@@ -1,5 +1,6 @@
 import type { Db, DrizzleTx } from '../db/client.ts';
 import { type EventRow, events, tasks } from '../db/schema.ts';
+import { providerForTask } from '../models/roles.ts';
 import type { EventBus, EventInput } from './events.ts';
 import type { EnqueueOptions, TaskKind, Tx } from './types.ts';
 import { TASK_ENTITY } from './types.ts';
@@ -68,7 +69,8 @@ function createTx(
         kind,
         entityId,
         runId,
-        provider: o.provider ?? null,
+        // Tagged with the provider its role routes to, so a limit pause skips it at lease time.
+        provider: o.provider === undefined ? providerForTask(kind) : o.provider,
         status: 'queued',
         attempts: 0,
         runAfter: o.runAfter ?? now,

@@ -7,6 +7,7 @@ import { connectNodeAdapter } from '@connectrpc/connect-node';
 import { ApplyantService } from '../gen/applyant/v1/applyant_pb.js';
 import type { Secrets } from '../secrets/secrets.ts';
 import type { Logger } from '../util/log.ts';
+import { candidateRpcs } from './candidate.ts';
 import { postingRpcs, type RpcContext } from './postings.ts';
 import { secretRpcs } from './secrets.ts';
 
@@ -40,6 +41,7 @@ export async function startRpcServer(o: RpcServerOptions): Promise<RpcServer> {
     routes: (router) =>
       router.service(ApplyantService, {
         ...postingRpcs(o),
+        ...candidateRpcs(o),
         ...secretRpcs(o.secrets),
       }),
   });

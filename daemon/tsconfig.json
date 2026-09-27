@@ -18,5 +18,5 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["src", "test", "vitest.config.ts", "drizzle.config.ts"]
+  "include": ["src", "test", "vitest.config.ts", "vitest.live.config.ts", "drizzle.config.ts"]
 }

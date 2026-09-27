@@ -5,9 +5,14 @@ import { randomBytes } from 'node:crypto';
 import { ReaderPool } from './browser/reader-pool.ts';
 import { type Config, loadConfig } from './config.ts';
 import { closeDb, openDb, openReadDb } from './db/client.ts';
+import { agentRuns } from './db/schema.ts';
 import type { Deps } from './deps.ts';
+import { syncSource } from './domain/knowledge/sync.ts';
+import { NodeTextExtractor } from './domain/knowledge/text/extract.ts';
 import { verifyPosting } from './domain/search/verify.ts';
 import { isAlive, readEndpoint, removeEndpoint, writeEndpoint } from './endpoint.ts';
+import { AgentRunner } from './models/agent-runner.ts';
+import { ClaudeProvider } from './models/providers/claude.ts';
 import { EventBus } from './queue/events.ts';
 import type { Handlers } from './queue/types.ts';
 import { Worker } from './queue/worker.ts';
@@ -33,8 +38,26 @@ export async function runDaemon(config: Config = loadConfig()): Promise<() => Pr
   const bus = new EventBus();
   const secrets = new FileSecrets(config.secretsFile);
   const reader = new ReaderPool({ ...config.reader, log: log.child({ part: 'reader' }) });
-  const deps: Deps = { reader, secrets, log };
-  const handlers: Handlers = { verify_posting: verifyPosting };
+  const models = new AgentRunner({
+    providers: [new ClaudeProvider()],
+    runsDir: config.runsDir,
+    workDir: config.workDir,
+    // Run bookkeeping is the runner's own short write, like task progress events;
+    // handlers still never hold a write handle.
+    record: (row) => {
+      db.insert(agentRuns).values(row).run();
+    },
+    log: log.child({ part: 'models' }),
+  });
+  const deps: Deps = {
+    reader,
+    secrets,
+    models,
+    text: new NodeTextExtractor(),
+    dirs: { repos: config.reposDir },
+    log,
+  };
+  const handlers: Handlers = { verify_posting: verifyPosting, sync_source: syncSource };
 
   const worker = new Worker({
     db,

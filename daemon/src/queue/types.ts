@@ -3,11 +3,13 @@
 
 import type { DrizzleTx, ReadDb } from '../db/client.ts';
 import type { Deps } from '../deps.ts';
+import type { Provider as RoleProvider } from '../models/roles.ts';
 import type { EventInput } from './events.ts';
 
 /** Every task kind, and the kind of entity its `entity_id` points at. */
 export const TASK_ENTITY = {
   verify_posting: 'posting',
+  sync_source: 'source',
 } as const;
 export type TaskKind = keyof typeof TASK_ENTITY;
 export const TASK_KINDS = Object.keys(TASK_ENTITY) as TaskKind[];
@@ -16,8 +18,8 @@ export function isTaskKind(kind: string): kind is TaskKind {
   return Object.hasOwn(TASK_ENTITY, kind);
 }
 
-/** Model providers whose subscription limits can pause their tasks (used from phase 2). */
-export type Provider = 'claude' | 'codex' | 'jev' | 'apple';
+/** Model providers whose subscription limits can pause their tasks. */
+export type Provider = RoleProvider;
 
 export interface Task<K extends TaskKind = TaskKind> {
   id: number;

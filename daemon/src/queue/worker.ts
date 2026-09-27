@@ -1,14 +1,15 @@
 // The lease-based worker.
 //
-//   tx1 (ms):   requeue expired leases · lease the oldest runnable task
+//   tx1 (ms):   requeue expired leases · lease the oldest runnable task whose provider
+//               isn't paused by a subscription limit
 //   handler:    runs with NO transaction open, lease renewed in the background
 //   tx2 (ms):   stillLeased? → apply the Outcome (commit, stage moves, next tasks)
 //               lease lost ⇒ the handler's results are discarded
 import { randomBytes } from 'node:crypto';
 import { hostname } from 'node:os';
-import { and, asc, eq, lt, lte } from 'drizzle-orm';
+import { and, asc, eq, gt, isNull, lt, lte, notInArray, or } from 'drizzle-orm';
 import type { Db, ReadDb } from '../db/client.ts';
-import { type TaskRow, tasks } from '../db/schema.ts';
+import { providerPauses, type TaskRow, tasks } from '../db/schema.ts';
 import type { Deps } from '../deps.ts';
 import type { Logger } from '../util/log.ts';
 import type { EventBus, EventInput } from './events.ts';
@@ -154,7 +155,7 @@ export class Worker {
     });
   }
 
-  /** tx1: requeue expired leases, then lease the oldest runnable task. */
+  /** tx1: requeue expired leases, then lease the oldest runnable task of an unpaused provider. */
   private lease(): TaskRow | null {
     const now = this.now();
     return runInTx(this.o.db, this.o.bus, { now }, (tx) => {
@@ -186,11 +187,24 @@ export class Worker {
         });
       }
 
+      // Providers paused by a subscription limit: their tasks wait, everything else runs.
+      const paused = tx.db
+        .select({ provider: providerPauses.provider })
+        .from(providerPauses)
+        .where(gt(providerPauses.until, now))
+        .all()
+        .map((p) => p.provider);
+      const runnable = and(
+        eq(tasks.status, 'queued'),
+        lte(tasks.runAfter, now),
+        paused.length ? or(isNull(tasks.provider), notInArray(tasks.provider, paused)) : undefined,
+      );
+
       for (;;) {
         const next = tx.db
           .select()
           .from(tasks)
-          .where(and(eq(tasks.status, 'queued'), lte(tasks.runAfter, now)))
+          .where(runnable)
           .orderBy(asc(tasks.runAfter), asc(tasks.id))
           .limit(1)
           .get();
@@ -384,7 +398,16 @@ export class Worker {
           break;
         }
         case 'pause_provider': {
-          // A subscription limit is not a failure: attempts stay as they were.
+          // A subscription limit is not a failure: attempts stay as they were. The whole
+          // provider pauses, so its other queued tasks aren't leased just to hit the limit.
+          tx.db
+            .insert(providerPauses)
+            .values({ provider: outcome.provider, until: outcome.until, reason: 'limit' })
+            .onConflictDoUpdate({
+              target: providerPauses.provider,
+              set: { until: outcome.until, reason: 'limit' },
+            })
+            .run();
           settle('queued', { runAfter: outcome.until, note: `${outcome.provider} limit` });
           this.emitTask(tx, row, {
             kind: 'task.provider_paused',

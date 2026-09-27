@@ -1,0 +1,36 @@
+[page 1]
+Alex Example
+
+Senior Backend and AI Engineer · Athens, Greece · alex@example.com
+
+Summary
+
+Backend engineer with 8 years of experience building data-heavy Python services and LLM features in
+production.
+
+Experience
+
+Nightingale — Acme Voice, Senior Backend Engineer, 2021–2024
+
+Designed and built the asynchronous call-analysis pipeline in Python and FastAPI, processing
+about 20,000 calls a day.
+Led a team of 4 engineers that shipped speech-to-text and LLM summarisation of sales calls.
+Cut transcription cost by 35% by moving batch jobs to spot instances.
+
+Ledgerly — Ledgerly GmbH, Backend Engineer, 2018–2021
+
+Wrote the invoice reconciliation service in Go and PostgreSQL.
+Maintained the Kafka event bus shared by 6 product teams.
+
+[page 2]
+Skills
+
+Python, FastAPI, Go, PostgreSQL, Kafka, Docker, Kubernetes, LLM APIs (Claude, OpenAI)
+
+Education
+
+MSc Computer Science, National Technical University of Athens, 2017
+
+Languages
+
+English (C1), Greek (native), German (B1)

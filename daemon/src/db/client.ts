@@ -13,6 +13,8 @@ export type DrizzleTx = Parameters<Parameters<Db['transaction']>[0]>[0];
  * so a write outside the queue's commit fails at the driver.
  */
 export type ReadDb = Db;
+/** Anything queries can run on: the writer, a transaction, or a read-only connection. */
+export type Conn = Db | DrizzleTx;
 
 const MIGRATIONS = fileURLToPath(new URL('./migrations', import.meta.url));
 

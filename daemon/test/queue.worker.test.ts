@@ -1,15 +1,13 @@
 import { eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { ReaderPool } from '../src/browser/reader-pool.ts';
 import { type EventRow, postings, tasks } from '../src/db/schema.ts';
-import type { Deps } from '../src/deps.ts';
 import { EventBus } from '../src/queue/events.ts';
 import { runInTx } from '../src/queue/tx.ts';
 import type { Handler, HandlerContext, Outcome, Task } from '../src/queue/types.ts';
 import { Worker, type WorkerOptions } from '../src/queue/worker.ts';
-import { FileSecrets } from '../src/secrets/file-backend.ts';
 import { createLogger } from '../src/util/log.ts';
 import { type TempDb, tempDb } from './helpers/db.ts';
+import { handlers, testDeps } from './helpers/deps.ts';
 
 const log = createLogger({ test: 'queue' });
 const noLog = { ...log, info() {}, warn() {}, error() {}, child: () => noLog };
@@ -51,17 +49,12 @@ describe('queue worker', () => {
   });
 
   function worker(handler: Handler<'verify_posting'>, opts: Partial<WorkerOptions> = {}) {
-    const deps: Deps = {
-      reader: {} as ReaderPool,
-      secrets: new FileSecrets(`${t.dir}/secrets.json`),
-      log: noLog,
-    };
     const w = new Worker({
       db: t.db,
       read: t.read,
       bus,
-      deps,
-      handlers: { verify_posting: handler },
+      deps: testDeps({ dir: t.dir }),
+      handlers: handlers({ verify_posting: handler }),
       log: noLog,
       concurrency: 2,
       leaseMs: 60_000,

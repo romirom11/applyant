@@ -11,6 +11,12 @@ export interface Config {
   /** File secrets backend (Linux); the Keychain replaces it on macOS in 8a. */
   secretsFile: string;
   filesDir: string;
+  /** files/runs: one NDJSON log per agent run. */
+  runsDir: string;
+  /** files/work: empty per-run working directories for the agent CLIs. */
+  workDir: string;
+  /** Partial clones of GitHub sources. */
+  reposDir: string;
   host: '127.0.0.1';
   /** 0 picks a free port. */
   port: number;
@@ -53,6 +59,9 @@ export function loadConfig(env: Env = process.env): Config {
     endpointFile: join(home, 'endpoint.json'),
     secretsFile: join(home, 'secrets.json'),
     filesDir: join(home, 'files'),
+    runsDir: join(home, 'files', 'runs'),
+    workDir: join(home, 'files', 'work'),
+    reposDir: join(home, 'repos'),
     host: '127.0.0.1',
     port: int(env, 'APPLYANT_PORT', 0),
     worker: {

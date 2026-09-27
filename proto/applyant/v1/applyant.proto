@@ -23,6 +23,24 @@ service ApplyantService {
   rpc SetSecret(SetSecretRequest) returns (SetSecretResponse);
   rpc DeleteSecret(DeleteSecretRequest) returns (DeleteSecretResponse);
   rpc ListSecrets(ListSecretsRequest) returns (ListSecretsResponse);
+
+  // Candidate knowledge: profile, projects, sources and the facts extracted from them.
+  rpc GetCandidate(GetCandidateRequest) returns (GetCandidateResponse);
+  rpc SetProfileValue(SetProfileValueRequest) returns (SetProfileValueResponse);
+  rpc CreateProject(CreateProjectRequest) returns (CreateProjectResponse);
+  rpc ListProjects(ListProjectsRequest) returns (ListProjectsResponse);
+  rpc GetProject(GetProjectRequest) returns (GetProjectResponse);
+  // AddSource records a source and enqueues its first sync.
+  rpc AddSource(AddSourceRequest) returns (AddSourceResponse);
+  // SyncSources enqueues a sync of every matching source.
+  rpc SyncSources(SyncSourcesRequest) returns (SyncSourcesResponse);
+  rpc ListFacts(ListFactsRequest) returns (ListFactsResponse);
+  // ConfirmFact marks facts as true in the candidate's own judgement.
+  rpc ConfirmFact(ConfirmFactRequest) returns (ConfirmFactResponse);
+  // EditFact replaces a fact's text with the candidate's words, which confirms it.
+  rpc EditFact(EditFactRequest) returns (EditFactResponse);
+  // RejectFact marks a fact as untrue; a re-sync won't bring it back.
+  rpc RejectFact(RejectFactRequest) returns (RejectFactResponse);
 }
 
 enum PostingStage {
@@ -164,4 +182,191 @@ message ListSecretsRequest {}
 
 message ListSecretsResponse {
   repeated string names = 1;
+}
+
+// ---- Candidate knowledge ------------------------------------------------------------
+
+message ProfileEntry {
+  string key = 1;
+  // Lists (github_logins, commit_emails) have one value per entry.
+  repeated string values = 2;
+}
+
+message Project {
+  int64 id = 1;
+  // Short handle for the CLI, e.g. "solovei".
+  string slug = 2;
+  string name = 3;
+  optional string summary = 4;
+  optional string role = 5;
+  optional string period = 6;
+  repeated string stack = 7;
+  int32 source_count = 8;
+  // Facts that are unconfirmed or confirmed (rejected ones are not counted).
+  int32 fact_count = 9;
+  int32 unconfirmed_count = 10;
+  int32 confirmed_count = 11;
+}
+
+enum SourceKind {
+  SOURCE_KIND_UNSPECIFIED = 0;
+  SOURCE_KIND_FILE = 1;
+  SOURCE_KIND_URL = 2;
+  SOURCE_KIND_GITHUB = 3;
+  SOURCE_KIND_DRIVE = 4;
+  SOURCE_KIND_MANUAL = 5;
+}
+
+message Source {
+  int64 id = 1;
+  // Unset for profile-level sources (a CV covering many projects).
+  optional int64 project_id = 2;
+  SourceKind kind = 3;
+  // Absolute path, URL or https://github.com/<owner>/<repo>.
+  string locator = 4;
+  optional google.protobuf.Timestamp last_synced_at = 5;
+  // What the last sync did, or why it failed.
+  optional string sync_note = 6;
+}
+
+enum FactStatus {
+  FACT_STATUS_UNSPECIFIED = 0;
+  FACT_STATUS_UNCONFIRMED = 1;
+  FACT_STATUS_CONFIRMED = 2;
+  FACT_STATUS_REJECTED = 3;
+}
+
+message Evidence {
+  optional int64 source_id = 1;
+  SourceKind source_kind = 2;
+  string source_locator = 3;
+  // Where inside the source: "page 2", "commit:1a2b3c4d5e6f", "pr:#12", "path:README.md".
+  optional string locator = 4;
+  // A short verbatim excerpt of the source.
+  optional string excerpt = 5;
+}
+
+message Fact {
+  int64 id = 1;
+  optional int64 project_id = 2;
+  optional string project_slug = 3;
+  string text = 4;
+  // personal_contribution | team_context | role | skill | impact | education | other
+  string kind = 5;
+  FactStatus status = 6;
+  // extracted | interview | review_edit
+  string origin = 7;
+  repeated Evidence evidence = 8;
+  optional google.protobuf.Timestamp edited_at = 9;
+}
+
+message GetCandidateRequest {}
+
+message GetCandidateResponse {
+  repeated ProfileEntry profile = 1;
+  repeated Project projects = 2;
+  // Sources that belong to no single project.
+  repeated Source profile_sources = 3;
+  int32 profile_fact_count = 4;
+}
+
+message SetProfileValueRequest {
+  string key = 1;
+  // Lists are comma- or space-separated; an empty value clears the key.
+  string value = 2;
+}
+
+message SetProfileValueResponse {
+  ProfileEntry entry = 1;
+}
+
+message CreateProjectRequest {
+  string name = 1;
+  // Derived from the name when unset.
+  optional string slug = 2;
+  optional string summary = 3;
+  optional string role = 4;
+  optional string period = 5;
+  repeated string stack = 6;
+}
+
+message CreateProjectResponse {
+  Project project = 1;
+}
+
+message ListProjectsRequest {}
+
+message ListProjectsResponse {
+  repeated Project projects = 1;
+}
+
+message GetProjectRequest {
+  // Id, slug or name.
+  string ref = 1;
+}
+
+message GetProjectResponse {
+  Project project = 1;
+  repeated Source sources = 2;
+}
+
+message AddSourceRequest {
+  // Project id, slug or name; empty for a profile-level source.
+  string project = 1;
+  SourceKind kind = 2;
+  string locator = 3;
+}
+
+message AddSourceResponse {
+  Source source = 1;
+  // False when the same source was already there (no sync is enqueued then).
+  bool created = 2;
+}
+
+message SyncSourcesRequest {
+  // A project ref, a source kind ("file", "url", "github"), "profile", or empty for all.
+  string target = 1;
+  // Re-extract even when a source hasn't changed since its last sync.
+  bool force = 2;
+}
+
+message SyncSourcesResponse {
+  repeated Source sources = 1;
+  // Sources a sync was enqueued for (others already had one queued or running).
+  repeated int64 enqueued_source_ids = 2;
+}
+
+message ListFactsRequest {
+  // Project ref; "profile" for profile-level facts; empty for all.
+  string project = 1;
+  FactStatus status = 2;
+}
+
+message ListFactsResponse {
+  repeated Fact facts = 1;
+}
+
+message ConfirmFactRequest {
+  repeated int64 ids = 1;
+}
+
+message ConfirmFactResponse {
+  repeated Fact facts = 1;
+}
+
+message EditFactRequest {
+  int64 id = 1;
+  string text = 2;
+}
+
+message EditFactResponse {
+  Fact fact = 1;
+}
+
+message RejectFactRequest {
+  repeated int64 ids = 1;
+}
+
+message RejectFactResponse {
+  repeated Fact facts = 1;
 }

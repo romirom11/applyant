@@ -28,5 +28,25 @@ pnpm -C daemon cli runs show --follow
 printf %s "$KEY" | pnpm -C daemon cli secrets set jev
 ```
 
+Candidate knowledge (facts are extracted by the `claude` CLI signed in on this machine;
+set `APPLYANT_CLAUDE_PATH` if it isn't on the daemon's `PATH`):
+
+```sh
+pnpm -C daemon cli candidate profile set github_logins <login>        # decides which commits are yours
+pnpm -C daemon cli candidate profile set commit_emails you@example.com
+pnpm -C daemon cli candidate source add profile file ~/cv.pdf         # a CV drafts projects + facts
+pnpm -C daemon cli candidate project add Solovei
+pnpm -C daemon cli candidate source add solovei github https://github.com/<owner>/<repo>
+pnpm -C daemon cli candidate fact list solovei                        # every fact with its evidence
+pnpm -C daemon cli candidate fact confirm <id…>                       # or: fact edit <id> "<text>" · fact reject <id…>
+pnpm -C daemon cli candidate sync [project | profile | github] [--force]
+```
+
+Live tests call the real agent CLIs (and spend subscription quota), so they only run on request:
+
+```sh
+APPLYANT_LIVE=1 pnpm -C daemon test:live -t extractor
+```
+
 Schema changes: edit `daemon/src/db/schema.ts`, then `pnpm -C daemon db:generate --name <what>`
 (never `drizzle-kit push`).

@@ -500,6 +500,695 @@ export declare type ListSecretsResponse = Message<"applyant.v1.ListSecretsRespon
 export declare const ListSecretsResponseSchema: GenMessage<ListSecretsResponse>;
 
 /**
+ * @generated from message applyant.v1.ProfileEntry
+ */
+export declare type ProfileEntry = Message<"applyant.v1.ProfileEntry"> & {
+  /**
+   * @generated from field: string key = 1;
+   */
+  key: string;
+
+  /**
+   * Lists (github_logins, commit_emails) have one value per entry.
+   *
+   * @generated from field: repeated string values = 2;
+   */
+  values: string[];
+};
+
+/**
+ * Describes the message applyant.v1.ProfileEntry.
+ * Use `create(ProfileEntrySchema)` to create a new message.
+ */
+export declare const ProfileEntrySchema: GenMessage<ProfileEntry>;
+
+/**
+ * @generated from message applyant.v1.Project
+ */
+export declare type Project = Message<"applyant.v1.Project"> & {
+  /**
+   * @generated from field: int64 id = 1;
+   */
+  id: bigint;
+
+  /**
+   * Short handle for the CLI, e.g. "solovei".
+   *
+   * @generated from field: string slug = 2;
+   */
+  slug: string;
+
+  /**
+   * @generated from field: string name = 3;
+   */
+  name: string;
+
+  /**
+   * @generated from field: optional string summary = 4;
+   */
+  summary?: string | undefined;
+
+  /**
+   * @generated from field: optional string role = 5;
+   */
+  role?: string | undefined;
+
+  /**
+   * @generated from field: optional string period = 6;
+   */
+  period?: string | undefined;
+
+  /**
+   * @generated from field: repeated string stack = 7;
+   */
+  stack: string[];
+
+  /**
+   * @generated from field: int32 source_count = 8;
+   */
+  sourceCount: number;
+
+  /**
+   * Facts that are unconfirmed or confirmed (rejected ones are not counted).
+   *
+   * @generated from field: int32 fact_count = 9;
+   */
+  factCount: number;
+
+  /**
+   * @generated from field: int32 unconfirmed_count = 10;
+   */
+  unconfirmedCount: number;
+
+  /**
+   * @generated from field: int32 confirmed_count = 11;
+   */
+  confirmedCount: number;
+};
+
+/**
+ * Describes the message applyant.v1.Project.
+ * Use `create(ProjectSchema)` to create a new message.
+ */
+export declare const ProjectSchema: GenMessage<Project>;
+
+/**
+ * @generated from message applyant.v1.Source
+ */
+export declare type Source = Message<"applyant.v1.Source"> & {
+  /**
+   * @generated from field: int64 id = 1;
+   */
+  id: bigint;
+
+  /**
+   * Unset for profile-level sources (a CV covering many projects).
+   *
+   * @generated from field: optional int64 project_id = 2;
+   */
+  projectId?: bigint | undefined;
+
+  /**
+   * @generated from field: applyant.v1.SourceKind kind = 3;
+   */
+  kind: SourceKind;
+
+  /**
+   * Absolute path, URL or https://github.com/<owner>/<repo>.
+   *
+   * @generated from field: string locator = 4;
+   */
+  locator: string;
+
+  /**
+   * @generated from field: optional google.protobuf.Timestamp last_synced_at = 5;
+   */
+  lastSyncedAt?: Timestamp | undefined;
+
+  /**
+   * What the last sync did, or why it failed.
+   *
+   * @generated from field: optional string sync_note = 6;
+   */
+  syncNote?: string | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.Source.
+ * Use `create(SourceSchema)` to create a new message.
+ */
+export declare const SourceSchema: GenMessage<Source>;
+
+/**
+ * @generated from message applyant.v1.Evidence
+ */
+export declare type Evidence = Message<"applyant.v1.Evidence"> & {
+  /**
+   * @generated from field: optional int64 source_id = 1;
+   */
+  sourceId?: bigint | undefined;
+
+  /**
+   * @generated from field: applyant.v1.SourceKind source_kind = 2;
+   */
+  sourceKind: SourceKind;
+
+  /**
+   * @generated from field: string source_locator = 3;
+   */
+  sourceLocator: string;
+
+  /**
+   * Where inside the source: "page 2", "commit:1a2b3c4d5e6f", "pr:#12", "path:README.md".
+   *
+   * @generated from field: optional string locator = 4;
+   */
+  locator?: string | undefined;
+
+  /**
+   * A short verbatim excerpt of the source.
+   *
+   * @generated from field: optional string excerpt = 5;
+   */
+  excerpt?: string | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.Evidence.
+ * Use `create(EvidenceSchema)` to create a new message.
+ */
+export declare const EvidenceSchema: GenMessage<Evidence>;
+
+/**
+ * @generated from message applyant.v1.Fact
+ */
+export declare type Fact = Message<"applyant.v1.Fact"> & {
+  /**
+   * @generated from field: int64 id = 1;
+   */
+  id: bigint;
+
+  /**
+   * @generated from field: optional int64 project_id = 2;
+   */
+  projectId?: bigint | undefined;
+
+  /**
+   * @generated from field: optional string project_slug = 3;
+   */
+  projectSlug?: string | undefined;
+
+  /**
+   * @generated from field: string text = 4;
+   */
+  text: string;
+
+  /**
+   * personal_contribution | team_context | role | skill | impact | education | other
+   *
+   * @generated from field: string kind = 5;
+   */
+  kind: string;
+
+  /**
+   * @generated from field: applyant.v1.FactStatus status = 6;
+   */
+  status: FactStatus;
+
+  /**
+   * extracted | interview | review_edit
+   *
+   * @generated from field: string origin = 7;
+   */
+  origin: string;
+
+  /**
+   * @generated from field: repeated applyant.v1.Evidence evidence = 8;
+   */
+  evidence: Evidence[];
+
+  /**
+   * @generated from field: optional google.protobuf.Timestamp edited_at = 9;
+   */
+  editedAt?: Timestamp | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.Fact.
+ * Use `create(FactSchema)` to create a new message.
+ */
+export declare const FactSchema: GenMessage<Fact>;
+
+/**
+ * @generated from message applyant.v1.GetCandidateRequest
+ */
+export declare type GetCandidateRequest = Message<"applyant.v1.GetCandidateRequest"> & {
+};
+
+/**
+ * Describes the message applyant.v1.GetCandidateRequest.
+ * Use `create(GetCandidateRequestSchema)` to create a new message.
+ */
+export declare const GetCandidateRequestSchema: GenMessage<GetCandidateRequest>;
+
+/**
+ * @generated from message applyant.v1.GetCandidateResponse
+ */
+export declare type GetCandidateResponse = Message<"applyant.v1.GetCandidateResponse"> & {
+  /**
+   * @generated from field: repeated applyant.v1.ProfileEntry profile = 1;
+   */
+  profile: ProfileEntry[];
+
+  /**
+   * @generated from field: repeated applyant.v1.Project projects = 2;
+   */
+  projects: Project[];
+
+  /**
+   * Sources that belong to no single project.
+   *
+   * @generated from field: repeated applyant.v1.Source profile_sources = 3;
+   */
+  profileSources: Source[];
+
+  /**
+   * @generated from field: int32 profile_fact_count = 4;
+   */
+  profileFactCount: number;
+};
+
+/**
+ * Describes the message applyant.v1.GetCandidateResponse.
+ * Use `create(GetCandidateResponseSchema)` to create a new message.
+ */
+export declare const GetCandidateResponseSchema: GenMessage<GetCandidateResponse>;
+
+/**
+ * @generated from message applyant.v1.SetProfileValueRequest
+ */
+export declare type SetProfileValueRequest = Message<"applyant.v1.SetProfileValueRequest"> & {
+  /**
+   * @generated from field: string key = 1;
+   */
+  key: string;
+
+  /**
+   * Lists are comma- or space-separated; an empty value clears the key.
+   *
+   * @generated from field: string value = 2;
+   */
+  value: string;
+};
+
+/**
+ * Describes the message applyant.v1.SetProfileValueRequest.
+ * Use `create(SetProfileValueRequestSchema)` to create a new message.
+ */
+export declare const SetProfileValueRequestSchema: GenMessage<SetProfileValueRequest>;
+
+/**
+ * @generated from message applyant.v1.SetProfileValueResponse
+ */
+export declare type SetProfileValueResponse = Message<"applyant.v1.SetProfileValueResponse"> & {
+  /**
+   * @generated from field: applyant.v1.ProfileEntry entry = 1;
+   */
+  entry?: ProfileEntry | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.SetProfileValueResponse.
+ * Use `create(SetProfileValueResponseSchema)` to create a new message.
+ */
+export declare const SetProfileValueResponseSchema: GenMessage<SetProfileValueResponse>;
+
+/**
+ * @generated from message applyant.v1.CreateProjectRequest
+ */
+export declare type CreateProjectRequest = Message<"applyant.v1.CreateProjectRequest"> & {
+  /**
+   * @generated from field: string name = 1;
+   */
+  name: string;
+
+  /**
+   * Derived from the name when unset.
+   *
+   * @generated from field: optional string slug = 2;
+   */
+  slug?: string | undefined;
+
+  /**
+   * @generated from field: optional string summary = 3;
+   */
+  summary?: string | undefined;
+
+  /**
+   * @generated from field: optional string role = 4;
+   */
+  role?: string | undefined;
+
+  /**
+   * @generated from field: optional string period = 5;
+   */
+  period?: string | undefined;
+
+  /**
+   * @generated from field: repeated string stack = 6;
+   */
+  stack: string[];
+};
+
+/**
+ * Describes the message applyant.v1.CreateProjectRequest.
+ * Use `create(CreateProjectRequestSchema)` to create a new message.
+ */
+export declare const CreateProjectRequestSchema: GenMessage<CreateProjectRequest>;
+
+/**
+ * @generated from message applyant.v1.CreateProjectResponse
+ */
+export declare type CreateProjectResponse = Message<"applyant.v1.CreateProjectResponse"> & {
+  /**
+   * @generated from field: applyant.v1.Project project = 1;
+   */
+  project?: Project | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.CreateProjectResponse.
+ * Use `create(CreateProjectResponseSchema)` to create a new message.
+ */
+export declare const CreateProjectResponseSchema: GenMessage<CreateProjectResponse>;
+
+/**
+ * @generated from message applyant.v1.ListProjectsRequest
+ */
+export declare type ListProjectsRequest = Message<"applyant.v1.ListProjectsRequest"> & {
+};
+
+/**
+ * Describes the message applyant.v1.ListProjectsRequest.
+ * Use `create(ListProjectsRequestSchema)` to create a new message.
+ */
+export declare const ListProjectsRequestSchema: GenMessage<ListProjectsRequest>;
+
+/**
+ * @generated from message applyant.v1.ListProjectsResponse
+ */
+export declare type ListProjectsResponse = Message<"applyant.v1.ListProjectsResponse"> & {
+  /**
+   * @generated from field: repeated applyant.v1.Project projects = 1;
+   */
+  projects: Project[];
+};
+
+/**
+ * Describes the message applyant.v1.ListProjectsResponse.
+ * Use `create(ListProjectsResponseSchema)` to create a new message.
+ */
+export declare const ListProjectsResponseSchema: GenMessage<ListProjectsResponse>;
+
+/**
+ * @generated from message applyant.v1.GetProjectRequest
+ */
+export declare type GetProjectRequest = Message<"applyant.v1.GetProjectRequest"> & {
+  /**
+   * Id, slug or name.
+   *
+   * @generated from field: string ref = 1;
+   */
+  ref: string;
+};
+
+/**
+ * Describes the message applyant.v1.GetProjectRequest.
+ * Use `create(GetProjectRequestSchema)` to create a new message.
+ */
+export declare const GetProjectRequestSchema: GenMessage<GetProjectRequest>;
+
+/**
+ * @generated from message applyant.v1.GetProjectResponse
+ */
+export declare type GetProjectResponse = Message<"applyant.v1.GetProjectResponse"> & {
+  /**
+   * @generated from field: applyant.v1.Project project = 1;
+   */
+  project?: Project | undefined;
+
+  /**
+   * @generated from field: repeated applyant.v1.Source sources = 2;
+   */
+  sources: Source[];
+};
+
+/**
+ * Describes the message applyant.v1.GetProjectResponse.
+ * Use `create(GetProjectResponseSchema)` to create a new message.
+ */
+export declare const GetProjectResponseSchema: GenMessage<GetProjectResponse>;
+
+/**
+ * @generated from message applyant.v1.AddSourceRequest
+ */
+export declare type AddSourceRequest = Message<"applyant.v1.AddSourceRequest"> & {
+  /**
+   * Project id, slug or name; empty for a profile-level source.
+   *
+   * @generated from field: string project = 1;
+   */
+  project: string;
+
+  /**
+   * @generated from field: applyant.v1.SourceKind kind = 2;
+   */
+  kind: SourceKind;
+
+  /**
+   * @generated from field: string locator = 3;
+   */
+  locator: string;
+};
+
+/**
+ * Describes the message applyant.v1.AddSourceRequest.
+ * Use `create(AddSourceRequestSchema)` to create a new message.
+ */
+export declare const AddSourceRequestSchema: GenMessage<AddSourceRequest>;
+
+/**
+ * @generated from message applyant.v1.AddSourceResponse
+ */
+export declare type AddSourceResponse = Message<"applyant.v1.AddSourceResponse"> & {
+  /**
+   * @generated from field: applyant.v1.Source source = 1;
+   */
+  source?: Source | undefined;
+
+  /**
+   * False when the same source was already there (no sync is enqueued then).
+   *
+   * @generated from field: bool created = 2;
+   */
+  created: boolean;
+};
+
+/**
+ * Describes the message applyant.v1.AddSourceResponse.
+ * Use `create(AddSourceResponseSchema)` to create a new message.
+ */
+export declare const AddSourceResponseSchema: GenMessage<AddSourceResponse>;
+
+/**
+ * @generated from message applyant.v1.SyncSourcesRequest
+ */
+export declare type SyncSourcesRequest = Message<"applyant.v1.SyncSourcesRequest"> & {
+  /**
+   * A project ref, a source kind ("file", "url", "github"), "profile", or empty for all.
+   *
+   * @generated from field: string target = 1;
+   */
+  target: string;
+
+  /**
+   * Re-extract even when a source hasn't changed since its last sync.
+   *
+   * @generated from field: bool force = 2;
+   */
+  force: boolean;
+};
+
+/**
+ * Describes the message applyant.v1.SyncSourcesRequest.
+ * Use `create(SyncSourcesRequestSchema)` to create a new message.
+ */
+export declare const SyncSourcesRequestSchema: GenMessage<SyncSourcesRequest>;
+
+/**
+ * @generated from message applyant.v1.SyncSourcesResponse
+ */
+export declare type SyncSourcesResponse = Message<"applyant.v1.SyncSourcesResponse"> & {
+  /**
+   * @generated from field: repeated applyant.v1.Source sources = 1;
+   */
+  sources: Source[];
+
+  /**
+   * Sources a sync was enqueued for (others already had one queued or running).
+   *
+   * @generated from field: repeated int64 enqueued_source_ids = 2;
+   */
+  enqueuedSourceIds: bigint[];
+};
+
+/**
+ * Describes the message applyant.v1.SyncSourcesResponse.
+ * Use `create(SyncSourcesResponseSchema)` to create a new message.
+ */
+export declare const SyncSourcesResponseSchema: GenMessage<SyncSourcesResponse>;
+
+/**
+ * @generated from message applyant.v1.ListFactsRequest
+ */
+export declare type ListFactsRequest = Message<"applyant.v1.ListFactsRequest"> & {
+  /**
+   * Project ref; "profile" for profile-level facts; empty for all.
+   *
+   * @generated from field: string project = 1;
+   */
+  project: string;
+
+  /**
+   * @generated from field: applyant.v1.FactStatus status = 2;
+   */
+  status: FactStatus;
+};
+
+/**
+ * Describes the message applyant.v1.ListFactsRequest.
+ * Use `create(ListFactsRequestSchema)` to create a new message.
+ */
+export declare const ListFactsRequestSchema: GenMessage<ListFactsRequest>;
+
+/**
+ * @generated from message applyant.v1.ListFactsResponse
+ */
+export declare type ListFactsResponse = Message<"applyant.v1.ListFactsResponse"> & {
+  /**
+   * @generated from field: repeated applyant.v1.Fact facts = 1;
+   */
+  facts: Fact[];
+};
+
+/**
+ * Describes the message applyant.v1.ListFactsResponse.
+ * Use `create(ListFactsResponseSchema)` to create a new message.
+ */
+export declare const ListFactsResponseSchema: GenMessage<ListFactsResponse>;
+
+/**
+ * @generated from message applyant.v1.ConfirmFactRequest
+ */
+export declare type ConfirmFactRequest = Message<"applyant.v1.ConfirmFactRequest"> & {
+  /**
+   * @generated from field: repeated int64 ids = 1;
+   */
+  ids: bigint[];
+};
+
+/**
+ * Describes the message applyant.v1.ConfirmFactRequest.
+ * Use `create(ConfirmFactRequestSchema)` to create a new message.
+ */
+export declare const ConfirmFactRequestSchema: GenMessage<ConfirmFactRequest>;
+
+/**
+ * @generated from message applyant.v1.ConfirmFactResponse
+ */
+export declare type ConfirmFactResponse = Message<"applyant.v1.ConfirmFactResponse"> & {
+  /**
+   * @generated from field: repeated applyant.v1.Fact facts = 1;
+   */
+  facts: Fact[];
+};
+
+/**
+ * Describes the message applyant.v1.ConfirmFactResponse.
+ * Use `create(ConfirmFactResponseSchema)` to create a new message.
+ */
+export declare const ConfirmFactResponseSchema: GenMessage<ConfirmFactResponse>;
+
+/**
+ * @generated from message applyant.v1.EditFactRequest
+ */
+export declare type EditFactRequest = Message<"applyant.v1.EditFactRequest"> & {
+  /**
+   * @generated from field: int64 id = 1;
+   */
+  id: bigint;
+
+  /**
+   * @generated from field: string text = 2;
+   */
+  text: string;
+};
+
+/**
+ * Describes the message applyant.v1.EditFactRequest.
+ * Use `create(EditFactRequestSchema)` to create a new message.
+ */
+export declare const EditFactRequestSchema: GenMessage<EditFactRequest>;
+
+/**
+ * @generated from message applyant.v1.EditFactResponse
+ */
+export declare type EditFactResponse = Message<"applyant.v1.EditFactResponse"> & {
+  /**
+   * @generated from field: applyant.v1.Fact fact = 1;
+   */
+  fact?: Fact | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.EditFactResponse.
+ * Use `create(EditFactResponseSchema)` to create a new message.
+ */
+export declare const EditFactResponseSchema: GenMessage<EditFactResponse>;
+
+/**
+ * @generated from message applyant.v1.RejectFactRequest
+ */
+export declare type RejectFactRequest = Message<"applyant.v1.RejectFactRequest"> & {
+  /**
+   * @generated from field: repeated int64 ids = 1;
+   */
+  ids: bigint[];
+};
+
+/**
+ * Describes the message applyant.v1.RejectFactRequest.
+ * Use `create(RejectFactRequestSchema)` to create a new message.
+ */
+export declare const RejectFactRequestSchema: GenMessage<RejectFactRequest>;
+
+/**
+ * @generated from message applyant.v1.RejectFactResponse
+ */
+export declare type RejectFactResponse = Message<"applyant.v1.RejectFactResponse"> & {
+  /**
+   * @generated from field: repeated applyant.v1.Fact facts = 1;
+   */
+  facts: Fact[];
+};
+
+/**
+ * Describes the message applyant.v1.RejectFactResponse.
+ * Use `create(RejectFactResponseSchema)` to create a new message.
+ */
+export declare const RejectFactResponseSchema: GenMessage<RejectFactResponse>;
+
+/**
  * @generated from enum applyant.v1.PostingStage
  */
 export enum PostingStage {
@@ -595,6 +1284,76 @@ export enum TaskEventType {
 export declare const TaskEventTypeSchema: GenEnum<TaskEventType>;
 
 /**
+ * @generated from enum applyant.v1.SourceKind
+ */
+export enum SourceKind {
+  /**
+   * @generated from enum value: SOURCE_KIND_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: SOURCE_KIND_FILE = 1;
+   */
+  FILE = 1,
+
+  /**
+   * @generated from enum value: SOURCE_KIND_URL = 2;
+   */
+  URL = 2,
+
+  /**
+   * @generated from enum value: SOURCE_KIND_GITHUB = 3;
+   */
+  GITHUB = 3,
+
+  /**
+   * @generated from enum value: SOURCE_KIND_DRIVE = 4;
+   */
+  DRIVE = 4,
+
+  /**
+   * @generated from enum value: SOURCE_KIND_MANUAL = 5;
+   */
+  MANUAL = 5,
+}
+
+/**
+ * Describes the enum applyant.v1.SourceKind.
+ */
+export declare const SourceKindSchema: GenEnum<SourceKind>;
+
+/**
+ * @generated from enum applyant.v1.FactStatus
+ */
+export enum FactStatus {
+  /**
+   * @generated from enum value: FACT_STATUS_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: FACT_STATUS_UNCONFIRMED = 1;
+   */
+  UNCONFIRMED = 1,
+
+  /**
+   * @generated from enum value: FACT_STATUS_CONFIRMED = 2;
+   */
+  CONFIRMED = 2,
+
+  /**
+   * @generated from enum value: FACT_STATUS_REJECTED = 3;
+   */
+  REJECTED = 3,
+}
+
+/**
+ * Describes the enum applyant.v1.FactStatus.
+ */
+export declare const FactStatusSchema: GenEnum<FactStatus>;
+
+/**
  * ApplyantService is the only contract between applyantd and its clients
  * (the `applyant` CLI now, the macOS app and Share extension later).
  * Every call carries `Authorization: Bearer <token>` from the endpoint file.
@@ -674,6 +1433,106 @@ export declare const ApplyantService: GenService<{
     methodKind: "unary";
     input: typeof ListSecretsRequestSchema;
     output: typeof ListSecretsResponseSchema;
+  },
+  /**
+   * Candidate knowledge: profile, projects, sources and the facts extracted from them.
+   *
+   * @generated from rpc applyant.v1.ApplyantService.GetCandidate
+   */
+  getCandidate: {
+    methodKind: "unary";
+    input: typeof GetCandidateRequestSchema;
+    output: typeof GetCandidateResponseSchema;
+  },
+  /**
+   * @generated from rpc applyant.v1.ApplyantService.SetProfileValue
+   */
+  setProfileValue: {
+    methodKind: "unary";
+    input: typeof SetProfileValueRequestSchema;
+    output: typeof SetProfileValueResponseSchema;
+  },
+  /**
+   * @generated from rpc applyant.v1.ApplyantService.CreateProject
+   */
+  createProject: {
+    methodKind: "unary";
+    input: typeof CreateProjectRequestSchema;
+    output: typeof CreateProjectResponseSchema;
+  },
+  /**
+   * @generated from rpc applyant.v1.ApplyantService.ListProjects
+   */
+  listProjects: {
+    methodKind: "unary";
+    input: typeof ListProjectsRequestSchema;
+    output: typeof ListProjectsResponseSchema;
+  },
+  /**
+   * @generated from rpc applyant.v1.ApplyantService.GetProject
+   */
+  getProject: {
+    methodKind: "unary";
+    input: typeof GetProjectRequestSchema;
+    output: typeof GetProjectResponseSchema;
+  },
+  /**
+   * AddSource records a source and enqueues its first sync.
+   *
+   * @generated from rpc applyant.v1.ApplyantService.AddSource
+   */
+  addSource: {
+    methodKind: "unary";
+    input: typeof AddSourceRequestSchema;
+    output: typeof AddSourceResponseSchema;
+  },
+  /**
+   * SyncSources enqueues a sync of every matching source.
+   *
+   * @generated from rpc applyant.v1.ApplyantService.SyncSources
+   */
+  syncSources: {
+    methodKind: "unary";
+    input: typeof SyncSourcesRequestSchema;
+    output: typeof SyncSourcesResponseSchema;
+  },
+  /**
+   * @generated from rpc applyant.v1.ApplyantService.ListFacts
+   */
+  listFacts: {
+    methodKind: "unary";
+    input: typeof ListFactsRequestSchema;
+    output: typeof ListFactsResponseSchema;
+  },
+  /**
+   * ConfirmFact marks facts as true in the candidate's own judgement.
+   *
+   * @generated from rpc applyant.v1.ApplyantService.ConfirmFact
+   */
+  confirmFact: {
+    methodKind: "unary";
+    input: typeof ConfirmFactRequestSchema;
+    output: typeof ConfirmFactResponseSchema;
+  },
+  /**
+   * EditFact replaces a fact's text with the candidate's words, which confirms it.
+   *
+   * @generated from rpc applyant.v1.ApplyantService.EditFact
+   */
+  editFact: {
+    methodKind: "unary";
+    input: typeof EditFactRequestSchema;
+    output: typeof EditFactResponseSchema;
+  },
+  /**
+   * RejectFact marks a fact as untrue; a re-sync won't bring it back.
+   *
+   * @generated from rpc applyant.v1.ApplyantService.RejectFact
+   */
+  rejectFact: {
+    methodKind: "unary";
+    input: typeof RejectFactRequestSchema;
+    output: typeof RejectFactResponseSchema;
   },
 }>;
 

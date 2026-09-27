@@ -13,7 +13,8 @@ export type EventKind =
   | 'task.needs_candidate'
   | 'task.lease_lost'
   | 'task.requeued'
-  | 'posting.stage';
+  | 'posting.stage'
+  | 'source.synced';
 
 export interface EventInput {
   kind: EventKind;

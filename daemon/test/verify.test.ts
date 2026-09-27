@@ -13,9 +13,9 @@ import {
 } from '../src/domain/search/verify.ts';
 import { EventBus } from '../src/queue/events.ts';
 import { Worker } from '../src/queue/worker.ts';
-import { FileSecrets } from '../src/secrets/file-backend.ts';
 import { createLogger } from '../src/util/log.ts';
 import { tempDb } from './helpers/db.ts';
+import { handlers, testDeps } from './helpers/deps.ts';
 import { type SiteServer, startSiteServer } from './helpers/site-server.ts';
 
 const quiet = createLogger({ test: 'verify' });
@@ -143,8 +143,8 @@ describe('verify_posting through the queue', () => {
       db: t.db,
       read: t.read,
       bus,
-      handlers: { verify_posting: verifyPosting },
-      deps: { reader, secrets: new FileSecrets(`${t.dir}/secrets.json`), log },
+      handlers: handlers({ verify_posting: verifyPosting }),
+      deps: testDeps({ dir: t.dir, reader }),
       log,
       concurrency: 3,
       leaseMs: 60_000,
