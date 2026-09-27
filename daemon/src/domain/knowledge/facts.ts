@@ -1,7 +1,7 @@
 // Facts: everything the agents may say about the candidate. Extracted facts start
 // `unconfirmed`; the candidate's own words (a confirm, an edit, later interview answers and
 // review edits) are `confirmed`. Rejected facts stay, so a re-sync doesn't bring them back.
-import { and, asc, eq, isNull, type SQL } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, ne, type SQL } from 'drizzle-orm';
 import type { Conn } from '../../db/client.ts';
 import {
   type FactKind,
@@ -12,6 +12,7 @@ import {
   projects,
 } from '../../db/schema.ts';
 import { type EvidenceView, evidenceFor } from './evidence.ts';
+import type { FactRef } from './retrieve.ts';
 
 export class FactError extends Error {}
 
@@ -128,4 +129,28 @@ export function editFact(
     .where(eq(facts.id, id))
     .returning()
     .get();
+}
+
+/** The given facts as agents see them; rejected and unknown ids are left out. */
+export function factRefs(conn: Conn, ids: number[]): Map<number, FactRef> {
+  const out = new Map<number, FactRef>();
+  const unique = [...new Set(ids)];
+  for (let i = 0; i < unique.length; i += 500) {
+    const rows = conn
+      .select({
+        id: facts.id,
+        text: facts.text,
+        status: facts.status,
+        kind: facts.kind,
+        projectId: facts.projectId,
+        project: projects.name,
+        period: projects.period,
+      })
+      .from(facts)
+      .leftJoin(projects, eq(facts.projectId, projects.id))
+      .where(and(inArray(facts.id, unique.slice(i, i + 500)), ne(facts.status, 'rejected')))
+      .all();
+    for (const r of rows) out.set(r.id, r);
+  }
+  return out;
 }

@@ -92,6 +92,35 @@ pnpm -C daemon cli jobs show <id> --form                               # steps, 
 pnpm -C daemon cli jobs read-form [id…]                                # read again (default: every posting never read)
 ```
 
+Applications: a posting that scores at or above your threshold (`candidate prefs set threshold`,
+default 80) with no dealbreaker, or that you mark `interested`, gets an application prepared for
+its real form. Standard fields come from your profile, which is only a default: nothing about
+you is built in, a value your profile lacks is never guessed (the application waits for you
+instead), and every value can be set for one application without touching the profile. Custom
+questions are drafted by `application_writer` (claude:opus) sentence by sentence, each sentence
+citing the facts it relies on (it may look up at most 3 more through Applyant's local MCP
+endpoint). Every sentence is then checked: numbers and dates without a model (a contradicted
+number is a hard flag, a number the facts don't have is confirmable), then by a separate
+`claim_verifier` (claude:haiku) that sees only the sentences and the cited facts. Approve is
+refused while a required value is missing, a sentence is flagged, or a relied-on fact is
+unconfirmed. In this phase approval only marks the application approved; delivery comes next.
+
+```sh
+pnpm -C daemon cli candidate profile set visa_sponsorship "No sponsorship needed in the EU"  # also:
+pnpm -C daemon cli candidate profile set current_company Globex        #   relocation · current_title
+pnpm -C daemon cli jobs apply <posting-id>                             # start (or re-start) by hand
+pnpm -C daemon cli applications list
+pnpm -C daemon cli applications preview <id>                           # every value and where it came from
+pnpm -C daemon cli applications set-field <id> salary "70000 EUR/year" # this application only (#n, meaning or label)
+pnpm -C daemon cli applications set-field <id> salary --clear          # back to the profile value
+pnpm -C daemon cli applications set-field <id> Education '[{"School": "…", "Degree": "…"}]'   # a repeatable group
+pnpm -C daemon cli applications confirm <id> [fact-id…]                # the unconfirmed facts it relies on
+pnpm -C daemon cli applications edit <id> q2.3 "<your sentence>"       # your words → a confirmed fact
+pnpm -C daemon cli applications edit <id> q2.3 --confirm               # a flagged number is true as written
+pnpm -C daemon cli applications prepare <id> [--rewrite]               # again: current profile, overrides kept
+pnpm -C daemon cli applications approve <id>
+```
+
 Recorded forms: `pnpm -C daemon fixtures:record <url> --name <name> --about "<what it is>"` reads a
 public application form (read-only, with a synthetic profile), saves the page as a HAR and the
 decisions as JSON under `daemon/test/fixtures/forms/<name>/`, and replays it offline to check the
@@ -103,6 +132,7 @@ Live tests call the real agent CLIs and Jev (and spend quota), so they only run 
 APPLYANT_LIVE=1 pnpm -C daemon test:live -t extractor
 APPLYANT_LIVE=1 pnpm -C daemon test:live -t matcher    # also downloads EmbeddingGemma unless APPLYANT_MODELS_DIR has it
 APPLYANT_LIVE=1 pnpm -C daemon test:live -t jev        # key from APPLYANT_JEV_KEY or the `jev` secret
+APPLYANT_LIVE=1 pnpm -C daemon test:live -t "writer|verifier"   # opus writer + haiku verifier, seeded exaggerations
 ```
 
 Schema changes: edit `daemon/src/db/schema.ts`, then `pnpm -C daemon db:generate --name <what>`

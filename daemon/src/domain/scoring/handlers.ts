@@ -15,6 +15,7 @@ import { eq } from 'drizzle-orm';
 import { type PostingRow, postings } from '../../db/schema.ts';
 import { matcherSchema, postingExtractionSchema } from '../../models/schemas/posting.ts';
 import type { Handler, HandlerContext, Outcome, Task } from '../../queue/types.ts';
+import { ensureApplication } from '../applications/store.ts';
 import { fetchPostingText } from '../search/posting-text.ts';
 import {
   extractionKey,
@@ -212,6 +213,11 @@ async function matchAndScore(
         stage,
         message: `score ${result.score}${flags}`,
       });
+      // At or above the threshold with no dealbreaker: prepared without asking.
+      const threshold = getPreferences(tx.db).threshold;
+      if (stage === 'scored' && result.score >= threshold && result.dealbreakers.length === 0) {
+        ensureApplication(tx, posting.id, `score ${result.score} ≥ ${threshold}`);
+      }
     },
   };
 }

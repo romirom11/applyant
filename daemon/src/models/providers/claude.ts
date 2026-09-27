@@ -107,11 +107,13 @@ export class ClaudeProvider implements ModelProvider {
       ...(req.model ? { model: req.model } : {}),
       systemPrompt: req.system,
       outputFormat: { type: 'json_schema', schema: req.jsonSchema },
-      // No built-in tools: roles that need tools get Applyant's MCP tools (phase 5+).
+      // No built-in tools: roles that need tools get Applyant's MCP tools (the writer's
+      // search_facts / get_project), allowed by name; `dontAsk` denies anything else.
       tools: [],
       // Only MCP servers Applyant passes. Without this the account's claude.ai connectors
       // are attached as tools too: hundreds of schemas, ~550k tokens on every run.
-      mcpServers: {},
+      mcpServers: req.tools?.servers ?? {},
+      ...(req.tools ? { allowedTools: req.tools.allowed } : {}),
       strictMcpConfig: true,
       permissionMode: 'dontAsk',
       // Nothing from ~/.claude or a project directory leaks into a task.

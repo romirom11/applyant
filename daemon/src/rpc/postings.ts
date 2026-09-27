@@ -4,6 +4,7 @@ import { eq } from 'drizzle-orm';
 import type { Db } from '../db/client.ts';
 import { type EventRow, postings as postingsTable } from '../db/schema.ts';
 import { READABLE_STAGES, requestFormRead } from '../domain/applications/read-form.ts';
+import { applicationsByPosting } from '../domain/applications/store.ts';
 import { DecisionError, recordDecision, requestScoring } from '../domain/scoring/store.ts';
 import { InvalidUrlError } from '../domain/search/canonical-url.ts';
 import {
@@ -68,14 +69,16 @@ export function postingRpcs(
 
     listPostings(req) {
       const rows = listPostings(c.db, stageFromPb(req.stage), req.byScore);
-      return { postings: rows.map((row) => postingToPb(row)) };
+      const apps = applicationsByPosting(c.db);
+      return { postings: rows.map((row) => postingToPb(row, [], null, apps.get(row.id) ?? null)) };
     },
 
     getPosting(req) {
       const found = getPosting(c.db, id(req.id, 'id'));
       if (!found) throw new ConnectError(`posting ${req.id} not found`, Code.NotFound);
+      const app = applicationsByPosting(c.db).get(found.posting.id) ?? null;
       return {
-        posting: postingToPb(found.posting, found.sources, citedFacts(c.db, found.posting)),
+        posting: postingToPb(found.posting, found.sources, citedFacts(c.db, found.posting), app),
       };
     },
 
@@ -99,7 +102,8 @@ export function postingRpcs(
           reason: null,
           now: c.now(),
         });
-        return { posting: postingToPb(res.posting), rescored: res.rescored };
+        const app = applicationsByPosting(c.db).get(res.posting.id) ?? null;
+        return { posting: postingToPb(res.posting, [], null, app), rescored: res.rescored };
       });
     },
 

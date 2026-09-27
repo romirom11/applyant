@@ -73,6 +73,7 @@ describe.skipIf(!live)('live matcher (real claude, real embeddings)', () => {
         models,
         embedder,
         readPool: pool,
+        mcp: null,
         fx: fixedFx(),
         text: new NodeTextExtractor(),
         dirs: { repos: join(dir, 'repos') },

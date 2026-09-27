@@ -38,6 +38,16 @@ export interface Usage {
   costUsd: number | null;
 }
 
+/**
+ * Tools a run may use: Applyant's own MCP servers (streamable HTTP on 127.0.0.1, scoped by a
+ * per-task token) and the fully qualified names of the tools allowed on them.
+ */
+export interface RunTools {
+  servers: Record<string, { type: 'http'; url: string; headers: Record<string, string> }>;
+  /** e.g. mcp__applyant__search_facts */
+  allowed: string[];
+}
+
 export interface ProviderRequest {
   role: Role;
   /** Provider-specific model name or alias; null = the provider's default. */
@@ -48,6 +58,8 @@ export interface ProviderRequest {
   jsonSchema: Record<string, unknown>;
   /** An empty private directory the CLI runs in. */
   cwd: string;
+  /** No tools at all when null (the default for every role but the writer). */
+  tools: RunTools | null;
   signal: AbortSignal;
   /** Every raw provider event, in order; the runner writes them to the run log. */
   onEvent(event: unknown): void;
@@ -75,6 +87,7 @@ export interface RunRequest<T> {
   progress?(message: string): void;
   /** Checks the zod type can't express (lengths, cross-references). Returns a problem or null. */
   validate?(output: T): string | null;
+  tools?: RunTools | null;
 }
 
 export type RunResult<T> =
@@ -171,6 +184,7 @@ export class AgentRunner {
         prompt: req.prompt,
         jsonSchema,
         cwd,
+        tools: req.tools ?? null,
         signal,
         onEvent: (event) => log.write(event),
         onProgress: (message) => req.progress?.(`${role} · ${message}`),

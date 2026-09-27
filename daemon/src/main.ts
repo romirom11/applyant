@@ -8,20 +8,26 @@ import { closeDb, openDb, openReadDb } from './db/client.ts';
 import { ReadPool } from './db/read-pool.ts';
 import { agentRuns } from './db/schema.ts';
 import type { Deps } from './deps.ts';
+import { prepareApplication } from './domain/applications/prepare.ts';
 import { readFormHandler, requestFormRead } from './domain/applications/read-form.ts';
+import { catchUpApplications } from './domain/applications/store.ts';
 import { embedFacts, ensureFactIndex } from './domain/knowledge/embed-index.ts';
 import { syncSource } from './domain/knowledge/sync.ts';
 import { NodeTextExtractor } from './domain/knowledge/text/extract.ts';
 import { EcbFx } from './domain/scoring/fx.ts';
 import { scorePosting } from './domain/scoring/handlers.ts';
+import { getPreferences } from './domain/scoring/prefs.ts';
 import { requestScoring, unscoredPostings } from './domain/scoring/store.ts';
 import { verifyPosting } from './domain/search/verify.ts';
 import { isAlive, readEndpoint, removeEndpoint, writeEndpoint } from './endpoint.ts';
+import { McpHub } from './mcp/server.ts';
+import { knowledgeTools } from './mcp/tools/knowledge.ts';
 import { AgentRunner } from './models/agent-runner.ts';
 import { type Embedder, GemmaEmbedder, HashEmbedder } from './models/embeddings.ts';
 import { ClaudeProvider } from './models/providers/claude.ts';
 import { JevClient } from './models/providers/jev.ts';
 import { EventBus } from './queue/events.ts';
+import { runInTx } from './queue/tx.ts';
 import type { Handlers } from './queue/types.ts';
 import { Worker } from './queue/worker.ts';
 import { startRpcServer } from './rpc/server.ts';
@@ -68,12 +74,19 @@ export async function runDaemon(config: Config = loadConfig()): Promise<() => Pr
     size: config.readWorkers,
     log: log.child({ part: 'read-pool' }),
   });
+  // Tools for agent runs (the writer's knowledge lookups), on 127.0.0.1 behind per-task tokens.
+  const mcp = new McpHub({
+    tools: knowledgeTools({ read, readPool, embedder }),
+    log: log.child({ part: 'mcp' }),
+  });
+  await mcp.start();
   const deps: Deps = {
     reader,
     secrets,
     models,
     embedder,
     readPool,
+    mcp,
     fx: new EcbFx(),
     text: new NodeTextExtractor(),
     dirs: { repos: config.reposDir },
@@ -83,6 +96,7 @@ export async function runDaemon(config: Config = loadConfig()): Promise<() => Pr
     verify_posting: verifyPosting,
     score_posting: scorePosting,
     read_form: readFormHandler,
+    prepare_application: prepareApplication,
     sync_source: syncSource,
     embed_facts: embedFacts,
   };
@@ -94,6 +108,10 @@ export async function runDaemon(config: Config = loadConfig()): Promise<() => Pr
   if (unscored.length) requestScoring(db, bus, unscored, new Date());
   // …and a read of the application form for live postings verified before Read existed.
   requestFormRead(db, bus, [], new Date());
+  // …and an application for postings that qualified before applications existed.
+  runInTx(db, bus, { now: new Date() }, (tx) =>
+    catchUpApplications(tx, getPreferences(tx.db).threshold),
+  );
 
   const worker = new Worker({
     db,
@@ -133,6 +151,7 @@ export async function runDaemon(config: Config = loadConfig()): Promise<() => Pr
       removeEndpoint(config.endpointFile, process.pid);
       await rpc.close();
       await worker.stop();
+      await mcp.close();
       await reader.close();
       await readPool.close();
       await embedder.close?.();

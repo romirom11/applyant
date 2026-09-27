@@ -342,6 +342,7 @@ describe('ClaudeProvider (fake `claude` executable)', () => {
     prompt: 'What is 2+2?',
     jsonSchema: toStrictJsonSchema(answerSchema),
     cwd,
+    tools: null,
     signal: new AbortController().signal,
     onEvent: () => {},
     onProgress: () => {},

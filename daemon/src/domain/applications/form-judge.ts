@@ -100,8 +100,16 @@ export function standardValue(meaning: FieldMeaning, p: StandardProfile): string
     case 'notice_period':
       return p.notice_period;
     case 'work_authorization':
-    case 'visa_sponsorship':
       return p.work_authorization;
+    case 'visa_sponsorship':
+      // Read only needs a plausible branch; Prepare never borrows one answer for the other.
+      return p.visa_sponsorship ?? p.work_authorization;
+    case 'relocation':
+      return p.relocation;
+    case 'current_company':
+      return p.current_company;
+    case 'current_title':
+      return p.current_title;
     default:
       return null;
   }

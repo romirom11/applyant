@@ -1,5 +1,6 @@
 import { timestampDate } from '@bufbuild/protobuf/wkt';
 import {
+  ApplicationStage,
   type ElementRef,
   type Event,
   type Posting,
@@ -39,6 +40,13 @@ export function parseStage(name: string): PostingStage {
   }
   return stage;
 }
+
+const APP_STAGE: Record<number, string> = {
+  [ApplicationStage.PREPARING]: 'preparing',
+  [ApplicationStage.READY_FOR_REVIEW]: 'ready_for_review',
+  [ApplicationStage.NEEDS_CANDIDATE]: 'needs_candidate',
+  [ApplicationStage.APPROVED]: 'approved',
+};
 
 const TASK_TYPE: Record<number, string> = {
   [TaskEventType.QUEUED]: 'queued',
@@ -90,6 +98,7 @@ export function postingJson(p: Posting) {
     formStatus: p.formStatus ?? null,
     formNote: p.formNote ?? null,
     formReadAt: iso(p.formReadAt),
+    applicationId: p.applicationId === undefined ? null : Number(p.applicationId),
     form: p.form
       ? {
           url: p.form.url,
@@ -156,6 +165,16 @@ export function eventJson(e: Event) {
     const p = e.payload.value;
     return { ...base, type: 'posting', postingId: Number(p.postingId), stage: stageName(p.stage) };
   }
+  if (e.payload.case === 'application') {
+    const a = e.payload.value;
+    return {
+      ...base,
+      type: 'application',
+      applicationId: Number(a.applicationId),
+      postingId: Number(a.postingId),
+      stage: APP_STAGE[a.stage] ?? 'unknown',
+    };
+  }
   return { ...base, type: 'unknown' };
 }
 
@@ -173,6 +192,10 @@ export function eventLine(e: Event): string {
   if (e.payload.case === 'posting') {
     const p = e.payload.value;
     return `${time(e)}${run}  posting ${p.postingId} → ${stageName(p.stage)}${msg}`;
+  }
+  if (e.payload.case === 'application') {
+    const a = e.payload.value;
+    return `${time(e)}${run}  application ${a.applicationId} → ${APP_STAGE[a.stage] ?? 'unknown'}${msg}`;
   }
   return `${time(e)}${run}${msg}`;
 }

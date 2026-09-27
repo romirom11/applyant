@@ -2,7 +2,7 @@
 // migrations and never appear here, so `drizzle-kit generate` never tries to drop them.
 import { sql } from 'drizzle-orm';
 import { index, integer, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
-import type { FormRead } from '../browser/form-types.ts';
+import type { FieldSpec, FormRead } from '../browser/form-types.ts';
 import type { Component, StoredExtraction, StoredMatch } from '../domain/scoring/types.ts';
 
 const now = sql`(cast(unixepoch('subsec') * 1000 as integer))`;
@@ -289,6 +289,132 @@ export const fxRates = sqliteTable('fx_rates', {
   fetchedAt: integer('fetched_at', { mode: 'timestamp_ms' }).notNull(),
 });
 
+// ---- Applications ----------------------------------------------------------------------
+
+/**
+ * preparing → ready_for_review ⇄ needs_candidate → approved (→ delivering → applied, phase 6).
+ * needs_candidate: something only the candidate can give (a value the profile lacks, a fact
+ * the knowledge base lacks) or preparation failed; the note says what.
+ */
+export const APPLICATION_STAGES = [
+  'preparing',
+  'ready_for_review',
+  'needs_candidate',
+  'approved',
+] as const;
+export type ApplicationStage = (typeof APPLICATION_STAGES)[number];
+
+export const applications = sqliteTable('applications', {
+  id: integer('id').primaryKey(),
+  postingId: integer('posting_id')
+    .notNull()
+    .unique()
+    .references(() => postings.id, { onDelete: 'cascade' }),
+  stage: text('stage', { enum: APPLICATION_STAGES }).notNull(),
+  /** web_form · email (the form's status decides; email is delivered from phase 13). */
+  channel: text('channel').notNull().default('web_form'),
+  /** What the candidate needs to do, or why preparation stopped. */
+  note: text('note'),
+  /** The form read (postings.form_read_at) the fields were prepared from. */
+  fieldsFormAt: integer('fields_form_at', { mode: 'timestamp_ms' }),
+  /** Set by a re-prepare request: redo the standard fields (profile may have changed). */
+  refreshFields: integer('refresh_fields', { mode: 'boolean' }).notNull().default(true),
+  /** Set by `prepare --rewrite`: redraft every answer, not only missing ones. */
+  rewriteAnswers: integer('rewrite_answers', { mode: 'boolean' }).notNull().default(false),
+  preparedAt: integer('prepared_at', { mode: 'timestamp_ms' }),
+  approvedAt: integer('approved_at', { mode: 'timestamp_ms' }),
+  appliedAt: integer('applied_at', { mode: 'timestamp_ms' }),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull().default(now),
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull().default(now),
+});
+
+/**
+ * Where a field's value comes from.
+ *   profile   the candidate's profile (a default for every application)
+ *   override  set by the candidate for this one application; survives re-preparation
+ *   answer    written by application_writer (or the candidate's edit of it)
+ *   file      a file from the profile (the base CV until phase 7)
+ *   rule      not a candidate value: consent given by approving, "decline to answer" on a
+ *             required demographic question
+ *   none      no value
+ */
+export const FIELD_SOURCES = ['profile', 'override', 'answer', 'file', 'rule', 'none'] as const;
+export type FieldSource = (typeof FIELD_SOURCES)[number];
+
+/** One row per field of the form (every step and branch); which ones apply is derived. */
+export const fieldValues = sqliteTable(
+  'field_values',
+  {
+    id: integer('id').primaryKey(),
+    applicationId: integer('application_id')
+      .notNull()
+      .references(() => applications.id, { onDelete: 'cascade' }),
+    /** `<step>:<refKey>`: stable across re-reads of the same form. */
+    fieldRef: text('field_ref').notNull(),
+    /** Position in the form (steps flattened), for display and CLI handles. */
+    position: integer('position').notNull(),
+    /** The field as Read found it (label, kind, options, meaning, revealedBy). */
+    spec: text('spec', { mode: 'json' }).$type<FieldSpec>().notNull(),
+    /** What the value is; the text sent (or the option, "checked", a file path, JSON entries). */
+    value: text('value'),
+    /** Effective source: `override` while the candidate's override is set. */
+    source: text('source', { enum: FIELD_SOURCES }).notNull(),
+    /** What preparation computed (kept under an override, so clearing it restores this). */
+    defaultValue: text('default_value'),
+    defaultSource: text('default_source', { enum: FIELD_SOURCES }).notNull(),
+    /** Why there is no value, or how it was chosen ("from your profile: 'EU citizen'"). */
+    note: text('note'),
+  },
+  (t) => [uniqueIndex('field_values_app_ref').on(t.applicationId, t.fieldRef)],
+);
+
+export const answers = sqliteTable(
+  'answers',
+  {
+    id: integer('id').primaryKey(),
+    applicationId: integer('application_id')
+      .notNull()
+      .references(() => applications.id, { onDelete: 'cascade' }),
+    /** The field_ref of the question it answers. */
+    questionRef: text('question_ref').notNull(),
+    question: text('question').notNull(),
+    /** text: the sentences are sent · choice: `choice` is sent, the sentences are its claim. */
+    kind: text('kind', { enum: ['text', 'choice'] }).notNull(),
+    /** needs_candidate: the facts can't answer it honestly; `missing` says what's lacking. */
+    status: text('status', { enum: ['answered', 'needs_candidate'] }).notNull(),
+    choice: text('choice'),
+    missing: text('missing'),
+    /** "answer:<id>" of a prior answer whose facts this one reuses. */
+    adaptedFrom: text('adapted_from'),
+    /** The candidate rewrote it (their words; not re-drafted on re-preparation). */
+    edited: integer('edited', { mode: 'boolean' }).notNull().default(false),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull().default(now),
+  },
+  (t) => [uniqueIndex('answers_app_question').on(t.applicationId, t.questionRef)],
+);
+
+/**
+ * none · unchecked (checks not run yet) · absent_number · contradiction ·
+ * verifier:<quantity|role|scope|timeframe|unsupported>. "Relies on an unconfirmed fact" is
+ * derived from the cited facts' status when shown, so confirming a fact clears it.
+ */
+export const answerSentences = sqliteTable(
+  'answer_sentences',
+  {
+    id: integer('id').primaryKey(),
+    answerId: integer('answer_id')
+      .notNull()
+      .references(() => answers.id, { onDelete: 'cascade' }),
+    idx: integer('idx').notNull(),
+    text: text('text').notNull(),
+    factIds: text('fact_ids_json', { mode: 'json' }).$type<number[]>().notNull(),
+    flag: text('flag').notNull().default('unchecked'),
+    /** What the check found ("the fact says a team of 4; the sentence says 10"). */
+    note: text('note'),
+  },
+  (t) => [uniqueIndex('answer_sentences_answer_idx').on(t.answerId, t.idx)],
+);
+
 /** Small daemon-internal state, key → JSON (e.g. which embedder made the fact vectors). */
 export const appState = sqliteTable('app_state', {
   key: text('key').primaryKey(),
@@ -307,3 +433,7 @@ export type AgentRunRow = typeof agentRuns.$inferSelect;
 export type NewAgentRunRow = typeof agentRuns.$inferInsert;
 export type NewEventRow = typeof events.$inferInsert;
 export type PostingFeedbackRow = typeof postingFeedback.$inferSelect;
+export type ApplicationRow = typeof applications.$inferSelect;
+export type FieldValueRow = typeof fieldValues.$inferSelect;
+export type AnswerRow = typeof answers.$inferSelect;
+export type AnswerSentenceRow = typeof answerSentences.$inferSelect;

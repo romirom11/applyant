@@ -4,6 +4,7 @@ import type { ReadExec } from './db/read-pool.ts';
 import type { GithubApi } from './domain/knowledge/sources/github.ts';
 import type { TextExtractor } from './domain/knowledge/text/extract.ts';
 import type { FxSource } from './domain/scoring/fx.ts';
+import type { McpAccess } from './mcp/server.ts';
 import type { AgentRunner } from './models/agent-runner.ts';
 import type { Embedder } from './models/embeddings.ts';
 import type { Secrets } from './secrets/secrets.ts';
@@ -20,6 +21,8 @@ export interface Deps {
   readPool: ReadExec;
   /** Daily reference exchange rates for salary comparison. */
   fx: FxSource;
+  /** Applyant's MCP endpoint: per-task tool grants (the writer's knowledge lookups). */
+  mcp: McpAccess | null;
   /** Documents → text (pdfjs-dist here; applyant-native on the Mac from 8a). */
   text: TextExtractor;
   dirs: {

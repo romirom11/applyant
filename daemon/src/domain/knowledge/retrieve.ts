@@ -18,6 +18,15 @@ export interface FactHit {
   score: number;
 }
 
+/** A fact as agents see it: text, status and the project it belongs to. */
+export type FactRef = Omit<FactHit, 'score'>;
+
+/** One line per fact for prompts: `#12 [personal_contribution · confirmed · Harbor, 2021–2024] text`. */
+export function factLine(f: FactRef): string {
+  const where = [f.project, f.period].filter(Boolean).join(', ');
+  return `#${f.id} [${f.kind} · ${f.status}${where ? ` · ${where}` : ''}] ${f.text}`;
+}
+
 export interface RetrieveQuery {
   text: string;
   /** The query embedding; null = keyword search only (no embedder available). */

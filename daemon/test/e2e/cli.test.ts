@@ -50,6 +50,18 @@ const EXTRACTION = {
 };
 const SECRET = 'jev_e2e_5d1c9b7a3e2f4a6b';
 
+// What the fake `claude` answers as application_writer. Field classification has no model in
+// this test, so the form's unlabelled-by-HTML name fields reach the writer as questions; the
+// writer says only the candidate can answer them, as it must when the facts don't say.
+const DRAFTS = ['q1', 'q2'].map((question) => ({
+  question,
+  status: 'needs_candidate',
+  choice: null,
+  sentences: [],
+  missing: 'Your name as you want it on the application',
+  adaptedFrom: null,
+}));
+
 let site: SiteServer;
 let home: string;
 let daemon: ChildProcess;
@@ -107,6 +119,24 @@ async function waitFor<T>(what: string, fn: () => Promise<T | undefined>, ms = 4
   }
 }
 
+interface AppField {
+  number: number;
+  label: string;
+  value: string | null;
+  source: string;
+  defaultValue: string | null;
+  missing: boolean;
+}
+
+interface AppJson {
+  id: number;
+  postingId: number;
+  stage: string;
+  title: string | null;
+  fields: AppField[];
+  answers: Array<{ status: string }>;
+}
+
 interface PostingJson {
   id: number;
   stage: string;
@@ -125,7 +155,7 @@ beforeAll(async () => {
   home = mkdtempSync(join(tmpdir(), 'applyant-e2e-'));
   writeFileSync(
     join(home, 'fake-claude-output.json'),
-    JSON.stringify({ $bySchema: { requirements: EXTRACTION } }),
+    JSON.stringify({ $bySchema: { requirements: EXTRACTION, drafts: { drafts: DRAFTS } } }),
     { mode: 0o600 },
   );
   daemon = spawn(process.execPath, ['src/main.ts'], { cwd: DAEMON_DIR, env: env() });
@@ -358,6 +388,79 @@ describe('applyant CLI against a live daemon', () => {
     const back = await cli(['jobs', 'interested', id]);
     expect(back.stdout).toMatch(/Marked posting \d+ as interested/);
     expect((await cliJson<PostingJson>(['jobs', 'show', id])).stage).toBe('scored');
+  });
+
+  it('prepares an application, takes per-application values and approves it', async () => {
+    const [scored] = await cliJson<PostingJson[]>(['jobs', 'list', '--stage', 'scored']);
+    if (!scored) throw new Error('no scored posting');
+    // `jobs interested` (previous test) started the application.
+    const app = await waitFor('the application to be prepared', async () => {
+      const rows = await cliJson<AppJson[]>(['applications', 'list']);
+      const a = rows.find((r) => r.postingId === scored.id);
+      return a && a.stage !== 'preparing' ? a : undefined;
+    });
+    const id = String(app.id);
+    expect(app).toMatchObject({ stage: 'needs_candidate', title: 'Senior AI Engineer' });
+    let full = await cliJson<AppJson>(['applications', 'preview', id]);
+    const byLabel = (a: AppJson, label: string) => a.fields.find((f) => f.label === label);
+    // Nothing is invented: no profile email yet, and the writer left the names to the candidate.
+    expect(byLabel(full, 'Email')).toMatchObject({ value: null, missing: true, source: 'none' });
+    expect(full.answers.map((a) => a.status)).toEqual(['needs_candidate', 'needs_candidate']);
+    const text = await cli(['applications', 'preview', id]);
+    expect(text.stdout).toMatch(/Needs you\n {2}#1 First name/);
+    expect(text.stdout).toContain('Approve is blocked:');
+    const refused = await cli(['applications', 'approve', id]);
+    expect(refused.code).toBe(1);
+    expect(refused.stderr).toMatch(/can't be approved yet:[\s\S]*required field\(s\) need a value/);
+
+    expect((await cli(['applications', 'set-field', id, '1', 'Alex'])).stdout).toMatch(
+      /#1 First name = Alex \(for this application only\)/,
+    );
+    await cli(['applications', 'set-field', id, 'Last name', 'Example']);
+    // The profile is the default: set it and prepare again; the per-application values stay.
+    await cli(['candidate', 'profile', 'set', 'email', 'alex@example.test']);
+    expect((await cli(['applications', 'prepare', id])).stdout).toMatch(
+      /Preparing application \d+ again/,
+    );
+    full = await waitFor('re-preparation', async () => {
+      const a = await cliJson<AppJson>(['applications', 'preview', id]);
+      return a.stage === 'ready_for_review' ? a : undefined;
+    });
+    expect(byLabel(full, 'Email')).toMatchObject({ value: 'alex@example.test', source: 'profile' });
+    expect(byLabel(full, 'First name')).toMatchObject({ value: 'Alex', source: 'override' });
+    // One application gets its own email; the profile keeps the default.
+    const set = await cliJson<{ field: AppField }>([
+      'applications',
+      'set-field',
+      id,
+      'email',
+      'jobs@example.test',
+    ]);
+    expect(set.field).toMatchObject({
+      value: 'jobs@example.test',
+      source: 'override',
+      defaultValue: 'alex@example.test',
+    });
+    const profile = await cliJson<Record<string, string[]>>(['candidate', 'profile', 'show']);
+    expect(profile.email).toEqual(['alex@example.test']);
+    const shown = await cli(['applications', 'preview', id]);
+    expect(shown.stdout).toMatch(/Email\s+jobs@example\.test\s+this application/);
+    expect(shown.stdout).toMatch(/First name\s+Alex\s+this application/);
+
+    const ok = await cli(['applications', 'approve', id]);
+    expect(ok.stdout).toMatch(/Approved application \d+ \(Senior AI Engineer · Acme AI\)/);
+    expect((await cliJson<AppJson>(['applications', 'preview', id])).stage).toBe('approved');
+    expect(
+      (await cli(['applications', 'set-field', id, 'email', 'x@example.test'])).stderr,
+    ).toMatch(/already approved/);
+    const posting = await cliJson<PostingJson & { applicationId: number }>([
+      'jobs',
+      'show',
+      String(scored.id),
+    ]);
+    expect(posting.applicationId).toBe(app.id);
+    // Preparation read nothing it could send: the form was never submitted.
+    expect(site.writes).toEqual([]);
   });
 
   it('reports bad input clearly', async () => {

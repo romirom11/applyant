@@ -12,6 +12,8 @@ export const TASK_ENTITY = {
   score_posting: 'posting',
   // The posting's application form: every step, field and option (phase 4).
   read_form: 'posting',
+  // Standard fields, answers (application_writer) and their checks (claim_verifier), phase 5.
+  prepare_application: 'application',
   sync_source: 'source',
   // The fact vector index as a whole: entity_id is always 0.
   embed_facts: 'index',
@@ -36,7 +38,7 @@ export interface Task<K extends TaskKind = TaskKind> {
   attempts: number;
 }
 
-/** Why a task needs the candidate (used from phase 5; richer shape arrives with hand-off). */
+/** Why a task needs the candidate (phase 5: what preparation lacks; phase 6 adds the browser). */
 export interface HandOff {
   reason: string;
   detail: string | null;

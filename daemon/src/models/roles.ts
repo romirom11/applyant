@@ -100,6 +100,8 @@ export const TASK_ROLE: Partial<Record<string, Role>> = {
   verify_posting: 'posting_liveness',
   // The form's own work is the browser; field_classify and option_match are Jev's.
   read_form: 'field_classify',
+  // The writer is the expensive part; standard fields (option_match) and claim_verifier also run.
+  prepare_application: 'application_writer',
 };
 
 /**

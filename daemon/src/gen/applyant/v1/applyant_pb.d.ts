@@ -176,6 +176,18 @@ export declare type Posting = Message<"applyant.v1.Posting"> & {
    * @generated from field: optional applyant.v1.ApplicationForm form = 26;
    */
   form?: ApplicationForm | undefined;
+
+  /**
+   * The posting's application, once there is one.
+   *
+   * @generated from field: optional int64 application_id = 27;
+   */
+  applicationId?: bigint | undefined;
+
+  /**
+   * @generated from field: applyant.v1.ApplicationStage application_stage = 28;
+   */
+  applicationStage: ApplicationStage;
 };
 
 /**
@@ -1048,6 +1060,32 @@ export declare type PostingEvent = Message<"applyant.v1.PostingEvent"> & {
 export declare const PostingEventSchema: GenMessage<PostingEvent>;
 
 /**
+ * @generated from message applyant.v1.ApplicationEvent
+ */
+export declare type ApplicationEvent = Message<"applyant.v1.ApplicationEvent"> & {
+  /**
+   * @generated from field: int64 application_id = 1;
+   */
+  applicationId: bigint;
+
+  /**
+   * @generated from field: int64 posting_id = 2;
+   */
+  postingId: bigint;
+
+  /**
+   * @generated from field: applyant.v1.ApplicationStage stage = 3;
+   */
+  stage: ApplicationStage;
+};
+
+/**
+ * Describes the message applyant.v1.ApplicationEvent.
+ * Use `create(ApplicationEventSchema)` to create a new message.
+ */
+export declare const ApplicationEventSchema: GenMessage<ApplicationEvent>;
+
+/**
  * @generated from message applyant.v1.Event
  */
 export declare type Event = Message<"applyant.v1.Event"> & {
@@ -1088,6 +1126,12 @@ export declare type Event = Message<"applyant.v1.Event"> & {
      */
     value: PostingEvent;
     case: "posting";
+  } | {
+    /**
+     * @generated from field: applyant.v1.ApplicationEvent application = 12;
+     */
+    value: ApplicationEvent;
+    case: "application";
   } | { case: undefined; value?: undefined };
 };
 
@@ -1879,6 +1923,14 @@ export declare type ConfirmFactRequest = Message<"applyant.v1.ConfirmFactRequest
    * @generated from field: repeated int64 ids = 1;
    */
   ids: bigint[];
+
+  /**
+   * With an application: confirms the unconfirmed facts it relies on (all of them when `ids`
+   * is empty; otherwise only those, which must be ones it relies on).
+   *
+   * @generated from field: optional int64 application_id = 2;
+   */
+  applicationId?: bigint | undefined;
 };
 
 /**
@@ -1971,6 +2023,650 @@ export declare type RejectFactResponse = Message<"applyant.v1.RejectFactResponse
  * Use `create(RejectFactResponseSchema)` to create a new message.
  */
 export declare const RejectFactResponseSchema: GenMessage<RejectFactResponse>;
+
+/**
+ * @generated from message applyant.v1.ApplicationField
+ */
+export declare type ApplicationField = Message<"applyant.v1.ApplicationField"> & {
+  /**
+   * 1-based position in the form (the CLI's #n).
+   *
+   * @generated from field: int32 number = 1;
+   */
+  number: number;
+
+  /**
+   * Stable id of the field: "<step>:<control>".
+   *
+   * @generated from field: string ref = 2;
+   */
+  ref: string;
+
+  /**
+   * @generated from field: int32 step = 3;
+   */
+  step: number;
+
+  /**
+   * @generated from field: string label = 4;
+   */
+  label: string;
+
+  /**
+   * text | textarea | select | combobox | radio | checkbox | file | date | group | unknown
+   *
+   * @generated from field: string kind = 5;
+   */
+  kind: string;
+
+  /**
+   * @generated from field: optional string meaning = 6;
+   */
+  meaning?: string | undefined;
+
+  /**
+   * @generated from field: bool required = 7;
+   */
+  required: boolean;
+
+  /**
+   * @generated from field: repeated string options = 8;
+   */
+  options: string[];
+
+  /**
+   * @generated from field: bool has_options = 9;
+   */
+  hasOptions: boolean;
+
+  /**
+   * standard | question | group | entry | consent | eeo
+   *
+   * @generated from field: string role = 10;
+   */
+  role: string;
+
+  /**
+   * What will be sent: text, an option, "checked"/"unchecked", a file path, or a JSON list
+   * (several options; a group's entries).
+   *
+   * @generated from field: optional string value = 11;
+   */
+  value?: string | undefined;
+
+  /**
+   * profile | override | answer | file | rule | none
+   *
+   * @generated from field: string source = 12;
+   */
+  source: string;
+
+  /**
+   * What preparation computed; applies again when an override is cleared.
+   *
+   * @generated from field: optional string default_value = 13;
+   */
+  defaultValue?: string | undefined;
+
+  /**
+   * @generated from field: string default_source = 14;
+   */
+  defaultSource: string;
+
+  /**
+   * Why there is no value, or how it was chosen.
+   *
+   * @generated from field: optional string note = 15;
+   */
+  note?: string | undefined;
+
+  /**
+   * The form will ask it: its branch (revealed_by) applies with the values as they are.
+   *
+   * @generated from field: bool active = 16;
+   */
+  active: boolean;
+
+  /**
+   * Required, active and without a value.
+   *
+   * @generated from field: bool missing = 17;
+   */
+  missing: boolean;
+
+  /**
+   * For fields of a repeatable group's entry: the group's ref.
+   *
+   * @generated from field: optional string entry_of = 18;
+   */
+  entryOf?: string | undefined;
+
+  /**
+   * "shown when "X" is "Yes"" for conditional fields.
+   *
+   * @generated from field: optional string condition = 19;
+   */
+  condition?: string | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.ApplicationField.
+ * Use `create(ApplicationFieldSchema)` to create a new message.
+ */
+export declare const ApplicationFieldSchema: GenMessage<ApplicationField>;
+
+/**
+ * @generated from message applyant.v1.AnswerSentence
+ */
+export declare type AnswerSentence = Message<"applyant.v1.AnswerSentence"> & {
+  /**
+   * @generated from field: int32 index = 1;
+   */
+  index: number;
+
+  /**
+   * @generated from field: string text = 2;
+   */
+  text: string;
+
+  /**
+   * @generated from field: repeated int64 fact_ids = 3;
+   */
+  factIds: bigint[];
+
+  /**
+   * none | unchecked | unconfirmed | rejected_fact | absent_number | contradiction |
+   * verifier:<quantity|role|scope|timeframe|unsupported>
+   *
+   * @generated from field: string flag = 4;
+   */
+  flag: string;
+
+  /**
+   * @generated from field: optional string note = 5;
+   */
+  note?: string | undefined;
+
+  /**
+   * @generated from field: repeated applyant.v1.MatchedFact facts = 6;
+   */
+  facts: MatchedFact[];
+};
+
+/**
+ * Describes the message applyant.v1.AnswerSentence.
+ * Use `create(AnswerSentenceSchema)` to create a new message.
+ */
+export declare const AnswerSentenceSchema: GenMessage<AnswerSentence>;
+
+/**
+ * @generated from message applyant.v1.Answer
+ */
+export declare type Answer = Message<"applyant.v1.Answer"> & {
+  /**
+   * 1-based, in form order (the CLI's q1, q2, …).
+   *
+   * @generated from field: int32 number = 1;
+   */
+  number: number;
+
+  /**
+   * @generated from field: int64 id = 2;
+   */
+  id: bigint;
+
+  /**
+   * The question's field ref.
+   *
+   * @generated from field: string field_ref = 3;
+   */
+  fieldRef: string;
+
+  /**
+   * @generated from field: string question = 4;
+   */
+  question: string;
+
+  /**
+   * text (the sentences are sent) | choice (`choice` is sent; the sentences are its claim)
+   *
+   * @generated from field: string kind = 5;
+   */
+  kind: string;
+
+  /**
+   * answered | needs_candidate
+   *
+   * @generated from field: string status = 6;
+   */
+  status: string;
+
+  /**
+   * @generated from field: optional string choice = 7;
+   */
+  choice?: string | undefined;
+
+  /**
+   * For needs_candidate: what the candidate has to tell.
+   *
+   * @generated from field: optional string missing = 8;
+   */
+  missing?: string | undefined;
+
+  /**
+   * "answer:<id>" of a prior answer whose facts it reuses.
+   *
+   * @generated from field: optional string adapted_from = 9;
+   */
+  adaptedFrom?: string | undefined;
+
+  /**
+   * @generated from field: bool edited = 10;
+   */
+  edited: boolean;
+
+  /**
+   * @generated from field: bool active = 11;
+   */
+  active: boolean;
+
+  /**
+   * The candidate set the field directly; this draft isn't used.
+   *
+   * @generated from field: bool overridden = 12;
+   */
+  overridden: boolean;
+
+  /**
+   * @generated from field: repeated applyant.v1.AnswerSentence sentences = 13;
+   */
+  sentences: AnswerSentence[];
+};
+
+/**
+ * Describes the message applyant.v1.Answer.
+ * Use `create(AnswerSchema)` to create a new message.
+ */
+export declare const AnswerSchema: GenMessage<Answer>;
+
+/**
+ * @generated from message applyant.v1.Application
+ */
+export declare type Application = Message<"applyant.v1.Application"> & {
+  /**
+   * @generated from field: int64 id = 1;
+   */
+  id: bigint;
+
+  /**
+   * @generated from field: int64 posting_id = 2;
+   */
+  postingId: bigint;
+
+  /**
+   * @generated from field: applyant.v1.ApplicationStage stage = 3;
+   */
+  stage: ApplicationStage;
+
+  /**
+   * web_form | email
+   *
+   * @generated from field: string channel = 4;
+   */
+  channel: string;
+
+  /**
+   * @generated from field: optional string note = 5;
+   */
+  note?: string | undefined;
+
+  /**
+   * @generated from field: optional string title = 6;
+   */
+  title?: string | undefined;
+
+  /**
+   * @generated from field: optional string company = 7;
+   */
+  company?: string | undefined;
+
+  /**
+   * @generated from field: optional int32 score = 8;
+   */
+  score?: number | undefined;
+
+  /**
+   * @generated from field: string posting_url = 9;
+   */
+  postingUrl: string;
+
+  /**
+   * @generated from field: optional string form_url = 10;
+   */
+  formUrl?: string | undefined;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp created_at = 11;
+   */
+  createdAt?: Timestamp | undefined;
+
+  /**
+   * @generated from field: optional google.protobuf.Timestamp prepared_at = 12;
+   */
+  preparedAt?: Timestamp | undefined;
+
+  /**
+   * @generated from field: optional google.protobuf.Timestamp approved_at = 13;
+   */
+  approvedAt?: Timestamp | undefined;
+
+  /**
+   * Why approve is refused; empty when it can be approved.
+   *
+   * @generated from field: repeated string blockers = 14;
+   */
+  blockers: string[];
+
+  /**
+   * What only the candidate can give.
+   *
+   * @generated from field: repeated string missing = 15;
+   */
+  missing: string[];
+
+  /**
+   * @generated from field: repeated int64 unconfirmed_fact_ids = 16;
+   */
+  unconfirmedFactIds: bigint[];
+
+  /**
+   * Only filled by GetApplication (and the review RPCs).
+   *
+   * @generated from field: repeated applyant.v1.ApplicationField fields = 17;
+   */
+  fields: ApplicationField[];
+
+  /**
+   * @generated from field: repeated applyant.v1.Answer answers = 18;
+   */
+  answers: Answer[];
+};
+
+/**
+ * Describes the message applyant.v1.Application.
+ * Use `create(ApplicationSchema)` to create a new message.
+ */
+export declare const ApplicationSchema: GenMessage<Application>;
+
+/**
+ * @generated from message applyant.v1.ListApplicationsRequest
+ */
+export declare type ListApplicationsRequest = Message<"applyant.v1.ListApplicationsRequest"> & {
+  /**
+   * Unspecified lists every stage.
+   *
+   * @generated from field: applyant.v1.ApplicationStage stage = 1;
+   */
+  stage: ApplicationStage;
+};
+
+/**
+ * Describes the message applyant.v1.ListApplicationsRequest.
+ * Use `create(ListApplicationsRequestSchema)` to create a new message.
+ */
+export declare const ListApplicationsRequestSchema: GenMessage<ListApplicationsRequest>;
+
+/**
+ * @generated from message applyant.v1.ListApplicationsResponse
+ */
+export declare type ListApplicationsResponse = Message<"applyant.v1.ListApplicationsResponse"> & {
+  /**
+   * @generated from field: repeated applyant.v1.Application applications = 1;
+   */
+  applications: Application[];
+};
+
+/**
+ * Describes the message applyant.v1.ListApplicationsResponse.
+ * Use `create(ListApplicationsResponseSchema)` to create a new message.
+ */
+export declare const ListApplicationsResponseSchema: GenMessage<ListApplicationsResponse>;
+
+/**
+ * @generated from message applyant.v1.GetApplicationRequest
+ */
+export declare type GetApplicationRequest = Message<"applyant.v1.GetApplicationRequest"> & {
+  /**
+   * @generated from field: int64 id = 1;
+   */
+  id: bigint;
+};
+
+/**
+ * Describes the message applyant.v1.GetApplicationRequest.
+ * Use `create(GetApplicationRequestSchema)` to create a new message.
+ */
+export declare const GetApplicationRequestSchema: GenMessage<GetApplicationRequest>;
+
+/**
+ * @generated from message applyant.v1.GetApplicationResponse
+ */
+export declare type GetApplicationResponse = Message<"applyant.v1.GetApplicationResponse"> & {
+  /**
+   * @generated from field: applyant.v1.Application application = 1;
+   */
+  application?: Application | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.GetApplicationResponse.
+ * Use `create(GetApplicationResponseSchema)` to create a new message.
+ */
+export declare const GetApplicationResponseSchema: GenMessage<GetApplicationResponse>;
+
+/**
+ * @generated from message applyant.v1.PrepareApplicationRequest
+ */
+export declare type PrepareApplicationRequest = Message<"applyant.v1.PrepareApplicationRequest"> & {
+  /**
+   * One of the two: a posting (its application is created if it has none) or an application.
+   *
+   * @generated from field: optional int64 posting_id = 1;
+   */
+  postingId?: bigint | undefined;
+
+  /**
+   * @generated from field: optional int64 application_id = 2;
+   */
+  applicationId?: bigint | undefined;
+
+  /**
+   * Redraft every answer, not only missing ones (the candidate's edits are redrafted too).
+   *
+   * @generated from field: bool rewrite = 3;
+   */
+  rewrite: boolean;
+};
+
+/**
+ * Describes the message applyant.v1.PrepareApplicationRequest.
+ * Use `create(PrepareApplicationRequestSchema)` to create a new message.
+ */
+export declare const PrepareApplicationRequestSchema: GenMessage<PrepareApplicationRequest>;
+
+/**
+ * @generated from message applyant.v1.PrepareApplicationResponse
+ */
+export declare type PrepareApplicationResponse = Message<"applyant.v1.PrepareApplicationResponse"> & {
+  /**
+   * @generated from field: applyant.v1.Application application = 1;
+   */
+  application?: Application | undefined;
+
+  /**
+   * @generated from field: bool created = 2;
+   */
+  created: boolean;
+};
+
+/**
+ * Describes the message applyant.v1.PrepareApplicationResponse.
+ * Use `create(PrepareApplicationResponseSchema)` to create a new message.
+ */
+export declare const PrepareApplicationResponseSchema: GenMessage<PrepareApplicationResponse>;
+
+/**
+ * @generated from message applyant.v1.SetFieldValueRequest
+ */
+export declare type SetFieldValueRequest = Message<"applyant.v1.SetFieldValueRequest"> & {
+  /**
+   * @generated from field: int64 application_id = 1;
+   */
+  applicationId: bigint;
+
+  /**
+   * The field's number (#3), meaning (salary), label or ref.
+   *
+   * @generated from field: string field = 2;
+   */
+  field: string;
+
+  /**
+   * @generated from field: string value = 3;
+   */
+  value: string;
+
+  /**
+   * Clears this application's value: the prepared one (from the profile) applies again.
+   *
+   * @generated from field: bool clear = 4;
+   */
+  clear: boolean;
+};
+
+/**
+ * Describes the message applyant.v1.SetFieldValueRequest.
+ * Use `create(SetFieldValueRequestSchema)` to create a new message.
+ */
+export declare const SetFieldValueRequestSchema: GenMessage<SetFieldValueRequest>;
+
+/**
+ * @generated from message applyant.v1.SetFieldValueResponse
+ */
+export declare type SetFieldValueResponse = Message<"applyant.v1.SetFieldValueResponse"> & {
+  /**
+   * @generated from field: applyant.v1.Application application = 1;
+   */
+  application?: Application | undefined;
+
+  /**
+   * @generated from field: applyant.v1.ApplicationField field = 2;
+   */
+  field?: ApplicationField | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.SetFieldValueResponse.
+ * Use `create(SetFieldValueResponseSchema)` to create a new message.
+ */
+export declare const SetFieldValueResponseSchema: GenMessage<SetFieldValueResponse>;
+
+/**
+ * @generated from message applyant.v1.EditAnswerRequest
+ */
+export declare type EditAnswerRequest = Message<"applyant.v1.EditAnswerRequest"> & {
+  /**
+   * @generated from field: int64 application_id = 1;
+   */
+  applicationId: bigint;
+
+  /**
+   * q2, 2, or the question field's number / label.
+   *
+   * @generated from field: string answer = 2;
+   */
+  answer: string;
+
+  /**
+   * 0-based sentence; unset = the whole answer.
+   *
+   * @generated from field: optional int32 sentence = 3;
+   */
+  sentence?: number | undefined;
+
+  /**
+   * The candidate's words. Unset (with `sentence`) confirms that sentence as written.
+   *
+   * @generated from field: optional string text = 4;
+   */
+  text?: string | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.EditAnswerRequest.
+ * Use `create(EditAnswerRequestSchema)` to create a new message.
+ */
+export declare const EditAnswerRequestSchema: GenMessage<EditAnswerRequest>;
+
+/**
+ * @generated from message applyant.v1.EditAnswerResponse
+ */
+export declare type EditAnswerResponse = Message<"applyant.v1.EditAnswerResponse"> & {
+  /**
+   * @generated from field: applyant.v1.Application application = 1;
+   */
+  application?: Application | undefined;
+
+  /**
+   * @generated from field: applyant.v1.Answer answer = 2;
+   */
+  answer?: Answer | undefined;
+
+  /**
+   * Facts saved from the candidate's words (confirmed, origin review_edit).
+   *
+   * @generated from field: repeated int64 fact_ids = 3;
+   */
+  factIds: bigint[];
+};
+
+/**
+ * Describes the message applyant.v1.EditAnswerResponse.
+ * Use `create(EditAnswerResponseSchema)` to create a new message.
+ */
+export declare const EditAnswerResponseSchema: GenMessage<EditAnswerResponse>;
+
+/**
+ * @generated from message applyant.v1.ApproveApplicationRequest
+ */
+export declare type ApproveApplicationRequest = Message<"applyant.v1.ApproveApplicationRequest"> & {
+  /**
+   * @generated from field: int64 id = 1;
+   */
+  id: bigint;
+};
+
+/**
+ * Describes the message applyant.v1.ApproveApplicationRequest.
+ * Use `create(ApproveApplicationRequestSchema)` to create a new message.
+ */
+export declare const ApproveApplicationRequestSchema: GenMessage<ApproveApplicationRequest>;
+
+/**
+ * @generated from message applyant.v1.ApproveApplicationResponse
+ */
+export declare type ApproveApplicationResponse = Message<"applyant.v1.ApproveApplicationResponse"> & {
+  /**
+   * @generated from field: applyant.v1.Application application = 1;
+   */
+  application?: Application | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.ApproveApplicationResponse.
+ * Use `create(ApproveApplicationResponseSchema)` to create a new message.
+ */
+export declare const ApproveApplicationResponseSchema: GenMessage<ApproveApplicationResponse>;
 
 /**
  * @generated from enum applyant.v1.PostingStage
@@ -2146,6 +2842,44 @@ export enum FactStatus {
  * Describes the enum applyant.v1.FactStatus.
  */
 export declare const FactStatusSchema: GenEnum<FactStatus>;
+
+/**
+ * @generated from enum applyant.v1.ApplicationStage
+ */
+export enum ApplicationStage {
+  /**
+   * @generated from enum value: APPLICATION_STAGE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: APPLICATION_STAGE_PREPARING = 1;
+   */
+  PREPARING = 1,
+
+  /**
+   * @generated from enum value: APPLICATION_STAGE_READY_FOR_REVIEW = 2;
+   */
+  READY_FOR_REVIEW = 2,
+
+  /**
+   * Something only the candidate can give: a value the profile lacks, a fact the knowledge
+   * base lacks (see `note` and the missing fields).
+   *
+   * @generated from enum value: APPLICATION_STAGE_NEEDS_CANDIDATE = 3;
+   */
+  NEEDS_CANDIDATE = 3,
+
+  /**
+   * @generated from enum value: APPLICATION_STAGE_APPROVED = 4;
+   */
+  APPROVED = 4,
+}
+
+/**
+ * Describes the enum applyant.v1.ApplicationStage.
+ */
+export declare const ApplicationStageSchema: GenEnum<ApplicationStage>;
 
 /**
  * ApplyantService is the only contract between applyantd and its clients
@@ -2385,6 +3119,71 @@ export declare const ApplyantService: GenService<{
     methodKind: "unary";
     input: typeof RejectFactRequestSchema;
     output: typeof RejectFactResponseSchema;
+  },
+  /**
+   * Applications: one per posting, prepared for its real form, reviewed, then approved.
+   *
+   * @generated from rpc applyant.v1.ApplyantService.ListApplications
+   */
+  listApplications: {
+    methodKind: "unary";
+    input: typeof ListApplicationsRequestSchema;
+    output: typeof ListApplicationsResponseSchema;
+  },
+  /**
+   * GetApplication returns everything review shows: every field with its value and where it
+   * came from, every answer sentence with its facts and flags, and what still blocks approve.
+   *
+   * @generated from rpc applyant.v1.ApplyantService.GetApplication
+   */
+  getApplication: {
+    methodKind: "unary";
+    input: typeof GetApplicationRequestSchema;
+    output: typeof GetApplicationResponseSchema;
+  },
+  /**
+   * PrepareApplication starts the posting's application, or prepares it again: standard fields
+   * from the current profile (per-application overrides stay), missing answers drafted.
+   *
+   * @generated from rpc applyant.v1.ApplyantService.PrepareApplication
+   */
+  prepareApplication: {
+    methodKind: "unary";
+    input: typeof PrepareApplicationRequestSchema;
+    output: typeof PrepareApplicationResponseSchema;
+  },
+  /**
+   * SetFieldValue sets one field's value for this application only (the profile is untouched),
+   * or clears that override so the prepared value applies again.
+   *
+   * @generated from rpc applyant.v1.ApplyantService.SetFieldValue
+   */
+  setFieldValue: {
+    methodKind: "unary";
+    input: typeof SetFieldValueRequestSchema;
+    output: typeof SetFieldValueResponseSchema;
+  },
+  /**
+   * EditAnswer rewrites a sentence or a whole answer in the candidate's words (saved as
+   * confirmed review_edit facts), or confirms a flagged sentence as true as written.
+   *
+   * @generated from rpc applyant.v1.ApplyantService.EditAnswer
+   */
+  editAnswer: {
+    methodKind: "unary";
+    input: typeof EditAnswerRequestSchema;
+    output: typeof EditAnswerResponseSchema;
+  },
+  /**
+   * ApproveApplication is refused (FailedPrecondition, listing why) while a required value is
+   * missing, a sentence is flagged or unchecked, or a relied-on fact is unconfirmed.
+   *
+   * @generated from rpc applyant.v1.ApplyantService.ApproveApplication
+   */
+  approveApplication: {
+    methodKind: "unary";
+    input: typeof ApproveApplicationRequestSchema;
+    output: typeof ApproveApplicationResponseSchema;
   },
 }>;
 

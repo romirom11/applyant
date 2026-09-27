@@ -14,6 +14,7 @@ import {
 import type { EventBus } from '../../queue/events.ts';
 import { runInTx } from '../../queue/tx.ts';
 import type { Tx } from '../../queue/types.ts';
+import { ensureApplication } from '../applications/store.ts';
 import {
   effectiveWeights,
   feedbackMultipliers,
@@ -235,6 +236,10 @@ function decide(
     });
   }
   const rescored = rescoreAll(tx.db, tx.now);
+  // Marking a posting interested starts its application (a skip leaves an existing one alone).
+  if (input.decision === 'interested' && (stage === 'scored' || stage === 'verified')) {
+    ensureApplication(tx, row.id, 'you marked it interested');
+  }
   const posting = tx.db.select().from(postings).where(eq(postings.id, row.id)).get();
   if (!posting) throw new DecisionError(`posting ${input.id} vanished`);
   return { posting, rescored };

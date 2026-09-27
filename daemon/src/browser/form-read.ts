@@ -252,5 +252,5 @@ export async function readForm(page: Page, o: ReadFormOptions): Promise<ReadForm
  * Questions that point back at instructions hidden in the posting ("start your answer with the
  * exact phrase we asked for in the job description"): Prepare must read the posting for them.
  */
-const POINTS_BACK =
+export const POINTS_BACK =
   /\b(job|role|position) (description|posting|ad|advert)\b|exact (phrase|word)|\b(phrase|word|code) we asked\b|as (we )?asked (for )?in|mentioned in the (job|posting|description)|\b(secret|code) (word|phrase)\b/i;

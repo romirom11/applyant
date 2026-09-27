@@ -7,7 +7,6 @@ import { type FactStatus, facts, type SourceKind, type SourceRow } from '../db/s
 import { enqueueEmbedFacts } from '../domain/knowledge/embed-index.ts';
 import type { EvidenceView } from '../domain/knowledge/evidence.ts';
 import {
-  confirmFact,
   editFact,
   FactError,
   type FactView,
@@ -176,7 +175,6 @@ export function candidateRpcs(
   | 'addSource'
   | 'syncSources'
   | 'listFacts'
-  | 'confirmFact'
   | 'editFact'
   | 'rejectFact'
 > {
@@ -280,10 +278,6 @@ export function candidateRpcs(
       });
     },
 
-    confirmFact(req) {
-      return guard(() => changeFacts(c, ids(req.ids), confirmFact));
-    },
-
     rejectFact(req) {
       return guard(() => changeFacts(c, ids(req.ids), rejectFact));
     },
@@ -307,7 +301,7 @@ export function candidateRpcs(
 function changeFacts(
   c: RpcContext,
   factIds: number[],
-  change: typeof confirmFact,
+  change: typeof rejectFact,
 ): { facts: Fact[] } {
   const views = runInTx(c.db, c.bus, { now: c.now() }, (tx) =>
     factIds.map((id) => {

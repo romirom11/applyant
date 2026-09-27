@@ -1,6 +1,7 @@
 // `applyant jobs …`: postings, their scores and the candidate's calls on them.
 import type { Command } from 'commander';
 import type { Posting } from '../gen/applyant/v1/applyant_pb.js';
+import { appStageName } from './applications.ts';
 import type { ApplyantClient } from './client.ts';
 import { iso, parseStage, postingJson, stageName, table, truncate } from './format.ts';
 
@@ -226,6 +227,11 @@ export function registerJobs(program: Command, client: () => ApplyantClient): vo
         out(`Decision     ${j.decision}${j.decisionReason ? `: ${j.decisionReason}` : ''}`);
       }
       if (j.scoreNote) out(`Scoring      ${j.scoreNote}`);
+      if (p.applicationId !== undefined) {
+        out(
+          `Application  ${p.applicationId} · ${appStageName(p.applicationStage).replace(/_/g, ' ')} (\`applyant applications preview ${p.applicationId}\`)`,
+        );
+      }
       if (p.breakdown.length) {
         out('');
         out(`Score ${j.score}${j.scoredAt ? `  (scored ${j.scoredAt})` : ''}`);
@@ -257,6 +263,23 @@ export function registerJobs(program: Command, client: () => ApplyantClient): vo
         out('Application form');
         for (const line of formLines(p)) out(line);
       }
+    });
+
+  jobs
+    .command('apply <id>')
+    .description(
+      'prepare an application for this posting (it is also started by a score at or above your threshold, or `jobs interested`)',
+    )
+    .option('--rewrite', 'when it exists: redraft every answer')
+    .action(async (idArg: string, opts: { rewrite?: boolean }) => {
+      const res = await client().prepareApplication({
+        postingId: BigInt(positiveInt(idArg)),
+        rewrite: !!opts.rewrite,
+      });
+      const a = res.application;
+      out(
+        `${res.created ? 'Preparing' : 'Preparing again:'} application ${a?.id} for posting ${idArg}. Then \`applyant applications preview ${a?.id}\`.`,
+      );
     });
 
   jobs

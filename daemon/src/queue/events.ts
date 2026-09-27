@@ -16,6 +16,8 @@ export type EventKind =
   | 'posting.stage'
   // A posting's application form was read (stage unchanged; message says what was found).
   | 'posting.form'
+  // An application moved (entity_id = application id, posting_id set, stage = its stage).
+  | 'application.stage'
   | 'source.synced';
 
 export interface EventInput {

@@ -53,6 +53,24 @@ service ApplyantService {
   rpc EditFact(EditFactRequest) returns (EditFactResponse);
   // RejectFact marks a fact as untrue; a re-sync won't bring it back.
   rpc RejectFact(RejectFactRequest) returns (RejectFactResponse);
+
+  // Applications: one per posting, prepared for its real form, reviewed, then approved.
+  rpc ListApplications(ListApplicationsRequest) returns (ListApplicationsResponse);
+  // GetApplication returns everything review shows: every field with its value and where it
+  // came from, every answer sentence with its facts and flags, and what still blocks approve.
+  rpc GetApplication(GetApplicationRequest) returns (GetApplicationResponse);
+  // PrepareApplication starts the posting's application, or prepares it again: standard fields
+  // from the current profile (per-application overrides stay), missing answers drafted.
+  rpc PrepareApplication(PrepareApplicationRequest) returns (PrepareApplicationResponse);
+  // SetFieldValue sets one field's value for this application only (the profile is untouched),
+  // or clears that override so the prepared value applies again.
+  rpc SetFieldValue(SetFieldValueRequest) returns (SetFieldValueResponse);
+  // EditAnswer rewrites a sentence or a whole answer in the candidate's words (saved as
+  // confirmed review_edit facts), or confirms a flagged sentence as true as written.
+  rpc EditAnswer(EditAnswerRequest) returns (EditAnswerResponse);
+  // ApproveApplication is refused (FailedPrecondition, listing why) while a required value is
+  // missing, a sentence is flagged or unchecked, or a relied-on fact is unconfirmed.
+  rpc ApproveApplication(ApproveApplicationRequest) returns (ApproveApplicationResponse);
 }
 
 enum PostingStage {
@@ -108,6 +126,9 @@ message Posting {
   optional google.protobuf.Timestamp form_read_at = 25;
   // Only filled by GetPosting: the application form as Read found it.
   optional ApplicationForm form = 26;
+  // The posting's application, once there is one.
+  optional int64 application_id = 27;
+  ApplicationStage application_stage = 28;
 }
 
 // How to find a form control again: getByRole(role, {name, exact}).nth(nth) inside the
@@ -347,6 +368,12 @@ message PostingEvent {
   PostingStage stage = 2;
 }
 
+message ApplicationEvent {
+  int64 application_id = 1;
+  int64 posting_id = 2;
+  ApplicationStage stage = 3;
+}
+
 message Event {
   int64 id = 1;
   google.protobuf.Timestamp at = 2;
@@ -356,6 +383,7 @@ message Event {
   oneof payload {
     TaskEvent task = 10;
     PostingEvent posting = 11;
+    ApplicationEvent application = 12;
   }
 }
 
@@ -569,6 +597,9 @@ message ListFactsResponse {
 
 message ConfirmFactRequest {
   repeated int64 ids = 1;
+  // With an application: confirms the unconfirmed facts it relies on (all of them when `ids`
+  // is empty; otherwise only those, which must be ones it relies on).
+  optional int64 application_id = 2;
 }
 
 message ConfirmFactResponse {
@@ -590,4 +621,179 @@ message RejectFactRequest {
 
 message RejectFactResponse {
   repeated Fact facts = 1;
+}
+
+// ---- Applications -------------------------------------------------------------------------
+
+enum ApplicationStage {
+  APPLICATION_STAGE_UNSPECIFIED = 0;
+  APPLICATION_STAGE_PREPARING = 1;
+  APPLICATION_STAGE_READY_FOR_REVIEW = 2;
+  // Something only the candidate can give: a value the profile lacks, a fact the knowledge
+  // base lacks (see `note` and the missing fields).
+  APPLICATION_STAGE_NEEDS_CANDIDATE = 3;
+  APPLICATION_STAGE_APPROVED = 4;
+}
+
+message ApplicationField {
+  // 1-based position in the form (the CLI's #n).
+  int32 number = 1;
+  // Stable id of the field: "<step>:<control>".
+  string ref = 2;
+  int32 step = 3;
+  string label = 4;
+  // text | textarea | select | combobox | radio | checkbox | file | date | group | unknown
+  string kind = 5;
+  optional string meaning = 6;
+  bool required = 7;
+  repeated string options = 8;
+  bool has_options = 9;
+  // standard | question | group | entry | consent | eeo
+  string role = 10;
+  // What will be sent: text, an option, "checked"/"unchecked", a file path, or a JSON list
+  // (several options; a group's entries).
+  optional string value = 11;
+  // profile | override | answer | file | rule | none
+  string source = 12;
+  // What preparation computed; applies again when an override is cleared.
+  optional string default_value = 13;
+  string default_source = 14;
+  // Why there is no value, or how it was chosen.
+  optional string note = 15;
+  // The form will ask it: its branch (revealed_by) applies with the values as they are.
+  bool active = 16;
+  // Required, active and without a value.
+  bool missing = 17;
+  // For fields of a repeatable group's entry: the group's ref.
+  optional string entry_of = 18;
+  // "shown when "X" is "Yes"" for conditional fields.
+  optional string condition = 19;
+}
+
+message AnswerSentence {
+  int32 index = 1;
+  string text = 2;
+  repeated int64 fact_ids = 3;
+  // none | unchecked | unconfirmed | rejected_fact | absent_number | contradiction |
+  // verifier:<quantity|role|scope|timeframe|unsupported>
+  string flag = 4;
+  optional string note = 5;
+  repeated MatchedFact facts = 6;
+}
+
+message Answer {
+  // 1-based, in form order (the CLI's q1, q2, …).
+  int32 number = 1;
+  int64 id = 2;
+  // The question's field ref.
+  string field_ref = 3;
+  string question = 4;
+  // text (the sentences are sent) | choice (`choice` is sent; the sentences are its claim)
+  string kind = 5;
+  // answered | needs_candidate
+  string status = 6;
+  optional string choice = 7;
+  // For needs_candidate: what the candidate has to tell.
+  optional string missing = 8;
+  // "answer:<id>" of a prior answer whose facts it reuses.
+  optional string adapted_from = 9;
+  bool edited = 10;
+  bool active = 11;
+  // The candidate set the field directly; this draft isn't used.
+  bool overridden = 12;
+  repeated AnswerSentence sentences = 13;
+}
+
+message Application {
+  int64 id = 1;
+  int64 posting_id = 2;
+  ApplicationStage stage = 3;
+  // web_form | email
+  string channel = 4;
+  optional string note = 5;
+  optional string title = 6;
+  optional string company = 7;
+  optional int32 score = 8;
+  string posting_url = 9;
+  optional string form_url = 10;
+  google.protobuf.Timestamp created_at = 11;
+  optional google.protobuf.Timestamp prepared_at = 12;
+  optional google.protobuf.Timestamp approved_at = 13;
+  // Why approve is refused; empty when it can be approved.
+  repeated string blockers = 14;
+  // What only the candidate can give.
+  repeated string missing = 15;
+  repeated int64 unconfirmed_fact_ids = 16;
+  // Only filled by GetApplication (and the review RPCs).
+  repeated ApplicationField fields = 17;
+  repeated Answer answers = 18;
+}
+
+message ListApplicationsRequest {
+  // Unspecified lists every stage.
+  ApplicationStage stage = 1;
+}
+
+message ListApplicationsResponse {
+  repeated Application applications = 1;
+}
+
+message GetApplicationRequest {
+  int64 id = 1;
+}
+
+message GetApplicationResponse {
+  Application application = 1;
+}
+
+message PrepareApplicationRequest {
+  // One of the two: a posting (its application is created if it has none) or an application.
+  optional int64 posting_id = 1;
+  optional int64 application_id = 2;
+  // Redraft every answer, not only missing ones (the candidate's edits are redrafted too).
+  bool rewrite = 3;
+}
+
+message PrepareApplicationResponse {
+  Application application = 1;
+  bool created = 2;
+}
+
+message SetFieldValueRequest {
+  int64 application_id = 1;
+  // The field's number (#3), meaning (salary), label or ref.
+  string field = 2;
+  string value = 3;
+  // Clears this application's value: the prepared one (from the profile) applies again.
+  bool clear = 4;
+}
+
+message SetFieldValueResponse {
+  Application application = 1;
+  ApplicationField field = 2;
+}
+
+message EditAnswerRequest {
+  int64 application_id = 1;
+  // q2, 2, or the question field's number / label.
+  string answer = 2;
+  // 0-based sentence; unset = the whole answer.
+  optional int32 sentence = 3;
+  // The candidate's words. Unset (with `sentence`) confirms that sentence as written.
+  optional string text = 4;
+}
+
+message EditAnswerResponse {
+  Application application = 1;
+  Answer answer = 2;
+  // Facts saved from the candidate's words (confirmed, origin review_edit).
+  repeated int64 fact_ids = 3;
+}
+
+message ApproveApplicationRequest {
+  int64 id = 1;
+}
+
+message ApproveApplicationResponse {
+  Application application = 1;
 }

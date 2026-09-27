@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // applyant: a thin client. Every command is one or two RPCs to applyantd.
 import { Command } from 'commander';
+import { registerApplications } from './applications.ts';
 import { registerCandidate } from './candidate.ts';
 import { type ApplyantClient, connect, describeError } from './client.ts';
 import { eventJson, eventLine } from './format.ts';
@@ -58,6 +59,7 @@ export function buildCli(client: () => ApplyantClient): Command {
 
   registerJobs(program, client);
   registerCandidate(program, client);
+  registerApplications(program, client);
 
   const runs = program.command('runs').description('task activity');
   runs

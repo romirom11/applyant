@@ -2,15 +2,26 @@
 import { create } from '@bufbuild/protobuf';
 import { timestampFromDate } from '@bufbuild/protobuf/wkt';
 import type { ElementRef, FormRead } from '../browser/form-types.ts';
-import type { EventRow, PostingRow, PostingSourceRow, PostingStage } from '../db/schema.ts';
+import type {
+  ApplicationRow,
+  ApplicationStage,
+  EventRow,
+  PostingRow,
+  PostingSourceRow,
+  PostingStage,
+} from '../db/schema.ts';
+import type { ApplicationView } from '../domain/applications/store.ts';
 import { effectiveExtraction } from '../domain/scoring/structured.ts';
 import type { CitedFact } from '../domain/search/postings.ts';
 import {
+  type Application,
   type ApplicationForm,
   ApplicationFormSchema,
+  ApplicationSchema,
   ElementRefSchema,
   type Event,
   EventSchema,
+  ApplicationStage as PbAppStage,
   type ElementRef as PbElementRef,
   FactStatus as PbFactStatus,
   PostingStage as PbStage,
@@ -35,6 +46,108 @@ const STAGE_TO_PB: Record<PostingStage, PbStage> = {
   scored: PbStage.SCORED,
   skipped: PbStage.SKIPPED,
 };
+
+const APP_STAGE_TO_PB: Record<ApplicationStage, PbAppStage> = {
+  preparing: PbAppStage.PREPARING,
+  ready_for_review: PbAppStage.READY_FOR_REVIEW,
+  needs_candidate: PbAppStage.NEEDS_CANDIDATE,
+  approved: PbAppStage.APPROVED,
+};
+
+export function appStageToPb(stage: string | null | undefined): PbAppStage {
+  return APP_STAGE_TO_PB[stage as ApplicationStage] ?? PbAppStage.UNSPECIFIED;
+}
+
+export function appStageFromPb(stage: PbAppStage): ApplicationStage | undefined {
+  for (const [key, value] of Object.entries(APP_STAGE_TO_PB)) {
+    if (value === stage) return key as ApplicationStage;
+  }
+  return undefined;
+}
+
+/** `full` adds every field and answer (GetApplication and the review RPCs). */
+export function applicationToPb(view: ApplicationView, full = true): Application {
+  const { app, posting } = view;
+  return create(ApplicationSchema, {
+    id: BigInt(app.id),
+    postingId: BigInt(app.postingId),
+    stage: appStageToPb(app.stage),
+    channel: app.channel,
+    note: app.note ?? undefined,
+    title: posting.title ?? undefined,
+    company: posting.company ?? undefined,
+    score: posting.score ?? undefined,
+    postingUrl: posting.canonicalUrl,
+    formUrl: posting.formUrl ?? undefined,
+    createdAt: timestampFromDate(app.createdAt),
+    preparedAt: app.preparedAt ? timestampFromDate(app.preparedAt) : undefined,
+    approvedAt: app.approvedAt ? timestampFromDate(app.approvedAt) : undefined,
+    blockers: view.blockers,
+    missing: view.missing,
+    unconfirmedFactIds: view.unconfirmedFactIds.map((n) => BigInt(n)),
+    fields: full
+      ? view.fields.map((f) => ({
+          number: f.number,
+          ref: f.ref,
+          step: f.step,
+          label: f.label,
+          kind: f.kind,
+          meaning: f.meaning ?? undefined,
+          required: f.required,
+          options: f.options ?? [],
+          hasOptions: f.options !== null,
+          role: f.role,
+          value: f.value ?? undefined,
+          source: f.source,
+          defaultValue: f.defaultValue ?? undefined,
+          defaultSource: f.defaultSource,
+          note: f.note ?? undefined,
+          active: f.active,
+          missing: f.missing,
+          entryOf: f.entryOf ?? undefined,
+          condition: f.condition ?? undefined,
+        }))
+      : [],
+    answers: full ? view.answers.map(answerToPb) : [],
+  });
+}
+
+export function answerToPb(a: ApplicationView['answers'][number]) {
+  return {
+    number: a.number,
+    id: BigInt(a.id),
+    fieldRef: a.ref,
+    question: a.question,
+    kind: a.kind,
+    status: a.status,
+    choice: a.choice ?? undefined,
+    missing: a.missing ?? undefined,
+    adaptedFrom: a.adaptedFrom ?? undefined,
+    edited: a.edited,
+    active: a.active,
+    overridden: a.overridden,
+    sentences: a.sentences.map((s) => ({
+      index: s.idx,
+      text: s.text,
+      factIds: s.factIds.map((n) => BigInt(n)),
+      flag: s.flag,
+      note: s.note ?? undefined,
+      facts: s.facts.map((f) => ({
+        id: BigInt(f.id),
+        text: f.text,
+        status:
+          f.status === 'confirmed'
+            ? PbFactStatus.CONFIRMED
+            : f.status === 'unconfirmed'
+              ? PbFactStatus.UNCONFIRMED
+              : f.status === 'rejected'
+                ? PbFactStatus.REJECTED
+                : PbFactStatus.UNSPECIFIED,
+        projectSlug: f.projectSlug ?? undefined,
+      })),
+    })),
+  };
+}
 
 export function stageToPb(stage: string | null): PbStage {
   return STAGE_TO_PB[stage as PostingStage] ?? PbStage.UNSPECIFIED;
@@ -88,8 +201,11 @@ export function postingToPb(
   row: PostingRow,
   sources: PostingSourceRow[] = [],
   facts: Map<number, CitedFact> | null = null,
+  app: Pick<ApplicationRow, 'id' | 'stage'> | null = null,
 ): Posting {
   return create(PostingSchema, {
+    applicationId: app ? BigInt(app.id) : undefined,
+    applicationStage: appStageToPb(app?.stage),
     id: BigInt(row.id),
     stage: stageToPb(row.stage),
     canonicalUrl: row.canonicalUrl,
@@ -185,6 +301,19 @@ export function eventToPb(row: EventRow): Event {
           entityId: BigInt(row.entityId ?? 0),
           type: taskType,
           attempts: row.attempts ?? 0,
+        },
+      },
+    });
+  }
+  if (row.kind === 'application.stage') {
+    return create(EventSchema, {
+      ...base,
+      payload: {
+        case: 'application',
+        value: {
+          applicationId: BigInt(row.entityId ?? 0),
+          postingId: BigInt(row.postingId ?? 0),
+          stage: appStageToPb(row.stage),
         },
       },
     });

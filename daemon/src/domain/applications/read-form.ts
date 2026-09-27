@@ -18,6 +18,7 @@ import { runInTx } from '../../queue/tx.ts';
 import type { Handler, Tx } from '../../queue/types.ts';
 import { getStandardProfile } from '../knowledge/profile.ts';
 import { FormJudge } from './form-judge.ts';
+import { formReadFor } from './store.ts';
 
 /** Navigation failures are retried this many times before the read is marked failed. */
 export const READ_FORM_ATTEMPTS = 3;
@@ -125,6 +126,8 @@ function save(
         ? `apply form verified: ${note}`
         : `apply form ${status.replace('_', ' ')}: ${note}`,
   });
+  // An application waiting for this form (or prepared from an older read) is prepared now.
+  formReadFor(tx, posting.id);
 }
 
 /**

@@ -1,8 +1,10 @@
 // The candidate profile: key → JSON value.
 //   lists     the identities that decide authorship (GitHub logins, commit emails, AI agents)
 //   standard  the values application forms ask for (name, email, location, work authorisation,
-//             …). Read dry-fills forms with them, so conditional fields show the branch the
-//             candidate's real answer takes.
+//             …). They are defaults: Read dry-fills forms with them (so conditional fields show
+//             the branch the candidate's real answer takes) and Prepare fills applications from
+//             them, and every one can be overridden for a single application. None has a
+//             built-in value: a key the candidate hasn't set is simply missing.
 import { existsSync, statSync } from 'node:fs';
 import { isAbsolute } from 'node:path';
 import { eq } from 'drizzle-orm';
@@ -20,8 +22,13 @@ export const STANDARD_KEYS = [
   'phone',
   'location',
   'work_authorization',
+  /** Whether the candidate needs visa sponsorship (its own answer: not work_authorization's). */
+  'visa_sponsorship',
+  'relocation',
   'salary_expectation',
   'notice_period',
+  'current_company',
+  'current_title',
   'links.github',
   'links.website',
   'links.linkedin',

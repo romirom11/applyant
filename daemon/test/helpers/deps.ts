@@ -9,6 +9,7 @@ import type { Deps } from '../../src/deps.ts';
 import type { GithubApi } from '../../src/domain/knowledge/sources/github.ts';
 import { NodeTextExtractor } from '../../src/domain/knowledge/text/extract.ts';
 import type { FxRates, FxSource } from '../../src/domain/scoring/fx.ts';
+import type { McpAccess } from '../../src/mcp/server.ts';
 import {
   AgentRunner,
   type AgentRunnerOptions,
@@ -44,6 +45,7 @@ export interface TestDepsOptions {
   readPool?: ReadExec;
   fx?: FxSource;
   jev?: AgentRunnerOptions['jev'];
+  mcp?: McpAccess | null;
 }
 
 /** Fixed reference rates (no network). */
@@ -93,6 +95,7 @@ export function testDeps(o: TestDepsOptions): Deps {
             },
           }),
     fx: o.fx ?? fixedFx(),
+    mcp: o.mcp ?? null,
     text: new NodeTextExtractor(),
     dirs: { repos: join(o.dir, 'repos') },
     log: quietLog,
@@ -112,6 +115,7 @@ export function handlers(partial: Partial<Handlers>): Handlers {
     read_form: never as Handler<'read_form'>,
     sync_source: never as Handler<'sync_source'>,
     embed_facts: never as Handler<'embed_facts'>,
+    prepare_application: never as Handler<'prepare_application'>,
     ...partial,
   };
 }
