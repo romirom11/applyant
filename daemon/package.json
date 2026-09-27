@@ -1,0 +1,44 @@
+{
+  "name": "applyant-daemon",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "applyantd and the applyant CLI",
+  "engines": {
+    "node": ">=24"
+  },
+  "packageManager": "pnpm@12.6.0",
+  "bin": {
+    "applyant": "./src/cli/index.ts",
+    "applyantd": "./src/main.ts"
+  },
+  "scripts": {
+    "start": "node src/main.ts",
+    "cli": "node src/cli/index.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "format": "biome check --write .",
+    "test": "vitest run",
+    "db:generate": "drizzle-kit generate"
+  },
+  "dependencies": {
+    "@bufbuild/protobuf": "^2.15.0",
+    "@connectrpc/connect": "^2.2.0",
+    "@connectrpc/connect-node": "^2.2.0",
+    "better-sqlite3": "^13.0.3",
+    "commander": "^15.0.0",
+    "drizzle-orm": "^0.45.3",
+    "playwright": "^1.63.0",
+    "sqlite-vec": "0.1.9"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.14",
+    "@bufbuild/buf": "1.73.0",
+    "@bufbuild/protoc-gen-es": "^2.15.0",
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/node": "^24.19.0",
+    "drizzle-kit": "^0.31.11",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.2"
+  }
+}

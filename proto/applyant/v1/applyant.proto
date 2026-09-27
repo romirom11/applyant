@@ -1,0 +1,167 @@
+syntax = "proto3";
+
+package applyant.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// ApplyantService is the only contract between applyantd and its clients
+// (the `applyant` CLI now, the macOS app and Share extension later).
+// Every call carries `Authorization: Bearer <token>` from the endpoint file.
+service ApplyantService {
+  // AddPosting records a posting at stage FOUND and enqueues its verification.
+  // A URL that is already known returns the existing posting.
+  rpc AddPosting(AddPostingRequest) returns (AddPostingResponse);
+  rpc ListPostings(ListPostingsRequest) returns (ListPostingsResponse);
+  rpc GetPosting(GetPostingRequest) returns (GetPostingResponse);
+
+  // ListEvents returns stored events, newest last.
+  rpc ListEvents(ListEventsRequest) returns (ListEventsResponse);
+  // WatchEvents streams events as they happen: task progress and posting stage changes.
+  rpc WatchEvents(WatchEventsRequest) returns (stream WatchEventsResponse);
+
+  // Secrets are write-only from clients: values are never returned.
+  rpc SetSecret(SetSecretRequest) returns (SetSecretResponse);
+  rpc DeleteSecret(DeleteSecretRequest) returns (DeleteSecretResponse);
+  rpc ListSecrets(ListSecretsRequest) returns (ListSecretsResponse);
+}
+
+enum PostingStage {
+  POSTING_STAGE_UNSPECIFIED = 0;
+  POSTING_STAGE_FOUND = 1;
+  POSTING_STAGE_VERIFIED = 2;
+  POSTING_STAGE_FAILED_VERIFICATION = 3;
+}
+
+message Posting {
+  int64 id = 1;
+  PostingStage stage = 2;
+  string canonical_url = 3;
+  optional string title = 4;
+  optional string company = 5;
+  google.protobuf.Timestamp first_seen_at = 6;
+  optional google.protobuf.Timestamp verified_at = 7;
+  // Why verification decided what it did, e.g. "apply form on page" or "HTTP 404".
+  optional string verify_note = 8;
+  // Only filled by GetPosting.
+  repeated PostingSource sources = 9;
+}
+
+message PostingSource {
+  // manual | share | board | ats | ...
+  string kind = 1;
+  string url = 2;
+  google.protobuf.Timestamp first_seen_at = 3;
+}
+
+message AddPostingRequest {
+  string url = 1;
+}
+
+message AddPostingResponse {
+  Posting posting = 1;
+  // False when the URL was already known.
+  bool created = 2;
+}
+
+message ListPostingsRequest {
+  // Unspecified lists every stage.
+  PostingStage stage = 1;
+}
+
+message ListPostingsResponse {
+  repeated Posting postings = 1;
+}
+
+message GetPostingRequest {
+  int64 id = 1;
+}
+
+message GetPostingResponse {
+  Posting posting = 1;
+}
+
+enum TaskEventType {
+  TASK_EVENT_TYPE_UNSPECIFIED = 0;
+  TASK_EVENT_TYPE_QUEUED = 1;
+  TASK_EVENT_TYPE_STARTED = 2;
+  TASK_EVENT_TYPE_PROGRESS = 3;
+  TASK_EVENT_TYPE_DONE = 4;
+  TASK_EVENT_TYPE_RETRY = 5;
+  TASK_EVENT_TYPE_FAILED = 6;
+  TASK_EVENT_TYPE_PROVIDER_PAUSED = 7;
+  TASK_EVENT_TYPE_NEEDS_CANDIDATE = 8;
+  TASK_EVENT_TYPE_LEASE_LOST = 9;
+  TASK_EVENT_TYPE_REQUEUED = 10;
+}
+
+message TaskEvent {
+  int64 task_id = 1;
+  // verify_posting, ...
+  string task_kind = 2;
+  int64 entity_id = 3;
+  TaskEventType type = 4;
+  int32 attempts = 5;
+}
+
+message PostingEvent {
+  int64 posting_id = 1;
+  PostingStage stage = 2;
+}
+
+message Event {
+  int64 id = 1;
+  google.protobuf.Timestamp at = 2;
+  optional int64 run_id = 3;
+  // Human-readable, e.g. "HTTP 404" or "retry at 15:45: navigation timeout".
+  string message = 4;
+  oneof payload {
+    TaskEvent task = 10;
+    PostingEvent posting = 11;
+  }
+}
+
+message ListEventsRequest {
+  // Only events of this run.
+  optional int64 run_id = 1;
+  // Only events about this posting.
+  optional int64 posting_id = 2;
+  // At most this many of the newest events; 0 means 100.
+  int32 limit = 3;
+}
+
+message ListEventsResponse {
+  repeated Event events = 1;
+}
+
+message WatchEventsRequest {
+  optional int64 run_id = 1;
+  optional int64 posting_id = 2;
+  // Stored events with a greater id are sent first, then live ones.
+  // Unset: live events only.
+  optional int64 after_event_id = 3;
+}
+
+message WatchEventsResponse {
+  Event event = 1;
+}
+
+message SetSecretRequest {
+  string name = 1;
+  string value = 2;
+}
+
+message SetSecretResponse {}
+
+message DeleteSecretRequest {
+  string name = 1;
+}
+
+message DeleteSecretResponse {
+  bool deleted = 1;
+}
+
+message ListSecretsRequest {}
+
+message ListSecretsResponse {
+  repeated string names = 1;
+}

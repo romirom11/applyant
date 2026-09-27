@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Research Engineer</title>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"JobPosting","title":"Research Engineer","datePosted":"2026-09-01","validThrough":"2099-12-31","hiringOrganization":{"@type":"Organization","name":"Acme AI"},"jobLocationType":"TELECOMMUTE","description":"Build LLM systems."}
+</script>
+</head><body>
+<h1>Research Engineer</h1>
+<p>Acme AI is hiring. You will build production LLM systems with Python and TypeScript.</p>
+<div id="root">Loading…</div>
+<script>
+setTimeout(function () {
+  document.getElementById("root").innerHTML = document.getElementById("tpl").innerHTML;
+}, 300);
+</script>
+<template id="tpl"><form action="/submitted" method="post" enctype="multipart/form-data">
+  <label>First name <input name="first_name" required></label>
+  <label>Last name <input name="last_name" required></label>
+  <label>Email <input type="email" name="email" required></label>
+  <label>Resume <input type="file" name="resume"></label>
+  <button type="submit">Submit application</button>
+</form></template>
+</body></html>
