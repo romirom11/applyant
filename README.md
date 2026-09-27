@@ -34,6 +34,9 @@ set `APPLYANT_CLAUDE_PATH` if it isn't on the daemon's `PATH`):
 ```sh
 pnpm -C daemon cli candidate profile set github_logins <login>        # decides which commits are yours
 pnpm -C daemon cli candidate profile set commit_emails you@example.com
+# Commits by your AI coding agents (Claude Code, Codex, Cursor, Copilot built in) count as yours
+# in repos you own and in PRs you opened or merged; add other agents' emails or logins:
+pnpm -C daemon cli candidate profile set ai_agent_identities aider@example.dev
 pnpm -C daemon cli candidate source add profile file ~/cv.pdf         # a CV drafts projects + facts
 pnpm -C daemon cli candidate project add Solovei
 pnpm -C daemon cli candidate source add solovei github https://github.com/<owner>/<repo>

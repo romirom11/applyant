@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { ExecError, run } from '../../../util/exec.ts';
 import { ensurePrivateDir } from '../../../util/fs.ts';
 import type { Logger } from '../../../util/log.ts';
+import { AgentMatcher, noreplyLogin } from '../ai-agents.ts';
 import type { Identities } from '../profile.ts';
 import {
   type Authorship,
@@ -102,7 +103,15 @@ export interface GithubApi {
   commitsBy(login: string): Promise<string[]>;
   /** PRs this login opened, with each commit's authors. */
   pullRequestsBy(login: string): Promise<PullRequest[]>;
+  /** For each commit SHA, the PRs it was part of, with who opened and who merged them. */
+  associatedPullRequests(shas: string[]): Promise<Map<string, AssociatedPullRequest[]>>;
   meta(): Promise<string | null>;
+}
+
+export interface AssociatedPullRequest {
+  number: number;
+  author: string | null;
+  mergedBy: string | null;
 }
 
 export interface GithubReadOptions {
@@ -114,6 +123,11 @@ export interface GithubReadOptions {
   useGh?: boolean;
   /** Overrides the GitHub API client (tests); null = none. */
   gh?: GithubApi | null;
+  /**
+   * Login of the repository's owner. Default: the owner in the GitHub URL; a local
+   * repository (no GitHub URL) counts as the candidate's own.
+   */
+  owner?: string | null;
 }
 
 const GIT_ENV = (): NodeJS.ProcessEnv => ({
@@ -126,6 +140,8 @@ const MAX_COMMITS = 5000;
 /** Commit bodies are kept for the claim check, not sent to the extractor. */
 const MAX_BODY = 400;
 const MAX_CANDIDATE_LINES = 400;
+/** Agent commits looked up for "a PR the candidate merged" in repos they don't own. */
+const MAX_AGENT_LOOKUPS = 1000;
 const REV = 'origin/HEAD';
 
 export async function readGithubSource(
@@ -177,23 +193,68 @@ export async function readGithubSource(
 
   const emails = new Set(o.identities.emails);
   const logins = new Set(o.identities.logins);
+  const agents = new AgentMatcher(o.identities.agents);
   const isCandidateAuthor = (email: string, login: string | null) => {
     const e = email.toLowerCase();
     if (emails.has(e)) return true;
     if (login && logins.has(login.toLowerCase())) return true;
-    const noreply = /^(?:\d+\+)?([^@]+)@users\.noreply\.github\.com$/.exec(e);
-    return !!noreply?.[1] && logins.has(noreply[1]);
+    const fromEmail = noreplyLogin(e);
+    return !!fromEmail && logins.has(fromEmail);
   };
-  const isCandidate = (c: Commit) => isCandidateAuthor(c.authorEmail, null) || loginShas.has(c.sha);
+
+  // AI coding agents the candidate works through (Claude Code, Codex, Cursor, …): their
+  // commits are the candidate's in a repository the candidate owns, or in a PR the candidate
+  // opened or merged. Elsewhere they are other contributors' work, like anyone's.
+  const owner = o.owner !== undefined ? o.owner : (ref.github?.owner ?? null);
+  const repoOwned = owner === null ? true : logins.has(owner.toLowerCase());
+  const agentShasInCandidatePrs = new Set<string>();
+  for (const pr of opened.values()) {
+    for (const c of pr.commits) {
+      if (c.authors.some((a) => agents.matches(a.email, a.login)))
+        agentShasInCandidatePrs.add(c.oid);
+    }
+  }
+  const agentCommit = (c: Commit) => agents.matches(c.authorEmail);
+  let agentShasMerged = new Set<string>();
+  if (!repoOwned && gh) {
+    // Agent commits outside the candidate's own PRs: were they in a PR the candidate merged?
+    const unknown = commits
+      .filter((c) => agentCommit(c) && !agentShasInCandidatePrs.has(c.sha))
+      .map((c) => c.sha)
+      .slice(0, MAX_AGENT_LOOKUPS);
+    if (unknown.length) {
+      const found = await gh.associatedPullRequests(unknown);
+      agentShasMerged = new Set(
+        [...found.entries()]
+          .filter(([, prs]) =>
+            prs.some(
+              (p) =>
+                (p.author && logins.has(p.author.toLowerCase())) ||
+                (p.mergedBy && logins.has(p.mergedBy.toLowerCase())),
+            ),
+          )
+          .map(([sha]) => sha),
+      );
+    }
+  }
+  const agentCounts = (sha: string) =>
+    repoOwned || agentShasInCandidatePrs.has(sha) || agentShasMerged.has(sha);
+
+  const isCandidate = (c: Commit) =>
+    isCandidateAuthor(c.authorEmail, null) ||
+    loginShas.has(c.sha) ||
+    (agentCommit(c) && agentCounts(c.sha));
   const mine = commits.filter(isCandidate);
   const others = commits.filter((c) => !isCandidate(c));
   const candidateShas = new Set(mine.map((c) => c.sha));
 
   // Opening a PR doesn't make its commits yours: a PR is the candidate's evidence only
-  // through the commits in it that the candidate wrote (squash-merged branches included,
-  // so this goes by the PR's own commit authors, not only the default branch's history).
+  // through the commits in it that the candidate (or their coding agent) wrote. Squash-merged
+  // branches included, so this goes by the PR's own commit authors, not only the default
+  // branch's history. Every PR here was opened by the candidate, so agent commits count.
   const prCommitIsCandidate = (c: PullRequestCommit) =>
-    candidateShas.has(c.oid) || c.authors.some((a) => isCandidateAuthor(a.email, a.login));
+    candidateShas.has(c.oid) ||
+    c.authors.some((a) => isCandidateAuthor(a.email, a.login) || agents.matches(a.email, a.login));
   const prs = [...opened.values()].sort((a, b) => b.number - a.number);
   const candidatePrs = prs.filter((p) => p.commits.some(prCommitIsCandidate));
   const othersPrs = prs.filter((p) => !p.commits.some(prCommitIsCandidate));
@@ -608,6 +669,61 @@ class Gh implements GithubApi {
       }
     }
     return prs;
+  }
+
+  /** Batched GraphQL (50 commits a query): each commit's PRs, their author and merger. */
+  async associatedPullRequests(shas: string[]): Promise<Map<string, AssociatedPullRequest[]>> {
+    const out = new Map<string, AssociatedPullRequest[]>();
+    for (let i = 0; i < shas.length; i += 50) {
+      const batch = shas.slice(i, i + 50).filter((s) => /^[0-9a-f]{40}$/.test(s));
+      if (!batch.length) continue;
+      const fields = batch
+        .map(
+          (sha, j) =>
+            `c${j}: object(oid: "${sha}") { ... on Commit { associatedPullRequests(first: 5) { nodes { number author { login } mergedBy { login } } } } }`,
+        )
+        .join('\n');
+      const query = `query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) {\n${fields}\n} }`;
+      const res = await this.api([
+        'graphql',
+        '-f',
+        `owner=${this.repo.owner}`,
+        '-f',
+        `name=${this.repo.repo}`,
+        '-f',
+        `query=${query}`,
+      ]);
+      if (!res) continue;
+      try {
+        const repo = (JSON.parse(res) as { data?: { repository?: Record<string, unknown> } }).data
+          ?.repository;
+        batch.forEach((sha, j) => {
+          const node = repo?.[`c${j}`] as
+            | {
+                associatedPullRequests?: {
+                  nodes: Array<{
+                    number: number;
+                    author: { login: string } | null;
+                    mergedBy: { login: string } | null;
+                  }>;
+                };
+              }
+            | null
+            | undefined;
+          out.set(
+            sha,
+            (node?.associatedPullRequests?.nodes ?? []).map((p) => ({
+              number: p.number,
+              author: p.author?.login ?? null,
+              mergedBy: p.mergedBy?.login ?? null,
+            })),
+          );
+        });
+      } catch {
+        // A malformed reply only loses this batch.
+      }
+    }
+    return out;
   }
 
   async meta(): Promise<string | null> {

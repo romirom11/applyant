@@ -1,10 +1,12 @@
-// The candidate profile: key → JSON value. For now only the GitHub identities that decide
-// authorship; phase 4 adds the standard form fields (name, email, location, ...).
+// The candidate profile: key → JSON value. For now only the identities that decide
+// authorship (GitHub logins, commit emails, AI coding agents); phase 4 adds the standard
+// form fields (name, email, location, ...).
 import { eq } from 'drizzle-orm';
 import type { Conn } from '../../db/client.ts';
 import { profile } from '../../db/schema.ts';
+import { defaultAgentIds, isAutomationBot } from './ai-agents.ts';
 
-export const LIST_KEYS = ['github_logins', 'commit_emails'] as const;
+export const LIST_KEYS = ['github_logins', 'commit_emails', 'ai_agent_identities'] as const;
 export type ProfileListKey = (typeof LIST_KEYS)[number];
 export const PROFILE_KEYS: readonly string[] = [...LIST_KEYS];
 
@@ -15,6 +17,11 @@ export interface Identities {
   logins: string[];
   /** Commit author emails, lowercase. */
   emails: string[];
+  /**
+   * AI coding agents the candidate works through (emails and logins, lowercase): the
+   * defaults plus `ai_agent_identities`. See ai-agents.ts for when their commits count.
+   */
+  agents: string[];
 }
 
 function list(conn: Conn, key: ProfileListKey): string[] {
@@ -26,6 +33,11 @@ export function getIdentities(conn: Conn): Identities {
   return {
     logins: list(conn, 'github_logins').map((l) => l.toLowerCase()),
     emails: list(conn, 'commit_emails').map((e) => e.toLowerCase()),
+    agents: [
+      ...new Set(
+        [...defaultAgentIds(), ...list(conn, 'ai_agent_identities')].map((a) => a.toLowerCase()),
+      ),
+    ],
   };
 }
 
@@ -54,6 +66,16 @@ export function parseProfileValue(key: string, raw: string): unknown {
     }
     if (key === 'commit_emails' && !/^[^\s@]+@[^\s@]+$/.test(v)) {
       throw new ProfileError(`"${v}" is not an email address`);
+    }
+    if (key === 'ai_agent_identities') {
+      if (!/^[^\s@]+@[^\s@]+$/.test(v) && !/^[a-z\d](?:[a-z\d-]{0,38})(\[bot\])?$/i.test(v)) {
+        throw new ProfileError(`"${v}" is neither a commit email nor a GitHub login`);
+      }
+      if (isAutomationBot(v)) {
+        throw new ProfileError(
+          `"${v}" is an automation bot, not a coding agent; its commits are never yours`,
+        );
+      }
     }
   }
   return values;

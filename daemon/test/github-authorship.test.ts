@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { facts, sources } from '../src/db/schema.ts';
+import { defaultAgentIds } from '../src/domain/knowledge/ai-agents.ts';
 import { applyAuthorship, TEAM_PREFIX } from '../src/domain/knowledge/authorship.ts';
 import { listFacts } from '../src/domain/knowledge/facts.ts';
 import { setProfileValue } from '../src/domain/knowledge/profile.ts';
@@ -55,7 +56,7 @@ beforeAll(() => {
 
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
-const identities = { logins: ['alexgh'], emails: ['alex@example.com'] };
+const identities = { logins: ['alexgh'], emails: ['alex@example.com'], agents: defaultAgentIds() };
 
 describe('the repository digest', () => {
   it("splits history into the candidate's commits and everyone else's", async () => {
@@ -102,7 +103,7 @@ describe('the repository digest', () => {
   it('attributes nothing to the candidate when no identities are configured', async () => {
     const m = await readGithubSource(repo, {
       reposDir: join(dir, 'repos'),
-      identities: { logins: [], emails: [] },
+      identities: { logins: [], emails: [], agents: defaultAgentIds() },
       signal: new AbortController().signal,
       log: quietLog,
       useGh: false,
