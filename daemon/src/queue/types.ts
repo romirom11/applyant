@@ -9,7 +9,10 @@ import type { EventInput } from './events.ts';
 /** Every task kind, and the kind of entity its `entity_id` points at. */
 export const TASK_ENTITY = {
   verify_posting: 'posting',
+  score_posting: 'posting',
   sync_source: 'source',
+  // The fact vector index as a whole: entity_id is always 0.
+  embed_facts: 'index',
 } as const;
 export type TaskKind = keyof typeof TASK_ENTITY;
 export const TASK_KINDS = Object.keys(TASK_ENTITY) as TaskKind[];

@@ -5,7 +5,9 @@
 //
 //   FAKE_CLAUDE_ARGV    file to append {argv, cwd, env} to, one JSON line per start
 //   FAKE_CLAUDE_MODE    ok (default) | limit | limit-event | error | exit
-//   FAKE_CLAUDE_OUTPUT  JSON file with the structured output to return in ok mode
+//   FAKE_CLAUDE_OUTPUT  JSON file with the structured output to return in ok mode. A file of
+//                       the form {"$bySchema": {"<property>": output, ...}} answers by role:
+//                       the first property the --json-schema has at its top level picks it.
 (async () => {
   const fs = await import('node:fs');
   const env = process.env;
@@ -88,7 +90,17 @@
       send(result({ subtype: 'error_during_execution', is_error: true, errors: ['boom'] }));
       return;
     }
-    const output = JSON.parse(fs.readFileSync(env.FAKE_CLAUDE_OUTPUT, 'utf8'));
+    let output = JSON.parse(fs.readFileSync(env.FAKE_CLAUDE_OUTPUT, 'utf8'));
+    if (output && output.$bySchema) {
+      const i = process.argv.indexOf('--json-schema');
+      const props = i > 0 ? Object.keys(JSON.parse(process.argv[i + 1]).properties ?? {}) : [];
+      const key = Object.keys(output.$bySchema).find((k) => props.includes(k));
+      if (!key) {
+        send(result({ subtype: 'error_during_execution', is_error: true, errors: [`no fake output for ${props}`] }));
+        return;
+      }
+      output = output.$bySchema[key];
+    }
     send(result({ subtype: 'success', is_error: false, result: '', structured_output: output }));
   };
 

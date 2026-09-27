@@ -94,6 +94,8 @@ export function describeRoute(route: Route): string {
 /** Which role a task kind's model work runs under, so the queue can tag tasks by provider. */
 export const TASK_ROLE: Partial<Record<string, Role>> = {
   sync_source: 'extractor',
+  // Extraction, then (on the second pass) the matcher; both route to claude by default.
+  score_posting: 'extractor',
 };
 
 /**

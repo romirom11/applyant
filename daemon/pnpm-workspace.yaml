@@ -2,3 +2,7 @@ allowBuilds:
   '@bufbuild/buf': true
   better-sqlite3: true
   esbuild: true
+  # CPU binaries ship inside the package; the script only downloads optional CUDA providers.
+  onnxruntime-node: false
+  # Only prints a version-scheme warning.
+  protobufjs: false

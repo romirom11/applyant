@@ -2,20 +2,33 @@
 import { create } from '@bufbuild/protobuf';
 import { timestampFromDate } from '@bufbuild/protobuf/wkt';
 import type { EventRow, PostingRow, PostingSourceRow, PostingStage } from '../db/schema.ts';
+import { effectiveExtraction } from '../domain/scoring/structured.ts';
+import type { CitedFact } from '../domain/search/postings.ts';
 import {
   type Event,
   EventSchema,
+  FactStatus as PbFactStatus,
   PostingStage as PbStage,
   type Posting,
   PostingSchema,
   PostingSourceSchema,
+  RequirementMatchSchema,
+  ScoreComponentSchema,
   TaskEventType,
 } from '../gen/applyant/v1/applyant_pb.js';
+
+const FACT_STATUS_TO_PB = {
+  unconfirmed: PbFactStatus.UNCONFIRMED,
+  confirmed: PbFactStatus.CONFIRMED,
+  rejected: PbFactStatus.REJECTED,
+} as const;
 
 const STAGE_TO_PB: Record<PostingStage, PbStage> = {
   found: PbStage.FOUND,
   verified: PbStage.VERIFIED,
   failed_verification: PbStage.FAILED_VERIFICATION,
+  scored: PbStage.SCORED,
+  skipped: PbStage.SKIPPED,
 };
 
 export function stageToPb(stage: string | null): PbStage {
@@ -29,7 +42,15 @@ export function stageFromPb(stage: PbStage): PostingStage | undefined {
   return undefined;
 }
 
-export function postingToPb(row: PostingRow, sources: PostingSourceRow[] = []): Posting {
+/**
+ * `sources` and `facts` are only passed for GetPosting; with `facts`, the requirement
+ * matches are included with the facts they cite.
+ */
+export function postingToPb(
+  row: PostingRow,
+  sources: PostingSourceRow[] = [],
+  facts: Map<number, CitedFact> | null = null,
+): Posting {
   return create(PostingSchema, {
     id: BigInt(row.id),
     stage: stageToPb(row.stage),
@@ -46,6 +67,46 @@ export function postingToPb(row: PostingRow, sources: PostingSourceRow[] = []): 
         firstSeenAt: timestampFromDate(s.firstSeenAt),
       }),
     ),
+    score: row.score ?? undefined,
+    breakdown: (row.breakdown ?? []).map((c) =>
+      create(ScoreComponentSchema, {
+        key: c.key,
+        weight: c.weight,
+        value: c.value,
+        note: c.note ?? undefined,
+        uncertain: c.uncertain,
+        scale: c.scale ?? 1,
+      }),
+    ),
+    dealbreakers: row.dealbreakers ?? [],
+    scoredAt: row.scoredAt ? timestampFromDate(row.scoredAt) : undefined,
+    scoreNote: row.scoreNote ?? undefined,
+    decision: row.decision ?? undefined,
+    decisionReason: row.decisionReason ?? undefined,
+    summary: row.extraction?.summary || undefined,
+    salaryText: effectiveExtraction(row)?.extraction.salary?.text || undefined,
+    coreFit: row.coreFit ?? undefined,
+    structuredFields: effectiveExtraction(row)?.decided ?? [],
+    requirements: facts
+      ? (row.matches ?? []).map((m) =>
+          create(RequirementMatchSchema, {
+            text: m.text,
+            must: m.must,
+            verdict: m.verdict,
+            factIds: m.factIds.map((id) => BigInt(id)),
+            note: m.note ?? undefined,
+            facts: m.factIds
+              .map((id) => facts.get(id))
+              .filter((f) => f !== undefined)
+              .map((f) => ({
+                id: BigInt(f.id),
+                text: f.text,
+                status: FACT_STATUS_TO_PB[f.status],
+                projectSlug: f.projectSlug ?? undefined,
+              })),
+          }),
+        )
+      : [],
   });
 }
 

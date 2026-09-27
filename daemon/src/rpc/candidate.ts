@@ -4,6 +4,7 @@ import { timestampFromDate } from '@bufbuild/protobuf/wkt';
 import { Code, ConnectError, type ServiceImpl } from '@connectrpc/connect';
 import { isNull, sql } from 'drizzle-orm';
 import { type FactStatus, facts, type SourceKind, type SourceRow } from '../db/schema.ts';
+import { enqueueEmbedFacts } from '../domain/knowledge/embed-index.ts';
 import type { EvidenceView } from '../domain/knowledge/evidence.ts';
 import {
   confirmFact,
@@ -292,6 +293,8 @@ export function candidateRpcs(
         const [id] = ids([req.id]);
         const fact = runInTx(c.db, c.bus, { now: c.now() }, (tx) => {
           editFact(tx.db, id as number, req.text, tx.now);
+          // The trigger dropped the old vector; embed the new text.
+          enqueueEmbedFacts(tx);
           return getFact(tx.db, id as number);
         });
         if (!fact) throw new ConnectError(`no fact ${id}`, Code.NotFound);

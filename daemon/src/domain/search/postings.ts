@@ -1,15 +1,18 @@
 // Postings as the rest of the daemon sees them. Every entry point (jobs add, the Share
 // extension, search) joins here at stage `found`, followed by a verify_posting task.
-import { and, asc, desc, eq, gt, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, inArray, type SQL, sql } from 'drizzle-orm';
 import type { Db } from '../../db/client.ts';
 import {
   type EventRow,
   events,
+  type FactStatus,
+  facts,
   type PostingRow,
   type PostingSourceRow,
   type PostingStage,
   postingSources,
   postings,
+  projects,
 } from '../../db/schema.ts';
 import type { EventBus } from '../../queue/events.ts';
 import { runInTx } from '../../queue/tx.ts';
@@ -57,9 +60,35 @@ export function addPosting(
   });
 }
 
-export function listPostings(db: Db, stage?: PostingStage): PostingRow[] {
+export function listPostings(db: Db, stage?: PostingStage, byScore = false): PostingRow[] {
   const q = db.select().from(postings);
-  return (stage ? q.where(eq(postings.stage, stage)) : q).orderBy(desc(postings.id)).all();
+  return (stage ? q.where(eq(postings.stage, stage)) : q)
+    .orderBy(
+      ...(byScore ? [sql`${postings.score} is null`, desc(postings.score)] : []),
+      desc(postings.id),
+    )
+    .all();
+}
+
+/** A fact a requirement match cites. */
+export interface CitedFact {
+  id: number;
+  text: string;
+  status: FactStatus;
+  projectSlug: string | null;
+}
+
+/** The facts a posting's requirement matches cite, for showing them next to the verdicts. */
+export function citedFacts(db: Db, row: PostingRow): Map<number, CitedFact> {
+  const ids = [...new Set((row.matches ?? []).flatMap((m) => m.factIds))];
+  if (ids.length === 0) return new Map();
+  const found = db
+    .select({ id: facts.id, text: facts.text, status: facts.status, projectSlug: projects.slug })
+    .from(facts)
+    .leftJoin(projects, eq(facts.projectId, projects.id))
+    .where(inArray(facts.id, ids))
+    .all();
+  return new Map(found.map((f) => [f.id, f]));
 }
 
 export function getPosting(

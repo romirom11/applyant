@@ -13,6 +13,16 @@ service ApplyantService {
   rpc AddPosting(AddPostingRequest) returns (AddPostingResponse);
   rpc ListPostings(ListPostingsRequest) returns (ListPostingsResponse);
   rpc GetPosting(GetPostingRequest) returns (GetPostingResponse);
+  // SkipPosting records the candidate's skip (with a reason) as feedback and re-scores.
+  rpc SkipPosting(SkipPostingRequest) returns (SkipPostingResponse);
+  // MarkInterested records interest (undoing a skip) as feedback and re-scores.
+  rpc MarkInterested(MarkInterestedRequest) returns (MarkInterestedResponse);
+  // ScorePostings enqueues score_posting; cached extractions and matches are reused.
+  rpc ScorePostings(ScorePostingsRequest) returns (ScorePostingsResponse);
+
+  // Preferences drive the score; every change re-scores cached postings (no model calls).
+  rpc GetPreferences(GetPreferencesRequest) returns (GetPreferencesResponse);
+  rpc SetPreference(SetPreferenceRequest) returns (SetPreferenceResponse);
 
   // ListEvents returns stored events, newest last.
   rpc ListEvents(ListEventsRequest) returns (ListEventsResponse);
@@ -48,6 +58,8 @@ enum PostingStage {
   POSTING_STAGE_FOUND = 1;
   POSTING_STAGE_VERIFIED = 2;
   POSTING_STAGE_FAILED_VERIFICATION = 3;
+  POSTING_STAGE_SCORED = 4;
+  POSTING_STAGE_SKIPPED = 5;
 }
 
 message Posting {
@@ -62,6 +74,61 @@ message Posting {
   optional string verify_note = 8;
   // Only filled by GetPosting.
   repeated PostingSource sources = 9;
+
+  // 0–100, computed by the pure score() from the cached extraction and matches.
+  optional int32 score = 10;
+  // One component per key (must, nice, role, location, remote, salary, language, employment).
+  repeated ScoreComponent breakdown = 11;
+  // The candidate's own dealbreakers this posting hits. They never zero the score.
+  repeated string dealbreakers = 12;
+  optional google.protobuf.Timestamp scored_at = 13;
+  // Why the last scoring attempt failed.
+  optional string score_note = 14;
+  // interested | skipped
+  optional string decision = 15;
+  optional string decision_reason = 16;
+  // One sentence on the role, from the extractor.
+  optional string summary = 17;
+  // Only filled by GetPosting: each requirement with its verdict and supporting facts.
+  repeated RequirementMatch requirements = 18;
+  // The salary as the posting states it.
+  optional string salary_text = 19;
+  // must-haves × role fit, 0–1. Below 0.7 the logistics components count less.
+  optional double core_fit = 20;
+  // Fields the page's structured data (JSON-LD) decided over the extractor's reading.
+  repeated string structured_fields = 21;
+}
+
+message ScoreComponent {
+  // must | nice | role | location | remote | salary | language | employment
+  string key = 1;
+  // Effective weight; 0 when no preference applies.
+  double weight = 2;
+  // 0–1.
+  double value = 3;
+  optional string note = 4;
+  // The posting doesn't say enough: shown, not counted.
+  bool uncertain = 5;
+  // Share of weight·value that counts: below 1 for logistics when core fit is poor.
+  double scale = 6;
+}
+
+message MatchedFact {
+  int64 id = 1;
+  string text = 2;
+  FactStatus status = 3;
+  optional string project_slug = 4;
+}
+
+message RequirementMatch {
+  string text = 1;
+  bool must = 2;
+  // strong | partial | missing | unknown (a condition to ask the candidate about)
+  string verdict = 3;
+  repeated int64 fact_ids = 4;
+  optional string note = 5;
+  // The cited facts (GetPosting only).
+  repeated MatchedFact facts = 6;
 }
 
 message PostingSource {
@@ -84,6 +151,8 @@ message AddPostingResponse {
 message ListPostingsRequest {
   // Unspecified lists every stage.
   PostingStage stage = 1;
+  // Highest score first (unscored last) instead of newest first.
+  bool by_score = 2;
 }
 
 message ListPostingsResponse {
@@ -96,6 +165,88 @@ message GetPostingRequest {
 
 message GetPostingResponse {
   Posting posting = 1;
+}
+
+message SkipPostingRequest {
+  int64 id = 1;
+  // Free text, e.g. "salary too low"; it decides which weight the feedback nudges.
+  string reason = 2;
+}
+
+message SkipPostingResponse {
+  Posting posting = 1;
+  // Postings whose score changed with the nudged weights.
+  int32 rescored = 2;
+}
+
+message MarkInterestedRequest {
+  int64 id = 1;
+}
+
+message MarkInterestedResponse {
+  Posting posting = 1;
+  int32 rescored = 2;
+}
+
+message ScorePostingsRequest {
+  // Empty: every verified or scored posting.
+  repeated int64 ids = 1;
+  // Re-read the page and re-extract; matches are still reused where nothing changed.
+  bool refresh = 2;
+}
+
+message ScorePostingsResponse {
+  repeated int64 enqueued_ids = 1;
+}
+
+message Money {
+  double amount = 1;
+  // ISO 4217
+  string currency = 2;
+  // month | year
+  string period = 3;
+}
+
+message Preferences {
+  // Role families: ai_ml, backend, fullstack, frontend, data, platform, mobile, security,
+  // founding, management, research, other. Empty = any.
+  repeated string roles = 1;
+  repeated string seniority = 2;
+  optional string based_in = 3;
+  repeated string locations = 4;
+  // required | preferred | any
+  string remote = 5;
+  optional Money salary = 6;
+  optional Money salary_floor = 7;
+  // ISO 639-1 → A1…C2 | native
+  map<string, string> languages = 8;
+  repeated string employment = 9;
+  repeated string dealbreakers = 10;
+  // Base weights per component.
+  map<string, double> weights = 11;
+  // Bounded feedback nudges per component (1 = none).
+  map<string, double> feedback_multipliers = 12;
+  int32 threshold = 13;
+}
+
+message GetPreferencesRequest {}
+
+message GetPreferencesResponse {
+  Preferences preferences = 1;
+}
+
+message SetPreferenceRequest {
+  // roles | seniority | based_in | locations | remote | salary | salary_floor | languages |
+  // employment | dealbreakers | threshold | weight.<component> | weights
+  string key = 1;
+  // Lists are comma-separated; empty resets the key ("reset" for weights).
+  string value = 2;
+}
+
+message SetPreferenceResponse {
+  Preferences preferences = 1;
+  // Postings whose score changed.
+  int32 rescored = 2;
 }
 
 enum TaskEventType {

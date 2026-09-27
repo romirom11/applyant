@@ -5,13 +5,19 @@ import { randomBytes } from 'node:crypto';
 import { ReaderPool } from './browser/reader-pool.ts';
 import { type Config, loadConfig } from './config.ts';
 import { closeDb, openDb, openReadDb } from './db/client.ts';
+import { ReadPool } from './db/read-pool.ts';
 import { agentRuns } from './db/schema.ts';
 import type { Deps } from './deps.ts';
+import { embedFacts, ensureFactIndex } from './domain/knowledge/embed-index.ts';
 import { syncSource } from './domain/knowledge/sync.ts';
 import { NodeTextExtractor } from './domain/knowledge/text/extract.ts';
+import { EcbFx } from './domain/scoring/fx.ts';
+import { scorePosting } from './domain/scoring/handlers.ts';
+import { requestScoring, unscoredPostings } from './domain/scoring/store.ts';
 import { verifyPosting } from './domain/search/verify.ts';
 import { isAlive, readEndpoint, removeEndpoint, writeEndpoint } from './endpoint.ts';
 import { AgentRunner } from './models/agent-runner.ts';
+import { type Embedder, GemmaEmbedder, HashEmbedder } from './models/embeddings.ts';
 import { ClaudeProvider } from './models/providers/claude.ts';
 import { EventBus } from './queue/events.ts';
 import type { Handlers } from './queue/types.ts';
@@ -49,15 +55,38 @@ export async function runDaemon(config: Config = loadConfig()): Promise<() => Pr
     },
     log: log.child({ part: 'models' }),
   });
+  const embedder: Embedder =
+    config.embedder === 'hash'
+      ? new HashEmbedder()
+      : new GemmaEmbedder({ cacheDir: config.modelsDir, log: log.child({ part: 'embeddings' }) });
+  const readPool = new ReadPool({
+    path: config.dbPath,
+    size: config.readWorkers,
+    log: log.child({ part: 'read-pool' }),
+  });
   const deps: Deps = {
     reader,
     secrets,
     models,
+    embedder,
+    readPool,
+    fx: new EcbFx(),
     text: new NodeTextExtractor(),
     dirs: { repos: config.reposDir },
     log,
   };
-  const handlers: Handlers = { verify_posting: verifyPosting, sync_source: syncSource };
+  const handlers: Handlers = {
+    verify_posting: verifyPosting,
+    score_posting: scorePosting,
+    sync_source: syncSource,
+    embed_facts: embedFacts,
+  };
+
+  // Catch up: vectors for facts that have none (or were made by another embedder), and a
+  // score for postings verified before scoring existed.
+  ensureFactIndex(db, bus, embedder.id, new Date());
+  const unscored = unscoredPostings(db);
+  if (unscored.length) requestScoring(db, bus, unscored, new Date());
 
   const worker = new Worker({
     db,
@@ -98,6 +127,8 @@ export async function runDaemon(config: Config = loadConfig()): Promise<() => Pr
       await rpc.close();
       await worker.stop();
       await reader.close();
+      await readPool.close();
+      await embedder.close?.();
       closeDb(read);
       closeDb(db);
       log.info('applyantd stopped');

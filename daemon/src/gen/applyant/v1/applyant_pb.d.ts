@@ -63,6 +63,86 @@ export declare type Posting = Message<"applyant.v1.Posting"> & {
    * @generated from field: repeated applyant.v1.PostingSource sources = 9;
    */
   sources: PostingSource[];
+
+  /**
+   * 0–100, computed by the pure score() from the cached extraction and matches.
+   *
+   * @generated from field: optional int32 score = 10;
+   */
+  score?: number | undefined;
+
+  /**
+   * One component per key (must, nice, role, location, remote, salary, language, employment).
+   *
+   * @generated from field: repeated applyant.v1.ScoreComponent breakdown = 11;
+   */
+  breakdown: ScoreComponent[];
+
+  /**
+   * The candidate's own dealbreakers this posting hits. They never zero the score.
+   *
+   * @generated from field: repeated string dealbreakers = 12;
+   */
+  dealbreakers: string[];
+
+  /**
+   * @generated from field: optional google.protobuf.Timestamp scored_at = 13;
+   */
+  scoredAt?: Timestamp | undefined;
+
+  /**
+   * Why the last scoring attempt failed.
+   *
+   * @generated from field: optional string score_note = 14;
+   */
+  scoreNote?: string | undefined;
+
+  /**
+   * interested | skipped
+   *
+   * @generated from field: optional string decision = 15;
+   */
+  decision?: string | undefined;
+
+  /**
+   * @generated from field: optional string decision_reason = 16;
+   */
+  decisionReason?: string | undefined;
+
+  /**
+   * One sentence on the role, from the extractor.
+   *
+   * @generated from field: optional string summary = 17;
+   */
+  summary?: string | undefined;
+
+  /**
+   * Only filled by GetPosting: each requirement with its verdict and supporting facts.
+   *
+   * @generated from field: repeated applyant.v1.RequirementMatch requirements = 18;
+   */
+  requirements: RequirementMatch[];
+
+  /**
+   * The salary as the posting states it.
+   *
+   * @generated from field: optional string salary_text = 19;
+   */
+  salaryText?: string | undefined;
+
+  /**
+   * must-haves × role fit, 0–1. Below 0.7 the logistics components count less.
+   *
+   * @generated from field: optional double core_fit = 20;
+   */
+  coreFit?: number | undefined;
+
+  /**
+   * Fields the page's structured data (JSON-LD) decided over the extractor's reading.
+   *
+   * @generated from field: repeated string structured_fields = 21;
+   */
+  structuredFields: string[];
 };
 
 /**
@@ -70,6 +150,133 @@ export declare type Posting = Message<"applyant.v1.Posting"> & {
  * Use `create(PostingSchema)` to create a new message.
  */
 export declare const PostingSchema: GenMessage<Posting>;
+
+/**
+ * @generated from message applyant.v1.ScoreComponent
+ */
+export declare type ScoreComponent = Message<"applyant.v1.ScoreComponent"> & {
+  /**
+   * must | nice | role | location | remote | salary | language | employment
+   *
+   * @generated from field: string key = 1;
+   */
+  key: string;
+
+  /**
+   * Effective weight; 0 when no preference applies.
+   *
+   * @generated from field: double weight = 2;
+   */
+  weight: number;
+
+  /**
+   * 0–1.
+   *
+   * @generated from field: double value = 3;
+   */
+  value: number;
+
+  /**
+   * @generated from field: optional string note = 4;
+   */
+  note?: string | undefined;
+
+  /**
+   * The posting doesn't say enough: shown, not counted.
+   *
+   * @generated from field: bool uncertain = 5;
+   */
+  uncertain: boolean;
+
+  /**
+   * Share of weight·value that counts: below 1 for logistics when core fit is poor.
+   *
+   * @generated from field: double scale = 6;
+   */
+  scale: number;
+};
+
+/**
+ * Describes the message applyant.v1.ScoreComponent.
+ * Use `create(ScoreComponentSchema)` to create a new message.
+ */
+export declare const ScoreComponentSchema: GenMessage<ScoreComponent>;
+
+/**
+ * @generated from message applyant.v1.MatchedFact
+ */
+export declare type MatchedFact = Message<"applyant.v1.MatchedFact"> & {
+  /**
+   * @generated from field: int64 id = 1;
+   */
+  id: bigint;
+
+  /**
+   * @generated from field: string text = 2;
+   */
+  text: string;
+
+  /**
+   * @generated from field: applyant.v1.FactStatus status = 3;
+   */
+  status: FactStatus;
+
+  /**
+   * @generated from field: optional string project_slug = 4;
+   */
+  projectSlug?: string | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.MatchedFact.
+ * Use `create(MatchedFactSchema)` to create a new message.
+ */
+export declare const MatchedFactSchema: GenMessage<MatchedFact>;
+
+/**
+ * @generated from message applyant.v1.RequirementMatch
+ */
+export declare type RequirementMatch = Message<"applyant.v1.RequirementMatch"> & {
+  /**
+   * @generated from field: string text = 1;
+   */
+  text: string;
+
+  /**
+   * @generated from field: bool must = 2;
+   */
+  must: boolean;
+
+  /**
+   * strong | partial | missing | unknown (a condition to ask the candidate about)
+   *
+   * @generated from field: string verdict = 3;
+   */
+  verdict: string;
+
+  /**
+   * @generated from field: repeated int64 fact_ids = 4;
+   */
+  factIds: bigint[];
+
+  /**
+   * @generated from field: optional string note = 5;
+   */
+  note?: string | undefined;
+
+  /**
+   * The cited facts (GetPosting only).
+   *
+   * @generated from field: repeated applyant.v1.MatchedFact facts = 6;
+   */
+  facts: MatchedFact[];
+};
+
+/**
+ * Describes the message applyant.v1.RequirementMatch.
+ * Use `create(RequirementMatchSchema)` to create a new message.
+ */
+export declare const RequirementMatchSchema: GenMessage<RequirementMatch>;
 
 /**
  * @generated from message applyant.v1.PostingSource
@@ -148,6 +355,13 @@ export declare type ListPostingsRequest = Message<"applyant.v1.ListPostingsReque
    * @generated from field: applyant.v1.PostingStage stage = 1;
    */
   stage: PostingStage;
+
+  /**
+   * Highest score first (unscored last) instead of newest first.
+   *
+   * @generated from field: bool by_score = 2;
+   */
+  byScore: boolean;
 };
 
 /**
@@ -203,6 +417,324 @@ export declare type GetPostingResponse = Message<"applyant.v1.GetPostingResponse
  * Use `create(GetPostingResponseSchema)` to create a new message.
  */
 export declare const GetPostingResponseSchema: GenMessage<GetPostingResponse>;
+
+/**
+ * @generated from message applyant.v1.SkipPostingRequest
+ */
+export declare type SkipPostingRequest = Message<"applyant.v1.SkipPostingRequest"> & {
+  /**
+   * @generated from field: int64 id = 1;
+   */
+  id: bigint;
+
+  /**
+   * Free text, e.g. "salary too low"; it decides which weight the feedback nudges.
+   *
+   * @generated from field: string reason = 2;
+   */
+  reason: string;
+};
+
+/**
+ * Describes the message applyant.v1.SkipPostingRequest.
+ * Use `create(SkipPostingRequestSchema)` to create a new message.
+ */
+export declare const SkipPostingRequestSchema: GenMessage<SkipPostingRequest>;
+
+/**
+ * @generated from message applyant.v1.SkipPostingResponse
+ */
+export declare type SkipPostingResponse = Message<"applyant.v1.SkipPostingResponse"> & {
+  /**
+   * @generated from field: applyant.v1.Posting posting = 1;
+   */
+  posting?: Posting | undefined;
+
+  /**
+   * Postings whose score changed with the nudged weights.
+   *
+   * @generated from field: int32 rescored = 2;
+   */
+  rescored: number;
+};
+
+/**
+ * Describes the message applyant.v1.SkipPostingResponse.
+ * Use `create(SkipPostingResponseSchema)` to create a new message.
+ */
+export declare const SkipPostingResponseSchema: GenMessage<SkipPostingResponse>;
+
+/**
+ * @generated from message applyant.v1.MarkInterestedRequest
+ */
+export declare type MarkInterestedRequest = Message<"applyant.v1.MarkInterestedRequest"> & {
+  /**
+   * @generated from field: int64 id = 1;
+   */
+  id: bigint;
+};
+
+/**
+ * Describes the message applyant.v1.MarkInterestedRequest.
+ * Use `create(MarkInterestedRequestSchema)` to create a new message.
+ */
+export declare const MarkInterestedRequestSchema: GenMessage<MarkInterestedRequest>;
+
+/**
+ * @generated from message applyant.v1.MarkInterestedResponse
+ */
+export declare type MarkInterestedResponse = Message<"applyant.v1.MarkInterestedResponse"> & {
+  /**
+   * @generated from field: applyant.v1.Posting posting = 1;
+   */
+  posting?: Posting | undefined;
+
+  /**
+   * @generated from field: int32 rescored = 2;
+   */
+  rescored: number;
+};
+
+/**
+ * Describes the message applyant.v1.MarkInterestedResponse.
+ * Use `create(MarkInterestedResponseSchema)` to create a new message.
+ */
+export declare const MarkInterestedResponseSchema: GenMessage<MarkInterestedResponse>;
+
+/**
+ * @generated from message applyant.v1.ScorePostingsRequest
+ */
+export declare type ScorePostingsRequest = Message<"applyant.v1.ScorePostingsRequest"> & {
+  /**
+   * Empty: every verified or scored posting.
+   *
+   * @generated from field: repeated int64 ids = 1;
+   */
+  ids: bigint[];
+
+  /**
+   * Re-read the page and re-extract; matches are still reused where nothing changed.
+   *
+   * @generated from field: bool refresh = 2;
+   */
+  refresh: boolean;
+};
+
+/**
+ * Describes the message applyant.v1.ScorePostingsRequest.
+ * Use `create(ScorePostingsRequestSchema)` to create a new message.
+ */
+export declare const ScorePostingsRequestSchema: GenMessage<ScorePostingsRequest>;
+
+/**
+ * @generated from message applyant.v1.ScorePostingsResponse
+ */
+export declare type ScorePostingsResponse = Message<"applyant.v1.ScorePostingsResponse"> & {
+  /**
+   * @generated from field: repeated int64 enqueued_ids = 1;
+   */
+  enqueuedIds: bigint[];
+};
+
+/**
+ * Describes the message applyant.v1.ScorePostingsResponse.
+ * Use `create(ScorePostingsResponseSchema)` to create a new message.
+ */
+export declare const ScorePostingsResponseSchema: GenMessage<ScorePostingsResponse>;
+
+/**
+ * @generated from message applyant.v1.Money
+ */
+export declare type Money = Message<"applyant.v1.Money"> & {
+  /**
+   * @generated from field: double amount = 1;
+   */
+  amount: number;
+
+  /**
+   * ISO 4217
+   *
+   * @generated from field: string currency = 2;
+   */
+  currency: string;
+
+  /**
+   * month | year
+   *
+   * @generated from field: string period = 3;
+   */
+  period: string;
+};
+
+/**
+ * Describes the message applyant.v1.Money.
+ * Use `create(MoneySchema)` to create a new message.
+ */
+export declare const MoneySchema: GenMessage<Money>;
+
+/**
+ * @generated from message applyant.v1.Preferences
+ */
+export declare type Preferences = Message<"applyant.v1.Preferences"> & {
+  /**
+   * Role families: ai_ml, backend, fullstack, frontend, data, platform, mobile, security,
+   * founding, management, research, other. Empty = any.
+   *
+   * @generated from field: repeated string roles = 1;
+   */
+  roles: string[];
+
+  /**
+   * @generated from field: repeated string seniority = 2;
+   */
+  seniority: string[];
+
+  /**
+   * @generated from field: optional string based_in = 3;
+   */
+  basedIn?: string | undefined;
+
+  /**
+   * @generated from field: repeated string locations = 4;
+   */
+  locations: string[];
+
+  /**
+   * required | preferred | any
+   *
+   * @generated from field: string remote = 5;
+   */
+  remote: string;
+
+  /**
+   * @generated from field: optional applyant.v1.Money salary = 6;
+   */
+  salary?: Money | undefined;
+
+  /**
+   * @generated from field: optional applyant.v1.Money salary_floor = 7;
+   */
+  salaryFloor?: Money | undefined;
+
+  /**
+   * ISO 639-1 → A1…C2 | native
+   *
+   * @generated from field: map<string, string> languages = 8;
+   */
+  languages: { [key: string]: string };
+
+  /**
+   * @generated from field: repeated string employment = 9;
+   */
+  employment: string[];
+
+  /**
+   * @generated from field: repeated string dealbreakers = 10;
+   */
+  dealbreakers: string[];
+
+  /**
+   * Base weights per component.
+   *
+   * @generated from field: map<string, double> weights = 11;
+   */
+  weights: { [key: string]: number };
+
+  /**
+   * Bounded feedback nudges per component (1 = none).
+   *
+   * @generated from field: map<string, double> feedback_multipliers = 12;
+   */
+  feedbackMultipliers: { [key: string]: number };
+
+  /**
+   * @generated from field: int32 threshold = 13;
+   */
+  threshold: number;
+};
+
+/**
+ * Describes the message applyant.v1.Preferences.
+ * Use `create(PreferencesSchema)` to create a new message.
+ */
+export declare const PreferencesSchema: GenMessage<Preferences>;
+
+/**
+ * @generated from message applyant.v1.GetPreferencesRequest
+ */
+export declare type GetPreferencesRequest = Message<"applyant.v1.GetPreferencesRequest"> & {
+};
+
+/**
+ * Describes the message applyant.v1.GetPreferencesRequest.
+ * Use `create(GetPreferencesRequestSchema)` to create a new message.
+ */
+export declare const GetPreferencesRequestSchema: GenMessage<GetPreferencesRequest>;
+
+/**
+ * @generated from message applyant.v1.GetPreferencesResponse
+ */
+export declare type GetPreferencesResponse = Message<"applyant.v1.GetPreferencesResponse"> & {
+  /**
+   * @generated from field: applyant.v1.Preferences preferences = 1;
+   */
+  preferences?: Preferences | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.GetPreferencesResponse.
+ * Use `create(GetPreferencesResponseSchema)` to create a new message.
+ */
+export declare const GetPreferencesResponseSchema: GenMessage<GetPreferencesResponse>;
+
+/**
+ * @generated from message applyant.v1.SetPreferenceRequest
+ */
+export declare type SetPreferenceRequest = Message<"applyant.v1.SetPreferenceRequest"> & {
+  /**
+   * roles | seniority | based_in | locations | remote | salary | salary_floor | languages |
+   * employment | dealbreakers | threshold | weight.<component> | weights
+   *
+   * @generated from field: string key = 1;
+   */
+  key: string;
+
+  /**
+   * Lists are comma-separated; empty resets the key ("reset" for weights).
+   *
+   * @generated from field: string value = 2;
+   */
+  value: string;
+};
+
+/**
+ * Describes the message applyant.v1.SetPreferenceRequest.
+ * Use `create(SetPreferenceRequestSchema)` to create a new message.
+ */
+export declare const SetPreferenceRequestSchema: GenMessage<SetPreferenceRequest>;
+
+/**
+ * @generated from message applyant.v1.SetPreferenceResponse
+ */
+export declare type SetPreferenceResponse = Message<"applyant.v1.SetPreferenceResponse"> & {
+  /**
+   * @generated from field: applyant.v1.Preferences preferences = 1;
+   */
+  preferences?: Preferences | undefined;
+
+  /**
+   * Postings whose score changed.
+   *
+   * @generated from field: int32 rescored = 2;
+   */
+  rescored: number;
+};
+
+/**
+ * Describes the message applyant.v1.SetPreferenceResponse.
+ * Use `create(SetPreferenceResponseSchema)` to create a new message.
+ */
+export declare const SetPreferenceResponseSchema: GenMessage<SetPreferenceResponse>;
 
 /**
  * @generated from message applyant.v1.TaskEvent
@@ -1211,6 +1743,16 @@ export enum PostingStage {
    * @generated from enum value: POSTING_STAGE_FAILED_VERIFICATION = 3;
    */
   FAILED_VERIFICATION = 3,
+
+  /**
+   * @generated from enum value: POSTING_STAGE_SCORED = 4;
+   */
+  SCORED = 4,
+
+  /**
+   * @generated from enum value: POSTING_STAGE_SKIPPED = 5;
+   */
+  SKIPPED = 5,
 }
 
 /**
@@ -1387,6 +1929,54 @@ export declare const ApplyantService: GenService<{
     methodKind: "unary";
     input: typeof GetPostingRequestSchema;
     output: typeof GetPostingResponseSchema;
+  },
+  /**
+   * SkipPosting records the candidate's skip (with a reason) as feedback and re-scores.
+   *
+   * @generated from rpc applyant.v1.ApplyantService.SkipPosting
+   */
+  skipPosting: {
+    methodKind: "unary";
+    input: typeof SkipPostingRequestSchema;
+    output: typeof SkipPostingResponseSchema;
+  },
+  /**
+   * MarkInterested records interest (undoing a skip) as feedback and re-scores.
+   *
+   * @generated from rpc applyant.v1.ApplyantService.MarkInterested
+   */
+  markInterested: {
+    methodKind: "unary";
+    input: typeof MarkInterestedRequestSchema;
+    output: typeof MarkInterestedResponseSchema;
+  },
+  /**
+   * ScorePostings enqueues score_posting; cached extractions and matches are reused.
+   *
+   * @generated from rpc applyant.v1.ApplyantService.ScorePostings
+   */
+  scorePostings: {
+    methodKind: "unary";
+    input: typeof ScorePostingsRequestSchema;
+    output: typeof ScorePostingsResponseSchema;
+  },
+  /**
+   * Preferences drive the score; every change re-scores cached postings (no model calls).
+   *
+   * @generated from rpc applyant.v1.ApplyantService.GetPreferences
+   */
+  getPreferences: {
+    methodKind: "unary";
+    input: typeof GetPreferencesRequestSchema;
+    output: typeof GetPreferencesResponseSchema;
+  },
+  /**
+   * @generated from rpc applyant.v1.ApplyantService.SetPreference
+   */
+  setPreference: {
+    methodKind: "unary";
+    input: typeof SetPreferenceRequestSchema;
+    output: typeof SetPreferenceResponseSchema;
   },
   /**
    * ListEvents returns stored events, newest last.

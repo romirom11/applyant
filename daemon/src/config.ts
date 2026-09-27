@@ -17,6 +17,12 @@ export interface Config {
   workDir: string;
   /** Partial clones of GitHub sources. */
   reposDir: string;
+  /** Downloaded models (EmbeddingGemma). APPLYANT_MODELS_DIR overrides. */
+  modelsDir: string;
+  /** gemma (default) · hash: an offline lexical stand-in (tests, machines without the model). */
+  embedder: 'gemma' | 'hash';
+  /** Worker threads for heavy read queries. */
+  readWorkers: number;
   host: '127.0.0.1';
   /** 0 picks a free port. */
   port: number;
@@ -51,6 +57,12 @@ function int(env: Env, name: string, fallback: number): number {
   return n;
 }
 
+function embedderKind(raw: string | undefined): Config['embedder'] {
+  if (!raw || raw === 'gemma') return 'gemma';
+  if (raw === 'hash') return 'hash';
+  throw new Error('APPLYANT_EMBEDDER must be gemma or hash');
+}
+
 export function loadConfig(env: Env = process.env): Config {
   const home = env.APPLYANT_HOME || defaultHome(env);
   return {
@@ -62,6 +74,9 @@ export function loadConfig(env: Env = process.env): Config {
     runsDir: join(home, 'files', 'runs'),
     workDir: join(home, 'files', 'work'),
     reposDir: join(home, 'repos'),
+    modelsDir: env.APPLYANT_MODELS_DIR || join(home, 'models'),
+    embedder: embedderKind(env.APPLYANT_EMBEDDER),
+    readWorkers: Math.max(1, int(env, 'APPLYANT_READ_WORKERS', 2)),
     host: '127.0.0.1',
     port: int(env, 'APPLYANT_PORT', 0),
     worker: {

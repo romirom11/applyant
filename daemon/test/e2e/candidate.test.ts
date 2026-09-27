@@ -20,6 +20,8 @@ const env = () => ({
   APPLYANT_HOME: home,
   APPLYANT_POLL_MS: '50',
   APPLYANT_CLAUDE_PATH: FAKE_CLAUDE,
+  // Offline lexical embeddings: no model download in tests.
+  APPLYANT_EMBEDDER: 'hash',
   FAKE_CLAUDE_ARGV: join(home, 'fake-claude-argv.jsonl'),
   FAKE_CLAUDE_OUTPUT: join(home, 'fake-claude-output.json'),
 });

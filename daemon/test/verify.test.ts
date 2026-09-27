@@ -38,12 +38,22 @@ describe('checkPosting on fixture pages', () => {
   const check = (path: string) => checkPosting(reader, site.url(path));
 
   it('live posting with an application form on the page', async () => {
-    expect(await check('/live.html')).toEqual({
+    const verdict = await check('/live.html');
+    expect(verdict).toEqual({
       kind: 'live',
       note: 'apply form on page',
       title: 'Senior AI Engineer',
       company: 'Acme AI',
+      text: expect.any(String),
+      jsonLd: expect.objectContaining({ '@type': 'JobPosting', title: 'Senior AI Engineer' }),
     });
+    // The readable text is kept for the extractor, JSON-LD structured fields first.
+    const text = verdict.kind === 'live' ? (verdict.text ?? '') : '';
+    expect(text).toMatch(
+      /^# Senior AI Engineer\nPage header \(labels shown around the title\): Senior AI Engineer \| .*\nStructured data \(JobPosting\):\n/,
+    );
+    expect(text).toContain('\njobLocationType: TELECOMMUTE\n');
+    expect(text).toContain('You will build production LLM systems with Python and TypeScript.');
   });
 
   it('404', async () => {
@@ -143,7 +153,10 @@ describe('verify_posting through the queue', () => {
       db: t.db,
       read: t.read,
       bus,
-      handlers: handlers({ verify_posting: verifyPosting }),
+      handlers: handlers({
+        verify_posting: verifyPosting,
+        score_posting: async () => ({ kind: 'done', commit: () => {} }),
+      }),
       deps: testDeps({ dir: t.dir, reader }),
       log,
       concurrency: 3,
@@ -168,6 +181,10 @@ describe('verify_posting through the queue', () => {
         company: 'Acme AI',
       });
       expect(row(live)?.verifiedAt).toBeInstanceOf(Date);
+      expect(row(live)?.text).toContain('production LLM systems');
+      // A verified posting moves on to scoring; a failed one doesn't.
+      const scoring = t.db.select().from(tasks).where(eq(tasks.kind, 'score_posting')).all();
+      expect(scoring.map((task) => task.entityId)).toEqual([live]);
       expect(row(gone)).toMatchObject({ stage: 'failed_verification', verifyNote: 'HTTP 404' });
       expect(row(flaky)?.stage).toBe('found');
       const flakyTask = t.db.select().from(tasks).where(eq(tasks.entityId, flaky)).get();

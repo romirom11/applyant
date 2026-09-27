@@ -14,6 +14,10 @@ export function stageName(stage: PostingStage): string {
       return 'verified';
     case PostingStage.FAILED_VERIFICATION:
       return 'failed_verification';
+    case PostingStage.SCORED:
+      return 'scored';
+    case PostingStage.SKIPPED:
+      return 'skipped';
     default:
       return 'unknown';
   }
@@ -24,9 +28,14 @@ export function parseStage(name: string): PostingStage {
     found: PostingStage.FOUND,
     verified: PostingStage.VERIFIED,
     failed_verification: PostingStage.FAILED_VERIFICATION,
+    scored: PostingStage.SCORED,
+    skipped: PostingStage.SKIPPED,
   }[name];
-  if (stage === undefined)
-    throw new Error(`unknown stage "${name}" (found | verified | failed_verification)`);
+  if (stage === undefined) {
+    throw new Error(
+      `unknown stage "${name}" (found | verified | failed_verification | scored | skipped)`,
+    );
+  }
   return stage;
 }
 
@@ -58,6 +67,36 @@ export function postingJson(p: Posting) {
     verifiedAt: iso(p.verifiedAt),
     verifyNote: p.verifyNote ?? null,
     sources: p.sources.map((s) => ({ kind: s.kind, url: s.url, firstSeenAt: iso(s.firstSeenAt) })),
+    score: p.score ?? null,
+    breakdown: p.breakdown.map((c) => ({
+      key: c.key,
+      weight: c.weight,
+      value: c.value,
+      note: c.note ?? null,
+      uncertain: c.uncertain,
+      scale: c.scale,
+    })),
+    coreFit: p.coreFit ?? null,
+    structuredFields: p.structuredFields,
+    dealbreakers: p.dealbreakers,
+    scoredAt: iso(p.scoredAt),
+    scoreNote: p.scoreNote ?? null,
+    decision: p.decision ?? null,
+    decisionReason: p.decisionReason ?? null,
+    summary: p.summary ?? null,
+    salaryText: p.salaryText ?? null,
+    requirements: p.requirements.map((m) => ({
+      text: m.text,
+      must: m.must,
+      verdict: m.verdict,
+      factIds: m.factIds.map(Number),
+      note: m.note ?? null,
+      facts: m.facts.map((f) => ({
+        id: Number(f.id),
+        text: f.text,
+        project: f.projectSlug ?? null,
+      })),
+    })),
   };
 }
 

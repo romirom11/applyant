@@ -11,6 +11,7 @@ import {
 } from '../gen/applyant/v1/applyant_pb.js';
 import type { ApplyantClient } from './client.ts';
 import { iso, table, truncate } from './format.ts';
+import { registerPrefs } from './prefs.ts';
 
 const out = (text: string): void => {
   process.stdout.write(`${text}\n`);
@@ -201,6 +202,8 @@ export function registerCandidate(program: Command, client: () => ApplyantClient
       const res = await client().setProfileValue({ key, value: value.join(' ') });
       out(`${res.entry?.key}: ${res.entry?.values.join(', ') || '(cleared)'}`);
     });
+
+  registerPrefs(candidate, client);
 
   const project = candidate.command('project').description('projects');
   project

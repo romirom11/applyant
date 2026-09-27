@@ -2,11 +2,21 @@
 // migrations and never appear here, so `drizzle-kit generate` never tries to drop them.
 import { sql } from 'drizzle-orm';
 import { index, integer, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import type { Component, StoredExtraction, StoredMatch } from '../domain/scoring/types.ts';
 
 const now = sql`(cast(unixepoch('subsec') * 1000 as integer))`;
 
-export const POSTING_STAGES = ['found', 'verified', 'failed_verification'] as const;
+export const POSTING_STAGES = [
+  'found',
+  'verified',
+  'failed_verification',
+  'scored',
+  'skipped',
+] as const;
 export type PostingStage = (typeof POSTING_STAGES)[number];
+
+export const POSTING_DECISIONS = ['interested', 'skipped'] as const;
+export type PostingDecision = (typeof POSTING_DECISIONS)[number];
 
 export const postings = sqliteTable('postings', {
   id: integer('id').primaryKey(),
@@ -17,6 +27,28 @@ export const postings = sqliteTable('postings', {
   firstSeenAt: integer('first_seen_at', { mode: 'timestamp_ms' }).notNull().default(now),
   verifiedAt: integer('verified_at', { mode: 'timestamp_ms' }),
   verifyNote: text('verify_note'),
+  /** Readable posting text, captured when the page was verified. The extractor reads this. */
+  text: text('text'),
+  /** The page's schema.org JobPosting JSON-LD, when it has one (structured fields win). */
+  jsonLd: text('json_ld', { mode: 'json' }).$type<Record<string, unknown>>(),
+  /** Extractor output, cached for `extractionKey` (posting text hash + prompt version). */
+  extraction: text('extraction', { mode: 'json' }).$type<StoredExtraction>(),
+  extractionKey: text('extraction_key'),
+  /** Requirement matches, each with the cache key it was made for. */
+  matches: text('matches', { mode: 'json' }).$type<StoredMatch[]>(),
+  /** 0–100, from the pure score() over the cached extraction and matches. */
+  score: integer('score'),
+  /** must-haves × role fit (0–1) behind the score; logistics count less below 0.7. */
+  coreFit: real('core_fit'),
+  breakdown: text('breakdown', { mode: 'json' }).$type<Component[]>(),
+  dealbreakers: text('dealbreakers', { mode: 'json' }).$type<string[]>(),
+  scoredAt: integer('scored_at', { mode: 'timestamp_ms' }),
+  /** Why the last scoring attempt failed; null once it succeeds. */
+  scoreNote: text('score_note'),
+  /** The candidate's call on this posting. */
+  decision: text('decision', { enum: POSTING_DECISIONS }),
+  decisionReason: text('decision_reason'),
+  decidedAt: integer('decided_at', { mode: 'timestamp_ms' }),
 });
 
 export const postingSources = sqliteTable(
@@ -209,6 +241,47 @@ export const profile = sqliteTable('profile', {
   updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull().default(now),
 });
 
+/** Search and scoring preferences, key → JSON value (see domain/scoring/prefs.ts). */
+export const preferences = sqliteTable('preferences', {
+  key: text('key').primaryKey(),
+  value: text('value', { mode: 'json' }).notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull().default(now),
+});
+
+/**
+ * The candidate's skip / interested calls, kept so they can nudge component weights within
+ * bounds (domain/scoring/feedback.ts). `component` is the score component the call points at.
+ */
+export const postingFeedback = sqliteTable(
+  'posting_feedback',
+  {
+    id: integer('id').primaryKey(),
+    postingId: integer('posting_id')
+      .notNull()
+      .references(() => postings.id, { onDelete: 'cascade' }),
+    kind: text('kind', { enum: POSTING_DECISIONS }).notNull(),
+    reason: text('reason'),
+    component: text('component'),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull().default(now),
+  },
+  (t) => [index('posting_feedback_posting').on(t.postingId)],
+);
+
+/** Daily reference rates (units per 1 EUR), for comparing salaries in other currencies. */
+export const fxRates = sqliteTable('fx_rates', {
+  currency: text('currency').primaryKey(),
+  perEur: real('per_eur').notNull(),
+  /** The rates' own date (ECB publication date). */
+  asOf: text('as_of').notNull(),
+  fetchedAt: integer('fetched_at', { mode: 'timestamp_ms' }).notNull(),
+});
+
+/** Small daemon-internal state, key → JSON (e.g. which embedder made the fact vectors). */
+export const appState = sqliteTable('app_state', {
+  key: text('key').primaryKey(),
+  value: text('value', { mode: 'json' }).notNull(),
+});
+
 export type PostingRow = typeof postings.$inferSelect;
 export type PostingSourceRow = typeof postingSources.$inferSelect;
 export type TaskRow = typeof tasks.$inferSelect;
@@ -220,3 +293,4 @@ export type EvidenceRow = typeof evidence.$inferSelect;
 export type AgentRunRow = typeof agentRuns.$inferSelect;
 export type NewAgentRunRow = typeof agentRuns.$inferInsert;
 export type NewEventRow = typeof events.$inferInsert;
+export type PostingFeedbackRow = typeof postingFeedback.$inferSelect;

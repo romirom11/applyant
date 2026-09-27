@@ -2,9 +2,11 @@
 import { Code, ConnectError, type ServiceImpl } from '@connectrpc/connect';
 import type { Db } from '../db/client.ts';
 import type { EventRow } from '../db/schema.ts';
+import { DecisionError, recordDecision, requestScoring } from '../domain/scoring/store.ts';
 import { InvalidUrlError } from '../domain/search/canonical-url.ts';
 import {
   addPosting,
+  citedFacts,
   type EventFilter,
   eventMatches,
   eventsAfter,
@@ -34,7 +36,17 @@ function id(value: bigint, what: string): number {
 
 export function postingRpcs(
   c: RpcContext,
-): Pick<Impl, 'addPosting' | 'listPostings' | 'getPosting' | 'listEvents' | 'watchEvents'> {
+): Pick<
+  Impl,
+  | 'addPosting'
+  | 'listPostings'
+  | 'getPosting'
+  | 'skipPosting'
+  | 'markInterested'
+  | 'scorePostings'
+  | 'listEvents'
+  | 'watchEvents'
+> {
   return {
     addPosting(req) {
       try {
@@ -52,14 +64,48 @@ export function postingRpcs(
     },
 
     listPostings(req) {
-      const rows = listPostings(c.db, stageFromPb(req.stage));
+      const rows = listPostings(c.db, stageFromPb(req.stage), req.byScore);
       return { postings: rows.map((row) => postingToPb(row)) };
     },
 
     getPosting(req) {
       const found = getPosting(c.db, id(req.id, 'id'));
       if (!found) throw new ConnectError(`posting ${req.id} not found`, Code.NotFound);
-      return { posting: postingToPb(found.posting, found.sources) };
+      return {
+        posting: postingToPb(found.posting, found.sources, citedFacts(c.db, found.posting)),
+      };
+    },
+
+    skipPosting(req) {
+      return decision(() => {
+        const res = recordDecision(c.db, c.bus, {
+          id: id(req.id, 'id'),
+          decision: 'skipped',
+          reason: req.reason,
+          now: c.now(),
+        });
+        return { posting: postingToPb(res.posting), rescored: res.rescored };
+      });
+    },
+
+    markInterested(req) {
+      return decision(() => {
+        const res = recordDecision(c.db, c.bus, {
+          id: id(req.id, 'id'),
+          decision: 'interested',
+          reason: null,
+          now: c.now(),
+        });
+        return { posting: postingToPb(res.posting), rescored: res.rescored };
+      });
+    },
+
+    scorePostings(req) {
+      return decision(() => {
+        const ids = req.ids.map((v) => id(v, 'id'));
+        const enqueued = requestScoring(c.db, c.bus, ids, c.now(), { refresh: req.refresh });
+        return { enqueuedIds: enqueued.map((n) => BigInt(n)) };
+      });
     },
 
     listEvents(req) {
@@ -108,6 +154,18 @@ export function postingRpcs(
       }
     },
   };
+}
+
+function decision<T>(fn: () => T): T {
+  try {
+    return fn();
+  } catch (err) {
+    if (err instanceof DecisionError) {
+      const code = /not found/.test(err.message) ? Code.NotFound : Code.FailedPrecondition;
+      throw new ConnectError(err.message, code);
+    }
+    throw err;
+  }
 }
 
 function toFilter(req: { runId?: bigint; postingId?: bigint }): EventFilter {

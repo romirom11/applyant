@@ -3,11 +3,15 @@
 import type { z } from 'zod';
 import { claimCheckSchema } from './claim-check.ts';
 import { sourceExtractionSchema } from './extractor.ts';
+import { matcherSchema, postingExtractionSchema } from './posting.ts';
 
 export const ROLE_SCHEMAS: Record<string, z.ZodType> = {
   source_extraction: sourceExtractionSchema,
   claim_check: claimCheckSchema,
+  posting_extraction: postingExtractionSchema,
+  matcher: matcherSchema,
 };
 
 export { CLAIM_ISSUES, type ClaimCheck, claimCheckSchema } from './claim-check.ts';
 export { type SourceExtraction, sourceExtractionSchema } from './extractor.ts';
+export * from './posting.ts';

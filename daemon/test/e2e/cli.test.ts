@@ -1,6 +1,14 @@
 // Spawns applyantd on a temp APPLYANT_HOME and drives it only through the `applyant` CLI.
 import { type ChildProcess, execFile, spawn } from 'node:child_process';
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
+import {
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -8,6 +16,38 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { type SiteServer, startSiteServer } from '../helpers/site-server.ts';
 
 const DAEMON_DIR = fileURLToPath(new URL('../..', import.meta.url));
+const FAKE_CLAUDE = fileURLToPath(new URL('../fixtures/bin/claude', import.meta.url));
+
+// What the fake `claude` answers as the extractor for the live fixture posting. There are
+// no candidate facts in this test, so every requirement is missing without a matcher call.
+const EXTRACTION = {
+  title: 'Senior AI Engineer',
+  company: 'Acme AI',
+  summary: 'Build production LLM systems.',
+  seniority: 'senior',
+  roleFamilies: ['ai_ml', 'backend'],
+  requirements: [
+    { text: 'Production LLM systems', must: true, kind: 'skill' },
+    { text: 'Python', must: true, kind: 'skill' },
+    { text: 'TypeScript', must: false, kind: 'skill' },
+  ],
+  workplace: 'remote',
+  remoteRegions: ['europe'],
+  remoteCountries: [],
+  offices: [],
+  salary: {
+    min: 60000,
+    max: 70000,
+    currency: 'EUR',
+    period: 'year',
+    basis: 'gross',
+    text: '€60,000–70,000 a year',
+  },
+  languages: [{ language: 'en', level: 'professional', required: true }],
+  postingLanguage: 'en',
+  employment: 'full_time',
+  outstaffing: false,
+};
 const SECRET = 'jev_e2e_5d1c9b7a3e2f4a6b';
 
 let site: SiteServer;
@@ -21,6 +61,10 @@ const env = () => ({
   APPLYANT_HOME: home,
   APPLYANT_POLL_MS: '50',
   APPLYANT_NAV_TIMEOUT_MS: '15000',
+  // Never the real claude or a model download from tests.
+  APPLYANT_CLAUDE_PATH: FAKE_CLAUDE,
+  FAKE_CLAUDE_OUTPUT: join(home, 'fake-claude-output.json'),
+  APPLYANT_EMBEDDER: 'hash',
 });
 
 interface CliResult {
@@ -68,11 +112,20 @@ interface PostingJson {
   title: string | null;
   verifyNote: string | null;
   sources: Array<{ kind: string; url: string }>;
+  score: number | null;
+  breakdown: Array<{ key: string; weight: number; value: number; note: string | null }>;
+  requirements: Array<{ text: string; must: boolean; verdict: string }>;
+  decision: string | null;
 }
 
 beforeAll(async () => {
   site = await startSiteServer();
   home = mkdtempSync(join(tmpdir(), 'applyant-e2e-'));
+  writeFileSync(
+    join(home, 'fake-claude-output.json'),
+    JSON.stringify({ $bySchema: { requirements: EXTRACTION } }),
+    { mode: 0o600 },
+  );
   daemon = spawn(process.execPath, ['src/main.ts'], { cwd: DAEMON_DIR, env: env() });
   daemon.stdout?.on('data', (d) => {
     daemonOutput += d;
@@ -123,7 +176,7 @@ describe('applyant CLI against a live daemon', () => {
     expect(ok.status).toBe(200);
   });
 
-  it('jobs add → verify_posting → verified / failed_verification', async () => {
+  it('jobs add → verify_posting → score_posting → scored / failed_verification', async () => {
     const live = await cliJson<{ created: boolean; posting: PostingJson }>([
       'jobs',
       'add',
@@ -139,25 +192,27 @@ describe('applyant CLI against a live daemon', () => {
       site.url('/gone.html'),
     ]);
 
-    const list = await waitFor('both postings verified', async () => {
+    const list = await waitFor('verified and scored', async () => {
       const rows = await cliJson<PostingJson[]>(['jobs', 'list']);
-      return rows.every((r) => r.stage !== 'found') ? rows : undefined;
+      return rows.every((r) => r.stage !== 'found' && r.stage !== 'verified') ? rows : undefined;
     });
     expect(list.find((r) => r.id === live.posting.id)).toMatchObject({
-      stage: 'verified',
+      stage: 'scored',
       title: 'Senior AI Engineer',
       verifyNote: 'apply form on page',
+      // No preferences and no facts yet: only the (missing) requirements count.
+      score: 0,
     });
     expect(list.find((r) => r.id === gone.posting.id)).toMatchObject({
       stage: 'failed_verification',
       verifyNote: 'HTTP 404',
     });
 
-    const verifiedOnly = await cliJson<PostingJson[]>(['jobs', 'list', '--stage', 'verified']);
-    expect(verifiedOnly.map((r) => r.id)).toEqual([live.posting.id]);
+    const scoredOnly = await cliJson<PostingJson[]>(['jobs', 'list', '--stage', 'scored']);
+    expect(scoredOnly.map((r) => r.id)).toEqual([live.posting.id]);
 
     const table = await cli(['jobs', 'list']);
-    expect(table.stdout).toMatch(/ID\s+STAGE\s+COMPANY\s+TITLE\s+URL/);
+    expect(table.stdout).toMatch(/ID\s+SCORE\s+STAGE\s+COMPANY\s+TITLE\s+FLAGS\s+URL/);
     expect(table.stdout).toMatch(/failed_verification/);
 
     // The same page with other tracking params is the same posting, with a second source.
@@ -183,6 +238,12 @@ describe('applyant CLI against a live daemon', () => {
       .trim()
       .split('\n')
       .map((l) => JSON.parse(l));
+    // The extractor ran once, as the fake claude, for the live posting only.
+    const extracted = readdirSync(join(home, 'files', 'runs')).filter((f) =>
+      f.includes('extractor'),
+    );
+    expect(extracted).toHaveLength(1);
+
     expect(events.map((e) => e.event ?? e.stage)).toEqual([
       'found',
       'queued',
@@ -191,6 +252,74 @@ describe('applyant CLI against a live daemon', () => {
       'failed_verification',
       'done',
     ]);
+  });
+
+  it('explains the score, re-scores on preference changes and takes skip feedback', async () => {
+    const [scored] = await cliJson<PostingJson[]>(['jobs', 'list', '--stage', 'scored']);
+    if (!scored) throw new Error('no scored posting');
+    const id = String(scored.id);
+
+    const set = async (...args: string[]) => {
+      const res = await cli(['candidate', 'prefs', 'set', ...args]);
+      if (res.code !== 0) throw new Error(res.stderr);
+      return res.stdout;
+    };
+    expect(await set('salary', '7000 EUR/month')).toMatch(/Saved\. 1 scores changed\./);
+    await set('based_in', 'gr');
+    await set('remote', 'required');
+    await set('languages', 'en:C1,el:native');
+    const bad = await cli(['candidate', 'prefs', 'set', 'remote', 'sometimes']);
+    expect(bad).toMatchObject({ code: 1 });
+    expect(bad.stderr).toMatch(/unknown remote preference "sometimes"/);
+
+    const prefs = await cliJson<{ basedIn: string; salary: { amount: number } }>([
+      'candidate',
+      'prefs',
+      'show',
+    ]);
+    expect(prefs).toMatchObject({ basedIn: 'GR', salary: { amount: 7000 } });
+
+    const shown = await cliJson<PostingJson>(['jobs', 'show', id]);
+    const component = (key: string) => shown.breakdown.find((c) => c.key === key);
+    expect(component('salary')).toMatchObject({
+      weight: 10,
+      value: 0.58,
+      note: 'Salary €5,000–5,833/month (€70,000/year) · 17% below target · counts ×0: core fit 0%',
+      scale: 0,
+    });
+    expect(component('location')).toMatchObject({
+      value: 1,
+      note: 'Remote (europe) · counts ×0: core fit 0%',
+    });
+    expect(shown.requirements.map((r) => r.verdict)).toEqual(['missing', 'missing', 'missing']);
+    // No facts: every must-have is missing, so core fit is 0 and the (perfect) logistics
+    // can't lift the score.
+    expect(shown.score).toBe(0);
+
+    const text = await cli(['jobs', 'show', id]);
+    expect(text.stdout).toMatch(/salary\s+10\s+58% ×0\s+Salary €5,000–5,833\/month/);
+    expect(text.stdout).toContain(
+      'Core fit 0% (must-haves × role): logistics count ×0, in full from 70%',
+    );
+    expect(text.stdout).toMatch(/role & seniority\s+-\s+-\s+no role preferences \(not counted\)/);
+    expect(text.stdout).toContain('✗ must  Python');
+
+    // Skipping for salary nudges the salary weight up (bounded), which re-scores.
+    const skip = await cli(['jobs', 'skip', id, '--reason', 'salary too low']);
+    expect(skip.stdout).toMatch(/Skipped posting \d+ \(salary too low\)\. 1 scores changed\./);
+    const after = await cliJson<PostingJson>(['jobs', 'show', id]);
+    expect(after).toMatchObject({ stage: 'skipped', decision: 'skipped' });
+    expect(after.breakdown.find((c) => c.key === 'salary')?.weight).toBe(11);
+    const nudged = await cliJson<{ feedbackMultipliers: Record<string, number> }>([
+      'candidate',
+      'prefs',
+      'show',
+    ]);
+    expect(nudged.feedbackMultipliers.salary).toBe(1.1);
+
+    const back = await cli(['jobs', 'interested', id]);
+    expect(back.stdout).toMatch(/Marked posting \d+ as interested/);
+    expect((await cliJson<PostingJson>(['jobs', 'show', id])).stage).toBe('scored');
   });
 
   it('reports bad input clearly', async () => {

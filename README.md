@@ -45,11 +45,39 @@ pnpm -C daemon cli candidate fact confirm <id…>                       # or: fa
 pnpm -C daemon cli candidate sync [project | profile | github] [--force]
 ```
 
+Scoring: a verified posting keeps its text and gets an explained 0–100 score. The `extractor`
+reads its requirements, salary, location and so on once; the `matcher` judges each requirement
+against facts found by hybrid retrieval (FTS5 + EmbeddingGemma vectors); the number itself comes
+from a pure function over your preferences, so changing them re-scores instantly, with no model
+call. The embedding model (~300 MB) is downloaded into `$APPLYANT_HOME/models` on first use
+(`APPLYANT_MODELS_DIR` overrides; `APPLYANT_EMBEDDER=hash` is an offline keyword-only stand-in).
+
+```sh
+pnpm -C daemon cli candidate prefs set roles ai_ml,backend,founding    # see `candidate prefs set --help`
+pnpm -C daemon cli candidate prefs set seniority senior,staff,lead
+pnpm -C daemon cli candidate prefs set based_in GR                     # where you work from
+pnpm -C daemon cli candidate prefs set locations GR,CY                 # on-site / hybrid is fine here
+pnpm -C daemon cli candidate prefs set remote required                 # required | preferred | any
+pnpm -C daemon cli candidate prefs set salary "3000 EUR/month"         # target (gross)
+pnpm -C daemon cli candidate prefs set salary_floor "2000 EUR/month"   # optional hard floor
+pnpm -C daemon cli candidate prefs set languages en:C1,el:native
+pnpm -C daemon cli candidate prefs set employment full_time,contract
+pnpm -C daemon cli candidate prefs dealbreaker add outstaffing         # only you create dealbreakers
+pnpm -C daemon cli candidate prefs weight salary 15                    # · reset-weights · prefs show
+pnpm -C daemon cli jobs list --by-score
+pnpm -C daemon cli jobs show <id>                                      # breakdown and ✓/~/✗ per requirement
+pnpm -C daemon cli jobs skip <id> --reason "salary too low"            # nudges weights, within bounds
+pnpm -C daemon cli jobs interested <id>
+pnpm -C daemon cli jobs score [id…]                                    # re-run; cached results are reused
+```
+
 Live tests call the real agent CLIs (and spend subscription quota), so they only run on request:
 
 ```sh
 APPLYANT_LIVE=1 pnpm -C daemon test:live -t extractor
+APPLYANT_LIVE=1 pnpm -C daemon test:live -t matcher    # also downloads EmbeddingGemma unless APPLYANT_MODELS_DIR has it
 ```
 
 Schema changes: edit `daemon/src/db/schema.ts`, then `pnpm -C daemon db:generate --name <what>`
-(never `drizzle-kit push`).
+(never `drizzle-kit push`). Virtual tables (`facts_fts`, `facts_vec`) and their triggers live in
+custom migrations (`pnpm -C daemon exec drizzle-kit generate --custom --name <what>`).

@@ -7,14 +7,26 @@
 //   page text            "no longer accepting applications" and similar → dead
 //   apply path           application form (any frame) · mailto · apply link/button
 //                        apply link that lands on the homepage → dead
+//
+// A live posting keeps its readable text and moves on to score_posting.
 import { eq } from 'drizzle-orm';
 import type { Frame, Page } from 'playwright';
 import type { ReaderPool } from '../../browser/reader-pool.ts';
 import { postings } from '../../db/schema.ts';
 import type { Handler, Outcome } from '../../queue/types.ts';
+import { jobPostingNode, readPostingText } from './posting-text.ts';
 
 export type Verdict =
-  | { kind: 'live'; note: string; title: string | null; company: string | null }
+  | {
+      kind: 'live';
+      note: string;
+      title: string | null;
+      company: string | null;
+      /** The posting's readable text; null when it couldn't be read. */
+      text: string | null;
+      /** The page's JobPosting JSON-LD node. */
+      jsonLd: Record<string, unknown> | null;
+    }
   | { kind: 'dead'; note: string; title: string | null; company: string | null }
   | { kind: 'transient'; note: string };
 
@@ -66,10 +78,14 @@ export const verifyPosting: Handler<'verify_posting'> = async (task, ctx) => {
           verifyNote: result.note,
           title: posting.title ?? result.title,
           company: posting.company ?? result.company,
+          ...(result.kind === 'live' && result.text
+            ? { text: result.text, jsonLd: result.jsonLd }
+            : {}),
         })
         .where(eq(postings.id, posting.id))
         .run();
       tx.emit({ kind: 'posting.stage', postingId: posting.id, stage, message: result.note });
+      if (stage === 'verified') tx.enqueue('score_posting', posting.id);
     },
   };
   return outcome;
@@ -126,9 +142,18 @@ export async function checkPosting(
       const closed = closedMarker(meta.text);
       if (closed) return { kind: 'dead', note: `page says "${closed}"`, title, company };
 
+      // Read before looking for the apply path, which may open other pages.
+      const read = await readPostingText(page).catch(() => null);
       const apply = await findApplyPath(page, opts.signal);
       return apply.ok
-        ? { kind: 'live', note: apply.note, title, company }
+        ? {
+            kind: 'live',
+            note: apply.note,
+            title,
+            company,
+            text: read?.text ?? null,
+            jsonLd: read?.jsonLd ?? null,
+          }
         : { kind: 'dead', note: apply.note, title, company };
     },
     { signal: opts.signal },
@@ -200,43 +225,20 @@ export interface JobPostingLd {
 
 /** Finds the first schema.org JobPosting in a page's JSON-LD blocks (arrays and @graph included). */
 export function findJobPosting(blocks: string[]): JobPostingLd | null {
-  const visit = (node: unknown): JobPostingLd | null => {
-    if (Array.isArray(node)) {
-      for (const item of node) {
-        const found = visit(item);
-        if (found) return found;
-      }
-      return null;
-    }
-    if (!node || typeof node !== 'object') return null;
-    const obj = node as Record<string, unknown>;
-    const type = obj['@type'];
-    const types = Array.isArray(type) ? type : [type];
-    if (types.includes('JobPosting')) {
-      const org = obj.hiringOrganization;
-      const company =
-        typeof org === 'string'
-          ? org
-          : org && typeof org === 'object' && typeof (org as { name?: unknown }).name === 'string'
-            ? (org as { name: string }).name
-            : null;
-      return {
-        title: typeof obj.title === 'string' ? obj.title.trim() : null,
-        company: company?.trim() || null,
-        validThrough: typeof obj.validThrough === 'string' ? obj.validThrough : null,
-      };
-    }
-    return visit(obj['@graph']);
+  const obj = jobPostingNode(blocks);
+  if (!obj) return null;
+  const org = obj.hiringOrganization;
+  const company =
+    typeof org === 'string'
+      ? org
+      : org && typeof org === 'object' && typeof (org as { name?: unknown }).name === 'string'
+        ? (org as { name: string }).name
+        : null;
+  return {
+    title: typeof obj.title === 'string' ? obj.title.trim() : null,
+    company: company?.trim() || null,
+    validThrough: typeof obj.validThrough === 'string' ? obj.validThrough : null,
   };
-  for (const block of blocks) {
-    try {
-      const found = visit(JSON.parse(block));
-      if (found) return found;
-    } catch {
-      // Malformed JSON-LD is common; ignore the block.
-    }
-  }
-  return null;
 }
 
 const CLOSED_MARKERS = [

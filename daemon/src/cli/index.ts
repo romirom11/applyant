@@ -3,26 +3,13 @@
 import { Command } from 'commander';
 import { registerCandidate } from './candidate.ts';
 import { type ApplyantClient, connect, describeError } from './client.ts';
-import {
-  eventJson,
-  eventLine,
-  parseStage,
-  postingJson,
-  stageName,
-  table,
-  truncate,
-} from './format.ts';
+import { eventJson, eventLine } from './format.ts';
+import { positiveInt, registerJobs } from './jobs.ts';
 
 const out = (text: string): void => {
   process.stdout.write(`${text}\n`);
 };
 const json = (value: unknown): void => out(JSON.stringify(value, null, 2));
-
-function positiveInt(value: string): number {
-  const n = Number(value);
-  if (!Number.isSafeInteger(n) || n <= 0) throw new Error(`"${value}" is not an id`);
-  return n;
-}
 
 async function readSecretValue(name: string): Promise<string> {
   const { stdin, stderr } = process;
@@ -69,69 +56,7 @@ export function buildCli(client: () => ApplyantClient): Command {
     .description('Applyant: your job-search harness (talks to applyantd)')
     .showHelpAfterError();
 
-  const jobs = program.command('jobs').description('postings');
-
-  jobs
-    .command('add <url>')
-    .description('add a posting by URL; it is verified in the background')
-    .option('--json', 'print JSON')
-    .action(async (url: string, opts: { json?: boolean }) => {
-      const res = await client().addPosting({ url });
-      const p = res.posting;
-      if (!p) throw new Error('daemon returned no posting');
-      if (opts.json) return json({ created: res.created, posting: postingJson(p) });
-      out(
-        res.created
-          ? `Added posting ${p.id} (${stageName(p.stage)}), verifying: ${p.canonicalUrl}`
-          : `Already known as posting ${p.id} (${stageName(p.stage)}): ${p.canonicalUrl}`,
-      );
-    });
-
-  jobs
-    .command('list')
-    .description('list postings, newest first')
-    .option('--stage <stage>', 'only this stage (found | verified | failed_verification)')
-    .option('--json', 'print JSON')
-    .action(async (opts: { stage?: string; json?: boolean }) => {
-      const stage = opts.stage ? parseStage(opts.stage) : undefined;
-      const res = await client().listPostings(stage === undefined ? {} : { stage });
-      if (opts.json) return json(res.postings.map(postingJson));
-      if (res.postings.length === 0)
-        return out('No postings yet. Add one with `applyant jobs add <url>`.');
-      out(
-        table(
-          ['ID', 'STAGE', 'COMPANY', 'TITLE', 'URL'],
-          res.postings.map((p) => [
-            String(p.id),
-            stageName(p.stage),
-            truncate(p.company ?? '', 24),
-            truncate(p.title ?? '', 48),
-            p.canonicalUrl,
-          ]),
-        ),
-      );
-    });
-
-  jobs
-    .command('show <id>')
-    .description('show one posting')
-    .option('--json', 'print JSON')
-    .action(async (idArg: string, opts: { json?: boolean }) => {
-      const id = positiveInt(idArg);
-      const res = await client().getPosting({ id: BigInt(id) });
-      const p = res.posting;
-      if (!p) throw new Error(`posting ${id} not found`);
-      const j = postingJson(p);
-      if (opts.json) return json(j);
-      out(`${j.title ?? '(untitled)'}${j.company ? ` · ${j.company}` : ''}`);
-      out(`Posting ${j.id} · ${j.stage}`);
-      out(`URL          ${j.canonicalUrl}`);
-      out(`First seen   ${j.firstSeenAt ?? '-'}`);
-      out(`Verified     ${j.verifiedAt ? `${j.verifiedAt} · ${j.verifyNote ?? ''}` : '-'}`);
-      out('Sources');
-      for (const s of j.sources) out(`  ${s.kind.padEnd(8)} ${s.url}`);
-    });
-
+  registerJobs(program, client);
   registerCandidate(program, client);
 
   const runs = program.command('runs').description('task activity');

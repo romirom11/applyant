@@ -9,6 +9,7 @@ import type { Secrets } from '../secrets/secrets.ts';
 import type { Logger } from '../util/log.ts';
 import { candidateRpcs } from './candidate.ts';
 import { postingRpcs, type RpcContext } from './postings.ts';
+import { prefsRpcs } from './prefs.ts';
 import { secretRpcs } from './secrets.ts';
 
 export interface RpcServerOptions extends RpcContext {
@@ -42,6 +43,7 @@ export async function startRpcServer(o: RpcServerOptions): Promise<RpcServer> {
       router.service(ApplyantService, {
         ...postingRpcs(o),
         ...candidateRpcs(o),
+        ...prefsRpcs(o),
         ...secretRpcs(o.secrets),
       }),
   });

@@ -18,6 +18,11 @@ export type Conn = Db | DrizzleTx;
 
 const MIGRATIONS = fileURLToPath(new URL('./migrations', import.meta.url));
 
+/** A raw better-sqlite3 connection with the daemon's pragmas and sqlite-vec loaded. */
+export function openConnection(path: string, readonly: boolean): Database.Database {
+  return open(path, readonly);
+}
+
 function open(path: string, readonly: boolean): Database.Database {
   const conn = new Database(path, { readonly, fileMustExist: readonly });
   conn.pragma('busy_timeout = 5000');

@@ -25,6 +25,7 @@ import { type SourceExtraction, sourceExtractionSchema } from '../../models/sche
 import type { Handler, Outcome, Task, Tx } from '../../queue/types.ts';
 import { applyAuthorship } from './authorship.ts';
 import { checkClaims } from './claim-check.ts';
+import { enqueueEmbedFacts } from './embed-index.ts';
 import { addEvidence } from './evidence.ts';
 import {
   EXTRACTOR_SYSTEM,
@@ -178,6 +179,8 @@ export const syncSource: Handler<'sync_source'> = async (task, ctx) => {
         .set({ lastSyncedAt: tx.now, contentHash: hash, syncNote: note })
         .where(eq(sources.id, source.id))
         .run();
+      // New facts need vectors for retrieval.
+      if (summary.inserted > 0) enqueueEmbedFacts(tx);
       tx.emit({
         kind: 'source.synced',
         entityId: source.id,
