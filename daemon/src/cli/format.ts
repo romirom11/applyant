@@ -1,5 +1,6 @@
 import { timestampDate } from '@bufbuild/protobuf/wkt';
 import {
+  type ElementRef,
   type Event,
   type Posting,
   PostingStage,
@@ -85,6 +86,34 @@ export function postingJson(p: Posting) {
     decisionReason: p.decisionReason ?? null,
     summary: p.summary ?? null,
     salaryText: p.salaryText ?? null,
+    applyUrl: p.applyUrl ?? null,
+    formStatus: p.formStatus ?? null,
+    formNote: p.formNote ?? null,
+    formReadAt: iso(p.formReadAt),
+    form: p.form
+      ? {
+          url: p.form.url,
+          notes: p.form.notes,
+          steps: p.form.steps.map((st) => ({
+            isFinal: st.isFinal,
+            advance: st.advance ? refJson(st.advance) : null,
+            fields: st.fields.map((f) => ({
+              label: f.label,
+              kind: f.kind,
+              required: f.required,
+              options: f.hasOptions ? f.options : null,
+              meaning: f.meaning ?? null,
+              revealedBy: f.revealedBy
+                ? {
+                    ref: f.revealedBy.ref ? refJson(f.revealedBy.ref) : null,
+                    value: f.revealedBy.value,
+                  }
+                : null,
+              ref: f.ref ? refJson(f.ref) : null,
+            })),
+          })),
+        }
+      : null,
     requirements: p.requirements.map((m) => ({
       text: m.text,
       must: m.must,
@@ -98,6 +127,10 @@ export function postingJson(p: Posting) {
       })),
     })),
   };
+}
+
+function refJson(r: ElementRef) {
+  return { frame: r.frame, role: r.role, name: r.name, nth: r.nth, css: r.css ?? null };
 }
 
 export function eventJson(e: Event) {

@@ -7,12 +7,18 @@
 //   page text            "no longer accepting applications" and similar → dead
 //   apply path           application form (any frame) · mailto · apply link/button
 //                        apply link that lands on the homepage → dead
+//   posting_liveness     a live verdict is checked once more by a model (Jev; fallback
+//                        claude:haiku): a page that reads as closed or as no single posting
+//                        is dead. Advisory only: when the model is unsure or fails, the
+//                        deterministic verdict stands.
 //
-// A live posting keeps its readable text and moves on to score_posting.
+// A live posting keeps its readable text and where to apply, and moves on to score_posting and
+// read_form (the application form itself, read in phase 4's form engine).
 import { eq } from 'drizzle-orm';
 import type { Frame, Page } from 'playwright';
 import type { ReaderPool } from '../../browser/reader-pool.ts';
 import { postings } from '../../db/schema.ts';
+import type { Decide } from '../../models/decide.ts';
 import type { Handler, Outcome } from '../../queue/types.ts';
 import { jobPostingNode, readPostingText } from './posting-text.ts';
 
@@ -26,6 +32,8 @@ export type Verdict =
       text: string | null;
       /** The page's JobPosting JSON-LD node. */
       jsonLd: Record<string, unknown> | null;
+      /** Where to apply: the page with the form, the apply link's target, or a mailto: URL. */
+      applyUrl: string | null;
     }
   | { kind: 'dead'; note: string; title: string | null; company: string | null }
   | { kind: 'transient'; note: string };
@@ -65,8 +73,26 @@ export const verifyPosting: Handler<'verify_posting'> = async (task, ctx) => {
     };
   }
 
+  if (verdict.kind === 'live' && verdict.text) {
+    const opinion = await livenessCheck(
+      (role, req) => ctx.deps.models.decide(role, req),
+      { url: posting.canonicalUrl, title: verdict.title, text: verdict.text },
+      { taskId: task.id, signal: ctx.signal, progress: (message) => ctx.progress({ message }) },
+    );
+    if (opinion.dead) {
+      verdict = {
+        kind: 'dead',
+        note: opinion.note ?? 'posting_liveness: closed',
+        title: verdict.title,
+        company: verdict.company,
+      };
+    }
+  }
+
   const result = verdict;
   const stage = result.kind === 'live' ? 'verified' : 'failed_verification';
+  const applyUrl = result.kind === 'live' ? result.applyUrl : null;
+  const byEmail = applyUrl?.startsWith('mailto:') ?? false;
   const outcome: Outcome = {
     kind: 'done',
     commit: (tx) => {
@@ -81,11 +107,22 @@ export const verifyPosting: Handler<'verify_posting'> = async (task, ctx) => {
           ...(result.kind === 'live' && result.text
             ? { text: result.text, jsonLd: result.jsonLd }
             : {}),
+          applyUrl,
+          ...(byEmail
+            ? {
+                formStatus: 'email' as const,
+                formNote: `applies by email to ${applyUrl?.slice(7).split('?')[0]}`,
+                formReadAt: tx.now,
+              }
+            : {}),
         })
         .where(eq(postings.id, posting.id))
         .run();
       tx.emit({ kind: 'posting.stage', postingId: posting.id, stage, message: result.note });
-      if (stage === 'verified') tx.enqueue('score_posting', posting.id);
+      if (stage === 'verified') {
+        tx.enqueue('score_posting', posting.id);
+        if (!byEmail) tx.enqueue('read_form', posting.id);
+      }
     },
   };
   return outcome;
@@ -153,6 +190,7 @@ export async function checkPosting(
             company,
             text: read?.text ?? null,
             jsonLd: read?.jsonLd ?? null,
+            applyUrl: apply.url,
           }
         : { kind: 'dead', note: apply.note, title, company };
     },
@@ -277,6 +315,8 @@ const LIST_THRESHOLD = 3;
 interface ApplyPath {
   ok: boolean;
   note: string;
+  /** Where the application happens (live paths only). */
+  url: string | null;
 }
 
 interface ApplyControl {
@@ -291,17 +331,22 @@ async function findApplyPath(page: Page, signal?: AbortSignal): Promise<ApplyPat
         ok: true,
         note:
           frame === page.mainFrame() ? 'apply form on page' : `apply form in frame ${frame.url()}`,
+        url: page.url(),
       };
     }
   }
 
   const controls: ApplyControl[] = [];
   for (const frame of page.frames()) controls.push(...(await applyControls(frame)));
-  if (controls.length === 0) return { ok: false, note: 'no apply link or form found' };
+  if (controls.length === 0) return { ok: false, note: 'no apply link or form found', url: null };
 
   const mail = controls.find((c) => c.href?.startsWith('mailto:'));
   if (mail?.href) {
-    return { ok: true, note: `apply by email to ${mail.href.slice(7).split('?')[0]}` };
+    return {
+      ok: true,
+      note: `apply by email to ${mail.href.slice(7).split('?')[0]}`,
+      url: mail.href,
+    };
   }
 
   const here = stripHash(page.url());
@@ -317,16 +362,17 @@ async function findApplyPath(page: Page, signal?: AbortSignal): Promise<ApplyPat
     return {
       ok: false,
       note: `looks like a list of jobs (${sameHostTargets.size} apply links), not one posting`,
+      url: null,
     };
   }
 
   const link = controls.find(
     (c) => c.href && /^https?:/.test(c.href) && stripHash(c.href) !== here,
   );
-  if (!link?.href) return { ok: true, note: 'apply button on page' };
+  if (!link?.href) return { ok: true, note: 'apply button on page', url: page.url() };
 
   if (isRoot(link.href)) {
-    return { ok: false, note: `apply link leads to the homepage ${link.href}` };
+    return { ok: false, note: `apply link leads to the homepage ${link.href}`, url: null };
   }
 
   signal?.throwIfAborted();
@@ -334,19 +380,25 @@ async function findApplyPath(page: Page, signal?: AbortSignal): Promise<ApplyPat
   try {
     const response = await target.goto(link.href, { waitUntil: 'domcontentloaded' });
     const status = response?.status() ?? 200;
-    if (status >= 400) return { ok: false, note: `apply link ${link.href} returns HTTP ${status}` };
+    if (status >= 400)
+      return { ok: false, note: `apply link ${link.href} returns HTTP ${status}`, url: null };
     await settle(target);
     const landed = target.url();
     if (isRoot(landed)) {
-      return { ok: false, note: `apply link redirects to the homepage ${landed}` };
+      return { ok: false, note: `apply link redirects to the homepage ${landed}`, url: null };
     }
     for (const frame of target.frames()) {
-      if (await hasApplicationForm(frame)) return { ok: true, note: `apply form at ${landed}` };
+      if (await hasApplicationForm(frame))
+        return { ok: true, note: `apply form at ${landed}`, url: landed };
     }
-    return { ok: true, note: `apply link to ${landed}` };
+    return { ok: true, note: `apply link to ${landed}`, url: landed };
   } catch (err) {
     signal?.throwIfAborted();
-    return { ok: true, note: `apply link to ${link.href} (not opened: ${navigationError(err)})` };
+    return {
+      ok: true,
+      note: `apply link to ${link.href} (not opened: ${navigationError(err)})`,
+      url: link.href,
+    };
   } finally {
     await target.close().catch(() => {});
   }
@@ -415,4 +467,56 @@ function stripHash(url: string): string {
 function navigationError(err: unknown): string {
   const message = err instanceof Error ? err.message : String(err);
   return message.split('\n')[0] ?? message;
+}
+
+// ---- posting_liveness ---------------------------------------------------------------------
+
+/** How much of the posting text the liveness question sees (Jev degrades on large state). */
+const LIVENESS_TEXT = 6000;
+
+export const LIVENESS_OPTIONS = {
+  open: 'A single job posting that is live: it describes one role and invites applications',
+  closed:
+    'A job posting that says it is closed, filled, expired, archived or no longer accepting applications',
+  not_a_posting:
+    'Not a single job posting: a list of many jobs, a company homepage, a search page, an error or a login page',
+} as const;
+
+export interface LivenessOpinion {
+  dead: boolean;
+  /** Why it's dead; null = nothing to add to the deterministic note. */
+  note: string | null;
+}
+
+/**
+ * posting_liveness over the text of a page the deterministic checks found live. Only a sure
+ * "closed" or "not a posting" turns it dead.
+ */
+export async function livenessCheck(
+  decide: Decide,
+  page: { url: string; title: string | null; text: string },
+  o: { taskId: number | null; signal: AbortSignal; progress?(message: string): void },
+): Promise<LivenessOpinion> {
+  const res = await decide('posting_liveness', {
+    state: { url: page.url, title: page.title, page_text: page.text.slice(0, LIVENESS_TEXT) },
+    questions: {
+      liveness: {
+        instructions: 'Is this web page a single job posting that is still open for applications?',
+        options: { ...LIVENESS_OPTIONS },
+      },
+    },
+    taskId: o.taskId,
+    signal: o.signal,
+    ...(o.progress ? { progress: o.progress } : {}),
+  });
+  const a = res.answers.liveness;
+  // Unsure (or no model available): the deterministic verdict stands, unremarked.
+  if (!a?.sure) return { dead: false, note: null };
+  if (a.choice === 'closed') {
+    return { dead: true, note: `${a.by}: the page reads as closed (${a.confidence.toFixed(2)})` };
+  }
+  if (a.choice === 'not_a_posting') {
+    return { dead: true, note: `${a.by}: not a single job posting (${a.confidence.toFixed(2)})` };
+  }
+  return { dead: false, note: null };
 }

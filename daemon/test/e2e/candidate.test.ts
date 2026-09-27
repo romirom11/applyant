@@ -164,6 +164,33 @@ describe('applyant candidate', () => {
     expect(bad).toMatchObject({ code: 1 });
     expect(bad.stderr).toMatch(/not an email address/);
 
+    // The standard values application forms ask for.
+    const named = await cli(['candidate', 'profile', 'set', 'full_name', 'Alex', 'Example']);
+    expect(named.stdout.trim()).toBe('full_name: Alex Example');
+    await cli(['candidate', 'profile', 'set', 'work_authorization', 'No']);
+    const cv = await cli([
+      'candidate',
+      'profile',
+      'set',
+      'base_cv_file',
+      'test/fixtures/cv/cv.pdf',
+    ]);
+    expect(cv.stdout).toMatch(/^base_cv_file: \/.+\/test\/fixtures\/cv\/cv\.pdf$/m);
+    const badLink = await cli([
+      'candidate',
+      'profile',
+      'set',
+      'links.github',
+      'https://gitlab.com/x',
+    ]);
+    expect(badLink.stderr).toMatch(/not a GitHub URL/);
+    const shown = await cli(['candidate', 'profile', 'show']);
+    expect(shown.stdout).toMatch(/^full_name\s+Alex Example$/m);
+    expect(shown.stdout).toMatch(/^work_authorization\s+No$/m);
+    expect(shown.stdout).toMatch(/^links\.linkedin\s+\(not set\)$/m);
+    const cleared = await cli(['candidate', 'profile', 'set', 'work_authorization']);
+    expect(cleared.stdout.trim()).toBe('work_authorization: (cleared)');
+
     const added = await cli([
       'candidate',
       'project',

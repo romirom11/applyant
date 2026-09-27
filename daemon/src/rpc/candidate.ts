@@ -160,7 +160,7 @@ function profileEntries(profile: Record<string, unknown>) {
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([key, value]) => ({
       key,
-      values: Array.isArray(value) ? value.map(String) : [String(value)],
+      values: Array.isArray(value) ? value.map(String) : value === null ? [] : [String(value)],
     }));
 }
 

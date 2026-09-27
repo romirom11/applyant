@@ -65,6 +65,8 @@ const env = () => ({
   APPLYANT_CLAUDE_PATH: FAKE_CLAUDE,
   FAKE_CLAUDE_OUTPUT: join(home, 'fake-claude-output.json'),
   APPLYANT_EMBEDDER: 'hash',
+  // The secrets test stores a dummy Jev key: it must never reach the real API.
+  APPLYANT_JEV_URL: 'http://127.0.0.1:9/v1/systemone',
 });
 
 interface CliResult {
@@ -252,6 +254,42 @@ describe('applyant CLI against a live daemon', () => {
       'failed_verification',
       'done',
     ]);
+  });
+
+  it('reads the application form read-only and prints it with --form', async () => {
+    const [scored] = await cliJson<PostingJson[]>(['jobs', 'list', '--stage', 'scored']);
+    if (!scored) throw new Error('no scored posting');
+    const id = String(scored.id);
+    const read = await waitFor('the form read', async () => {
+      const p = await cliJson<PostingJson & { formStatus: string | null }>(['jobs', 'show', id]);
+      return p.formStatus ? p : undefined;
+    });
+    expect(read).toMatchObject({
+      formStatus: 'verified',
+      formNote: '1 step · 4 fields (3 required)',
+      applyUrl: site.url('/live.html'),
+    });
+    const text = await cli(['jobs', 'show', id, '--form']);
+    expect(text.stdout).toMatch(/Apply form {3}✓ apply form verified \S+ · 1 step · 4 fields/);
+    expect(text.stdout).toContain(
+      'Step 1 of 1 · 4 fields · submits with "Submit application" (Read stops here)',
+    );
+    expect(text.stdout).toMatch(/\* First name {2}· text/);
+    expect(text.stdout).toMatch(/ {3}Resume {2}· file/);
+    const json = await cliJson<{ form: { steps: Array<{ isFinal: boolean; fields: unknown[] }> } }>(
+      ['jobs', 'show', id, '--form'],
+    );
+    expect(json.form.steps).toEqual([expect.objectContaining({ isFinal: true })]);
+    expect(json.form.steps[0]?.fields).toHaveLength(4);
+    // Read typed into the form but sent nothing.
+    expect(site.writes).toEqual([]);
+
+    const again = await cli(['jobs', 'read-form', id]);
+    expect(again.stdout).toMatch(/Reading 1 form\(s\): \d+/);
+    const failed = await cliJson<PostingJson[]>(['jobs', 'list', '--stage', 'failed_verification']);
+    const refused = await cli(['jobs', 'read-form', String(failed[0]?.id)]);
+    expect(refused).toMatchObject({ code: 1 });
+    expect(refused.stderr).toMatch(/only verified or scored postings have a form to read/);
   });
 
   it('explains the score, re-scores on preference changes and takes skip feedback', async () => {

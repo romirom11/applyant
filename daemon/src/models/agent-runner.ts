@@ -12,6 +12,17 @@ import type { NewAgentRunRow } from '../db/schema.ts';
 import { ensurePrivateDir } from '../util/fs.ts';
 import type { Logger } from '../util/log.ts';
 import {
+  batchQuestions,
+  type ChoiceQuestion,
+  DECIDE_SYSTEM,
+  type DecideRequest,
+  type DecideResult,
+  decidePrompt,
+  decisionSchema,
+  validateDecisions,
+} from './decide.ts';
+import { JEV_MAX_OPTIONS, JEV_USD_PER_INPUT_TOKEN, type JevClient } from './providers/jev.ts';
+import {
   DEFAULT_ROUTING,
   describeRoute,
   type Provider,
@@ -81,6 +92,8 @@ export interface AgentRunnerOptions {
   log: Logger;
   now?: () => Date;
   routing?: RoutingTable;
+  /** Jev, for the decision roles. Without it (or without its key) they use the fallback. */
+  jev?: Pick<JevClient, 'available' | 'ask'> | null;
 }
 
 /**
@@ -244,6 +257,146 @@ export class AgentRunner {
         req.progress?.(`${role} · done in ${(durationMs / 1000).toFixed(1)} s${tokens}`);
         return { kind: 'ok', output: parsed.data, route };
       }
+    }
+  }
+
+  /**
+   * Choice questions for a decision role (field_classify, option_match, posting_liveness).
+   * Jev answers first when it's on; answers below the role's confidence threshold, and all of
+   * them when Jev is off or fails, are re-asked of the fallback model in one structured run.
+   */
+  async decide(role: Role, req: DecideRequest): Promise<DecideResult> {
+    req.signal.throwIfAborted();
+    const table = this.o.routing ?? DEFAULT_ROUTING;
+    const config = table.roles[role];
+    const min = config.minConfidence ?? 0;
+    const answers: DecideResult['answers'] = {};
+    const problems: string[] = [];
+    let limit: DecideResult['limit'] = null;
+    const ids = Object.keys(req.questions);
+    if (ids.length === 0) return { answers, problems, limit };
+
+    const jev = this.o.jev;
+    if (config.route.provider === 'jev' && jev && (await jev.available())) {
+      const askable: Record<string, ChoiceQuestion> = {};
+      for (const id of ids) {
+        const q = req.questions[id];
+        if (q && Object.keys(q.options).length <= JEV_MAX_OPTIONS) askable[id] = q;
+      }
+      for (const batch of batchQuestions(askable)) {
+        try {
+          const res = await this.askJev(role, req, batch);
+          for (const [id, a] of Object.entries(res)) {
+            if (
+              !a ||
+              typeof a.choice !== 'string' ||
+              !Object.hasOwn(batch[id]?.options ?? {}, a.choice)
+            ) {
+              continue;
+            }
+            const confidence = Number(a.confidence ?? 0);
+            answers[id] = { choice: a.choice, confidence, by: 'jev', sure: confidence >= min };
+          }
+        } catch (err) {
+          req.signal.throwIfAborted();
+          problems.push(`jev: ${errorMessage(err)}`);
+        }
+      }
+    }
+
+    const unsure = ids.filter((id) => !answers[id]?.sure);
+    if (unsure.length === 0) return { answers, problems, limit };
+    const questions: Record<string, ChoiceQuestion> = {};
+    for (const id of unsure) {
+      const q = req.questions[id];
+      if (q) questions[id] = q;
+    }
+    const res = await this.run(role, {
+      schema: decisionSchema,
+      system: DECIDE_SYSTEM,
+      prompt: decidePrompt(req.state, questions),
+      taskId: req.taskId,
+      signal: req.signal,
+      ...(req.progress ? { progress: req.progress } : {}),
+      validate: (out) => validateDecisions(out, questions),
+    });
+    if (res.kind === 'ok') {
+      const by = describeRoute(res.route);
+      for (const a of res.output.answers) {
+        answers[a.question] = { choice: a.choice, confidence: 1, by, sure: true };
+      }
+    } else if (res.kind === 'limit') {
+      limit = { provider: res.provider, until: res.until };
+      problems.push(`${res.provider} limit: ${res.message}`);
+    } else {
+      problems.push(res.reason);
+    }
+    return { answers, problems, limit };
+  }
+
+  /** One Jev request, logged and recorded like any agent run (the key never is). */
+  private async askJev(role: Role, req: DecideRequest, questions: Record<string, ChoiceQuestion>) {
+    const jev = this.o.jev;
+    if (!jev) throw new Error('jev is not configured');
+    const started = this.now();
+    const stamp = `${started.getTime()}-${++this.seq}`;
+    ensurePrivateDir(this.o.runsDir);
+    const logPath = join(this.o.runsDir, `task-${req.taskId ?? 'none'}-${role}-${stamp}.ndjson`);
+    const log = new RunLog(logPath);
+    const body = {
+      state: req.state,
+      questions: Object.fromEntries(
+        Object.entries(questions).map(([id, q]) => [
+          id,
+          { type: 'choice' as const, instructions: q.instructions, criteria: q.options },
+        ]),
+      ),
+    };
+    log.write({
+      type: 'applyant.request',
+      at: started.toISOString(),
+      taskId: req.taskId,
+      role,
+      route: 'jev',
+      ...body,
+    });
+    req.progress?.(`${role} · jev · ${Object.keys(questions).length} questions`);
+    const record = (
+      outcome: string,
+      error: string | null,
+      model: string | null,
+      tokens: { input_tokens: number; output_tokens: number } | null,
+    ) => {
+      const durationMs = this.now().getTime() - started.getTime();
+      log.write({ type: 'applyant.outcome', outcome, error, durationMs, usage: tokens });
+      log.close();
+      try {
+        this.o.record({
+          taskId: req.taskId,
+          role,
+          provider: 'jev',
+          model,
+          startedAt: started,
+          durationMs,
+          inputTokens: tokens?.input_tokens ?? null,
+          outputTokens: tokens?.output_tokens ?? null,
+          costUsd: tokens ? tokens.input_tokens * JEV_USD_PER_INPUT_TOKEN : null,
+          outcome,
+          error,
+          logPath,
+        });
+      } catch (err) {
+        this.o.log.warn('jev run not recorded', { role, err });
+      }
+    };
+    try {
+      const res = await jev.ask(body, req.signal);
+      log.write({ type: 'jev.response', model: res.model, answers: res.answers, usage: res.usage });
+      record('ok', null, res.model, res.usage);
+      return res.answers;
+    } catch (err) {
+      record(req.signal.aborted ? 'aborted' : 'error', errorMessage(err), null, null);
+      throw err;
     }
   }
 }

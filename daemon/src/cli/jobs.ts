@@ -2,7 +2,7 @@
 import type { Command } from 'commander';
 import type { Posting } from '../gen/applyant/v1/applyant_pb.js';
 import type { ApplyantClient } from './client.ts';
-import { parseStage, postingJson, stageName, table, truncate } from './format.ts';
+import { iso, parseStage, postingJson, stageName, table, truncate } from './format.ts';
 
 const out = (text: string): void => {
   process.stdout.write(`${text}\n`);
@@ -71,6 +71,78 @@ export function requirementLines(p: Posting): string[] {
   return lines;
 }
 
+function refLabel(ref: { role: string; name: string; css?: string | undefined }): string {
+  return ref.name ? `"${truncate(ref.name, 60)}"` : (ref.css ?? ref.role);
+}
+
+/** One line for the posting's form status (jobs show). */
+export function formStatusLine(p: Posting): string {
+  const when = p.formReadAt ? iso(p.formReadAt) : null;
+  switch (p.formStatus) {
+    case 'verified':
+      return `✓ apply form verified${when ? ` ${when}` : ''} · ${p.formNote ?? ''}`;
+    case 'email':
+      return `✓ ${p.formNote ?? 'applies by email'}`;
+    case 'no_form':
+      return `✗ no application form found${p.formNote ? `: ${p.formNote}` : ''}`;
+    case 'failed':
+      return `✗ couldn't read the form${p.formNote ? `: ${p.formNote}` : ''}`;
+    default:
+      return 'not read yet';
+  }
+}
+
+/** The form Read found: every step, field, required flag, option list and conditional field. */
+export function formLines(p: Posting): string[] {
+  const form = p.form;
+  if (!form) return ['  (no form read yet: `applyant jobs read-form <id>`)'];
+  const lines: string[] = [
+    `  ${form.url}`,
+    '  * required · indented fields belong to one entry of the repeatable group above them',
+  ];
+  const steps = form.steps;
+  const labels = new Map<string, string>();
+  for (const st of steps) {
+    for (const f of st.fields) {
+      if (f.ref) labels.set(JSON.stringify(f.ref), f.label);
+    }
+  }
+  steps.forEach((st, i) => {
+    const advance = st.advance
+      ? `${st.isFinal ? 'submits with' : 'moves on with'} ${refLabel(st.advance)}${st.isFinal ? ' (Read stops here)' : ''}`
+      : 'no advance control found';
+    lines.push('', `  Step ${i + 1} of ${steps.length} · ${st.fields.length} fields · ${advance}`);
+    for (const f of st.fields) {
+      const req = f.required ? '*' : ' ';
+      const meaning = f.meaning ? ` [${f.meaning}]` : '';
+      const kind = f.kind === 'group' ? 'repeatable group' : f.kind;
+      const entry = f.revealedBy?.value === 'add' ? '    ' : '';
+      lines.push(`   ${req} ${entry}${f.label || '(no label)'}  · ${kind}${meaning}`);
+      if (f.hasOptions) {
+        const shown = f.options.slice(0, 8).map((o) => truncate(o, 40));
+        const more = f.options.length > 8 ? ` … +${f.options.length - 8} more` : '';
+        lines.push(`       options: ${shown.join(' | ')}${more}`);
+      } else if (f.kind === 'combobox') {
+        lines.push('       options: load as you type');
+      }
+      if (f.revealedBy && f.revealedBy.value !== 'add') {
+        const by = f.revealedBy.ref ? labels.get(JSON.stringify(f.revealedBy.ref)) : undefined;
+        const value = f.revealedBy.value === '*' ? 'any answer' : `"${f.revealedBy.value}"`;
+        // A conditional field's * means required on that branch only.
+        const then = f.required ? ', and required then' : '';
+        lines.push(
+          `       ↳ shown when "${truncate(by ?? 'another field', 60)}" is ${value}${then}`,
+        );
+      }
+    }
+  });
+  if (form.notes.length) {
+    lines.push('', '  Notes');
+    for (const n of form.notes) lines.push(`   - ${n}`);
+  }
+  return lines;
+}
+
 export function registerJobs(program: Command, client: () => ApplyantClient): void {
   const jobs = program.command('jobs').description('postings');
 
@@ -127,8 +199,9 @@ export function registerJobs(program: Command, client: () => ApplyantClient): vo
   jobs
     .command('show <id>')
     .description('show one posting with its score breakdown and requirements')
+    .option('--form', 'also print the application form: steps, fields, options, conditional fields')
     .option('--json', 'print JSON')
-    .action(async (idArg: string, opts: { json?: boolean }) => {
+    .action(async (idArg: string, opts: { json?: boolean; form?: boolean }) => {
       const id = positiveInt(idArg);
       const res = await client().getPosting({ id: BigInt(id) });
       const p = res.posting;
@@ -141,6 +214,9 @@ export function registerJobs(program: Command, client: () => ApplyantClient): vo
       out(`URL          ${j.canonicalUrl}`);
       out(`First seen   ${j.firstSeenAt ?? '-'}`);
       out(`Verified     ${j.verifiedAt ? `${j.verifiedAt} · ${j.verifyNote ?? ''}` : '-'}`);
+      if (j.stage !== 'found' && j.stage !== 'failed_verification') {
+        out(`Apply form   ${formStatusLine(p)}`);
+      }
       if (j.summary) out(`About        ${j.summary}`);
       if (j.salaryText) out(`Salary       ${j.salaryText}`);
       if (j.structuredFields.length) {
@@ -176,6 +252,25 @@ export function registerJobs(program: Command, client: () => ApplyantClient): vo
       out('');
       out('Sources');
       for (const s of j.sources) out(`  ${s.kind.padEnd(8)} ${s.url}`);
+      if (opts.form) {
+        out('');
+        out('Application form');
+        for (const line of formLines(p)) out(line);
+      }
+    });
+
+  jobs
+    .command('read-form [ids...]')
+    .description(
+      "read postings' application forms again (read-only: nothing is submitted); default: every live posting never read",
+    )
+    .action(async (idArgs: string[]) => {
+      const res = await client().readForms({ ids: idArgs.map((v) => BigInt(positiveInt(v))) });
+      out(
+        res.enqueuedIds.length
+          ? `Reading ${res.enqueuedIds.length} form(s): ${res.enqueuedIds.join(', ')}. Then \`applyant jobs show <id> --form\`.`
+          : 'Nothing to read (or already in progress).',
+      );
     });
 
   jobs

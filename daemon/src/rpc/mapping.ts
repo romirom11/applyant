@@ -1,12 +1,17 @@
 // Domain rows → proto messages. The only place that knows both shapes.
 import { create } from '@bufbuild/protobuf';
 import { timestampFromDate } from '@bufbuild/protobuf/wkt';
+import type { ElementRef, FormRead } from '../browser/form-types.ts';
 import type { EventRow, PostingRow, PostingSourceRow, PostingStage } from '../db/schema.ts';
 import { effectiveExtraction } from '../domain/scoring/structured.ts';
 import type { CitedFact } from '../domain/search/postings.ts';
 import {
+  type ApplicationForm,
+  ApplicationFormSchema,
+  ElementRefSchema,
   type Event,
   EventSchema,
+  type ElementRef as PbElementRef,
   FactStatus as PbFactStatus,
   PostingStage as PbStage,
   type Posting,
@@ -42,9 +47,42 @@ export function stageFromPb(stage: PbStage): PostingStage | undefined {
   return undefined;
 }
 
+function refToPb(ref: ElementRef): PbElementRef {
+  return create(ElementRefSchema, {
+    frame: ref.frame,
+    role: ref.role,
+    name: ref.name,
+    nth: ref.nth,
+    css: ref.css ?? undefined,
+  });
+}
+
+export function formToPb(read: FormRead): ApplicationForm {
+  return create(ApplicationFormSchema, {
+    url: read.url,
+    notes: read.notes,
+    steps: read.requirements.steps.map((step) => ({
+      advance: step.advance ? refToPb(step.advance) : undefined,
+      isFinal: step.isFinal,
+      fields: step.fields.map((f) => ({
+        ref: refToPb(f.ref),
+        label: f.label,
+        kind: f.kind,
+        required: f.required,
+        options: f.options ?? [],
+        hasOptions: f.options !== null,
+        meaning: f.meaning ?? undefined,
+        revealedBy: f.revealedBy
+          ? { ref: refToPb(f.revealedBy.ref), value: f.revealedBy.value }
+          : undefined,
+      })),
+    })),
+  });
+}
+
 /**
  * `sources` and `facts` are only passed for GetPosting; with `facts`, the requirement
- * matches are included with the facts they cite.
+ * matches are included with the facts they cite (and the form Read found).
  */
 export function postingToPb(
   row: PostingRow,
@@ -87,6 +125,11 @@ export function postingToPb(
     salaryText: effectiveExtraction(row)?.extraction.salary?.text || undefined,
     coreFit: row.coreFit ?? undefined,
     structuredFields: effectiveExtraction(row)?.decided ?? [],
+    applyUrl: row.applyUrl ?? undefined,
+    formStatus: row.formStatus ?? undefined,
+    formNote: row.formNote ?? undefined,
+    formReadAt: row.formReadAt ? timestampFromDate(row.formReadAt) : undefined,
+    form: facts && row.form ? formToPb(row.form) : undefined,
     requirements: facts
       ? (row.matches ?? []).map((m) =>
           create(RequirementMatchSchema, {
@@ -146,7 +189,7 @@ export function eventToPb(row: EventRow): Event {
       },
     });
   }
-  if (row.kind === 'posting.stage') {
+  if (row.kind === 'posting.stage' || row.kind === 'posting.form') {
     return create(EventSchema, {
       ...base,
       payload: {

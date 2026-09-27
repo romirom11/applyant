@@ -1,0 +1,119 @@
+<!doctype html>
+<!-- Synthetic. Modelled on a Workday-style application wizard: "My Information" →
+     "My Experience" (required resume upload behind a "Select files" button) → "Application
+     Questions" → "Review". Steps are shown one at a time on the same page; "Save and Continue"
+     validates the step client-side and shows an "Errors Found" alert instead of moving on.
+     Step 3 depends on step 1: candidates not authorised to work get a visa question.
+     The final "Submit" POSTs the application. -->
+<html lang="en"><head><meta charset="utf-8"><title>Apply · Staff Engineer · Acme Corp</title>
+<style>
+  [hidden] { display: none !important; }
+  .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .field { margin: 10px 0; }
+</style>
+</head><body>
+<h1>Staff Engineer</h1>
+<ol aria-label="Application progress">
+  <li>My Information</li><li>My Experience</li><li>Application Questions</li><li>Review</li>
+</ol>
+<div id="errors" role="alert" hidden></div>
+<form id="wizard" novalidate onsubmit="return false">
+  <section data-step="1">
+    <h2>My Information</h2>
+    <div class="field"><label for="legalFirstName">Given Name(s) *</label><input id="legalFirstName" required></div>
+    <div class="field"><label for="legalLastName">Family Name *</label><input id="legalLastName" required></div>
+    <div class="field"><label for="emailAddress">Email Address *</label><input id="emailAddress" type="email" required></div>
+    <div class="field"><label for="phoneNumber">Phone Number</label><input id="phoneNumber" type="tel"></div>
+    <div class="field"><label for="countryRegion">Country *</label>
+      <select id="countryRegion" required><option value="">Select One</option><option>Greece</option><option>Cyprus</option><option>Germany</option><option>United States</option></select></div>
+    <fieldset class="field"><legend>Have you previously worked for Acme Corp? *</legend>
+      <label><input type="radio" name="previousWorker" value="Yes" required> Yes</label>
+      <label><input type="radio" name="previousWorker" value="No" required> No</label></fieldset>
+    <div class="field" id="employee-id" hidden><label for="employeeId">Employee ID</label><input id="employeeId"></div>
+    <div class="field"><label for="workAuth">Are you legally authorized to work in the country of this job? *</label>
+      <select id="workAuth" required><option value="">Select One</option><option>Yes</option><option>No</option></select></div>
+  </section>
+
+  <section data-step="2" hidden>
+    <h2>My Experience</h2>
+    <div class="field" role="group" aria-labelledby="resume-label" aria-required="true">
+      <div id="resume-label">Resume/CV *</div>
+      <button type="button" onclick="document.getElementById('resumeUpload').click()">Select files</button>
+      <input id="resumeUpload" class="visually-hidden" type="file" required>
+      <p>or drop files here</p>
+    </div>
+    <div class="field"><label for="linkedin">LinkedIn</label><input id="linkedin" type="url"></div>
+    <div class="field"><label for="website">Website</label><input id="website" type="url"></div>
+  </section>
+
+  <section data-step="3" hidden>
+    <h2>Application Questions</h2>
+    <div class="field"><label for="whyAcme">Why do you want to work at Acme Corp? *</label><textarea id="whyAcme" required></textarea></div>
+    <div class="field"><label for="salary">What are your salary expectations?</label><input id="salary"></div>
+    <div class="field" id="visa-q" hidden><label for="visaType">Which visa would you need? *</label>
+      <select id="visaType"><option value="">Select One</option><option>EU Blue Card</option><option>National work permit</option><option>Other</option></select></div>
+  </section>
+
+  <section data-step="4" hidden>
+    <h2>Review</h2>
+    <p>Please review your application before submitting.</p>
+    <div class="field"><label><input type="checkbox" id="certify" required> I certify that the information provided is accurate *</label></div>
+  </section>
+
+  <nav>
+    <button type="button" id="back" hidden>Back</button>
+    <button type="button" id="next">Save and Continue</button>
+    <button type="button" id="submit" hidden>Submit</button>
+  </nav>
+</form>
+<script>
+  window.__submitted = 0;
+  let step = 1;
+  const $ = (id) => document.getElementById(id);
+  const section = (n) => document.querySelector(`section[data-step="${n}"]`);
+  $('wizard').addEventListener('change', (e) => {
+    if (e.target.name === 'previousWorker') $('employee-id').hidden = e.target.value !== 'Yes';
+  });
+  function missing(n) {
+    const out = [];
+    for (const el of section(n).querySelectorAll('[required]')) {
+      if (el.closest('[hidden]')) continue;
+      const empty = el.type === 'file' ? el.files.length === 0
+        : el.type === 'radio' ? !section(n).querySelector(`input[name="${el.name}"]:checked`)
+        : el.type === 'checkbox' ? !el.checked : !el.value;
+      if (empty) { out.push(el); el.setAttribute('aria-invalid', 'true'); } else el.removeAttribute('aria-invalid');
+    }
+    return out;
+  }
+  function go(n) {
+    section(step).hidden = true;
+    step = n;
+    section(step).hidden = false;
+    if (step === 3) {
+      const needsVisa = $('workAuth').value === 'No';
+      $('visa-q').hidden = !needsVisa;
+      $('visaType').required = needsVisa;
+    }
+    $('back').hidden = step === 1;
+    $('next').hidden = step === 4;
+    $('submit').hidden = step !== 4;
+    $('errors').hidden = true;
+    history.replaceState(null, '', `#step-${step}`);
+  }
+  $('next').addEventListener('click', () => {
+    const m = missing(step);
+    if (m.length) {
+      $('errors').hidden = false;
+      $('errors').textContent = `Errors Found: ${m.length} required field(s) are empty`;
+      return;
+    }
+    setTimeout(() => go(step + 1), 150);
+  });
+  $('back').addEventListener('click', () => go(step - 1));
+  $('submit').addEventListener('click', () => {
+    if (missing(4).length) return;
+    window.__submitted++;
+    fetch('/submitted', { method: 'POST', body: 'application' }).catch(() => {});
+  });
+</script>
+</body></html>

@@ -19,6 +19,8 @@ service ApplyantService {
   rpc MarkInterested(MarkInterestedRequest) returns (MarkInterestedResponse);
   // ScorePostings enqueues score_posting; cached extractions and matches are reused.
   rpc ScorePostings(ScorePostingsRequest) returns (ScorePostingsResponse);
+  // ReadForms enqueues read_form: the posting's application form is read (again), read-only.
+  rpc ReadForms(ReadFormsRequest) returns (ReadFormsResponse);
 
   // Preferences drive the score; every change re-scores cached postings (no model calls).
   rpc GetPreferences(GetPreferencesRequest) returns (GetPreferencesResponse);
@@ -97,6 +99,65 @@ message Posting {
   optional double core_fit = 20;
   // Fields the page's structured data (JSON-LD) decided over the extractor's reading.
   repeated string structured_fields = 21;
+  // Where verification found the way to apply: the form page, an apply link's target, mailto:.
+  optional string apply_url = 22;
+  // verified | no_form | email | failed; unset until the form has been read.
+  optional string form_status = 23;
+  // What the read found ("1 step · 17 fields (9 required)") or why it failed.
+  optional string form_note = 24;
+  optional google.protobuf.Timestamp form_read_at = 25;
+  // Only filled by GetPosting: the application form as Read found it.
+  optional ApplicationForm form = 26;
+}
+
+// How to find a form control again: getByRole(role, {name, exact}).nth(nth) inside the
+// frames given by `frame` (iframe selectors, top page first), or `css` when set.
+message ElementRef {
+  repeated string frame = 1;
+  string role = 2;
+  string name = 3;
+  int32 nth = 4;
+  optional string css = 5;
+}
+
+message RevealedBy {
+  ElementRef ref = 1;
+  // The option (or "checked") that revealed the field; "*" = any answer; "add" = a field of an
+  // entry of the repeatable group `ref`.
+  string value = 2;
+}
+
+message FormField {
+  ElementRef ref = 1;
+  string label = 2;
+  // text | textarea | select | combobox | radio | checkbox | file | date | group | unknown
+  // (group: a repeatable section; ref adds an entry, whose fields have revealed_by value "add")
+  string kind = 3;
+  // Required whenever shown (for a conditional field: on its revealed_by branch only).
+  bool required = 4;
+  repeated string options = 5;
+  // False when the field has no fixed options (free text, or options that load as you type).
+  bool has_options = 6;
+  // What the field asks for (field_classify): email, work_authorization, question, …
+  optional string meaning = 7;
+  // Set for conditional fields.
+  optional RevealedBy revealed_by = 8;
+}
+
+message FormStep {
+  repeated FormField fields = 1;
+  // The control that moves on (or submits, when is_final).
+  optional ElementRef advance = 2;
+  // The advance control submits the application; Read never presses it.
+  bool is_final = 3;
+}
+
+message ApplicationForm {
+  // Where the form was read.
+  string url = 1;
+  repeated FormStep steps = 2;
+  // What Read couldn't do or noticed.
+  repeated string notes = 3;
 }
 
 message ScoreComponent {
@@ -196,6 +257,15 @@ message ScorePostingsRequest {
 }
 
 message ScorePostingsResponse {
+  repeated int64 enqueued_ids = 1;
+}
+
+message ReadFormsRequest {
+  // Empty: every live posting whose form was never read.
+  repeated int64 ids = 1;
+}
+
+message ReadFormsResponse {
   repeated int64 enqueued_ids = 1;
 }
 

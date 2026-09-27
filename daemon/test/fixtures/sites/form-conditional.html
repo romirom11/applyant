@@ -1,0 +1,96 @@
+<!doctype html>
+<!-- Synthetic. Modelled on a Greenhouse job-board application (job-boards.greenhouse.io):
+     labelled inputs with aria-required, a resume upload hidden behind an "Attach" button in a
+     role=group, custom questions whose answers reveal follow-up questions, an EEO block, a
+     consent checkbox, and a "Submit application" button that POSTs the application.
+     Also a cookie banner and a newsletter form outside the application form. -->
+<html lang="en"><head><meta charset="utf-8"><title>Senior AI Engineer · Acme AI</title>
+<style>
+  .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  [hidden] { display: none !important; }
+  .field { margin: 12px 0; }
+  #cookie-banner { position: fixed; bottom: 0; left: 0; right: 0; background: #eee; padding: 8px; }
+</style>
+</head><body>
+<header><h1>Senior AI Engineer</h1><p>Acme AI · Remote (EU)</p></header>
+<main>
+  <p>You will build production LLM systems with Python and TypeScript.</p>
+  <h2>Apply for this job</h2>
+  <p><span>*</span> indicates a required field</p>
+  <form id="application-form" action="/submitted" method="post" novalidate>
+    <div class="field"><label for="first_name">First Name<span aria-hidden="true">*</span></label>
+      <input id="first_name" name="first_name" aria-required="true" autocomplete="given-name"></div>
+    <div class="field"><label for="last_name">Last Name<span aria-hidden="true">*</span></label>
+      <input id="last_name" name="last_name" aria-required="true" autocomplete="family-name"></div>
+    <div class="field"><label for="email">Email<span aria-hidden="true">*</span></label>
+      <input id="email" name="email" type="email" aria-required="true"></div>
+    <div class="field"><label for="phone">Phone</label><input id="phone" name="phone" type="tel"></div>
+
+    <div class="field" role="group" aria-labelledby="upload-label-resume" aria-required="true">
+      <div id="upload-label-resume">Resume/CV<span class="required">*</span></div>
+      <button type="button" onclick="document.getElementById('resume').click()">Attach</button>
+      <label class="visually-hidden" for="resume">Attach</label>
+      <input id="resume" class="visually-hidden" type="file" accept=".pdf,.doc,.docx">
+      <p>Accepted file types: pdf, doc, docx</p>
+    </div>
+
+    <div class="field"><label for="q_linkedin">LinkedIn Profile</label><input id="q_linkedin" name="q_linkedin"></div>
+
+    <div class="field"><label for="q_workauth">Are you legally authorized to work in the European Union?<span aria-hidden="true">*</span></label>
+      <select id="q_workauth" name="q_workauth" aria-required="true">
+        <option value="">Select...</option><option>Yes</option><option>No</option>
+      </select></div>
+    <div class="field" id="when-yes" hidden><label for="q_country">Which country will you work from?<span aria-hidden="true">*</span></label>
+      <select id="q_country" name="q_country" aria-required="true">
+        <option value="">Select...</option><option>Greece</option><option>Cyprus</option><option>Germany</option>
+      </select></div>
+    <fieldset class="field" id="when-no" hidden>
+      <legend>Will you require visa sponsorship?<span aria-hidden="true">*</span></legend>
+      <label><input type="radio" name="q_sponsor" value="yes" required> Yes</label>
+      <label><input type="radio" name="q_sponsor" value="no" required> No</label>
+    </fieldset>
+    <div class="field" id="when-no-2" hidden><label for="q_visa">Tell us about your visa situation</label>
+      <textarea id="q_visa" name="q_visa"></textarea></div>
+
+    <div class="field"><label><input type="checkbox" id="q_has_portfolio" name="q_has_portfolio"> I have a portfolio I'd like to share</label></div>
+    <div class="field" id="portfolio" hidden><label for="q_portfolio">Portfolio URL</label><input id="q_portfolio" name="q_portfolio" type="url"></div>
+
+    <div class="field"><label for="q_source">How did you hear about this job?</label>
+      <select id="q_source" name="q_source"><option value="">Select...</option><option>LinkedIn</option><option>A friend</option><option>Other</option></select></div>
+    <div class="field" id="source-other" hidden><label for="q_source_other">Please specify</label><input id="q_source_other" name="q_source_other"></div>
+
+    <div class="field"><label for="q_why">Why do you want to join Acme AI?<span aria-hidden="true">*</span></label>
+      <textarea id="q_why" name="q_why" aria-required="true"></textarea></div>
+
+    <h3>Voluntary Self-Identification</h3>
+    <div class="field"><label for="gender">Gender</label>
+      <select id="gender" name="gender"><option value="">Select...</option><option>Male</option><option>Female</option><option>Decline to self-identify</option></select></div>
+
+    <div class="field"><label><input type="checkbox" id="consent" name="consent" required> I agree to the processing of my data under the privacy notice<span aria-hidden="true">*</span></label></div>
+
+    <button type="submit">Submit application</button>
+  </form>
+</main>
+<footer>
+  <form id="newsletter" onsubmit="return false"><label for="nl">Get job alerts</label><input id="nl" type="email" name="nl"><button>Subscribe</button></form>
+</footer>
+<div id="cookie-banner" role="dialog" aria-label="Cookie consent">We use cookies.
+  <button type="button" onclick="this.parentElement.remove()">Accept all</button>
+  <button type="button" onclick="this.parentElement.remove()">Reject all</button></div>
+<script>
+  window.__submitted = 0;
+  const show = (id, on) => { document.getElementById(id).hidden = !on; };
+  document.getElementById('q_workauth').addEventListener('change', (e) => {
+    show('when-yes', e.target.value === 'Yes');
+    show('when-no', e.target.value === 'No');
+    show('when-no-2', e.target.value === 'No');
+  });
+  document.getElementById('q_has_portfolio').addEventListener('change', (e) => show('portfolio', e.target.checked));
+  document.getElementById('q_source').addEventListener('change', (e) => show('source-other', e.target.value === 'Other'));
+  document.getElementById('application-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    window.__submitted++;
+    fetch('/submitted', { method: 'POST', body: new FormData(e.target) }).catch(() => {});
+  });
+</script>
+</body></html>

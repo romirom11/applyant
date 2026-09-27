@@ -1,0 +1,602 @@
+{
+  "name": "lever-leverdemo",
+  "url": "https://jobs.lever.co/leverdemo/ad208490-4052-4f91-a57e-433f2d1e484b/apply",
+  "source": "public",
+  "about": "Lever hosted application (jobs.lever.co), Lever's own demo board: pronoun checkboxes, EEO radios, an OFCCP disability form whose answer reveals name and date",
+  "recordedAt": "2026-09-27T21:06:24.451Z",
+  "profile": {
+    "full_name": "Alex Placeholder",
+    "email": "alex.placeholder@example.com",
+    "phone": "+30 210 000 0000",
+    "location": "Athens, Greece",
+    "work_authorization": "Yes",
+    "salary_expectation": "60000 EUR per year",
+    "notice_period": "1 month",
+    "links.github": "https://github.com/alex-placeholder",
+    "links.website": "https://alex.example.com",
+    "links.linkedin": "https://www.linkedin.com/in/alex-placeholder",
+    "base_cv_file": null
+  },
+  "decisions": {
+    "70731186efdd2447706a": {
+      "choice": "resume",
+      "confidence": 1,
+      "by": "jev",
+      "sure": true
+    },
+    "38c517ab59ad2db92f16": {
+      "choice": "full_name",
+      "confidence": 1,
+      "by": "jev",
+      "sure": true
+    },
+    "593f514d1932c5edbda3": {
+      "choice": "pronouns",
+      "confidence": 0.99,
+      "by": "jev",
+      "sure": true
+    },
+    "8ec74909e38751bf9f32": {
+      "choice": "question",
+      "confidence": 1,
+      "by": "claude:haiku",
+      "sure": true
+    },
+    "6d880f7012707732f19c": {
+      "choice": "phone",
+      "confidence": 1,
+      "by": "jev",
+      "sure": true
+    },
+    "3716012de5b18c618711": {
+      "choice": "location",
+      "confidence": 0.99,
+      "by": "jev",
+      "sure": true
+    },
+    "6be93239196f2a2a227c": {
+      "choice": "current_company",
+      "confidence": 0.99,
+      "by": "jev",
+      "sure": true
+    },
+    "a805a83ced232cdee606": {
+      "choice": "linkedin",
+      "confidence": 0.99,
+      "by": "jev",
+      "sure": true
+    },
+    "3c3eb073d2f103f6083b": {
+      "choice": "github",
+      "confidence": 0.98,
+      "by": "jev",
+      "sure": true
+    },
+    "ee9a74235686feda122a": {
+      "choice": "website",
+      "confidence": 0.96,
+      "by": "jev",
+      "sure": true
+    },
+    "87589a5d32a739ac5293": {
+      "choice": "website",
+      "confidence": 1,
+      "by": "claude:haiku",
+      "sure": true
+    },
+    "3bb10ef8dbce3daa71b2": {
+      "choice": "work_authorization",
+      "confidence": 1,
+      "by": "jev",
+      "sure": true
+    },
+    "152df67686de5725a2e5": {
+      "choice": "eeo",
+      "confidence": 0.99,
+      "by": "jev",
+      "sure": true
+    },
+    "4e82b639905526d00836": {
+      "choice": "eeo",
+      "confidence": 1,
+      "by": "jev",
+      "sure": true
+    },
+    "60a492a168c259787527": {
+      "choice": "eeo",
+      "confidence": 1,
+      "by": "jev",
+      "sure": true
+    },
+    "0674a124de96479ddc19": {
+      "choice": "eeo",
+      "confidence": 0.97,
+      "by": "jev",
+      "sure": true
+    },
+    "259a049459a1e7850c6a": {
+      "choice": "eeo",
+      "confidence": 0.9,
+      "by": "jev",
+      "sure": true
+    },
+    "bfff5909c8bae3719b96": {
+      "choice": "eeo",
+      "confidence": 0.97,
+      "by": "jev",
+      "sure": true
+    },
+    "3ce90032ec9897d58f47": {
+      "choice": "eeo",
+      "confidence": 0.99,
+      "by": "jev",
+      "sure": true
+    },
+    "83e9ded3cae794b4407e": {
+      "choice": "pronouns",
+      "confidence": 0.99,
+      "by": "jev",
+      "sure": true
+    },
+    "844d202425ee7ca6d52a": {
+      "choice": "full_name",
+      "confidence": 1,
+      "by": "jev",
+      "sure": true
+    },
+    "e5065b8ced8c85929749": {
+      "choice": "notice_period",
+      "confidence": 1,
+      "by": "claude:haiku",
+      "sure": true
+    }
+  },
+  "expected": {
+    "url": "https://jobs.lever.co/leverdemo/ad208490-4052-4f91-a57e-433f2d1e484b/apply",
+    "requirements": {
+      "steps": [
+        {
+          "fields": [
+            {
+              "ref": {
+                "frame": [],
+                "role": "button",
+                "name": "Resume/CV",
+                "nth": 0,
+                "css": "#resume-upload-input"
+              },
+              "label": "Resume/CV",
+              "kind": "file",
+              "required": false,
+              "options": null,
+              "meaning": "resume",
+              "revealedBy": null
+            },
+            {
+              "ref": {
+                "frame": [],
+                "role": "textbox",
+                "name": "Full name ✱",
+                "nth": 0,
+                "css": null
+              },
+              "label": "Full name",
+              "kind": "text",
+              "required": true,
+              "options": null,
+              "meaning": "full_name",
+              "revealedBy": null
+            },
+            {
+              "ref": {
+                "frame": [],
+                "role": "checkbox",
+                "name": "Pronouns",
+                "nth": 0,
+                "css": "input[type=\"checkbox\"][name=\"pronouns\"]"
+              },
+              "label": "Pronouns",
+              "kind": "checkbox",
+              "required": false,
+              "options": [
+                "He/him",
+                "She/her",
+                "They/them",
+                "Xe/xem",
+                "Ze/hir",
+                "Ey/em",
+                "Hir/hir",
+                "Fae/faer",
+                "Hu/hu",
+                "Use name only"
+              ],
+              "meaning": "pronouns",
+              "revealedBy": null
+            },
+            {
+              "ref": {
+                "frame": [],
+                "role": "checkbox",
+                "name": "Custom",
+                "nth": 0,
+                "css": null
+              },
+              "label": "Custom",
+              "kind": "checkbox",
+              "required": false,
+              "options": null,
+              "meaning": "question",
+              "revealedBy": null
+            },
+            {
+              "ref": {
+                "frame": [],
+                "role": "textbox",
+                "name": "Write here...",
+                "nth": 0,
+                "css": null
+              },
+              "label": "Pronouns",
+              "kind": "text",
+              "required": false,
+              "options": null,
+              "meaning": "pronouns",
+              "revealedBy": {
+                "ref": {
+                  "frame": [],
+                  "role": "checkbox",
+                  "name": "Custom",
+                  "nth": 0,
+                  "css": null
+                },
+                "value": "checked"
+              }
+            },
+            {
+              "ref": {
+                "frame": [],
+                "role": "textbox",
+                "name": "Email ✱",
+                "nth": 0,
+                "css": null
+              },
+              "label": "Email",
+              "kind": "text",
+              "required": true,
+              "options": null,
+              "meaning": "email",
+              "revealedBy": null
+            },
+            {
+              "ref": {
+                "frame": [],
+                "role": "textbox",
+                "name": "Phone ✱",
+                "nth": 0,
+                "css": null
+              },
+              "label": "Phone",
+              "kind": "text",
+              "required": true,
+              "options": null,
+              "meaning": "phone",
+              "revealedBy": null
+            },
+            {
+              "ref": {
+                "frame": [],
+                "role": "textbox",
+                "name": "Current location",
+                "nth": 0,
+                "css": null
+              },
+              "label": "Current location",
+              "kind": "text",
+              "required": false,
+              "options": null,
+              "meaning": "location",
+              "revealedBy": null
+            },
+            {
+              "ref": {
+                "frame": [],
+                "role": "textbox",
+                "name": "Current company ✱",
+                "nth": 0,
+                "css": null
+              },
+              "label": "Current company",
+              "kind": "text",
+              "required": true,
+              "options": null,
+              "meaning": "current_company",
+              "revealedBy": null
+            },
+            {
+              "ref": {
+                "frame": [],
+                "role": "textbox",
+                "name": "LinkedIn URL",
+                "nth": 0,
+                "css": null
+              },
+              "label": "LinkedIn URL",
+              "kind": "text",
+              "required": false,
+              "options": null,
+              "meaning": "linkedin",
+              "revealedBy": null
+            },
+            {
+              "ref": {
+                "frame": [],
+                "role": "textbox",
+                "name": "Github URL",
+                "nth": 0,
+                "css": null
+              },
+              "label": "Github URL",
+              "kind": "text",
+              "required": false,
+              "options": null,
+              "meaning": "github",
+              "revealedBy": null
+            },
+            {
+              "ref": {
+                "frame": [],
+                "role": "textbox",
+                "name": "Other Website URL",
+                "nth": 0,
+                "css": null
+              },
+              "label": "Other Website URL",
+              "kind": "text",
+              "required": false,
+              "options": null,
+              "meaning": "website",
+              "revealedBy": null
+            },
+            {
+              "ref": {
+                "frame": [],
+                "role": "textbox",
+                "name": "Video Link URL",
+                "nth": 0,
+                "css": null
+              },
+              "label": "Video Link URL",
+              "kind": "text",
+              "required": false,
+              "options": null,
+              "meaning": "website",
+              "revealedBy": null
+            },
+            {
+              "ref": {
+                "frame": [],
+                "role": "checkbox",
+                "name": "Are you eligible to work in the United States?",
+                "nth": 0,
+                "css": "#application-form > div:nth-of-type(3) > ul > li > div > div:nth-of-type(2) > ul input[type=\"checkbox\"]"
+              },
+              "label": "Are you eligible to work in the United States?",
+              "kind": "checkbox",
+              "required": false,
+              "options": [
+                "Yes",
+                "No"
+              ],
+              "meaning": "work_authorization",
+              "revealedBy": null
+            },
+            {
+              "ref": {
+                "frame": [],
+                "role": "combobox",
+                "name": "Gender",
+                "nth": 0,
+                "css": null
+              },
+              "label": "Gender",
+              "kind": "select",
+              "required": false,
+              "options": [
+                "Male",
+                "Female",
+                "Decline to self-identify"
+              ],
+              "meaning": "eeo",
+              "revealedBy": null
+            },
+            {
+              "ref": {
+                "frame": [],
+                "role": "radio",
+                "name": "Race",
+                "nth": 0,
+                "css": "input[type=\"radio\"][name=\"eeo[race]\"]"
+              },
+              "label": "Race",
+              "kind": "radio",
+              "required": false,
+              "options": [
+                "Hispanic or Latino A person of Cuban, Mexican, Puerto Rican, South or Central American, or other Spanish culture or origin regardless of race. White (Not Hispanic or Latino) A person having origins in",
+                "White (Not Hispanic or Latino) A person having origins in any of the original peoples of Europe, the Middle East, or North Africa.",
+                "Black or African American (Not Hispanic or Latino) A person having origins in any of the black racial groups of Africa.",
+                "Native Hawaiian or Other Pacific Islander (Not Hispanic or Latino) A person having origins in any of the peoples of Hawaii, Guam, Samoa, or other Pacific Islands.",
+                "Asian (Not Hispanic or Latino) A person having origins in any of the original peoples of the Far East, Southeast Asia, or the Indian Subcontinent, including, for example, Cambodia, China, India, Japan",
+                "American Indian or Alaska Native (Not Hispanic or Latino) A person having origins in any of the original peoples of North and South America (including Central America), and who maintain tribal affilia",
+                "Two or More Races (Not Hispanic or Latino) All persons who identify with more than one of the above five races.",
+                "Decline to self-identify"
+              ],
+              "meaning": "eeo",
+              "revealedBy": null
+            },
+            {
+              "ref": {
+                "frame": [],
+                "role": "combobox",
+                "name": "Veteran status",
+                "nth": 0,
+                "css": null
+              },
+              "label": "Veteran status",
+              "kind": "select",
+              "required": false,
+              "options": [
+                "I identify as one or more of the classifications of protected veteran listed above",
+                "I am not a protected veteran",
+                "I decline to self-identify for protected veteran status"
+              ],
+              "meaning": "eeo",
+              "revealedBy": null
+            },
+            {
+              "ref": {
+                "frame": [],
+                "role": "combobox",
+                "name": "Disability status",
+                "nth": 0,
+                "css": null
+              },
+              "label": "Disability status",
+              "kind": "select",
+              "required": false,
+              "options": [
+                "Yes, I have a disability, or have had one in the past",
+                "No, I do not have a disability and have not had one in the past",
+                "I do not want to answer"
+              ],
+              "meaning": "eeo",
+              "revealedBy": null
+            },
+            {
+              "ref": {
+                "frame": [],
+                "role": "textbox",
+                "name": "Name",
+                "nth": 0,
+                "css": null
+              },
+              "label": "Name",
+              "kind": "text",
+              "required": true,
+              "options": null,
+              "meaning": "full_name",
+              "revealedBy": {
+                "ref": {
+                  "frame": [],
+                  "role": "combobox",
+                  "name": "Disability status",
+                  "nth": 0,
+                  "css": null
+                },
+                "value": "*"
+              }
+            },
+            {
+              "ref": {
+                "frame": [],
+                "role": "textbox",
+                "name": "Date",
+                "nth": 0,
+                "css": null
+              },
+              "label": "Date",
+              "kind": "text",
+              "required": true,
+              "options": null,
+              "meaning": "notice_period",
+              "revealedBy": {
+                "ref": {
+                  "frame": [],
+                  "role": "combobox",
+                  "name": "Disability status",
+                  "nth": 0,
+                  "css": null
+                },
+                "value": "*"
+              }
+            },
+            {
+              "ref": {
+                "frame": [],
+                "role": "radio",
+                "name": "What is your age range?",
+                "nth": 0,
+                "css": "#countrySurvey\\a \\a _all-opportunity-locations > ul > li:nth-of-type(1) > div:nth-of-type(2) > ul input[type=\"radio\"]"
+              },
+              "label": "What is your age range?",
+              "kind": "radio",
+              "required": false,
+              "options": [
+                "17 or younger",
+                "18-20",
+                "21-29",
+                "30-39",
+                "40-49",
+                "50-59",
+                "60 or older"
+              ],
+              "meaning": "eeo",
+              "revealedBy": null
+            },
+            {
+              "ref": {
+                "frame": [],
+                "role": "radio",
+                "name": "What gender do you identify as?",
+                "nth": 0,
+                "css": "#countrySurvey\\a \\a _all-opportunity-locations > ul > li:nth-of-type(2) > div:nth-of-type(2) > ul input[type=\"radio\"]"
+              },
+              "label": "What gender do you identify as?",
+              "kind": "radio",
+              "required": false,
+              "options": [
+                "Female",
+                "Male",
+                "Non-binary"
+              ],
+              "meaning": "eeo",
+              "revealedBy": null
+            },
+            {
+              "ref": {
+                "frame": [],
+                "role": "checkbox",
+                "name": "I identify my ethnicity as... Select all that apply",
+                "nth": 0,
+                "css": "#countrySurvey\\a \\a _all-opportunity-locations > ul > li:nth-of-type(3) > div:nth-of-type(2) > ul input[type=\"checkbox\"]"
+              },
+              "label": "I identify my ethnicity as... Select all that apply",
+              "kind": "checkbox",
+              "required": false,
+              "options": [
+                "White / Caucasian",
+                "Hispanic, Latino, or Spanish origin",
+                "Black or African American",
+                "Asian",
+                "Native Hawaiian or other Pacific Islander",
+                "Indigenous Peoples, First Nations, Native American, or Alaska Native",
+                "Middle Eastern or North African",
+                "Some other race, ethnicity, or origin"
+              ],
+              "meaning": "eeo",
+              "revealedBy": null
+            }
+          ],
+          "advance": {
+            "frame": [],
+            "role": "button",
+            "name": "Submit application",
+            "nth": 0,
+            "css": null
+          },
+          "isFinal": true
+        }
+      ]
+    },
+    "notes": []
+  }
+}

@@ -8,6 +8,7 @@ import { closeDb, openDb, openReadDb } from './db/client.ts';
 import { ReadPool } from './db/read-pool.ts';
 import { agentRuns } from './db/schema.ts';
 import type { Deps } from './deps.ts';
+import { readFormHandler, requestFormRead } from './domain/applications/read-form.ts';
 import { embedFacts, ensureFactIndex } from './domain/knowledge/embed-index.ts';
 import { syncSource } from './domain/knowledge/sync.ts';
 import { NodeTextExtractor } from './domain/knowledge/text/extract.ts';
@@ -19,6 +20,7 @@ import { isAlive, readEndpoint, removeEndpoint, writeEndpoint } from './endpoint
 import { AgentRunner } from './models/agent-runner.ts';
 import { type Embedder, GemmaEmbedder, HashEmbedder } from './models/embeddings.ts';
 import { ClaudeProvider } from './models/providers/claude.ts';
+import { JevClient } from './models/providers/jev.ts';
 import { EventBus } from './queue/events.ts';
 import type { Handlers } from './queue/types.ts';
 import { Worker } from './queue/worker.ts';
@@ -46,6 +48,8 @@ export async function runDaemon(config: Config = loadConfig()): Promise<() => Pr
   const reader = new ReaderPool({ ...config.reader, log: log.child({ part: 'reader' }) });
   const models = new AgentRunner({
     providers: [new ClaudeProvider()],
+    // Decision roles ask Jev when its key is stored (`applyant secrets set jev`).
+    jev: new JevClient({ secrets, ...(config.jevUrl ? { url: config.jevUrl } : {}) }),
     runsDir: config.runsDir,
     workDir: config.workDir,
     // Run bookkeeping is the runner's own short write, like task progress events;
@@ -78,6 +82,7 @@ export async function runDaemon(config: Config = loadConfig()): Promise<() => Pr
   const handlers: Handlers = {
     verify_posting: verifyPosting,
     score_posting: scorePosting,
+    read_form: readFormHandler,
     sync_source: syncSource,
     embed_facts: embedFacts,
   };
@@ -87,6 +92,8 @@ export async function runDaemon(config: Config = loadConfig()): Promise<() => Pr
   ensureFactIndex(db, bus, embedder.id, new Date());
   const unscored = unscoredPostings(db);
   if (unscored.length) requestScoring(db, bus, unscored, new Date());
+  // …and a read of the application form for live postings verified before Read existed.
+  requestFormRead(db, bus, [], new Date());
 
   const worker = new Worker({
     db,

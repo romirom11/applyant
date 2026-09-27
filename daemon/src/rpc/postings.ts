@@ -1,7 +1,9 @@
 // Posting and event RPCs: validate → domain → proto.
 import { Code, ConnectError, type ServiceImpl } from '@connectrpc/connect';
+import { eq } from 'drizzle-orm';
 import type { Db } from '../db/client.ts';
-import type { EventRow } from '../db/schema.ts';
+import { type EventRow, postings as postingsTable } from '../db/schema.ts';
+import { READABLE_STAGES, requestFormRead } from '../domain/applications/read-form.ts';
 import { DecisionError, recordDecision, requestScoring } from '../domain/scoring/store.ts';
 import { InvalidUrlError } from '../domain/search/canonical-url.ts';
 import {
@@ -44,6 +46,7 @@ export function postingRpcs(
   | 'skipPosting'
   | 'markInterested'
   | 'scorePostings'
+  | 'readForms'
   | 'listEvents'
   | 'watchEvents'
 > {
@@ -106,6 +109,22 @@ export function postingRpcs(
         const enqueued = requestScoring(c.db, c.bus, ids, c.now(), { refresh: req.refresh });
         return { enqueuedIds: enqueued.map((n) => BigInt(n)) };
       });
+    },
+
+    readForms(req) {
+      const ids = req.ids.map((v) => id(v, 'id'));
+      for (const pid of ids) {
+        const row = c.db.select().from(postingsTable).where(eq(postingsTable.id, pid)).get();
+        if (!row) throw new ConnectError(`posting ${pid} not found`, Code.NotFound);
+        if (!READABLE_STAGES.includes(row.stage)) {
+          throw new ConnectError(
+            `posting ${pid} is ${row.stage}; only verified or scored postings have a form to read`,
+            Code.FailedPrecondition,
+          );
+        }
+      }
+      const enqueued = requestFormRead(c.db, c.bus, ids, c.now());
+      return { enqueuedIds: enqueued.map((n) => BigInt(n)) };
     },
 
     listEvents(req) {

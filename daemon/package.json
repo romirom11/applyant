@@ -20,7 +20,8 @@
     "format": "biome check --write .",
     "test": "vitest run",
     "test:live": "vitest run --config vitest.live.config.ts",
-    "db:generate": "drizzle-kit generate"
+    "db:generate": "drizzle-kit generate",
+    "fixtures:record": "node scripts/fixtures-record.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "0.3.283",

@@ -19,6 +19,8 @@ export interface Config {
   reposDir: string;
   /** Downloaded models (EmbeddingGemma). APPLYANT_MODELS_DIR overrides. */
   modelsDir: string;
+  /** Jev endpoint; APPLYANT_JEV_URL overrides it (tests point it nowhere). */
+  jevUrl: string | null;
   /** gemma (default) · hash: an offline lexical stand-in (tests, machines without the model). */
   embedder: 'gemma' | 'hash';
   /** Worker threads for heavy read queries. */
@@ -75,6 +77,7 @@ export function loadConfig(env: Env = process.env): Config {
     workDir: join(home, 'files', 'work'),
     reposDir: join(home, 'repos'),
     modelsDir: env.APPLYANT_MODELS_DIR || join(home, 'models'),
+    jevUrl: env.APPLYANT_JEV_URL || null,
     embedder: embedderKind(env.APPLYANT_EMBEDDER),
     readWorkers: Math.max(1, int(env, 'APPLYANT_READ_WORKERS', 2)),
     host: '127.0.0.1',

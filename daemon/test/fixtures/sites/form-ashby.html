@@ -1,0 +1,79 @@
+<!doctype html>
+<!-- Synthetic. Modelled on an Ashby hosted application (jobs.ashbyhq.com/<org>/<id>/application):
+     no <form> element; an "Autofill from resume" upload that parses the file on the server; labels
+     whose required star is CSS; Yes / No toggle buttons (aria-pressed) with a hidden checkbox;
+     radio and checkbox groups in fieldsets without a legend; and, like Ashby's ApiSetFormValue,
+     every change is autosaved to the server as you type. -->
+<html lang="en"><head><meta charset="utf-8"><title>AI Engineer @ Helix</title>
+<style>
+  .required::after { content: "*"; }
+  .hidden-input { position: absolute; width: 1px; height: 1px; clip: rect(0 0 0 0); overflow: hidden; }
+  [hidden] { display: none !important; }
+  .entry { margin: 12px 0; }
+</style>
+</head><body>
+<h1>AI Engineer</h1>
+<div id="app">
+  <div class="autofill">
+    <input type="file" class="hidden-input" tabindex="-1" id="autofill-input">
+    <div><h3>Autofill from resume</h3><p>Upload your resume here to autofill key application fields.</p>
+      <button type="button" onclick="document.getElementById('autofill-input').click()">Upload file</button></div>
+  </div>
+  <div class="form-container">
+    <div class="entry"><label class="question-title required" for="_systemfield_name">Name</label>
+      <div><input id="_systemfield_name" name="_systemfield_name" type="text" required placeholder="Type here..."></div></div>
+    <div class="entry"><label class="question-title required" for="_systemfield_email">Email</label>
+      <div><input id="_systemfield_email" name="_systemfield_email" type="email" required placeholder="hello@example.com..."></div></div>
+    <div class="entry"><label class="question-title" for="_systemfield_resume">Resume</label>
+      <div role="presentation"><input id="_systemfield_resume" type="file" tabindex="-1" class="hidden-input">
+        <div><button type="button" onclick="document.getElementById('_systemfield_resume').click()"><span>Upload File</span></button><p>or drag and drop here</p></div></div></div>
+    <div class="entry"><label class="question-title required" for="f_sponsor">Will you now or in the future require sponsorship for employment visa status?</label>
+      <div class="yesno">
+        <button type="button" aria-pressed="false" data-option="yes">Yes</button>
+        <button type="button" aria-pressed="false" data-option="no">No</button>
+        <input type="checkbox" class="hidden-input" tabindex="-1" name="f_sponsor">
+      </div></div>
+    <div class="entry" id="visa-entry" hidden><label class="question-title required" for="f_visa">Which visa do you hold today?</label>
+      <textarea id="f_visa" name="f_visa" placeholder="Type here..."></textarea></div>
+    <div class="entry"><label class="question-title required" for="f_built">What's the most recent thing you've built or shipped?</label>
+      <textarea id="f_built" name="f_built" required placeholder="Type here..."></textarea></div>
+    <div class="entry"><fieldset>
+      <label class="question-title" for="f_age">What is your current age?</label>
+      <div><span><input type="radio" id="age-0" name="f_age"></span><label for="age-0">Under 30</label></div>
+      <div><span><input type="radio" id="age-1" name="f_age"></span><label for="age-1">30-39</label></div>
+      <div><span><input type="radio" id="age-2" name="f_age"></span><label for="age-2">40 or older</label></div>
+      <div><span><input type="radio" id="age-3" name="f_age"></span><label for="age-3">I prefer not to answer</label></div>
+    </fieldset></div>
+    <div class="entry"><fieldset>
+      <label class="question-title" for="f_eth">Which ethnicity(ies) do you identify with? Please select all that apply.</label>
+      <div><input type="checkbox" id="eth-0" name="Asian"><label for="eth-0">Asian</label></div>
+      <div><input type="checkbox" id="eth-1" name="White"><label for="eth-1">White</label></div>
+      <div><input type="checkbox" id="eth-2" name="Other"><label for="eth-2">Other</label></div>
+      <div><input type="checkbox" id="eth-3" name="Prefer not"><label for="eth-3">I prefer not to answer</label></div>
+    </fieldset></div>
+    <button type="button" id="submit-application">Submit Application</button>
+  </div>
+</div>
+<script>
+  window.__submitted = 0;
+  const save = (path, value) =>
+    fetch('/api/non-user-graphql?op=ApiSetFormValue', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ operationName: 'ApiSetFormValue', variables: { path, value }, query: 'mutation ApiSetFormValue($path: String!, $value: JSON) { setFormValue(path: $path, value: $value) }' }),
+    }).catch(() => {});
+  document.addEventListener('change', (e) => save(e.target.name || e.target.id, e.target.value));
+  document.getElementById('autofill-input').addEventListener('change', () => fetch('/api/parse-resume', { method: 'POST', body: 'file' }).catch(() => {}));
+  for (const b of document.querySelectorAll('.yesno button')) {
+    b.addEventListener('click', () => {
+      for (const o of b.parentElement.querySelectorAll('button')) o.setAttribute('aria-pressed', String(o === b));
+      document.getElementById('visa-entry').hidden = b.dataset.option !== 'yes';
+      save('f_sponsor', b.dataset.option);
+    });
+  }
+  document.getElementById('submit-application').addEventListener('click', () => {
+    window.__submitted++;
+    fetch('/api/non-user-graphql?op=ApiSubmitSingleApplicationFormAction', { method: 'POST', body: '{}' }).catch(() => {});
+  });
+</script>
+</body></html>

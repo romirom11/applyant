@@ -13,6 +13,22 @@ import type { ApplyantClient } from './client.ts';
 import { iso, table, truncate } from './format.ts';
 import { registerPrefs } from './prefs.ts';
 
+/** Kept in step with domain/knowledge/profile.ts (importing it would load the DB layer into the CLI). */
+const PROFILE_LIST_KEYS = ['github_logins', 'commit_emails', 'ai_agent_identities'];
+const STANDARD_KEYS = [
+  'full_name',
+  'email',
+  'phone',
+  'location',
+  'work_authorization',
+  'salary_expectation',
+  'notice_period',
+  'links.github',
+  'links.website',
+  'links.linkedin',
+  'base_cv_file',
+];
+
 const out = (text: string): void => {
   process.stdout.write(`${text}\n`);
 };
@@ -151,8 +167,8 @@ export function registerCandidate(program: Command, client: () => ApplyantClient
       }
       out('Profile');
       const profile = new Map(res.profile.map((e) => [e.key, e.values]));
-      for (const key of ['github_logins', 'commit_emails']) {
-        out(`  ${key.padEnd(14)} ${(profile.get(key) ?? []).join(', ') || '(not set)'}`);
+      for (const key of ['github_logins', 'commit_emails', ...STANDARD_KEYS]) {
+        out(`  ${key.padEnd(18)} ${(profile.get(key) ?? []).join(', ') || '(not set)'}`);
       }
       if (!(profile.get('github_logins')?.length || profile.get('commit_emails')?.length)) {
         out(
@@ -192,14 +208,23 @@ export function registerCandidate(program: Command, client: () => ApplyantClient
       const res = await client().getCandidate({});
       const entries = Object.fromEntries(res.profile.map((e) => [e.key, e.values]));
       if (opts.json) return json(entries);
-      if (res.profile.length === 0) return out('No profile values set.');
-      for (const e of res.profile) out(`${e.key.padEnd(14)} ${e.values.join(', ')}`);
+      const known = new Map(res.profile.map((e) => [e.key, e.values]));
+      const keys = [...new Set([...PROFILE_LIST_KEYS, ...STANDARD_KEYS, ...known.keys()])];
+      for (const key of keys)
+        out(`${key.padEnd(20)} ${(known.get(key) ?? []).join(', ') || '(not set)'}`);
     });
   profile
     .command('set <key> [value...]')
-    .description('set a profile value: github_logins | commit_emails (comma-separated lists)')
+    .description(
+      `set a profile value (empty clears it). Lists (comma-separated): ${PROFILE_LIST_KEYS.join(', ')}. Form fields: ${STANDARD_KEYS.join(', ')}`,
+    )
     .action(async (key: string, value: string[]) => {
-      const res = await client().setProfileValue({ key, value: value.join(' ') });
+      let raw = value.join(' ');
+      if (key === 'base_cv_file' && raw) {
+        raw = resolve(raw);
+        if (!existsSync(raw)) throw new Error(`no file at ${raw}`);
+      }
+      const res = await client().setProfileValue({ key, value: raw });
       out(`${res.entry?.key}: ${res.entry?.values.join(', ') || '(cleared)'}`);
     });
 

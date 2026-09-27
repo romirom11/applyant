@@ -1,0 +1,369 @@
+{
+  "name": "ashby-ashby",
+  "url": "https://jobs.ashbyhq.com/ashby/7458d4e9-da2e-47bd-98cb-adfda43d42b2/application",
+  "source": "public",
+  "about": "Ashby hosted application (jobs.ashbyhq.com): yes/no toggles, a location search, autosave mutations (all blocked), 'Autofill from resume' left out",
+  "recordedAt": "2026-09-27T21:09:58.212Z",
+  "profile": {
+    "full_name": "Alex Placeholder",
+    "email": "alex.placeholder@example.com",
+    "phone": "+30 210 000 0000",
+    "location": "Athens, Greece",
+    "work_authorization": "Yes",
+    "salary_expectation": "60000 EUR per year",
+    "notice_period": "1 month",
+    "links.github": "https://github.com/alex-placeholder",
+    "links.website": "https://alex.example.com",
+    "links.linkedin": "https://www.linkedin.com/in/alex-placeholder",
+    "base_cv_file": null
+  },
+  "decisions": {
+    "91c5c210e909f198f7c9": {
+      "choice": "full_name",
+      "confidence": 0.95,
+      "by": "jev",
+      "sure": true
+    },
+    "707dc67d555915c69853": {
+      "choice": "resume",
+      "confidence": 0.99,
+      "by": "jev",
+      "sure": true
+    },
+    "7113a6492a1bc1bc1808": {
+      "choice": "linkedin",
+      "confidence": 1,
+      "by": "jev",
+      "sure": true
+    },
+    "67b6b15baefe3058b30d": {
+      "choice": "question",
+      "confidence": 0.94,
+      "by": "jev",
+      "sure": true
+    },
+    "3a15b251d6d0baf361c1": {
+      "choice": "location",
+      "confidence": 1,
+      "by": "claude:haiku",
+      "sure": true
+    },
+    "ccbb09e2e6044d079de2": {
+      "choice": "visa_sponsorship",
+      "confidence": 1,
+      "by": "jev",
+      "sure": true
+    },
+    "bad99652abd3218c0dbb": {
+      "choice": "question",
+      "confidence": 1,
+      "by": "jev",
+      "sure": true
+    },
+    "9e23537246a1a998469c": {
+      "choice": "question",
+      "confidence": 1,
+      "by": "jev",
+      "sure": true
+    },
+    "22772290c9060bd04c67": {
+      "choice": "question",
+      "confidence": 1,
+      "by": "jev",
+      "sure": true
+    },
+    "eaa7ae803e08948b81c4": {
+      "choice": "eeo",
+      "confidence": 0.85,
+      "by": "jev",
+      "sure": true
+    },
+    "21a28755ad152f25760d": {
+      "choice": "eeo",
+      "confidence": 0.97,
+      "by": "jev",
+      "sure": true
+    },
+    "ba5acc1d7112c84f2e3f": {
+      "choice": "eeo",
+      "confidence": 0.99,
+      "by": "jev",
+      "sure": true
+    },
+    "93a1f95a330b8aa9263b": {
+      "choice": "eeo",
+      "confidence": 0.95,
+      "by": "jev",
+      "sure": true
+    },
+    "157490db304d03575fc3": {
+      "choice": "Athens, Attica, Greece",
+      "confidence": 0.99,
+      "by": "jev",
+      "sure": true
+    }
+  },
+  "expected": {
+    "url": "https://jobs.ashbyhq.com/ashby/7458d4e9-da2e-47bd-98cb-adfda43d42b2/application",
+    "requirements": {
+      "steps": [
+        {
+          "fields": [
+            {
+              "ref": {
+                "frame": [],
+                "role": "textbox",
+                "name": "Name*",
+                "nth": 0,
+                "css": null
+              },
+              "label": "Name",
+              "kind": "text",
+              "required": true,
+              "options": null,
+              "meaning": "full_name",
+              "revealedBy": null
+            },
+            {
+              "ref": {
+                "frame": [],
+                "role": "textbox",
+                "name": "Email*",
+                "nth": 0,
+                "css": null
+              },
+              "label": "Email",
+              "kind": "text",
+              "required": true,
+              "options": null,
+              "meaning": "email",
+              "revealedBy": null
+            },
+            {
+              "ref": {
+                "frame": [],
+                "role": "button",
+                "name": "Resume",
+                "nth": 0,
+                "css": "#_systemfield_resume"
+              },
+              "label": "Resume",
+              "kind": "file",
+              "required": false,
+              "options": null,
+              "meaning": "resume",
+              "revealedBy": null
+            },
+            {
+              "ref": {
+                "frame": [],
+                "role": "textbox",
+                "name": "LinkedIn Profile*",
+                "nth": 0,
+                "css": null
+              },
+              "label": "LinkedIn Profile",
+              "kind": "text",
+              "required": true,
+              "options": null,
+              "meaning": "linkedin",
+              "revealedBy": null
+            },
+            {
+              "ref": {
+                "frame": [],
+                "role": "textbox",
+                "name": "Do you currently live in the EMEA timezone? If not, please explain why you're applying to this role",
+                "nth": 0,
+                "css": null
+              },
+              "label": "Do you currently live in the EMEA timezone? If not, please explain why you're applying to this role",
+              "kind": "text",
+              "required": false,
+              "options": null,
+              "meaning": "question",
+              "revealedBy": null
+            },
+            {
+              "ref": {
+                "frame": [],
+                "role": "combobox",
+                "name": "Start typing...",
+                "nth": 0,
+                "css": null
+              },
+              "label": "Which country do you intend to work from?",
+              "kind": "combobox",
+              "required": true,
+              "options": null,
+              "meaning": "location",
+              "revealedBy": null
+            },
+            {
+              "ref": {
+                "frame": [],
+                "role": "radio",
+                "name": "Will you now or in the future require sponsorship for employment visa status to work in this location?",
+                "nth": 0,
+                "css": "#form > div:nth-of-type(3) > div > div:nth-of-type(7) > div > [aria-pressed]"
+              },
+              "label": "Will you now or in the future require sponsorship for employment visa status to work in this location?",
+              "kind": "radio",
+              "required": true,
+              "options": [
+                "Yes",
+                "No"
+              ],
+              "meaning": "visa_sponsorship",
+              "revealedBy": null
+            },
+            {
+              "ref": {
+                "frame": [],
+                "role": "textbox",
+                "name": "Describe the best engineer you've worked with, someone else in your top 5, and the difference between the two.*",
+                "nth": 0,
+                "css": null
+              },
+              "label": "Describe the best engineer you've worked with, someone else in your top 5, and the difference between the two.",
+              "kind": "textarea",
+              "required": true,
+              "options": null,
+              "meaning": "question",
+              "revealedBy": null
+            },
+            {
+              "ref": {
+                "frame": [],
+                "role": "textbox",
+                "name": "What's the most recent thing you've built or shipped? Walk us through what it was and why you did it.*",
+                "nth": 0,
+                "css": null
+              },
+              "label": "What's the most recent thing you've built or shipped? Walk us through what it was and why you did it.",
+              "kind": "textarea",
+              "required": true,
+              "options": null,
+              "meaning": "question",
+              "revealedBy": null
+            },
+            {
+              "ref": {
+                "frame": [],
+                "role": "textbox",
+                "name": "How do you typically communicate a difficult decision or a change in direction to your team? Give us a specific example.*",
+                "nth": 0,
+                "css": null
+              },
+              "label": "How do you typically communicate a difficult decision or a change in direction to your team? Give us a specific example.",
+              "kind": "textarea",
+              "required": true,
+              "options": null,
+              "meaning": "question",
+              "revealedBy": null
+            },
+            {
+              "ref": {
+                "frame": [],
+                "role": "radio",
+                "name": "What is your current age?",
+                "nth": 0,
+                "css": "#form > div:nth-of-type(4) > div > div > div:nth-of-type(2) > fieldset input[type=\"radio\"]"
+              },
+              "label": "What is your current age?",
+              "kind": "radio",
+              "required": false,
+              "options": [
+                "Under 30",
+                "30-39",
+                "40-49",
+                "50-59",
+                "60 or older",
+                "I prefer not to answer"
+              ],
+              "meaning": "eeo",
+              "revealedBy": null
+            },
+            {
+              "ref": {
+                "frame": [],
+                "role": "radio",
+                "name": "What is your gender identity?",
+                "nth": 0,
+                "css": "#form > div:nth-of-type(4) > div > div > div:nth-of-type(3) > fieldset input[type=\"radio\"]"
+              },
+              "label": "What is your gender identity?",
+              "kind": "radio",
+              "required": false,
+              "options": [
+                "Man",
+                "Woman",
+                "Non-Binary",
+                "Another Gender Identity",
+                "I prefer not to answer"
+              ],
+              "meaning": "eeo",
+              "revealedBy": null
+            },
+            {
+              "ref": {
+                "frame": [],
+                "role": "checkbox",
+                "name": "Which ethnicity(ies) do you identify with? Please select all that apply.",
+                "nth": 0,
+                "css": "#form > div:nth-of-type(4) > div > div > div:nth-of-type(4) > fieldset input[type=\"checkbox\"]"
+              },
+              "label": "Which ethnicity(ies) do you identify with? Please select all that apply.",
+              "kind": "checkbox",
+              "required": false,
+              "options": [
+                "Asian or Asian American",
+                "Black or African American",
+                "Hispanic or Latine",
+                "Indigenous or Native American",
+                "Native Hawaiian or Other Pacific Islander",
+                "White",
+                "Other",
+                "I prefer not to answer"
+              ],
+              "meaning": "eeo",
+              "revealedBy": null
+            },
+            {
+              "ref": {
+                "frame": [],
+                "role": "checkbox",
+                "name": "Which of the following communities do you belong to? Please select all that apply.",
+                "nth": 0,
+                "css": "#form > div:nth-of-type(4) > div > div > div:nth-of-type(5) > fieldset input[type=\"checkbox\"]"
+              },
+              "label": "Which of the following communities do you belong to? Please select all that apply.",
+              "kind": "checkbox",
+              "required": false,
+              "options": [
+                "Person with disability",
+                "Neurodivergent",
+                "Veteran",
+                "Parent",
+                "Refugee or immigrant",
+                "None of the above",
+                "I prefer not to answer"
+              ],
+              "meaning": "eeo",
+              "revealedBy": null
+            }
+          ],
+          "advance": {
+            "frame": [],
+            "role": "button",
+            "name": "Submit Application",
+            "nth": 0,
+            "css": null
+          },
+          "isFinal": true
+        }
+      ]
+    },
+    "notes": []
+  }
+}

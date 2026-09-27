@@ -9,7 +9,11 @@ import type { Deps } from '../../src/deps.ts';
 import type { GithubApi } from '../../src/domain/knowledge/sources/github.ts';
 import { NodeTextExtractor } from '../../src/domain/knowledge/text/extract.ts';
 import type { FxRates, FxSource } from '../../src/domain/scoring/fx.ts';
-import { AgentRunner, type ModelProvider } from '../../src/models/agent-runner.ts';
+import {
+  AgentRunner,
+  type AgentRunnerOptions,
+  type ModelProvider,
+} from '../../src/models/agent-runner.ts';
 import { type Embedder, HashEmbedder } from '../../src/models/embeddings.ts';
 import { FakeProvider } from '../../src/models/providers/fake.ts';
 import type { Handler, Handlers } from '../../src/queue/types.ts';
@@ -39,6 +43,7 @@ export interface TestDepsOptions {
   read?: ReadDb;
   readPool?: ReadExec;
   fx?: FxSource;
+  jev?: AgentRunnerOptions['jev'];
 }
 
 /** Fixed reference rates (no network). */
@@ -68,6 +73,7 @@ export function testRunner(o: TestDepsOptions): AgentRunner {
     },
     log: quietLog,
     ...(o.now ? { now: o.now } : {}),
+    ...(o.jev ? { jev: o.jev } : {}),
   });
 }
 
@@ -103,6 +109,7 @@ export function handlers(partial: Partial<Handlers>): Handlers {
   return {
     verify_posting: never as Handler<'verify_posting'>,
     score_posting: never as Handler<'score_posting'>,
+    read_form: never as Handler<'read_form'>,
     sync_source: never as Handler<'sync_source'>,
     embed_facts: never as Handler<'embed_facts'>,
     ...partial,

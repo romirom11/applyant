@@ -2,6 +2,7 @@
 // migrations and never appear here, so `drizzle-kit generate` never tries to drop them.
 import { sql } from 'drizzle-orm';
 import { index, integer, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import type { FormRead } from '../browser/form-types.ts';
 import type { Component, StoredExtraction, StoredMatch } from '../domain/scoring/types.ts';
 
 const now = sql`(cast(unixepoch('subsec') * 1000 as integer))`;
@@ -16,6 +17,10 @@ export const POSTING_STAGES = [
 export type PostingStage = (typeof POSTING_STAGES)[number];
 
 export const POSTING_DECISIONS = ['interested', 'skipped'] as const;
+
+/** verified: the form was read · no_form: none found · email: applies by email · failed: gave up. */
+export const FORM_STATUSES = ['verified', 'no_form', 'email', 'failed'] as const;
+export type FormStatus = (typeof FORM_STATUSES)[number];
 export type PostingDecision = (typeof POSTING_DECISIONS)[number];
 
 export const postings = sqliteTable('postings', {
@@ -49,6 +54,14 @@ export const postings = sqliteTable('postings', {
   decision: text('decision', { enum: POSTING_DECISIONS }),
   decisionReason: text('decision_reason'),
   decidedAt: integer('decided_at', { mode: 'timestamp_ms' }),
+  /** Where verification found the way to apply (form page, apply link target, mailto:). */
+  applyUrl: text('apply_url'),
+  /** The application form as Read found it (steps, fields, options, conditional fields). */
+  form: text('form', { mode: 'json' }).$type<FormRead>(),
+  formStatus: text('form_status', { enum: FORM_STATUSES }),
+  /** What the last read found or why it failed ("2 steps · 17 fields"). */
+  formNote: text('form_note'),
+  formReadAt: integer('form_read_at', { mode: 'timestamp_ms' }),
 });
 
 export const postingSources = sqliteTable(

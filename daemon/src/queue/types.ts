@@ -10,6 +10,8 @@ import type { EventInput } from './events.ts';
 export const TASK_ENTITY = {
   verify_posting: 'posting',
   score_posting: 'posting',
+  // The posting's application form: every step, field and option (phase 4).
+  read_form: 'posting',
   sync_source: 'source',
   // The fact vector index as a whole: entity_id is always 0.
   embed_facts: 'index',

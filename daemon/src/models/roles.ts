@@ -28,7 +28,7 @@ export interface Route {
 
 export interface RoleConfig {
   route: Route;
-  /** Answers below this confidence are re-asked of the fallback (Jev roles, phase 4). */
+  /** Jev answers below this confidence are re-asked of the fallback model. */
   minConfidence: number | null;
   /** Hard ceiling for one run of this role. */
   timeoutMs: number;
@@ -96,6 +96,10 @@ export const TASK_ROLE: Partial<Record<string, Role>> = {
   sync_source: 'extractor',
   // Extraction, then (on the second pass) the matcher; both route to claude by default.
   score_posting: 'extractor',
+  // Deterministic checks, then posting_liveness (Jev, falling back to claude:haiku).
+  verify_posting: 'posting_liveness',
+  // The form's own work is the browser; field_classify and option_match are Jev's.
+  read_form: 'field_classify',
 };
 
 /**

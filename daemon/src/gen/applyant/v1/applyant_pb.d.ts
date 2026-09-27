@@ -143,6 +143,39 @@ export declare type Posting = Message<"applyant.v1.Posting"> & {
    * @generated from field: repeated string structured_fields = 21;
    */
   structuredFields: string[];
+
+  /**
+   * Where verification found the way to apply: the form page, an apply link's target, mailto:.
+   *
+   * @generated from field: optional string apply_url = 22;
+   */
+  applyUrl?: string | undefined;
+
+  /**
+   * verified | no_form | email | failed; unset until the form has been read.
+   *
+   * @generated from field: optional string form_status = 23;
+   */
+  formStatus?: string | undefined;
+
+  /**
+   * What the read found ("1 step · 17 fields (9 required)") or why it failed.
+   *
+   * @generated from field: optional string form_note = 24;
+   */
+  formNote?: string | undefined;
+
+  /**
+   * @generated from field: optional google.protobuf.Timestamp form_read_at = 25;
+   */
+  formReadAt?: Timestamp | undefined;
+
+  /**
+   * Only filled by GetPosting: the application form as Read found it.
+   *
+   * @generated from field: optional applyant.v1.ApplicationForm form = 26;
+   */
+  form?: ApplicationForm | undefined;
 };
 
 /**
@@ -150,6 +183,191 @@ export declare type Posting = Message<"applyant.v1.Posting"> & {
  * Use `create(PostingSchema)` to create a new message.
  */
 export declare const PostingSchema: GenMessage<Posting>;
+
+/**
+ * How to find a form control again: getByRole(role, {name, exact}).nth(nth) inside the
+ * frames given by `frame` (iframe selectors, top page first), or `css` when set.
+ *
+ * @generated from message applyant.v1.ElementRef
+ */
+export declare type ElementRef = Message<"applyant.v1.ElementRef"> & {
+  /**
+   * @generated from field: repeated string frame = 1;
+   */
+  frame: string[];
+
+  /**
+   * @generated from field: string role = 2;
+   */
+  role: string;
+
+  /**
+   * @generated from field: string name = 3;
+   */
+  name: string;
+
+  /**
+   * @generated from field: int32 nth = 4;
+   */
+  nth: number;
+
+  /**
+   * @generated from field: optional string css = 5;
+   */
+  css?: string | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.ElementRef.
+ * Use `create(ElementRefSchema)` to create a new message.
+ */
+export declare const ElementRefSchema: GenMessage<ElementRef>;
+
+/**
+ * @generated from message applyant.v1.RevealedBy
+ */
+export declare type RevealedBy = Message<"applyant.v1.RevealedBy"> & {
+  /**
+   * @generated from field: applyant.v1.ElementRef ref = 1;
+   */
+  ref?: ElementRef | undefined;
+
+  /**
+   * The option (or "checked") that revealed the field; "*" = any answer; "add" = a field of an
+   * entry of the repeatable group `ref`.
+   *
+   * @generated from field: string value = 2;
+   */
+  value: string;
+};
+
+/**
+ * Describes the message applyant.v1.RevealedBy.
+ * Use `create(RevealedBySchema)` to create a new message.
+ */
+export declare const RevealedBySchema: GenMessage<RevealedBy>;
+
+/**
+ * @generated from message applyant.v1.FormField
+ */
+export declare type FormField = Message<"applyant.v1.FormField"> & {
+  /**
+   * @generated from field: applyant.v1.ElementRef ref = 1;
+   */
+  ref?: ElementRef | undefined;
+
+  /**
+   * @generated from field: string label = 2;
+   */
+  label: string;
+
+  /**
+   * text | textarea | select | combobox | radio | checkbox | file | date | group | unknown
+   * (group: a repeatable section; ref adds an entry, whose fields have revealed_by value "add")
+   *
+   * @generated from field: string kind = 3;
+   */
+  kind: string;
+
+  /**
+   * Required whenever shown (for a conditional field: on its revealed_by branch only).
+   *
+   * @generated from field: bool required = 4;
+   */
+  required: boolean;
+
+  /**
+   * @generated from field: repeated string options = 5;
+   */
+  options: string[];
+
+  /**
+   * False when the field has no fixed options (free text, or options that load as you type).
+   *
+   * @generated from field: bool has_options = 6;
+   */
+  hasOptions: boolean;
+
+  /**
+   * What the field asks for (field_classify): email, work_authorization, question, …
+   *
+   * @generated from field: optional string meaning = 7;
+   */
+  meaning?: string | undefined;
+
+  /**
+   * Set for conditional fields.
+   *
+   * @generated from field: optional applyant.v1.RevealedBy revealed_by = 8;
+   */
+  revealedBy?: RevealedBy | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.FormField.
+ * Use `create(FormFieldSchema)` to create a new message.
+ */
+export declare const FormFieldSchema: GenMessage<FormField>;
+
+/**
+ * @generated from message applyant.v1.FormStep
+ */
+export declare type FormStep = Message<"applyant.v1.FormStep"> & {
+  /**
+   * @generated from field: repeated applyant.v1.FormField fields = 1;
+   */
+  fields: FormField[];
+
+  /**
+   * The control that moves on (or submits, when is_final).
+   *
+   * @generated from field: optional applyant.v1.ElementRef advance = 2;
+   */
+  advance?: ElementRef | undefined;
+
+  /**
+   * The advance control submits the application; Read never presses it.
+   *
+   * @generated from field: bool is_final = 3;
+   */
+  isFinal: boolean;
+};
+
+/**
+ * Describes the message applyant.v1.FormStep.
+ * Use `create(FormStepSchema)` to create a new message.
+ */
+export declare const FormStepSchema: GenMessage<FormStep>;
+
+/**
+ * @generated from message applyant.v1.ApplicationForm
+ */
+export declare type ApplicationForm = Message<"applyant.v1.ApplicationForm"> & {
+  /**
+   * Where the form was read.
+   *
+   * @generated from field: string url = 1;
+   */
+  url: string;
+
+  /**
+   * @generated from field: repeated applyant.v1.FormStep steps = 2;
+   */
+  steps: FormStep[];
+
+  /**
+   * What Read couldn't do or noticed.
+   *
+   * @generated from field: repeated string notes = 3;
+   */
+  notes: string[];
+};
+
+/**
+ * Describes the message applyant.v1.ApplicationForm.
+ * Use `create(ApplicationFormSchema)` to create a new message.
+ */
+export declare const ApplicationFormSchema: GenMessage<ApplicationForm>;
 
 /**
  * @generated from message applyant.v1.ScoreComponent
@@ -541,6 +759,40 @@ export declare type ScorePostingsResponse = Message<"applyant.v1.ScorePostingsRe
  * Use `create(ScorePostingsResponseSchema)` to create a new message.
  */
 export declare const ScorePostingsResponseSchema: GenMessage<ScorePostingsResponse>;
+
+/**
+ * @generated from message applyant.v1.ReadFormsRequest
+ */
+export declare type ReadFormsRequest = Message<"applyant.v1.ReadFormsRequest"> & {
+  /**
+   * Empty: every live posting whose form was never read.
+   *
+   * @generated from field: repeated int64 ids = 1;
+   */
+  ids: bigint[];
+};
+
+/**
+ * Describes the message applyant.v1.ReadFormsRequest.
+ * Use `create(ReadFormsRequestSchema)` to create a new message.
+ */
+export declare const ReadFormsRequestSchema: GenMessage<ReadFormsRequest>;
+
+/**
+ * @generated from message applyant.v1.ReadFormsResponse
+ */
+export declare type ReadFormsResponse = Message<"applyant.v1.ReadFormsResponse"> & {
+  /**
+   * @generated from field: repeated int64 enqueued_ids = 1;
+   */
+  enqueuedIds: bigint[];
+};
+
+/**
+ * Describes the message applyant.v1.ReadFormsResponse.
+ * Use `create(ReadFormsResponseSchema)` to create a new message.
+ */
+export declare const ReadFormsResponseSchema: GenMessage<ReadFormsResponse>;
 
 /**
  * @generated from message applyant.v1.Money
@@ -1959,6 +2211,16 @@ export declare const ApplyantService: GenService<{
     methodKind: "unary";
     input: typeof ScorePostingsRequestSchema;
     output: typeof ScorePostingsResponseSchema;
+  },
+  /**
+   * ReadForms enqueues read_form: the posting's application form is read (again), read-only.
+   *
+   * @generated from rpc applyant.v1.ApplyantService.ReadForms
+   */
+  readForms: {
+    methodKind: "unary";
+    input: typeof ReadFormsRequestSchema;
+    output: typeof ReadFormsResponseSchema;
   },
   /**
    * Preferences drive the score; every change re-scores cached postings (no model calls).

@@ -71,11 +71,38 @@ pnpm -C daemon cli jobs interested <id>
 pnpm -C daemon cli jobs score [id…]                                    # re-run; cached results are reused
 ```
 
-Live tests call the real agent CLIs (and spend subscription quota), so they only run on request:
+Application forms: after verification, `read_form` opens the posting's apply target in a
+throwaway headless context and reads the real form: every step, field, required flag, option
+list and conditional field (with the answer that reveals it). It dry-fills standard fields with
+your profile values, so conditional questions show the branch your real answer takes, fills
+questions with placeholders, tries each option of small choice fields, and presses "Next"-like
+buttons to reach later steps. It never presses a submit button, never uploads your CV, and
+blocks every request that could send data (autosaves, uploads, draft saves, submissions).
+What each field asks for and which option matches your answer are Jev decisions
+(`applyant secrets set jev`), with `claude:haiku` for anything Jev is unsure of or when it's off;
+Jev also double-checks that a verified page reads as an open posting.
+
+```sh
+pnpm -C daemon cli candidate profile set full_name Alex Example         # the values forms ask for:
+pnpm -C daemon cli candidate profile set email alex@example.com         #   email · phone · location
+pnpm -C daemon cli candidate profile set location "Athens, Greece"      #   work_authorization · salary_expectation
+pnpm -C daemon cli candidate profile set work_authorization "EU citizen, no sponsorship needed"
+pnpm -C daemon cli candidate profile set base_cv_file ~/cv.pdf          #   notice_period · links.github|website|linkedin
+pnpm -C daemon cli jobs show <id> --form                               # steps, fields, options, conditional fields
+pnpm -C daemon cli jobs read-form [id…]                                # read again (default: every posting never read)
+```
+
+Recorded forms: `pnpm -C daemon fixtures:record <url> --name <name> --about "<what it is>"` reads a
+public application form (read-only, with a synthetic profile), saves the page as a HAR and the
+decisions as JSON under `daemon/test/fixtures/forms/<name>/`, and replays it offline to check the
+recording reproduces. `test/form-read.har.test.ts` replays every recording offline on each test run.
+
+Live tests call the real agent CLIs and Jev (and spend quota), so they only run on request:
 
 ```sh
 APPLYANT_LIVE=1 pnpm -C daemon test:live -t extractor
 APPLYANT_LIVE=1 pnpm -C daemon test:live -t matcher    # also downloads EmbeddingGemma unless APPLYANT_MODELS_DIR has it
+APPLYANT_LIVE=1 pnpm -C daemon test:live -t jev        # key from APPLYANT_JEV_KEY or the `jev` secret
 ```
 
 Schema changes: edit `daemon/src/db/schema.ts`, then `pnpm -C daemon db:generate --name <what>`

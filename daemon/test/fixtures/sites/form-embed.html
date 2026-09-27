@@ -1,0 +1,15 @@
+<!doctype html>
+<!-- Synthetic. A company careers page that embeds its ATS application form in a cross-origin
+     iframe, the way Greenhouse's embed (<div id="grnhse_app"> + iframe#grnhse_iframe) does.
+     The page has its own newsletter form, which is not the application. -->
+<html lang="en"><head><meta charset="utf-8"><title>Careers · Machine Learning Engineer · Orbit</title></head>
+<body>
+<header><h1>Machine Learning Engineer</h1><p>Orbit · Athens or remote</p></header>
+<p>Join Orbit to build retrieval and evaluation systems for our LLM products.</p>
+<form id="newsletter" onsubmit="return false">
+  <label for="nl-email">Stay in touch</label><input id="nl-email" type="email"><button>Sign up</button>
+</form>
+<div id="grnhse_app">
+  <iframe id="grnhse_iframe" title="Greenhouse Job Board" width="100%" height="1200" src="{{ALT_ORIGIN}}/form-embedded.html"></iframe>
+</div>
+</body></html>

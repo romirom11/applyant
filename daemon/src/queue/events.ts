@@ -14,6 +14,8 @@ export type EventKind =
   | 'task.lease_lost'
   | 'task.requeued'
   | 'posting.stage'
+  // A posting's application form was read (stage unchanged; message says what was found).
+  | 'posting.form'
   | 'source.synced';
 
 export interface EventInput {
