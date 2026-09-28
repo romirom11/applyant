@@ -29,7 +29,7 @@ We build Applyant as the TDD describes. A TypeScript daemon (`applyantd`) owns a
 - [x] Phase 5: A prepared application is reviewed and approved from the CLI
 - [x] Phase 6: Approved web-form applications are delivered, with hand-off
 - [x] Phase 7: Each application gets a tailored CV
-- [ ] Phase 8a: Applyant.app installs, starts the daemon at login and finds the agent CLIs
+- [x] Phase 8a: Applyant.app installs, starts the daemon at login and finds the agent CLIs
 - [ ] Phase 8b: The candidate runs the core loop from the Mac app
 - [ ] Phase 9: The agent interview fills in what sources can't show
 - [ ] Phase 10: Search strategies find postings on their own
@@ -492,9 +492,9 @@ Progress notes (2026-09-28):
 
 ---
 
-## Phase 8a: Applyant.app installs, starts the daemon at login and finds the agent CLIs
+## ✅ Phase 8a: Applyant.app installs, starts the daemon at login and finds the agent CLIs
 
-> Owner decision (2026-09-28): Applyant is for the owner's own Mac only. No Apple Developer Program, Developer ID or notarisation; the bundle is signed ad-hoc and installed locally. `SMAppService` is tried first, with a `~/Library/LaunchAgents` + `launchctl bootstrap` fallback if macOS refuses an ad-hoc app. Wherever this phase says "notarised" or `spctl`, read "ad-hoc signed" and `codesign --verify --deep --strict`. The session brief is `handoff-phase-8a-mac.md` (also committed as `docs/phase-8a-mac.md`).
+> Owner decision (2026-09-28): Applyant is for the owner's own Mac only. No Apple Developer Program, Developer ID or notarisation; the bundle is signed ad-hoc and installed locally. `SMAppService` is tried first, with a `~/Library/LaunchAgents` + `launchctl bootstrap` fallback if macOS refuses an ad-hoc app. Wherever this phase says "notarised" or `spctl`, read "ad-hoc signed" and `codesign --verify --deep --strict`. The session brief was `handoff-phase-8a-mac.md` (`docs/phase-8a-mac.md` until 8a was done; its content is in the progress notes below).
 
 This phase is packaging only, and it runs in an agent session on the Mac. Signing native modules, notarisation, `SMAppService` and launchd are a different class of problem from SwiftUI, so they surface before any time goes into views. The result is a notarised `Applyant.app` that:
 
@@ -565,15 +565,32 @@ codex provider:  new Codex({ codexPathOverride: resolved })
 
 #### Automated Verification
 
-- [ ] `pnpm -C daemon test` still green on Linux (native stub, file secrets, `cli-paths.test.ts` over a fake HOME: lookup order, the shell probe runs once however many tasks resolve, SHELL unset / empty / `/bin/sh` falls back to the `dscl` shell and then `/bin/zsh`, and profile noise before the marker is ignored)
-- [ ] `swift test --package-path native` (Mac)
-- [ ] `scripts/bundle.sh && spctl --assess --type execute Applyant.app && scripts/smoke-bundle.sh` (Mac)
+- [x] `pnpm -C daemon test` still green on Linux (native stub, file secrets, `cli-paths.test.ts` over a fake HOME: lookup order, the shell probe runs once however many tasks resolve, SHELL unset / empty / `/bin/sh` falls back to the `dscl` shell and then `/bin/zsh`, and profile noise before the marker is ignored). 36 files, 263 tests on the Mac too; Linux CI green on every 8a push
+- [x] `swift test --package-path native` (Mac): 9 tests. Also `swift test --package-path app` and `xcodebuild -scheme Applyant-Package -destination 'platform=macOS' test` in `app/` (9 tests)
+- [x] `scripts/bundle.sh && codesign --verify --deep --strict /Applications/Applyant.app && scripts/smoke-bundle.sh` (Mac; ad-hoc, so `codesign --verify` instead of `spctl`)
+
+Progress notes (2026-09-28, on the owner's Mac: macOS 27, Xcode 26.2, Node 24.21 via nvm next to the default 22):
+
+- **CLI lookup** (`models/cli-paths.ts`) is the planned order. Two differences: the login shell prints `$PATH` after the marker instead of `command -v <tool>` (zsh's `command -v` prints an alias's definition, not a path), and the probe is started at daemon start without blocking it; the first resolve that needs it waits on the one cached promise. A found CLI's own directory leads its child PATH, because nvm's `codex` is a `#!/usr/bin/env node` script and launchd's PATH has no `node`. `claude.ts` lost its PATH lookup; `$APPLYANT_<TOOL>_PATH` pointing at a non-executable is reported, not skipped.
+- **`GetSetupStatus`** adds `found_via`, the daemon's `pid`, `home`, `started_at` and `checked_at` to the planned shape. Version and sign-in come from `<tool> --version` and `claude auth status` (JSON `loggedIn`) / `codex login status` (exit code), cached for a minute (`--refresh` re-runs them). `applyant status` prints it.
+- **applyant-native** (`native/`, Swift 6 package): JSON lines, one answer per `id`, `{"event":"wake"}` unsolicited; requests on a reader thread, the main thread keeps the run loop NSWorkspace needs; it exits when stdin closes. The daemon client restarts it with backoff if it dies (it must run to hear wake). Off macOS, or with `APPLYANT_NATIVE_PATH=off` (the e2e tests, so they never reach the real Keychain), the daemon gets a stub.
+- **Keychain**: generic passwords under service `com.applyant`. An existing `secrets.json` is moved in once at start and deleted only after every value is stored; if that fails the daemon stays on the file. The helper is signed with an identifier-only designated requirement: with the default ad-hoc requirement (the binary's hash) every rebuild would ask "allow access?". Checked with two different builds: the second read the first one's item without a prompt.
+- **Text**: PDFKit's `page.string` is not strictly better than pdfjs. On the fixture CV it moves one wrapped line up a line; on two of the owner's two-column CVs the two differ by a few lines each way. Sorting PDFKit's lines by position matches pdfjs on the fixture but interleaves columns, so `page.string` stays, per the plan, with pdfjs as the fallback (helper error, or no text layer).
+- **Wake**: logged, and a `system.wake` event on the stream. The scheduler's catch-up comes with phase 10.
+- **`app/` is a Swift package, not an Xcode project.** `xcodebuild` runs packages (schemes `Applyant`, `applyantd`, `Applyant-Package`), there's no `.pbxproj` to maintain by hand, and connect-swift in 8b is one more package dependency. `ApplyantKit` holds everything testable. `scripts/bundle.sh` assembles the bundle.
+- **launchd runs a Mach-O, not a script**: `Contents/MacOS/applyantd` (Swift, in `app/`) execs the bundled Node on `daemon/src/main.ts`, so after the exec launchd's KeepAlive watches the daemon itself. It sets `PLAYWRIGHT_BROWSERS_PATH` to the data dir's `browsers/` and `APPLYANT_INSTALL_BROWSERS=1`, so the daemon fetches the reader's headless shell on first launch (the reader waits for it), and writes stdout/stderr to `~/Library/Logs/Applyant/applyantd.log` (one rotated copy at 10 MB). The embedding model is fetched on first use, as before.
+- **SMAppService accepted the ad-hoc signed app**: the agent registered and ran on the first launch, with no approval prompt and no need for the `~/Library/LaunchAgents` fallback (it's implemented and unit-tested, and used only if `register()` throws). The agent is `ProcessType Interactive` (browser automation shouldn't be throttled).
+- **Bundle**: the official Node for the version on PATH, SHA-256 checked against nodejs.org; `daemon/src` plus a hoisted production `node_modules` (flat, no symlinks); other platforms' onnxruntime binaries dropped, and so is the Agent SDK's own `claude` build (~200 MB), so the SDK can't fall back to it. 600 MB installed. Every Mach-O in `node_modules` is signed ad-hoc (9: better-sqlite3, sqlite-vec, onnxruntime, sharp/libvips, @napi-rs/canvas), then Node, the helper, the launcher and the app. No hardened runtime, no entitlements; nothing needed them. The CLI is linked as `~/.local/bin/applyant` (where `claude` lives), not `/usr/local/bin`, which needs root on Apple silicon.
+- **`smoke-bundle.sh`** runs the bundle the way launchd does (`env -i` with HOME, USER and `/usr/bin:/bin:/usr/sbin:/sbin`; no SHELL) on a throwaway data dir: `claude` found in `~/.local/bin`, nvm's `codex` through the dscl shell's PATH, both signed in; the helper answers; `ListPostings` answers; a Keychain round trip through the bundled CLI; a clean stop on SIGTERM.
 
 #### Manual Verification
 
 - [ ] Fresh install on the Mac. Log out and back in, and check that the menu bar shows the daemon running. Check that `applyant status` from the bundled CLI prints where `claude` and `codex` were found.
+  - 2026-09-28: fresh install through `scripts/bundle.sh`: the daemon ran under launchd from `/Applications` right after the first app launch, and `applyant status` printed `claude ✓ ~/.local/bin/claude (fixed directory) · 2.1.283 · signed in` and `codex ✓ ~/.nvm/versions/node/v22.18.0/bin/codex (login shell's PATH) · codex-cli 0.157.1 · signed in`, native helper ✓, secrets in the keychain. `kill -9` of the daemon: launchd started a new one within a second (`runs = 2`), and the old helper exited with it. Left for the owner: logging out and back in, and looking at the menu bar icon (this session had no screen-recording permission to see it).
 - [ ] Import the PDF CV through the native path, and check that the Jev key moved into the Keychain.
+  - The path is covered by tests (the daemon's native test reads the fixture CV through the real helper; the move of `secrets.json` into the Keychain runs against the fake helper). On this Mac the data dir is new, so there was no Jev key to move: `applyant secrets set jev` now stores it in the Keychain directly. Left for the owner: `applyant candidate source add profile file <cv.pdf>` on the real CV.
 - [ ] Put the Mac to sleep across a schedule slot. After wake, check that one catch-up run appears.
+  - Until phase 10 there are no schedules: after a sleep, `applyant runs show` should list a `system.wake` event ("the Mac woke from sleep"). Not done in this session (it would have put the owner's Mac to sleep).
 
 ---
 

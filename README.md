@@ -1,13 +1,37 @@
 # applyant
 
 A personal, evidence-backed job-search harness. `applyantd` (TypeScript on Node) owns all
-logic and state; the `applyant` CLI and, later, the macOS app are thin clients of its
+logic and state; the `applyant` CLI and the macOS menu bar app are thin clients of its
 Connect API (`proto/applyant/v1/applyant.proto`).
 
 ## Layout
 
 - `proto/` — the only client ↔ daemon contract; `buf generate` writes `daemon/src/gen`
 - `daemon/` — `applyantd` and the `applyant` CLI (one pnpm package, Node ≥ 24 runs the `.ts` sources directly)
+
+- `native/` — `applyant-native`, the Swift helper the daemon runs on macOS (Keychain, PDFKit/AppKit text, wake events)
+- `app/` — the menu bar app and `applyantd`, the launcher launchd starts (Swift package)
+- `scripts/` — `bundle.sh` builds and installs `Applyant.app`; `smoke-bundle.sh` checks a built bundle
+
+## On the Mac
+
+Applyant.app is built on, and for, its owner's Mac: ad-hoc signed, not notarised. Needs Xcode,
+Node ≥ 24 and pnpm (corepack) on PATH, and the `claude` CLI signed in (`codex` is optional).
+
+```sh
+scripts/bundle.sh                 # build, sign, install to /Applications, link ~/.local/bin/applyant, open
+scripts/smoke-bundle.sh           # the installed bundle, run the way launchd runs it
+applyant status                   # the daemon, where claude/codex were found, helper, secrets backend
+swift test --package-path native && swift test --package-path app
+```
+
+The first launch registers the daemon as a launch agent (`com.applyant.daemon`, restarted by
+launchd after a crash) and the app as a login item. State lives in
+`~/Library/Application Support/Applyant`, secrets in the login keychain (service `com.applyant`;
+an old `secrets.json` is moved in once), the daemon's log in `~/Library/Logs/Applyant`. A launchd
+agent has no shell PATH, so the daemon finds `claude` and `codex` itself: `$APPLYANT_CLAUDE_PATH` /
+`$APPLYANT_CODEX_PATH`, then `~/.local/bin`, `~/.npm-global/bin`, `/opt/homebrew/bin`,
+`/usr/local/bin`, then your login shell's PATH (read once per daemon start).
 
 ## Development (Linux)
 
