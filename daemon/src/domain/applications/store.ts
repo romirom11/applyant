@@ -27,6 +27,7 @@ import {
   tasks,
 } from '../../db/schema.ts';
 import type { HandOff, Tx } from '../../queue/types.ts';
+import { type CvView, cvView } from './cv/store.ts';
 import { activeRefs, type FieldRole, fieldRole } from './standard-fields.ts';
 
 export class ApplicationError extends Error {}
@@ -122,6 +123,8 @@ export interface ApplicationView {
   missing: string[];
   /** Unconfirmed facts the application relies on. */
   unconfirmedFactIds: number[];
+  /** The CV its form takes (tailored or base), or null when the form takes none. */
+  cv: CvView | null;
   /** Set once delivery has submitted the application. */
   receipt: ReceiptView | null;
   /** The most recent delivery hand-off still waiting on the candidate, if any. */
@@ -145,7 +148,7 @@ function emitStage(
   });
 }
 
-function prepareQueued(conn: Conn, id: number): boolean {
+export function prepareQueued(conn: Conn, id: number): boolean {
   return !!conn
     .select({ id: tasks.id })
     .from(tasks)
@@ -281,7 +284,7 @@ export function listApplications(conn: Conn, stage?: ApplicationStage): Applicat
 
 // ---- the view -----------------------------------------------------------------------------
 
-function citedFacts(conn: Conn, ids: number[]): Map<number, CitedFactView> {
+export function citedFacts(conn: Conn, ids: number[]): Map<number, CitedFactView> {
   const out = new Map<number, CitedFactView>();
   const unique = [...new Set(ids)];
   for (let i = 0; i < unique.length; i += 500) {
@@ -482,6 +485,12 @@ export function applicationView(conn: Conn, id: number): ApplicationView {
       `${unconfirmed.size} unconfirmed fact(s): ${[...unconfirmed].map((n) => `#${n}`).join(', ')}`,
     );
   }
+  const cv = cvView(conn, id);
+  if (cv?.stale.length) {
+    blockers.push(
+      `the tailored CV cites facts that are no longer confirmed (${cv.stale.join(', ')}): edit or remove those lines, or \`applications prepare ${id} --rewrite\``,
+    );
+  }
   if (app.stage === 'approved' || app.stage === 'applied') blockers.length = 0;
 
   const receiptRow = conn.select().from(receipts).where(eq(receipts.applicationId, id)).get();
@@ -519,6 +528,7 @@ export function applicationView(conn: Conn, id: number): ApplicationView {
     },
     fields,
     answers: answerViews,
+    cv,
     receipt: receiptRow
       ? {
           finalUrl: receiptRow.finalUrl,

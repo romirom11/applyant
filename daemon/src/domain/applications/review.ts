@@ -18,15 +18,13 @@ import {
   answerSentences,
   answers,
   applications,
-  evidence,
-  type FactKind,
-  facts,
   fieldValues,
 } from '../../db/schema.ts';
 import type { Tx } from '../../queue/types.ts';
 import { enqueueEmbedFacts } from '../knowledge/embed-index.ts';
-import { confirmFact, MAX_FACT_LENGTH } from '../knowledge/facts.ts';
+import { confirmFact } from '../knowledge/facts.ts';
 import { enqueueDelivery } from './deliver.ts';
+import { reviewFact } from './review-fact.ts';
 import { entries } from './standard-fields.ts';
 import {
   type AnswerView,
@@ -225,46 +223,6 @@ export function splitSentences(text: string): string[] {
   return (clean.match(/[^.!?]+(?:[.!?]+(?=\s|$)|$)/g) ?? [clean])
     .map((s) => s.trim())
     .filter(Boolean);
-}
-
-/** The candidate's words become a confirmed review_edit fact (in the cited facts' project). */
-function reviewFact(tx: Tx, applicationId: number, text: string, cited: number[]): number {
-  const clean = text.replace(/\s+/g, ' ').trim().slice(0, MAX_FACT_LENGTH);
-  const rows = cited
-    .map((id) =>
-      tx.db
-        .select({ projectId: facts.projectId, kind: facts.kind })
-        .from(facts)
-        .where(eq(facts.id, id))
-        .get(),
-    )
-    .filter((r): r is { projectId: number | null; kind: FactKind } => !!r);
-  const projectIds = [...new Set(rows.map((r) => r.projectId))];
-  const projectId = projectIds.length === 1 ? (projectIds[0] ?? null) : null;
-  const kind: FactKind = rows[0]?.kind ?? 'other';
-  const fact = tx.db
-    .insert(facts)
-    .values({
-      projectId,
-      text: clean,
-      kind,
-      status: 'confirmed',
-      origin: 'review_edit',
-      createdAt: tx.now,
-      updatedAt: tx.now,
-    })
-    .returning({ id: facts.id })
-    .get();
-  tx.db
-    .insert(evidence)
-    .values({
-      factId: fact.id,
-      sourceId: null,
-      locator: `review of application ${applicationId}`,
-      excerpt: null,
-    })
-    .run();
-  return fact.id;
 }
 
 export interface EditResult {

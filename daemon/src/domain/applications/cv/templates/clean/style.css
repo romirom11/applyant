@@ -1,0 +1,107 @@
+/* "Clean": one column, system fonts, black on white. Class names are the contract with
+   cv/render.ts: .cv-header .cv-name .cv-headline .cv-contact .cv-section .cv-summary
+   .cv-project .cv-project-head .cv-period .cv-bullets .cv-education .cv-skills */
+@page {
+  size: A4;
+  margin: 16mm 18mm;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  color: #111;
+  font-family: "Helvetica Neue", Helvetica, Arial, "Liberation Sans", sans-serif;
+  font-size: 10pt;
+  line-height: 1.4;
+}
+
+.cv-header {
+  margin-bottom: 10pt;
+}
+
+.cv-name {
+  margin: 0;
+  font-size: 20pt;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.cv-headline {
+  margin: 2pt 0 0;
+  font-size: 11pt;
+  color: #333;
+}
+
+.cv-contact {
+  margin: 4pt 0 0;
+  color: #444;
+  font-size: 9pt;
+}
+
+.cv-contact a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.cv-section {
+  margin-top: 10pt;
+}
+
+.cv-section h2 {
+  margin: 0 0 4pt;
+  padding-bottom: 2pt;
+  border-bottom: 0.75pt solid #999;
+  font-size: 9pt;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #333;
+}
+
+.cv-summary p {
+  margin: 0;
+}
+
+.cv-project {
+  margin-top: 6pt;
+  break-inside: avoid;
+}
+
+.cv-project-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.cv-project-head h3 {
+  margin: 0;
+  font-size: 10.5pt;
+  font-weight: 600;
+}
+
+.cv-period {
+  color: #555;
+  font-size: 9pt;
+  white-space: nowrap;
+}
+
+.cv-bullets {
+  margin: 2pt 0 0;
+  padding-left: 12pt;
+}
+
+.cv-bullets li {
+  margin: 1pt 0;
+}
+
+.cv-education ul {
+  margin: 0;
+  padding-left: 12pt;
+}
+
+.cv-skills p {
+  margin: 0;
+}

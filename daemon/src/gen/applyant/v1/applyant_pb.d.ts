@@ -2443,6 +2443,13 @@ export declare type Application = Message<"applyant.v1.Application"> & {
    * @generated from field: optional applyant.v1.HandOff hand_off = 21;
    */
   handOff?: HandOff | undefined;
+
+  /**
+   * The CV its form takes; unset when the form takes none. Only filled by GetApplication.
+   *
+   * @generated from field: optional applyant.v1.Cv cv = 22;
+   */
+  cv?: Cv | undefined;
 };
 
 /**
@@ -2450,6 +2457,184 @@ export declare type Application = Message<"applyant.v1.Application"> & {
  * Use `create(ApplicationSchema)` to create a new message.
  */
 export declare const ApplicationSchema: GenMessage<Application>;
+
+/**
+ * @generated from message applyant.v1.CvLine
+ */
+export declare type CvLine = Message<"applyant.v1.CvLine"> & {
+  /**
+   * The CLI's handle: s1 (summary) · p2.3 (project 2, bullet 3) · e1 (education) · d4 (left out).
+   *
+   * @generated from field: string handle = 1;
+   */
+  handle: string;
+
+  /**
+   * @generated from field: string text = 2;
+   */
+  text: string;
+
+  /**
+   * @generated from field: repeated int64 fact_ids = 3;
+   */
+  factIds: bigint[];
+
+  /**
+   * @generated from field: repeated applyant.v1.MatchedFact facts = 4;
+   */
+  facts: MatchedFact[];
+};
+
+/**
+ * Describes the message applyant.v1.CvLine.
+ * Use `create(CvLineSchema)` to create a new message.
+ */
+export declare const CvLineSchema: GenMessage<CvLine>;
+
+/**
+ * @generated from message applyant.v1.CvProject
+ */
+export declare type CvProject = Message<"applyant.v1.CvProject"> & {
+  /**
+   * @generated from field: int32 number = 1;
+   */
+  number: number;
+
+  /**
+   * @generated from field: string slug = 2;
+   */
+  slug: string;
+
+  /**
+   * @generated from field: string name = 3;
+   */
+  name: string;
+
+  /**
+   * @generated from field: optional string period = 4;
+   */
+  period?: string | undefined;
+
+  /**
+   * @generated from field: repeated applyant.v1.CvLine bullets = 5;
+   */
+  bullets: CvLine[];
+};
+
+/**
+ * Describes the message applyant.v1.CvProject.
+ * Use `create(CvProjectSchema)` to create a new message.
+ */
+export declare const CvProjectSchema: GenMessage<CvProject>;
+
+/**
+ * @generated from message applyant.v1.CvDroppedLine
+ */
+export declare type CvDroppedLine = Message<"applyant.v1.CvDroppedLine"> & {
+  /**
+   * @generated from field: applyant.v1.CvLine line = 1;
+   */
+  line?: CvLine | undefined;
+
+  /**
+   * summary | education | skills | a project slug
+   *
+   * @generated from field: string section = 2;
+   */
+  section: string;
+
+  /**
+   * @generated from field: string reason = 3;
+   */
+  reason: string;
+};
+
+/**
+ * Describes the message applyant.v1.CvDroppedLine.
+ * Use `create(CvDroppedLineSchema)` to create a new message.
+ */
+export declare const CvDroppedLineSchema: GenMessage<CvDroppedLine>;
+
+/**
+ * The application's CV: what the tailored one emphasises, or that the base CV is sent.
+ *
+ * @generated from message applyant.v1.Cv
+ */
+export declare type Cv = Message<"applyant.v1.Cv"> & {
+  /**
+   * tailored | base
+   *
+   * @generated from field: string mode = 1;
+   */
+  mode: string;
+
+  /**
+   * pending | planned | ready | skipped (no tailored CV possible; the note says why)
+   *
+   * @generated from field: string status = 2;
+   */
+  status: string;
+
+  /**
+   * @generated from field: optional string note = 3;
+   */
+  note?: string | undefined;
+
+  /**
+   * @generated from field: optional string pdf_path = 4;
+   */
+  pdfPath?: string | undefined;
+
+  /**
+   * @generated from field: optional string pdf_hash = 5;
+   */
+  pdfHash?: string | undefined;
+
+  /**
+   * @generated from field: optional google.protobuf.Timestamp rendered_at = 6;
+   */
+  renderedAt?: Timestamp | undefined;
+
+  /**
+   * @generated from field: repeated applyant.v1.CvLine summary = 7;
+   */
+  summary: CvLine[];
+
+  /**
+   * In the order the CV shows them: the tailoring.
+   *
+   * @generated from field: repeated applyant.v1.CvProject projects = 8;
+   */
+  projects: CvProject[];
+
+  /**
+   * @generated from field: repeated applyant.v1.CvLine education = 9;
+   */
+  education: CvLine[];
+
+  /**
+   * @generated from field: repeated string skills = 10;
+   */
+  skills: string[];
+
+  /**
+   * @generated from field: repeated applyant.v1.CvDroppedLine dropped = 11;
+   */
+  dropped: CvDroppedLine[];
+
+  /**
+   * Handles of lines whose facts are no longer confirmed (these block approve).
+   *
+   * @generated from field: repeated string stale = 12;
+   */
+  stale: string[];
+};
+
+/**
+ * Describes the message applyant.v1.Cv.
+ * Use `create(CvSchema)` to create a new message.
+ */
+export declare const CvSchema: GenMessage<Cv>;
 
 /**
  * @generated from message applyant.v1.ReceiptFieldValue
@@ -2667,7 +2852,8 @@ export declare type PrepareApplicationRequest = Message<"applyant.v1.PrepareAppl
   applicationId?: bigint | undefined;
 
   /**
-   * Redraft every answer, not only missing ones (the candidate's edits are redrafted too).
+   * Redraft every answer, not only missing ones, and write the tailored CV again (the
+   * candidate's edits are redrafted too).
    *
    * @generated from field: bool rewrite = 3;
    */
@@ -2917,6 +3103,98 @@ export declare type GetHandOffResponse = Message<"applyant.v1.GetHandOffResponse
  * Use `create(GetHandOffResponseSchema)` to create a new message.
  */
 export declare const GetHandOffResponseSchema: GenMessage<GetHandOffResponse>;
+
+/**
+ * @generated from message applyant.v1.SetCvModeRequest
+ */
+export declare type SetCvModeRequest = Message<"applyant.v1.SetCvModeRequest"> & {
+  /**
+   * @generated from field: int64 application_id = 1;
+   */
+  applicationId: bigint;
+
+  /**
+   * tailored | base
+   *
+   * @generated from field: string mode = 2;
+   */
+  mode: string;
+};
+
+/**
+ * Describes the message applyant.v1.SetCvModeRequest.
+ * Use `create(SetCvModeRequestSchema)` to create a new message.
+ */
+export declare const SetCvModeRequestSchema: GenMessage<SetCvModeRequest>;
+
+/**
+ * @generated from message applyant.v1.SetCvModeResponse
+ */
+export declare type SetCvModeResponse = Message<"applyant.v1.SetCvModeResponse"> & {
+  /**
+   * @generated from field: applyant.v1.Application application = 1;
+   */
+  application?: Application | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.SetCvModeResponse.
+ * Use `create(SetCvModeResponseSchema)` to create a new message.
+ */
+export declare const SetCvModeResponseSchema: GenMessage<SetCvModeResponse>;
+
+/**
+ * @generated from message applyant.v1.EditCvRequest
+ */
+export declare type EditCvRequest = Message<"applyant.v1.EditCvRequest"> & {
+  /**
+   * @generated from field: int64 application_id = 1;
+   */
+  applicationId: bigint;
+
+  /**
+   * s1 · p2.3 · e1 · d4 (see Cv).
+   *
+   * @generated from field: string line = 2;
+   */
+  line: string;
+
+  /**
+   * The candidate's words; unset removes the line.
+   *
+   * @generated from field: optional string text = 3;
+   */
+  text?: string | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.EditCvRequest.
+ * Use `create(EditCvRequestSchema)` to create a new message.
+ */
+export declare const EditCvRequestSchema: GenMessage<EditCvRequest>;
+
+/**
+ * @generated from message applyant.v1.EditCvResponse
+ */
+export declare type EditCvResponse = Message<"applyant.v1.EditCvResponse"> & {
+  /**
+   * @generated from field: applyant.v1.Application application = 1;
+   */
+  application?: Application | undefined;
+
+  /**
+   * The fact saved from the candidate's words, when there were words.
+   *
+   * @generated from field: optional int64 fact_id = 2;
+   */
+  factId?: bigint | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.EditCvResponse.
+ * Use `create(EditCvResponseSchema)` to create a new message.
+ */
+export declare const EditCvResponseSchema: GenMessage<EditCvResponse>;
 
 /**
  * @generated from enum applyant.v1.PostingStage
@@ -3465,6 +3743,28 @@ export declare const ApplyantService: GenService<{
     methodKind: "unary";
     input: typeof GetHandOffRequestSchema;
     output: typeof GetHandOffResponseSchema;
+  },
+  /**
+   * SetCvMode sends the tailored CV (the default) or the profile's base CV for one application.
+   *
+   * @generated from rpc applyant.v1.ApplyantService.SetCvMode
+   */
+  setCvMode: {
+    methodKind: "unary";
+    input: typeof SetCvModeRequestSchema;
+    output: typeof SetCvModeResponseSchema;
+  },
+  /**
+   * EditCv rewrites one line of the tailored CV in the candidate's words (saved as a confirmed
+   * review_edit fact; a left-out line given words goes back in), or removes it. The PDF is
+   * rendered again.
+   *
+   * @generated from rpc applyant.v1.ApplyantService.EditCv
+   */
+  editCv: {
+    methodKind: "unary";
+    input: typeof EditCvRequestSchema;
+    output: typeof EditCvResponseSchema;
   },
 }>;
 

@@ -4,12 +4,14 @@
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { FieldKind, FieldMeaning, FieldSpec, FormRead } from '../../src/browser/form-types.ts';
+import { ReaderPool } from '../../src/browser/reader-pool.ts';
 import { SubmitProfile } from '../../src/browser/submit-profile.ts';
 import { TaskPages } from '../../src/browser/task-pages.ts';
 import { WebFormChannel } from '../../src/channels/web-form.ts';
 import type { Db } from '../../src/db/client.ts';
 import { directExec } from '../../src/db/read-pool.ts';
 import { facts, postings } from '../../src/db/schema.ts';
+import { CV_SYSTEM } from '../../src/domain/applications/cv/select.ts';
 import { deliverApplication } from '../../src/domain/applications/deliver.ts';
 import { prepareApplication } from '../../src/domain/applications/prepare.ts';
 import { embedFacts } from '../../src/domain/knowledge/embed-index.ts';
@@ -22,6 +24,7 @@ import type { ProviderRequest, ProviderResult } from '../../src/models/agent-run
 import { HashEmbedder } from '../../src/models/embeddings.ts';
 import { FakeProvider } from '../../src/models/providers/fake.ts';
 import type { Draft } from '../../src/models/schemas/application.ts';
+import type { CvPlanOutput } from '../../src/models/schemas/cv.ts';
 import { EventBus } from '../../src/queue/events.ts';
 import { Worker } from '../../src/queue/worker.ts';
 import type { TempDb } from './db.ts';
@@ -200,6 +203,51 @@ export interface Script {
   option?(label: string, answer: string, options: string[]): string | null;
   /** form_agent (phase 6): the field- or step-scoped run; default: refuses (done: false). */
   formAgent?(req: ProviderRequest): ProviderResult | Promise<ProviderResult>;
+  /** The CV plan (phase 7); default: `defaultCvPlan` over the facts the prompt lists. */
+  cv?(seen: CvPromptSeen, req: ProviderRequest): CvPlanOutput | Promise<CvPlanOutput>;
+}
+
+export interface CvPromptSeen {
+  projects: Array<{ slug: string; facts: Array<{ id: number; text: string }> }>;
+  general: Array<{ id: number; text: string }>;
+}
+
+/** The projects and facts a CV prompt lists (`[slug] Name` then `  #12 [kind · …] text`). */
+export function cvPromptSeen(prompt: string): CvPromptSeen {
+  const seen: CvPromptSeen = { projects: [], general: [] };
+  let into: Array<{ id: number; text: string }> | null = null;
+  for (const line of prompt.split('\n')) {
+    const p = /^\[([^\]]+)\] /.exec(line);
+    if (p) {
+      const project = { slug: p[1] ?? '', facts: [] as Array<{ id: number; text: string }> };
+      seen.projects.push(project);
+      into = project.facts;
+      continue;
+    }
+    if (line.startsWith('Facts tied to no project')) {
+      into = seen.general;
+      continue;
+    }
+    const f = /^ {2}#(\d+) \[[^\]]*\] (.+)$/.exec(line);
+    if (f && into) into.push({ id: Number(f[1]), text: f[2] ?? '' });
+  }
+  return seen;
+}
+
+/** Each project's facts as its bullets (verbatim), the first fact as the summary. */
+export function defaultCvPlan(seen: CvPromptSeen): CvPlanOutput {
+  const first = seen.projects.flatMap((p) => p.facts)[0] ?? seen.general[0];
+  return {
+    summary: first ? [{ text: first.text, factIds: [first.id] }] : [],
+    projects: seen.projects
+      .filter((p) => p.facts.length)
+      .map((p) => ({
+        project: p.slug,
+        bullets: p.facts.map((f) => ({ text: f.text, factIds: [f.id] })),
+      })),
+    education: [],
+    skills: ['Python'],
+  };
 }
 
 export function writerQuestions(prompt: string): WriterQuestionSeen[] {
@@ -220,6 +268,10 @@ export function scriptedClaude(script: Script = {}) {
       model: req.model,
       usage: { inputTokens: 10, outputTokens: 5, costUsd: 0 },
     });
+    if (req.role === 'application_writer' && req.system === CV_SYSTEM) {
+      const seen = cvPromptSeen(req.prompt);
+      return ok((await script.cv?.(seen, req)) ?? defaultCvPlan(seen));
+    }
     if (req.role === 'application_writer') {
       const questions = writerQuestions(req.prompt);
       const drafts =
@@ -276,6 +328,8 @@ export interface PrepareHarness {
   claude: ReturnType<typeof scriptedClaude>;
   submit: SubmitProfile;
   taskPages: TaskPages;
+  /** The headless reader (launched on first use): tailored CVs are printed through it. */
+  reader: ReaderPool;
   stop(): Promise<void>;
 }
 
@@ -311,6 +365,7 @@ export async function prepareHarness(
     log: quietLog,
     headless: o.headless ?? true,
   });
+  const reader = new ReaderPool({ maxContexts: 1, navigationTimeoutMs: 15_000, log: quietLog });
   const deps = testDeps({
     dir: t.dir,
     db: t.db,
@@ -320,6 +375,7 @@ export async function prepareHarness(
     mcp: hub,
     submit,
     taskPages,
+    reader,
   });
   deps.channels.web_form = new WebFormChannel({
     reader: deps.reader,
@@ -353,10 +409,12 @@ export async function prepareHarness(
     claude,
     submit,
     taskPages,
+    reader,
     async stop() {
       await worker.stop();
       await hub.close();
       await submit.close();
+      await reader.close();
     },
   };
 }

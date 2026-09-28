@@ -6,6 +6,10 @@
 //              application_writer (one run, ≤ 3 knowledge lookups over MCP)
 //     commit:  field values (overrides kept) · answers with every sentence `unchecked` ·
 //              enqueue prepare_application again
+//   CV pass (the form takes a CV, the application uses a tailored one, and it isn't ready):
+//     pending: application_writer plans the CV from confirmed facts → the same checks as
+//              answers; a line that fails leaves the CV (listed as dropped)
+//     planned: the plan is rendered to a PDF (reader pool) and the Resume field points at it
 //   pass 2 (unchecked sentences):
 //     slow:    numbers & dates (no model) → claim_verifier (sentences + cited facts only)
 //     commit:  flags · stage ready_for_review, or needs_candidate when a required value or
@@ -16,6 +20,7 @@
 // and the application waits for the candidate (`applications set-field`, or the profile and
 // `applications prepare`). A missing fact ends the same way; phase 9 turns it into an
 // interview question.
+import { join } from 'node:path';
 import { and, eq, inArray, notInArray } from 'drizzle-orm';
 import { type FormRead, refKey } from '../../browser/form-types.ts';
 import {
@@ -24,6 +29,8 @@ import {
   answerSentences,
   answers,
   applications,
+  type CvRow,
+  cvs,
   type FieldSource,
   type FieldValueRow,
   fieldValues,
@@ -37,6 +44,18 @@ import type { Handler, HandlerContext, Outcome, Task, Tx } from '../../queue/typ
 import { factRefs } from '../knowledge/facts.ts';
 import { getStandardProfile, type StandardProfile } from '../knowledge/profile.ts';
 import { checkSentences, type SentenceToCheck } from './checks/verify.ts';
+import { cvHeader, cvHtml, loadTemplate, renderPdf, storePdf } from './cv/render.ts';
+import {
+  applyChecks,
+  buildCvContext,
+  excludeUnconfirmed,
+  factStatuses,
+  linesToCheck,
+  planFromOutput,
+  planIsEmpty,
+  runCvWriter,
+} from './cv/select.ts';
+import { applyCvToFields, ensureCv, getCv, isResumeField, sameCv, updateCv } from './cv/store.ts';
 import { READABLE_STAGES } from './read-form.ts';
 import {
   activeRefs,
@@ -81,6 +100,7 @@ export const prepareApplication: Handler<'prepare_application'> = async (task, c
 
   const read: FormRead = posting.form;
   const fields = formFields(read);
+  const takesCv = fields.some((f) => isResumeField(f.spec));
   const rows = new Map(loadFieldRows(ctx.read, app.id).map((r) => [r.fieldRef, r]));
   const stored = new Map<string, StoredAnswer>(
     loadAnswers(ctx.read, app.id).map((a) => [a.questionRef, a]),
@@ -164,6 +184,7 @@ export const prepareApplication: Handler<'prepare_application'> = async (task, c
         const current = tx.db.select().from(applications).where(eq(applications.id, app.id)).get();
         if (!current || current.stage === 'approved') return;
         saveFields(tx, app.id, fields, defaults, written);
+        syncCv(tx, app, takesCv, profile);
         tx.db
           .update(applications)
           .set({
@@ -182,6 +203,25 @@ export const prepareApplication: Handler<'prepare_application'> = async (task, c
         tx.enqueue('prepare_application', app.id);
       },
     };
+  }
+
+  // The CV pass: write the tailored CV's plan, then render it.
+  if (takesCv) {
+    const cv = getCv(ctx.read, app.id);
+    if (!cv) {
+      // Prepared before tailored CVs existed: start one now.
+      return {
+        kind: 'done',
+        commit: (tx) => {
+          if (getApplicationStage(tx, app.id) === 'approved') return;
+          syncCv(tx, app, true, profile);
+          tx.enqueue('prepare_application', app.id);
+        },
+      };
+    }
+    if (cv.mode === 'tailored' && (cv.status === 'pending' || cv.status === 'planned')) {
+      return cvPass(task, app, posting, cv, profile, ctx);
+    }
   }
 
   // Pass 2: check what was drafted.
@@ -254,6 +294,151 @@ export const prepareApplication: Handler<'prepare_application'> = async (task, c
   }
   return { kind: 'done', commit };
 };
+
+// ---- the CV --------------------------------------------------------------------------------
+
+function getApplicationStage(tx: Tx, id: number): string | null {
+  return (
+    tx.db
+      .select({ stage: applications.stage })
+      .from(applications)
+      .where(eq(applications.id, id))
+      .get()?.stage ?? null
+  );
+}
+
+/**
+ * After pass 1: the CV row follows the form (created when it takes a CV, removed when it no
+ * longer does); `prepare --rewrite` writes the tailored CV again, a re-prepare renders it again
+ * (the profile's header may have changed) and retries one that couldn't be made.
+ */
+function syncCv(tx: Tx, app: ApplicationRow, takesCv: boolean, profile: StandardProfile): void {
+  const existing = getCv(tx.db, app.id);
+  if (!takesCv) {
+    if (existing) tx.db.delete(cvs).where(eq(cvs.id, existing.id)).run();
+    return;
+  }
+  const cv = existing ?? ensureCv(tx, app.id);
+  if (cv.mode === 'tailored') {
+    if (app.rewriteAnswers && existing) {
+      updateCv(tx, cv.id, {
+        status: 'pending',
+        plan: null,
+        pdfPath: null,
+        pdfHash: null,
+        note: null,
+      });
+    } else if (app.refreshFields && cv.status === 'ready') {
+      updateCv(tx, cv.id, { status: 'planned', pdfPath: null, pdfHash: null });
+    } else if (app.refreshFields && cv.status === 'skipped') {
+      updateCv(tx, cv.id, { status: 'pending', note: null });
+    }
+  }
+  applyCvToFields(tx, app.id, profile);
+}
+
+async function cvPass(
+  task: Task<'prepare_application'>,
+  app: ApplicationRow,
+  posting: PostingRow,
+  cv: CvRow,
+  profile: StandardProfile,
+  ctx: HandlerContext,
+): Promise<Outcome> {
+  const commitCv =
+    (
+      set: Parameters<typeof updateCv>[2],
+      note: string,
+      check?: (tx: Tx) => Parameters<typeof updateCv>[2],
+    ) =>
+    (tx: Tx) => {
+      if (getApplicationStage(tx, app.id) === 'approved') return;
+      if (!sameCv(cv, getCv(tx.db, app.id))) return;
+      updateCv(tx, cv.id, check ? check(tx) : set);
+      applyCvToFields(tx, app.id, profile);
+      tx.db
+        .update(applications)
+        .set({ note, updatedAt: tx.now })
+        .where(eq(applications.id, app.id))
+        .run();
+      tx.enqueue('prepare_application', app.id);
+    };
+  const skip = (why: string): Outcome => ({
+    kind: 'done',
+    commit: commitCv({ status: 'skipped', note: why }, `no tailored CV: ${why}`),
+  });
+  const failed = (reason: string) =>
+    failOrRetry(
+      task,
+      app,
+      `${reason} (\`applications cv use-base ${app.id}\` sends your base CV instead)`,
+      ctx,
+    );
+
+  const header = cvHeader(profile);
+  if (!header) return skip('full_name is not in your profile');
+
+  if (cv.status === 'pending' || !cv.plan) {
+    const cctx = buildCvContext(ctx.read, posting);
+    if (!cctx.citable.size) return skip('no confirmed facts yet');
+    ctx.progress({ message: `tailoring your CV from ${cctx.citable.size} confirmed facts` });
+    const res = await runCvWriter(cctx, ctx.deps.models, {
+      taskId: task.id,
+      signal: ctx.signal,
+      progress: (message) => ctx.progress({ message }),
+    });
+    if (res.kind === 'limit')
+      return { kind: 'pause_provider', provider: res.provider, until: res.until };
+    if (res.kind === 'failed') return failed(`tailoring your CV failed: ${res.reason}`);
+    let plan = planFromOutput(res.output, cctx);
+    const items = linesToCheck(plan, cctx);
+    if (items.length) {
+      ctx.progress({ message: `checking ${items.length} CV line(s)` });
+      const checked = await checkSentences(items, ctx.deps.models, {
+        taskId: task.id,
+        signal: ctx.signal,
+        progress: (message) => ctx.progress({ message }),
+      });
+      if (checked.kind === 'limit')
+        return { kind: 'pause_provider', provider: checked.provider, until: checked.until };
+      if (checked.kind === 'failed') return failed(`checking your CV failed: ${checked.reason}`);
+      plan = applyChecks(plan, checked.results);
+    }
+    return {
+      kind: 'done',
+      commit: commitCv({}, 'tailored CV written; rendering it', (tx) => {
+        // A fact rejected while the writer ran: its lines leave the CV too.
+        const final = excludeUnconfirmed(plan, factStatuses(tx.db, plan));
+        return planIsEmpty(final)
+          ? {
+              status: 'skipped',
+              plan: final,
+              note: 'every line was left out (see the dropped lines)',
+            }
+          : { status: 'planned', plan: final, note: null };
+      }),
+    };
+  }
+
+  ctx.progress({ message: 'rendering your CV' });
+  let stored: { path: string; hash: string };
+  try {
+    const html = cvHtml(cv.plan, header, loadTemplate(ctx.deps.dirs.cvTemplate ?? null));
+    const pdf = await renderPdf(ctx.deps.reader, html, ctx.signal);
+    stored = storePdf(join(ctx.deps.dirs.files, 'cv'), app.id, pdf);
+  } catch (err) {
+    ctx.signal.throwIfAborted();
+    return failed(`rendering your CV failed: ${(err as Error).message.split('\n')[0]}`);
+  }
+  return {
+    kind: 'done',
+    commit: (tx) =>
+      commitCv(
+        { status: 'ready', pdfPath: stored.path, pdfHash: stored.hash, renderedAt: tx.now },
+        'tailored CV ready',
+      )(tx),
+  };
+}
 
 // ---- pieces -------------------------------------------------------------------------------
 

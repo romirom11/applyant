@@ -64,6 +64,13 @@
       "when": 1790550798417,
       "tag": "0008_delivery",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1790593937259,
+      "tag": "0009_tailored_cv",
+      "breakpoints": true
     }
   ]
 }

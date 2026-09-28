@@ -3,6 +3,7 @@
 import { Code, ConnectError, type ServiceImpl } from '@connectrpc/connect';
 import { eq } from 'drizzle-orm';
 import { postings } from '../db/schema.ts';
+import { editCvLine, setCvMode } from '../domain/applications/cv/store.ts';
 import {
   ApprovalBlocked,
   approveApplication,
@@ -21,6 +22,7 @@ import {
   requestPrepare,
 } from '../domain/applications/store.ts';
 import { confirmFact, FactError, getFact } from '../domain/knowledge/facts.ts';
+import { getStandardProfile } from '../domain/knowledge/profile.ts';
 import type { ApplyantService, Fact } from '../gen/applyant/v1/applyant_pb.js';
 import { runInTx } from '../queue/tx.ts';
 import type { Tx } from '../queue/types.ts';
@@ -48,7 +50,7 @@ function guard<T>(fn: () => T): T {
     if (err instanceof ApplicationError || err instanceof FactError) {
       const code = /^no (application|fact|posting)/.test(err.message)
         ? Code.NotFound
-        : /already approved/.test(err.message)
+        : /already (approved|applied)/.test(err.message)
           ? Code.FailedPrecondition
           : Code.InvalidArgument;
       throw new ConnectError(err.message, code);
@@ -69,6 +71,8 @@ export function applicationRpcs(
   | 'approveApplication'
   | 'submitApplication'
   | 'getHandOff'
+  | 'setCvMode'
+  | 'editCv'
   | 'confirmFact'
 > {
   return {
@@ -182,6 +186,32 @@ export function applicationRpcs(
         const view = applicationView(c.db, appId);
         return { handOff: view.handOff ? handOffToPb(view.handOff) : undefined };
       });
+    },
+
+    setCvMode(req) {
+      return guard(() =>
+        runInTx(c.db, c.bus, { now: c.now() }, (tx) => {
+          const appId = id(req.applicationId, 'application_id');
+          if (req.mode !== 'tailored' && req.mode !== 'base') {
+            throw new ConnectError('mode is tailored or base', Code.InvalidArgument);
+          }
+          setCvMode(tx, appId, req.mode, getStandardProfile(tx.db));
+          return { application: applicationToPb(applicationView(tx.db, appId)) };
+        }),
+      );
+    },
+
+    editCv(req) {
+      return guard(() =>
+        runInTx(c.db, c.bus, { now: c.now() }, (tx) => {
+          const appId = id(req.applicationId, 'application_id');
+          const res = editCvLine(tx, appId, req.line, req.text ?? null);
+          return {
+            application: applicationToPb(applicationView(tx.db, appId)),
+            factId: res.factId === null ? undefined : BigInt(res.factId),
+          };
+        }),
+      );
     },
 
     // Replaces candidate.ts's ConfirmFact: plain ids as before, or an application's facts.

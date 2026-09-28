@@ -4,6 +4,7 @@ import type { z } from 'zod';
 import { decisionSchema } from '../decide.ts';
 import { answerCheckSchema, writerSchema } from './application.ts';
 import { claimCheckSchema } from './claim-check.ts';
+import { cvPlanSchema } from './cv.ts';
 import { sourceExtractionSchema } from './extractor.ts';
 import { matcherSchema, postingExtractionSchema } from './posting.ts';
 
@@ -11,6 +12,7 @@ export const ROLE_SCHEMAS: Record<string, z.ZodType> = {
   source_extraction: sourceExtractionSchema,
   claim_check: claimCheckSchema,
   application_writer: writerSchema,
+  cv_plan: cvPlanSchema,
   answer_check: answerCheckSchema,
   posting_extraction: postingExtractionSchema,
   matcher: matcherSchema,
@@ -20,5 +22,6 @@ export const ROLE_SCHEMAS: Record<string, z.ZodType> = {
 
 export * from './application.ts';
 export { CLAIM_ISSUES, type ClaimCheck, claimCheckSchema } from './claim-check.ts';
+export * from './cv.ts';
 export { type SourceExtraction, sourceExtractionSchema } from './extractor.ts';
 export * from './posting.ts';

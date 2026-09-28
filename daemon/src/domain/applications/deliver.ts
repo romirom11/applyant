@@ -3,6 +3,8 @@
 // exactly what was sent) or `needs_candidate` with a hand-off — the browser window is left open
 // and filled when delivery got stuck mid-form. Like every handler, this never writes: it
 // returns a commit the queue applies under the lease.
+import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { and, eq, inArray } from 'drizzle-orm';
 import type { DeliverOutcome } from '../../channels/channel.ts';
 import {
@@ -34,6 +36,8 @@ export const deliverApplication: Handler<'deliver_application'> = async (task, c
 
   const view = applicationView(ctx.read, app.id);
   const profile = getStandardProfile(ctx.read);
+  const cvProblem = tailoredCvChanged(view);
+  if (cvProblem) return needsCandidate(app, cvProblem);
 
   let outcome: DeliverOutcome;
   try {
@@ -141,6 +145,23 @@ export const deliverApplication: Handler<'deliver_application'> = async (task, c
 
   return needsCandidate(app, outcome.handOff.reason, outcome.handOff);
 };
+
+/** The tailored PDF about to be uploaded is byte for byte the one rendered for review. */
+function tailoredCvChanged(view: ReturnType<typeof applicationView>): string | null {
+  const cv = view.cv;
+  if (cv?.mode !== 'tailored' || !cv.pdfPath || !cv.pdfHash) return null;
+  const sending = view.fields.some((f) => f.active && f.value === cv.pdfPath);
+  if (!sending) return null;
+  let hash: string;
+  try {
+    hash = createHash('sha256').update(readFileSync(cv.pdfPath)).digest('hex');
+  } catch {
+    return `the tailored CV you approved is missing (${cv.pdfPath}), so nothing was sent`;
+  }
+  return hash === cv.pdfHash
+    ? null
+    : `the tailored CV at ${cv.pdfPath} changed after you approved it, so nothing was sent`;
+}
 
 function needsCandidate(app: ApplicationRow, reason: string, handOff?: HandOff): Outcome {
   const ho: HandOff = handOff ?? { reason, detail: null };

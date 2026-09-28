@@ -336,7 +336,7 @@ export const applications = sqliteTable('applications', {
  *   profile   the candidate's profile (a default for every application)
  *   override  set by the candidate for this one application; survives re-preparation
  *   answer    written by application_writer (or the candidate's edit of it)
- *   file      a file from the profile (the base CV until phase 7)
+ *   file      a file: the application's tailored CV, or the profile's base CV
  *   rule      not a candidate value: consent given by approving, "decline to answer" on a
  *             required demographic question
  *   none      no value
@@ -449,6 +449,65 @@ export const receipts = sqliteTable('receipts', {
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull().default(now),
 });
 
+/** One line of a tailored CV: its text and the confirmed facts it rests on. */
+export interface CvLine {
+  text: string;
+  factIds: number[];
+}
+
+/** A line the CV left out, and why (an unconfirmed fact, a check that failed). */
+export interface CvDroppedLine extends CvLine {
+  /** `summary`, `education`, `skills`, or the slug of the project the line was written for. */
+  section: string;
+  reason: string;
+}
+
+/**
+ * What the tailored CV says, in order. Project order, which facts become bullets and how the
+ * summary reads are the tailoring; every line cites confirmed facts only.
+ */
+export interface CvPlan {
+  summary: CvLine[];
+  projects: Array<{ slug: string; name: string; period: string | null; bullets: CvLine[] }>;
+  education: CvLine[];
+  skills: string[];
+  dropped: CvDroppedLine[];
+}
+
+/**
+ * tailored: preparation writes a CV for this posting (the default) · base: the profile's
+ * base_cv_file is sent instead (`applications cv use-base`).
+ */
+export const CV_MODES = ['tailored', 'base'] as const;
+export type CvMode = (typeof CV_MODES)[number];
+
+/**
+ * pending: a plan is still to be written · planned: written and checked, the PDF is still to
+ * be rendered · ready: `pdf_path` is the file delivery uploads · skipped: no tailored CV is
+ * possible (the note says why) and the base CV stands in.
+ */
+export const CV_STATUSES = ['pending', 'planned', 'ready', 'skipped'] as const;
+export type CvStatus = (typeof CV_STATUSES)[number];
+
+/** The application's CV: one row per application whose form takes a CV. */
+export const cvs = sqliteTable('cvs', {
+  id: integer('id').primaryKey(),
+  applicationId: integer('application_id')
+    .notNull()
+    .unique()
+    .references(() => applications.id, { onDelete: 'cascade' }),
+  mode: text('mode', { enum: CV_MODES }).notNull().default('tailored'),
+  status: text('status', { enum: CV_STATUSES }).notNull().default('pending'),
+  plan: text('plan', { mode: 'json' }).$type<CvPlan>(),
+  /** The rendered PDF under files/cv/ (named by its hash, so a new render is a new file). */
+  pdfPath: text('pdf_path'),
+  pdfHash: text('pdf_hash'),
+  note: text('note'),
+  renderedAt: integer('rendered_at', { mode: 'timestamp_ms' }),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull().default(now),
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull().default(now),
+});
+
 /** Small daemon-internal state, key → JSON (e.g. which embedder made the fact vectors). */
 export const appState = sqliteTable('app_state', {
   key: text('key').primaryKey(),
@@ -472,4 +531,5 @@ export type FieldValueRow = typeof fieldValues.$inferSelect;
 export type AnswerRow = typeof answers.$inferSelect;
 export type AnswerSentenceRow = typeof answerSentences.$inferSelect;
 export type ReceiptRow = typeof receipts.$inferSelect;
+export type CvRow = typeof cvs.$inferSelect;
 export type NewReceiptRow = typeof receipts.$inferInsert;

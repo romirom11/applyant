@@ -10,7 +10,8 @@ import type {
   PostingSourceRow,
   PostingStage,
 } from '../db/schema.ts';
-import type { ApplicationView, ReceiptView } from '../domain/applications/store.ts';
+import type { CvLineView, CvView } from '../domain/applications/cv/store.ts';
+import type { ApplicationView, CitedFactView, ReceiptView } from '../domain/applications/store.ts';
 import { effectiveExtraction } from '../domain/scoring/structured.ts';
 import type { CitedFact } from '../domain/search/postings.ts';
 import {
@@ -18,11 +19,13 @@ import {
   type ApplicationForm,
   ApplicationFormSchema,
   ApplicationSchema,
+  CvSchema,
   ElementRefSchema,
   type Event,
   EventSchema,
   HandOffSchema,
   ApplicationStage as PbAppStage,
+  type Cv as PbCv,
   type ElementRef as PbElementRef,
   FactStatus as PbFactStatus,
   type HandOff as PbHandOff,
@@ -147,6 +150,55 @@ export function applicationToPb(view: ApplicationView, full = true): Application
         }))
       : [],
     answers: full ? view.answers.map(answerToPb) : [],
+    cv: full && view.cv ? cvToPb(view.cv) : undefined,
+  });
+}
+
+function citedFactToPb(f: CitedFactView) {
+  return {
+    id: BigInt(f.id),
+    text: f.text,
+    status:
+      f.status === 'confirmed'
+        ? PbFactStatus.CONFIRMED
+        : f.status === 'unconfirmed'
+          ? PbFactStatus.UNCONFIRMED
+          : f.status === 'rejected'
+            ? PbFactStatus.REJECTED
+            : PbFactStatus.UNSPECIFIED,
+    projectSlug: f.projectSlug ?? undefined,
+  };
+}
+
+function cvLineToPb(l: CvLineView) {
+  return {
+    handle: l.handle,
+    text: l.text,
+    factIds: l.factIds.map((n) => BigInt(n)),
+    facts: l.facts.map(citedFactToPb),
+  };
+}
+
+export function cvToPb(cv: CvView): PbCv {
+  return create(CvSchema, {
+    mode: cv.mode,
+    status: cv.status,
+    note: cv.note ?? undefined,
+    pdfPath: cv.pdfPath ?? undefined,
+    pdfHash: cv.pdfHash ?? undefined,
+    renderedAt: cv.renderedAt ? timestampFromDate(cv.renderedAt) : undefined,
+    summary: cv.summary.map(cvLineToPb),
+    projects: cv.projects.map((p) => ({
+      number: p.number,
+      slug: p.slug,
+      name: p.name,
+      period: p.period ?? undefined,
+      bullets: p.bullets.map(cvLineToPb),
+    })),
+    education: cv.education.map(cvLineToPb),
+    skills: cv.skills,
+    dropped: cv.dropped.map((d) => ({ line: cvLineToPb(d), section: d.section, reason: d.reason })),
+    stale: cv.stale,
   });
 }
 
@@ -170,19 +222,7 @@ export function answerToPb(a: ApplicationView['answers'][number]) {
       factIds: s.factIds.map((n) => BigInt(n)),
       flag: s.flag,
       note: s.note ?? undefined,
-      facts: s.facts.map((f) => ({
-        id: BigInt(f.id),
-        text: f.text,
-        status:
-          f.status === 'confirmed'
-            ? PbFactStatus.CONFIRMED
-            : f.status === 'unconfirmed'
-              ? PbFactStatus.UNCONFIRMED
-              : f.status === 'rejected'
-                ? PbFactStatus.REJECTED
-                : PbFactStatus.UNSPECIFIED,
-        projectSlug: f.projectSlug ?? undefined,
-      })),
+      facts: s.facts.map(citedFactToPb),
     })),
   };
 }

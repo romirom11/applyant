@@ -5,6 +5,8 @@ import {
   type Application,
   type ApplicationField,
   ApplicationStage,
+  type Cv,
+  type CvLine,
   FactStatus,
 } from '../gen/applyant/v1/applyant_pb.js';
 import type { ApplyantClient } from './client.ts';
@@ -73,6 +75,92 @@ function receiptJson(r: NonNullable<Application['receipt']>) {
   };
 }
 
+function cvLineJson(l: CvLine) {
+  return {
+    handle: l.handle,
+    text: l.text,
+    factIds: l.factIds.map(Number),
+    facts: l.facts.map((f) => ({
+      id: Number(f.id),
+      text: f.text,
+      status: FACT_MARK[f.status] ?? '',
+      project: f.projectSlug ?? null,
+    })),
+  };
+}
+
+export function cvJson(cv: Cv) {
+  return {
+    mode: cv.mode,
+    status: cv.status,
+    note: cv.note ?? null,
+    pdfPath: cv.pdfPath ?? null,
+    pdfHash: cv.pdfHash ?? null,
+    renderedAt: iso(cv.renderedAt),
+    summary: cv.summary.map(cvLineJson),
+    projects: cv.projects.map((p) => ({
+      number: p.number,
+      slug: p.slug,
+      name: p.name,
+      period: p.period ?? null,
+      bullets: p.bullets.map(cvLineJson),
+    })),
+    education: cv.education.map(cvLineJson),
+    skills: cv.skills,
+    dropped: cv.dropped.map((d) => ({
+      ...(d.line ? cvLineJson(d.line) : {}),
+      section: d.section,
+      reason: d.reason,
+    })),
+    stale: cv.stale,
+  };
+}
+
+const factMarks = (l: CvLine) =>
+  l.facts.map((f) => `${FACT_MARK[f.status] ?? '·'}#${f.id}`).join(' ');
+
+/** The CV card: which CV goes out and, for a tailored one, what it emphasises. */
+export function cvLines(cv: Cv, id: number): string[] {
+  const lines: string[] = [];
+  if (cv.mode === 'base') {
+    lines.push(
+      `CV · your base CV (\`applyant applications cv use-tailored ${id}\` for a tailored one)`,
+    );
+    return lines;
+  }
+  if (cv.status === 'pending' || (cv.status === 'planned' && !cv.pdfPath)) {
+    lines.push(`CV · tailored · ${cv.status === 'pending' ? 'being written' : 'being rendered'}`);
+  } else if (cv.status === 'skipped') {
+    lines.push(`CV · no tailored CV: ${cv.note ?? 'not possible'}; your base CV is sent instead`);
+  } else {
+    lines.push(`CV · tailored · ${cv.pdfPath ?? ''}`);
+  }
+  const bullets = cv.projects.reduce((n, p) => n + p.bullets.length, 0);
+  if (cv.projects.length || cv.summary.length) {
+    lines.push(
+      `  leads with ${cv.projects.map((p) => p.name).join(', ') || '(no projects)'} · ${bullets} bullet(s) · ${cv.skills.length} skill(s)`,
+    );
+  }
+  for (const l of cv.summary) lines.push(`  ${l.handle.padEnd(5)} ${l.text}   ${factMarks(l)}`);
+  for (const p of cv.projects) {
+    lines.push(`  ${p.number}. ${p.name}${p.period ? ` (${p.period})` : ''}`);
+    for (const b of p.bullets) lines.push(`     ${b.handle.padEnd(5)} ${b.text}   ${factMarks(b)}`);
+  }
+  for (const l of cv.education) lines.push(`  ${l.handle.padEnd(5)} ${l.text}   ${factMarks(l)}`);
+  if (cv.skills.length) lines.push(`  Skills: ${cv.skills.join(' · ')}`);
+  if (cv.dropped.length) {
+    lines.push(`  Left out (${cv.dropped.length}):`);
+    for (const d of cv.dropped) {
+      lines.push(
+        `     ${(d.line?.handle ?? '').padEnd(5)} "${truncate(d.line?.text ?? '', 90)}" (${d.section}): ${d.reason}`,
+      );
+    }
+  }
+  if (cv.stale.length)
+    lines.push(`  ⚠ ${cv.stale.join(', ')} cite facts that are no longer confirmed`);
+  return lines;
+}
+
 export function handOffJson(h: NonNullable<Application['handOff']>) {
   return {
     reason: h.reason,
@@ -108,6 +196,7 @@ export function applicationJson(a: Application) {
     unconfirmedFactIds: a.unconfirmedFactIds.map(Number),
     fields: a.fields.map(fieldJson),
     answers: a.answers.map(answerJson),
+    cv: a.cv ? cvJson(a.cv) : null,
   };
 }
 
@@ -285,6 +374,8 @@ export function previewLines(a: Application, o: { all?: boolean } = {}): string[
     if (ans.adaptedFrom) lines.push(`   adapted from ${ans.adaptedFrom}`);
   }
 
+  if (a.cv) lines.push('', ...cvLines(a.cv, id));
+
   lines.push('');
   if (a.stage === ApplicationStage.APPLIED) {
     lines.push(`Applied ${iso(a.appliedAt) ?? ''}.`);
@@ -317,6 +408,11 @@ export function previewLines(a: Application, o: { all?: boolean } = {}): string[
       );
       lines.push(
         `  applyant applications edit ${id} q<n>.<s> --confirm  it's true as written (not for contradictions)`,
+      );
+    }
+    if (a.cv?.stale.length) {
+      lines.push(
+        `  applyant applications cv edit ${id} <line> "<text>"  rewrite a CV line in your words (or --remove)`,
       );
     }
   }
@@ -378,7 +474,7 @@ export function registerApplications(program: Command, client: () => ApplyantCli
     .description(
       'prepare an application again: fields from your current profile (your per-application values stay), missing answers drafted',
     )
-    .option('--rewrite', 'redraft every answer (your edits too)')
+    .option('--rewrite', 'redraft every answer and the tailored CV (your edits too)')
     .action(async (idArg: string, opts: { rewrite?: boolean }) => {
       const res = await client().prepareApplication({
         applicationId: BigInt(positiveInt(idArg)),
@@ -481,6 +577,73 @@ export function registerApplications(program: Command, client: () => ApplyantCli
           );
       },
     );
+
+  const cv = apps
+    .command('cv')
+    .description("the application's CV: tailored for the posting, or your base CV");
+
+  cv.command('show <id>')
+    .description(
+      'which CV goes out and what the tailored one emphasises, with the facts behind each line',
+    )
+    .option('--json', 'print JSON')
+    .action(async (idArg: string, opts: { json?: boolean }) => {
+      const res = await client().getApplication({ id: BigInt(positiveInt(idArg)) });
+      const a = res.application;
+      if (!a) throw new Error(`application ${idArg} not found`);
+      if (!a.cv) return out(`Application ${a.id}'s form takes no CV.`);
+      if (opts.json) return json(cvJson(a.cv));
+      for (const line of cvLines(a.cv, Number(a.id))) out(line);
+    });
+
+  cv.command('use-base <id>')
+    .description('send your base CV (profile base_cv_file) with this application instead')
+    .action(async (idArg: string) => {
+      const res = await client().setCvMode({
+        applicationId: BigInt(positiveInt(idArg)),
+        mode: 'base',
+      });
+      const f = res.application?.fields.find((x) => x.meaning === 'resume' && x.kind === 'file');
+      out(
+        f?.value
+          ? `Application ${idArg} sends your base CV (${f.value}).`
+          : `Application ${idArg} uses your base CV, but your profile has none: \`applyant candidate profile set base_cv_file <path>\`.`,
+      );
+    });
+
+  cv.command('use-tailored <id>')
+    .description('send the CV tailored for this posting (the default)')
+    .action(async (idArg: string) => {
+      const res = await client().setCvMode({
+        applicationId: BigInt(positiveInt(idArg)),
+        mode: 'tailored',
+      });
+      out(
+        res.application?.cv?.status === 'ready'
+          ? `Application ${idArg} sends its tailored CV (${res.application.cv.pdfPath}).`
+          : `Writing the tailored CV for application ${idArg}; follow with \`applyant runs show --follow\`.`,
+      );
+    });
+
+  cv.command('edit <id> <line> [text...]')
+    .description(
+      'rewrite a CV line (s1, p2.3, e1; a left-out d4 goes back in) in your own words, saved as a confirmed fact',
+    )
+    .option('--remove', 'take the line out of the CV')
+    .action(async (idArg: string, line: string, text: string[], opts: { remove?: boolean }) => {
+      if (opts.remove && text.length) throw new Error('--remove takes no text');
+      if (!opts.remove && text.length === 0) throw new Error('give the new text (or --remove)');
+      const res = await client().editCv({
+        applicationId: BigInt(positiveInt(idArg)),
+        line,
+        ...(opts.remove ? {} : { text: text.join(' ') }),
+      });
+      out(
+        opts.remove
+          ? `Removed ${line} from the CV; rendering it again.`
+          : `Updated ${line}; saved your words as fact #${res.factId}. Rendering the CV again.`,
+      );
+    });
 
   apps
     .command('confirm <id> [factIds...]')

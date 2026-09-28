@@ -2,7 +2,14 @@
   "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
   "vcs": { "enabled": false },
   "files": {
-    "includes": ["**", "!src/gen", "!src/db/migrations", "!test/fixtures", "!node_modules"]
+    "includes": [
+      "**",
+      "!src/gen",
+      "!src/db/migrations",
+      "!test/fixtures",
+      "!src/domain/applications/cv/templates",
+      "!node_modules"
+    ]
   },
   "formatter": {
     "enabled": true,

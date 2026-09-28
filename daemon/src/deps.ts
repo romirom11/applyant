@@ -37,8 +37,10 @@ export interface Deps {
   dirs: {
     /** Partial clones of GitHub sources. */
     repos: string;
-    /** files/: hand-off snapshots and delivery receipts live under here. */
+    /** files/: hand-off snapshots, delivery receipts and tailored CVs (files/cv) live here. */
     files: string;
+    /** The candidate's CV template, used instead of the bundled "Clean" when it exists. */
+    cvTemplate?: string | null;
   };
   /** Overrides the `gh`-backed GitHub API client (tests only). */
   github?: GithubApi | null;

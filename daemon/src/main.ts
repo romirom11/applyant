@@ -114,7 +114,7 @@ export async function runDaemon(config: Config = loadConfig()): Promise<() => Pr
     mcp,
     fx: new EcbFx(),
     text: new NodeTextExtractor(),
-    dirs: { repos: config.reposDir, files: config.filesDir },
+    dirs: { repos: config.reposDir, files: config.filesDir, cvTemplate: config.cvTemplateDir },
     log,
   };
   const handlers: Handlers = {

@@ -2,7 +2,7 @@
 // salary value, the final URL and the confirmation text — recorded once delivery submits, and
 // shown by `GetApplication` (the CLI's `applications preview` / `--json`).
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { appendFileSync, readFileSync } from 'node:fs';
 import { type Browser, chromium } from 'playwright';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { approveApplication } from '../src/domain/applications/review.ts';
@@ -13,6 +13,7 @@ import {
   type PrepareHarness,
   prepareHarness,
   SYNTHETIC_PROFILE,
+  seedFacts,
   seedPosting,
   setProfile,
 } from './helpers/applications.ts';
@@ -118,5 +119,57 @@ describe('the delivery receipt', () => {
       value: SYNTHETIC_PROFILE.notice_period,
       source: 'profile',
     });
+  });
+
+  const tailoredRun = async () => {
+    h = await prepareHarness(t, {
+      formAgent: async (req) => ({
+        kind: 'ok',
+        output: { done: true, note: 'moved the slider' },
+        model: req.model,
+        usage: { inputTokens: 1, outputTokens: 1, costUsd: 0 },
+      }),
+    });
+    const run = await runRead(browser, site.url('/form-deliver-simple.html'), {
+      jev: { meanings: [...FIXTURE_MEANINGS, [/notice period/i, 'notice_period']] },
+    });
+    closers.push(run.close);
+    setProfile(t.db, { ...SYNTHETIC_PROFILE, base_cv_file: cvFile(t.dir) }, now);
+    seedFacts(t.db, now);
+    const postingId = seedPosting(t.db, run.read, { now, stage: 'verified' });
+    const id = runInTx(t.db, h.bus, { now }, (tx) => ensureApplication(tx, postingId, 't').app.id);
+    await h.worker.idle();
+    const cv = applicationView(t.db, id).cv;
+    if (!cv?.pdfPath || !cv.pdfHash) throw new Error('no tailored CV');
+    return { id, cv: { path: cv.pdfPath, hash: cv.pdfHash } };
+  };
+
+  it('uploads the exact tailored PDF that was reviewed, and the receipt keeps its hash', async () => {
+    t = tempDb();
+    const { id, cv } = await tailoredRun();
+    runInTx(t.db, h.bus, { now }, (tx) => approveApplication(tx, id));
+    await h.worker.idle();
+
+    const view = applicationView(t.db, id);
+    expect(view.app.stage).toBe('applied');
+    expect(view.receipt?.cvPath).toBe(cv.path);
+    expect(view.receipt?.cvHash).toBe(cv.hash);
+    expect(view.receipt?.fieldValues.find((f) => f.label === 'Resume')).toMatchObject({
+      value: cv.path,
+      source: 'file',
+    });
+  });
+
+  it('sends nothing when the tailored PDF changed after review', async () => {
+    t = tempDb();
+    const { id, cv } = await tailoredRun();
+    appendFileSync(cv.path, '\n% changed');
+    runInTx(t.db, h.bus, { now }, (tx) => approveApplication(tx, id));
+    await h.worker.idle();
+
+    const view = applicationView(t.db, id);
+    expect(view.app.stage).toBe('approved');
+    expect(view.receipt).toBeNull();
+    expect(view.handOff?.reason).toMatch(/changed after you approved it, so nothing was sent/);
   });
 });

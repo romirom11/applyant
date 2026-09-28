@@ -78,6 +78,12 @@ service ApplyantService {
   rpc SubmitApplication(SubmitApplicationRequest) returns (SubmitApplicationResponse);
   // GetHandOff returns the most recent delivery hand-off still waiting on the candidate, if any.
   rpc GetHandOff(GetHandOffRequest) returns (GetHandOffResponse);
+  // SetCvMode sends the tailored CV (the default) or the profile's base CV for one application.
+  rpc SetCvMode(SetCvModeRequest) returns (SetCvModeResponse);
+  // EditCv rewrites one line of the tailored CV in the candidate's words (saved as a confirmed
+  // review_edit fact; a left-out line given words goes back in), or removes it. The PDF is
+  // rendered again.
+  rpc EditCv(EditCvRequest) returns (EditCvResponse);
 }
 
 enum PostingStage {
@@ -750,6 +756,51 @@ message Application {
   optional Receipt receipt = 20;
   // The most recent delivery hand-off still waiting on the candidate, if any.
   optional HandOff hand_off = 21;
+  // The CV its form takes; unset when the form takes none. Only filled by GetApplication.
+  optional Cv cv = 22;
+}
+
+message CvLine {
+  // The CLI's handle: s1 (summary) · p2.3 (project 2, bullet 3) · e1 (education) · d4 (left out).
+  string handle = 1;
+  string text = 2;
+  repeated int64 fact_ids = 3;
+  repeated MatchedFact facts = 4;
+}
+
+message CvProject {
+  int32 number = 1;
+  string slug = 2;
+  string name = 3;
+  optional string period = 4;
+  repeated CvLine bullets = 5;
+}
+
+message CvDroppedLine {
+  CvLine line = 1;
+  // summary | education | skills | a project slug
+  string section = 2;
+  string reason = 3;
+}
+
+// The application's CV: what the tailored one emphasises, or that the base CV is sent.
+message Cv {
+  // tailored | base
+  string mode = 1;
+  // pending | planned | ready | skipped (no tailored CV possible; the note says why)
+  string status = 2;
+  optional string note = 3;
+  optional string pdf_path = 4;
+  optional string pdf_hash = 5;
+  optional google.protobuf.Timestamp rendered_at = 6;
+  repeated CvLine summary = 7;
+  // In the order the CV shows them: the tailoring.
+  repeated CvProject projects = 8;
+  repeated CvLine education = 9;
+  repeated string skills = 10;
+  repeated CvDroppedLine dropped = 11;
+  // Handles of lines whose facts are no longer confirmed (these block approve).
+  repeated string stale = 12;
 }
 
 message ReceiptFieldValue {
@@ -805,7 +856,8 @@ message PrepareApplicationRequest {
   // One of the two: a posting (its application is created if it has none) or an application.
   optional int64 posting_id = 1;
   optional int64 application_id = 2;
-  // Redraft every answer, not only missing ones (the candidate's edits are redrafted too).
+  // Redraft every answer, not only missing ones, and write the tailored CV again (the
+  // candidate's edits are redrafted too).
   bool rewrite = 3;
 }
 
@@ -867,4 +919,28 @@ message GetHandOffRequest {
 
 message GetHandOffResponse {
   optional HandOff hand_off = 1;
+}
+
+message SetCvModeRequest {
+  int64 application_id = 1;
+  // tailored | base
+  string mode = 2;
+}
+
+message SetCvModeResponse {
+  Application application = 1;
+}
+
+message EditCvRequest {
+  int64 application_id = 1;
+  // s1 · p2.3 · e1 · d4 (see Cv).
+  string line = 2;
+  // The candidate's words; unset removes the line.
+  optional string text = 3;
+}
+
+message EditCvResponse {
+  Application application = 1;
+  // The fact saved from the candidate's words, when there were words.
+  optional int64 fact_id = 2;
 }

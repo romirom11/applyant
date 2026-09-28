@@ -113,7 +113,13 @@ describe('preparing the recorded public forms', () => {
     expect(v.fields.find((f) => f.kind === 'text' && f.label === 'Phone')?.value).toBe(
       '+30 210 555 0100',
     );
-    expect(byLabel('Resume')).toMatchObject({ value: null, missing: true });
+    // No base CV in the profile, but confirmed facts: the tailored CV fills the slot.
+    expect(byLabel('Resume')).toMatchObject({
+      value: v.cv?.pdfPath,
+      source: 'file',
+      missing: false,
+    });
+    expect(v.cv?.status).toBe('ready');
     const writer = h.claude.requests.find((r) => r.role === 'application_writer');
     expect(writer?.prompt).toContain('open models forever');
     expect(writer?.prompt).toMatch(

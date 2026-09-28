@@ -138,6 +138,27 @@ pnpm -C daemon cli applications submit <id>                            # approve
 pnpm -C daemon cli handoff show <id>                                   # why delivery stopped, and what is left
 ```
 
+Tailored CVs: when the form has a CV upload, preparation also writes a CV for the posting.
+`application_writer` picks which projects lead, which facts become bullets, how the summary
+reads and which skills come first, from confirmed facts only (never `team_context` facts), each
+line citing its facts. Every line then goes through the same checks as answer sentences, and a
+line that fails, or whose fact stops being confirmed, is left out of the CV (`preview` lists it
+as dropped) rather than blocking approve. The CV is printed to PDF from an HTML/CSS template
+(the bundled "Clean", or yours in `$APPLYANT_HOME/cv-template/`: `index.html` with `{{title}}`,
+`{{style}}` and `{{cv}}`, plus `style.css`) and stored as `files/cv/<application>-<hash>.pdf`.
+The Resume field points at that file, delivery uploads exactly that file (a changed file is not
+sent), and the receipt keeps its hash. Without confirmed facts, or without `full_name`, the base
+CV stands in, and `preview` says why.
+
+```sh
+pnpm -C daemon cli applications cv show <id>                           # what leads, each line with its facts, what was left out
+pnpm -C daemon cli applications cv use-base <id>                       # send profile base_cv_file instead · cv use-tailored <id>
+pnpm -C daemon cli applications cv edit <id> p1.2 "<your words>"       # a line (s1 · p1.2 · e1) → a confirmed fact, re-rendered
+pnpm -C daemon cli applications cv edit <id> d1 "<your words>"         # a left-out line goes back in, in your words
+pnpm -C daemon cli applications cv edit <id> p1.2 --remove
+pnpm -C daemon cli applications prepare <id> --rewrite                 # write the answers and the CV again
+```
+
 Recorded forms: `pnpm -C daemon fixtures:record <url> --name <name> --about "<what it is>"` reads a
 public application form (read-only, with a synthetic profile), saves the page as a HAR and the
 decisions as JSON under `daemon/test/fixtures/forms/<name>/`, and replays it offline to check the
