@@ -3,6 +3,7 @@
 // browser and the Connect server, then writes {port, token} for clients.
 import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
+import { installReaderBrowser } from './browser/install.ts';
 import { ReaderPool } from './browser/reader-pool.ts';
 import { SubmitProfile } from './browser/submit-profile.ts';
 import { TaskPages } from './browser/task-pages.ts';
@@ -68,7 +69,13 @@ export async function runDaemon(config: Config = loadConfig()): Promise<() => Pr
   const cliPaths = defaultCliPaths();
   void cliPaths.start();
   const cli = new CliStatus({ paths: cliPaths });
-  const reader = new ReaderPool({ ...config.reader, log: log.child({ part: 'reader' }) });
+  const reader = new ReaderPool({
+    ...config.reader,
+    log: log.child({ part: 'reader' }),
+    ...(config.installBrowsers
+      ? { ready: installReaderBrowser(log.child({ part: 'reader' })) }
+      : {}),
+  });
   const models = new AgentRunner({
     providers: [
       new ClaudeProvider({

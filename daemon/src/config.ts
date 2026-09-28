@@ -33,6 +33,8 @@ export interface Config {
    * Contents/Helpers, else a `swift build` in the repo's native/. Null when none exists.
    */
   nativeHelperPath: string | null;
+  /** Fetch the reader's Chromium headless shell at start (set by the app's launcher). */
+  installBrowsers: boolean;
   /** Worker threads for heavy read queries. */
   readWorkers: number;
   host: '127.0.0.1';
@@ -111,6 +113,7 @@ export function loadConfig(env: Env = process.env): Config {
     jevUrl: env.APPLYANT_JEV_URL || null,
     embedder: embedderKind(env.APPLYANT_EMBEDDER),
     nativeHelperPath: nativeHelperPath(env),
+    installBrowsers: env.APPLYANT_INSTALL_BROWSERS === '1',
     readWorkers: Math.max(1, int(env, 'APPLYANT_READ_WORKERS', 2)),
     host: '127.0.0.1',
     port: int(env, 'APPLYANT_PORT', 0),

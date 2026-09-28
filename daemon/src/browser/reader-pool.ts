@@ -7,6 +7,8 @@ export interface ReaderPoolOptions {
   maxContexts: number;
   navigationTimeoutMs: number;
   log: Logger;
+  /** Settles when the browser is installed (the app's first launch fetches it). */
+  ready?: Promise<unknown>;
 }
 
 export interface WithPageOptions {
@@ -68,7 +70,9 @@ export class ReaderPool {
   private getBrowser(): Promise<Browser> {
     if (this.closed) return Promise.reject(new Error('reader pool is closed'));
     if (!this.browser) {
-      const launching = chromium.launch({ headless: true });
+      const launching = (this.o.ready ?? Promise.resolve()).then(() =>
+        chromium.launch({ headless: true }),
+      );
       this.browser = launching;
       launching.then(
         (browser) => {
