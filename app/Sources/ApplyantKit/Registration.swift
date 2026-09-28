@@ -1,22 +1,20 @@
-// Starting the daemon at login, and again after a crash: a launchd agent with KeepAlive.
+// Starting the daemon at login, and again after a crash: a launchd agent with KeepAlive,
+// written to ~/Library/LaunchAgents and bootstrapped with launchctl.
 //
-// First choice is SMAppService with the plist inside the bundle (Contents/Library/
-// LaunchAgents), which shows up in System Settings → Login Items under Applyant. The bundle
-// is only ad-hoc signed, and if macOS refuses to register it that way, the app writes the
-// same agent to ~/Library/LaunchAgents and bootstraps it with launchctl. Once it has fallen
-// back, it stays on the file (so the two never both run a daemon).
+// Not SMAppService: it takes the ad-hoc signed bundle, but trusts the launcher by its hash
+// (launchd's launch constraint), and after a rebuild launchd refuses to spawn the new one
+// ("spawn failed", EX_CONFIG, "needs LWCR update"), even after unregister + register. A plain
+// agent file has no such constraint. The agent still shows in System Settings → Login Items,
+// grouped under Applyant (AssociatedBundleIdentifiers).
 import Foundation
 import ServiceManagement
 
 public enum RegistrationOutcome: Equatable, Sendable {
-    case smAppService
     case launchAgentFile
-    /// Registered, but the candidate has to allow it in System Settings → Login Items.
-    case needsApproval
     case failed(String)
 }
 
-/// The fallback agent: the same keys as the bundled plist, with an absolute Program path.
+/// The agent: the launcher inside the installed bundle, kept alive by launchd.
 public func launchAgentPlist(program: URL) throws -> Data {
     let plist: [String: Any] = [
         "Label": Identity.daemonLabel,
@@ -90,32 +88,24 @@ public struct LaunchctlAgent: Sendable {
 }
 
 public struct DaemonRegistration: Sendable {
-    public let fallback: LaunchctlAgent
+    public let agent: LaunchctlAgent
 
-    public init(fallback: LaunchctlAgent) {
-        self.fallback = fallback
+    public init(agent: LaunchctlAgent) {
+        self.agent = agent
     }
 
-    public func ensure() -> RegistrationOutcome {
-        if fallback.installed { return fallback.install() }
-        let agent = SMAppService.agent(plistName: Identity.daemonPlist)
-        switch agent.status {
-        case .enabled:
-            return .smAppService
-        case .requiresApproval:
-            return .needsApproval
-        case .notRegistered, .notFound:
-            break
-        @unknown default:
-            break
+    public func ensure() async -> RegistrationOutcome {
+        // 8a's first builds registered the agent through SMAppService under the same label:
+        // take that one down first, so launchd has a single com.applyant.daemon.
+        let legacy = SMAppService.agent(plistName: Identity.daemonPlist)
+        if legacy.status == .enabled || legacy.status == .requiresApproval {
+            do {
+                try await legacy.unregister()
+            } catch {
+                NSLog("Applyant: could not unregister the SMAppService agent: %@", "\(error)")
+            }
         }
-        do {
-            try agent.register()
-        } catch {
-            NSLog("Applyant: SMAppService refused the daemon agent (%@); using ~/Library/LaunchAgents", "\(error)")
-            return fallback.install()
-        }
-        return agent.status == .requiresApproval ? .needsApproval : .smAppService
+        return agent.install()
     }
 
     /// The app itself as a login item, for the menu bar. Failures only cost the menu bar icon.
@@ -127,9 +117,5 @@ public struct DaemonRegistration: Sendable {
         } catch {
             NSLog("Applyant: could not register as a login item: %@", "\(error)")
         }
-    }
-
-    public func openLoginItemsSettings() {
-        SMAppService.openSystemSettingsLoginItems()
     }
 }

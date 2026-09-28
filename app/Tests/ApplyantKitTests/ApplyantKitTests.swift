@@ -138,29 +138,17 @@ final class Box<T>: @unchecked Sendable {
 }
 
 @Suite struct RegistrationTests {
-    @Test func theFallbackAgentMatchesTheBundledOne() throws {
-        let bundled = try #require(
-            try PropertyListSerialization.propertyList(
-                from: Data(contentsOf: URL(fileURLWithPath: #filePath)
-                    .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-                    .appendingPathComponent("Bundle/com.applyant.daemon.plist")),
-                format: nil
-            ) as? [String: Any]
-        )
+    @Test func theAgentRunsTheLauncherAndIsKeptAlive() throws {
         let program = URL(fileURLWithPath: "/Applications/Applyant.app/Contents/MacOS/applyantd")
-        let fallback = try #require(
+        let plist = try #require(
             try PropertyListSerialization.propertyList(from: launchAgentPlist(program: program), format: nil)
                 as? [String: Any]
         )
-        #expect(fallback["Program"] as? String == program.path)
-        #expect(bundled["BundleProgram"] as? String == "Contents/MacOS/applyantd")
-        var a = bundled
-        a.removeValue(forKey: "BundleProgram")
-        var b = fallback
-        b.removeValue(forKey: "Program")
-        #expect(NSDictionary(dictionary: a) == NSDictionary(dictionary: b))
-        #expect(a["KeepAlive"] as? Bool == true)
-        #expect(a["Label"] as? String == Identity.daemonLabel)
+        #expect(plist["Label"] as? String == Identity.daemonLabel)
+        #expect(plist["Program"] as? String == program.path)
+        #expect(plist["KeepAlive"] as? Bool == true)
+        #expect(plist["RunAtLoad"] as? Bool == true)
+        #expect(plist["AssociatedBundleIdentifiers"] as? [String] == [Identity.appBundleId])
     }
 
     @Test func installWritesThePlistAndBootstrapsIt() throws {

@@ -9,8 +9,7 @@
 #   ├── Helpers/applyant-native                 the Swift helper (Keychain, PDFKit, wake)
 #   ├── Resources/node/bin/node                 the official Node, darwin-arm64
 #   ├── Resources/daemon/                       daemon/src + production node_modules (hoisted)
-#   ├── Resources/bin/applyant                  the CLI launcher (symlinked to ~/.local/bin)
-#   └── Library/LaunchAgents/com.applyant.daemon.plist
+#   └── Resources/bin/applyant                  the CLI launcher (symlinked to ~/.local/bin)
 #
 # Needs Xcode, and Node 24 + pnpm (the daemon's versions) on PATH.
 set -euo pipefail
@@ -63,7 +62,7 @@ swift build -c release --package-path "$ROOT/native" --arch arm64
 swift build -c release --package-path "$ROOT/app" --arch arm64
 NATIVE_BIN="$(swift build -c release --package-path "$ROOT/native" --arch arm64 --show-bin-path)"
 APP_BIN="$(swift build -c release --package-path "$ROOT/app" --arch arm64 --show-bin-path)"
-mkdir -p "$C/MacOS" "$C/Helpers" "$C/Library/LaunchAgents"
+mkdir -p "$C/MacOS" "$C/Helpers"
 cp "$APP_BIN/Applyant" "$APP_BIN/applyantd" "$C/MacOS/"
 cp "$NATIVE_BIN/applyant-native" "$C/Helpers/"
 
@@ -83,7 +82,7 @@ rm -rf "$STAGE"/node_modules/@anthropic-ai/claude-agent-sdk-darwin-*
 rm -f "$STAGE/pnpm-lock.yaml" "$STAGE/pnpm-workspace.yaml"
 mv "$STAGE" "$C/Resources/daemon"
 
-step "CLI launcher, plists"
+step "CLI launcher, Info.plist"
 mkdir -p "$C/Resources/bin"
 cat > "$C/Resources/bin/applyant" <<'SH'
 #!/bin/sh
@@ -100,8 +99,7 @@ chmod 755 "$C/Resources/bin/applyant"
 BUILD_NUMBER="$(git -C "$ROOT" rev-list --count HEAD 2>/dev/null || echo 1)"
 sed "s/__BUILD__/$BUILD_NUMBER/" "$ROOT/app/Bundle/Info.plist" > "$C/Info.plist"
 printf 'APPL????' > "$C/PkgInfo"
-cp "$ROOT/app/Bundle/com.applyant.daemon.plist" "$C/Library/LaunchAgents/"
-plutil -lint "$C/Info.plist" "$C/Library/LaunchAgents/com.applyant.daemon.plist" >/dev/null
+plutil -lint "$C/Info.plist" >/dev/null
 
 step "Ad-hoc signing: every Mach-O inside out, the app last"
 sign() { codesign --force --sign - --timestamp=none "$@"; }
@@ -140,10 +138,15 @@ if [ ! -e "$LINK" ] || [ -L "$LINK" ]; then
 else
   echo "warning: $LINK exists and isn't a symlink; left alone" >&2
 fi
-# A daemon launchd already runs is still on the old files: restart it on the new ones.
+# The daemon launchd runs is still on the old files: restart it on the new ones. (On a first
+# install the app writes the agent and starts it.)
 if launchctl print "gui/$(id -u)/com.applyant.daemon" >/dev/null 2>&1; then
   launchctl kickstart -k "gui/$(id -u)/com.applyant.daemon"
   echo "restarted the running daemon"
 fi
-[ "$OPEN" = 1 ] && open "$DEST"
+if [ "$OPEN" = 1 ]; then
+  open "$DEST"
+else
+  echo "note: launch the app once (open $DEST) so it installs the daemon's launch agent"
+fi
 echo "installed $DEST"

@@ -1,6 +1,8 @@
 # Generates the TypeScript messages and service descriptors (protobuf-es v2 + Connect)
-# into daemon/src/gen. The plugin comes from daemon's node_modules, so run
-# `pnpm -C daemon install` first. connect-swift for app/ is added in phase 8b.
+# into daemon/src/gen, and the Swift messages and Connect client for the app into
+# app/Generated. The TypeScript plugin comes from daemon's node_modules (run
+# `pnpm -C daemon install` first); the Swift ones are Buf's hosted plugins, pinned to the
+# versions app/Package.swift depends on.
 version: v2
 inputs:
   - directory: proto
@@ -11,4 +13,16 @@ plugins:
     opt:
       - target=js+dts
       - import_extension=js
+  - remote: buf.build/apple/swift:v1.38.1
+    out: app/Generated
+    opt:
+      - Visibility=Public
+      - FileNaming=PathToUnderscores
+  - remote: buf.build/connectrpc/swift:v1.2.3
+    out: app/Generated
+    opt:
+      - Visibility=Public
+      - FileNaming=PathToUnderscores
+      - GenerateAsyncMethods=true
+      - GenerateCallbackMethods=false
 clean: true

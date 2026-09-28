@@ -5,18 +5,39 @@ import PackageDescription
 
 let package = Package(
     name: "Applyant",
-    platforms: [.macOS(.v14)],
+    platforms: [.macOS(.v15)],
     products: [
         .executable(name: "Applyant", targets: ["Applyant"]),
         .executable(name: "applyantd", targets: ["applyantd"]),
     ],
+    dependencies: [
+        // Pinned to the versions of the hosted buf plugins in buf.gen.yaml.
+        .package(url: "https://github.com/connectrpc/connect-swift.git", exact: "1.2.3"),
+        .package(url: "https://github.com/apple/swift-protobuf.git", exact: "1.38.1"),
+    ],
     targets: [
-        // Everything testable: bundle paths, the daemon's endpoint and status, registration.
-        .target(name: "ApplyantKit"),
-        // The menu bar app (8a: daemon status only).
-        .executableTarget(name: "Applyant", dependencies: ["ApplyantKit"]),
+        // Generated from proto/applyant/v1/applyant.proto by `buf generate` (don't edit).
+        .target(
+            name: "ApplyantAPI",
+            dependencies: [
+                .product(name: "Connect", package: "connect-swift"),
+                .product(name: "SwiftProtobuf", package: "swift-protobuf"),
+            ],
+            path: "Generated",
+            swiftSettings: [.swiftLanguageMode(.v5)]
+        ),
+        // Everything testable: the store, the daemon connection, bundle paths, registration.
+        .target(
+            name: "ApplyantKit",
+            dependencies: [
+                "ApplyantAPI",
+                .product(name: "Connect", package: "connect-swift"),
+            ]
+        ),
+        // The app: menu bar and main window.
+        .executableTarget(name: "Applyant", dependencies: ["ApplyantKit", "ApplyantAPI"]),
         // What launchd starts: a signed Mach-O that execs the bundled Node on the daemon.
         .executableTarget(name: "applyantd", dependencies: ["ApplyantKit"]),
-        .testTarget(name: "ApplyantKitTests", dependencies: ["ApplyantKit"]),
+        .testTarget(name: "ApplyantKitTests", dependencies: ["ApplyantKit", "ApplyantAPI"]),
     ]
 )

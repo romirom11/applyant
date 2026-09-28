@@ -32,10 +32,12 @@ jobs:
       - name: buf lint
         run: daemon/node_modules/.bin/buf lint
 
+      # The TypeScript code (daemon/src/gen) and the app's Swift client (app/Generated).
       - name: Generated code is up to date
         run: |
           daemon/node_modules/.bin/buf generate
-          git diff --exit-code daemon/src/gen
+          git diff --exit-code daemon/src/gen app/Generated
+          test -z "$(git status --porcelain daemon/src/gen app/Generated)"
 
       - name: Typecheck
         run: pnpm -C daemon typecheck
