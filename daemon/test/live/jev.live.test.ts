@@ -2,8 +2,8 @@
 // model: field_classify over a fixture form, option_match, and posting_liveness.
 //   APPLYANT_LIVE=1 pnpm test:live -t jev
 //
-// The key comes from APPLYANT_JEV_KEY, else the `jev` secret in APPLYANT_HOME (default data
-// dir). It is never printed. The whole file costs a few thousand input tokens ($42 / billion).
+// The key comes from APPLYANT_JEV_KEY, else the `jev` secret the daemon uses: the Keychain
+// through applyant-native on a Mac, the file in APPLYANT_HOME elsewhere. It is never printed. The whole file costs a few thousand input tokens ($42 / billion).
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -16,7 +16,8 @@ import { FormJudge } from '../../src/domain/applications/form-judge.ts';
 import { livenessCheck } from '../../src/domain/search/verify.ts';
 import { AgentRunner } from '../../src/models/agent-runner.ts';
 import { JEV_SECRET, JevClient } from '../../src/models/providers/jev.ts';
-import { FileSecrets } from '../../src/secrets/file-backend.ts';
+import { openNative } from '../../src/native/client.ts';
+import { openSecrets } from '../../src/secrets/keychain-backend.ts';
 import { addRedaction } from '../../src/util/log.ts';
 import { quietLog } from '../helpers/deps.ts';
 import { FIXTURE_PROFILE, field, runRead } from '../helpers/form-read.ts';
@@ -28,10 +29,15 @@ const POSTING = fileURLToPath(new URL('../fixtures/postings/ai-engineer.txt', im
 async function jevKey(): Promise<string | null> {
   const env = process.env.APPLYANT_JEV_KEY?.trim();
   if (env) return env;
+  const config = loadConfig();
+  const native = openNative({ path: config.nativeHelperPath, log: quietLog });
   try {
-    return await new FileSecrets(loadConfig().secretsFile).get(JEV_SECRET);
+    const secrets = await openSecrets({ native, secretsFile: config.secretsFile, log: quietLog });
+    return await secrets.get(JEV_SECRET);
   } catch {
     return null;
+  } finally {
+    await native.close();
   }
 }
 
