@@ -99,7 +99,8 @@ enum ChromeWindow {
         let profile = UserPaths().dataDir().appendingPathComponent("browser").path
         let pgrep = Process()
         pgrep.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
-        pgrep.arguments = ["-f", "--user-data-dir=\(profile)"]
+        // "--": the pattern starts with dashes, and pgrep would read it as an option.
+        pgrep.arguments = ["-f", "--", "--user-data-dir=\(profile)"]
         let pipe = Pipe()
         pgrep.standardOutput = pipe
         guard (try? pgrep.run()) != nil else { return false }

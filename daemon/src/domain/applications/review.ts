@@ -23,6 +23,7 @@ import {
 import type { Tx } from '../../queue/types.ts';
 import { enqueueEmbedFacts } from '../knowledge/embed-index.ts';
 import { confirmFact } from '../knowledge/facts.ts';
+import { getCv, requestCvPass, updateCv } from './cv/store.ts';
 import { enqueueDelivery } from './deliver.ts';
 import { reviewFact } from './review-fact.ts';
 import { entries } from './standard-fields.ts';
@@ -374,6 +375,18 @@ export function confirmApplicationFacts(
       );
     }
     confirmFact(tx.db, id, tx.now);
+  }
+  // A tailored CV skipped for lack of confirmed facts can be written now.
+  const cv = getCv(tx.db, applicationId);
+  if (
+    todo.length &&
+    cv?.mode === 'tailored' &&
+    cv.status === 'skipped' &&
+    view.app.stage !== 'approved' &&
+    view.app.stage !== 'applied'
+  ) {
+    updateCv(tx, cv.id, { status: 'pending', note: null });
+    requestCvPass(tx, applicationId, 'writing your tailored CV with the facts you confirmed');
   }
   return todo;
 }

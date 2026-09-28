@@ -8,6 +8,7 @@ struct HandOffCard: View {
     let store: AppStore
     let app: Application
     @State private var noWindow = false
+    @State private var confirmSubmitted = false
 
     var body: some View {
         let h = app.handOff
@@ -24,6 +25,7 @@ struct HandOffCard: View {
                 HStack {
                     Button("Show the browser window") { noWindow = !ChromeWindow.bringForward() }
                         .buttonStyle(.borderedProminent)
+                    Button("I submitted it") { confirmSubmitted = true }
                     Button("Try delivery again") { Task { await store.submit(application: app.id) } }
                     if h.hasURL, let url = URL(string: h.url) {
                         Link("Page ↗", destination: url)
@@ -36,6 +38,11 @@ struct HandOffCard: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(6)
+        }
+        .confirmationDialog("Did the site accept your application?", isPresented: $confirmSubmitted) {
+            Button("Yes, I submitted it") { Task { await store.markSubmitted(application: app.id) } }
+        } message: {
+            Text("It's recorded as applied, with what the form was filled with.")
         }
     }
 

@@ -58,6 +58,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var openMainWindow: (() -> Void)?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // `--script steps.json --out dir`: a scripted check of the app (ScriptRunner.swift);
+        // nothing is registered and no notifications are posted.
+        if let script = ScriptRunner(arguments: CommandLine.arguments, store: store) {
+            running = Task { await store.run() }
+            Task { await script.run() }
+            return
+        }
         status.start()
         let notifications = NotificationDelegate(store: store) { [weak self] in self?.showMainWindow() }
         self.notifications = notifications
@@ -90,7 +97,7 @@ struct ApplyantApp: App {
                 .onAppear { NSApp.setActivationPolicy(.regular) }
                 .onDisappear { NSApp.setActivationPolicy(.accessory) }
         }
-        .defaultSize(width: 1280, height: 800)
+        .defaultSize(width: 1440, height: 900)
         // Started at login as a menu bar app: the window opens on request, not at every login.
         .defaultLaunchBehavior(.suppressed)
 

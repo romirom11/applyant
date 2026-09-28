@@ -21,24 +21,34 @@ struct ReviewApplication: View {
     var body: some View {
         Group {
             if let app = store.applicationDetails[applicationId] {
-                HStack(spacing: 0) {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 16) {
-                            header(app)
-                            if app.hasHandOff { HandOffCard(store: store, app: app) }
-                            if app.hasReceipt { receipt(app.receipt) }
-                            if app.hasNote && !app.hasHandOff { note(app.note) }
-                            needsYou(app)
-                            standardFields(app)
-                            if app.hasCv { CvCard(store: store, app: app) }
-                            questions(app)
+                GeometryReader { geo in
+                    // Evidence sits beside the answers when there's room, below them when not.
+                    let side = geo.size.width >= 860
+                    HStack(spacing: 0) {
+                        ScrollView {
+                            VStack(alignment: .leading, spacing: 16) {
+                                header(app)
+                                if app.hasHandOff { HandOffCard(store: store, app: app) }
+                                if app.hasReceipt { receipt(app.receipt) }
+                                if app.hasNote && !app.hasHandOff && app.stage != .needsCandidate { note(app.note) }
+                                needsYou(app)
+                                standardFields(app)
+                                if app.hasCv { CvCard(store: store, app: app) }
+                                questions(app)
+                                if !side {
+                                    Divider()
+                                    EvidencePanel(store: store, app: app, answer: selected(app), scrolls: false)
+                                }
+                            }
+                            .padding(20)
+                            .frame(maxWidth: 820, alignment: .leading)
                         }
-                        .padding(20)
-                        .frame(maxWidth: 820, alignment: .leading)
+                        if side {
+                            Divider()
+                            EvidencePanel(store: store, app: app, answer: selected(app))
+                                .frame(width: 290)
+                        }
                     }
-                    Divider()
-                    EvidencePanel(store: store, app: app, answer: selected(app))
-                        .frame(width: 300)
                 }
             } else {
                 ProgressView()
@@ -71,12 +81,17 @@ struct ReviewApplication: View {
                 Spacer()
                 ChipView(chip: StageText.chip(app))
             }
-            HStack(spacing: 8) {
-                if !app.blockers.isEmpty && app.stage != .approved && app.stage != .applied {
-                    Label(app.blockers.joined(separator: " · "), systemImage: "exclamationmark.circle")
-                        .foregroundStyle(.orange)
-                        .lineLimit(2)
+            if !app.blockers.isEmpty && app.stage != .approved && app.stage != .applied {
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(app.blockers, id: \.self) { blocker in
+                        Label(blocker, systemImage: "exclamationmark.circle")
+                            .foregroundStyle(.orange)
+                            .lineLimit(3)
+                    }
                 }
+                .font(.callout)
+            }
+            HStack(spacing: 8) {
                 Spacer()
                 if app.stage == .readyForReview || app.stage == .needsCandidate {
                     Button("Regenerate…") { confirmRegenerate = true }
@@ -154,7 +169,7 @@ struct ReviewApplication: View {
             }
             if showAllFields {
                 ForEach(routine, id: \.ref) { f in
-                    FieldRow(field: f) { value in
+                    FieldRow(field: f, editable: app.stage != .approved && app.stage != .applied) { value in
                         Task { await store.setField(application: app.id, field: f.ref, value: value) }
                     }
                 }
@@ -172,6 +187,7 @@ struct ReviewApplication: View {
             ForEach(answers, id: \.id) { answer in
                 AnswerCard(
                     answer: answer,
+                    editable: app.stage != .approved && app.stage != .applied,
                     selected: selected(app)?.number == answer.number,
                     select: { selectedAnswer = answer.number },
                     write: {
@@ -273,6 +289,7 @@ struct MissingFieldRow: View {
 
 struct FieldRow: View {
     let field: FormFieldValue
+    var editable = true
     let set: (String?) -> Void
     @State private var editing = false
     @State private var value = ""
@@ -291,14 +308,18 @@ struct FieldRow: View {
                 Text(field.hasValue ? field.value : "—").lineLimit(2).textSelection(.enabled)
                 Text(field.source).font(.caption).foregroundStyle(.tertiary)
                 Spacer()
-                if field.source == "override" {
+                if !editable {
+                    EmptyView()
+                } else if field.source == "override" {
                     Button("Profile value") { set(nil) }.buttonStyle(.link)
                 }
-                Button("Change") {
-                    value = field.hasValue ? field.value : ""
-                    editing = true
+                if editable {
+                    Button("Change") {
+                        value = field.hasValue ? field.value : ""
+                        editing = true
+                    }
+                    .buttonStyle(.link)
                 }
-                .buttonStyle(.link)
             }
         }
         .font(.callout)
@@ -307,6 +328,7 @@ struct FieldRow: View {
 
 struct AnswerCard: View {
     let answer: Answer
+    var editable = true
     let selected: Bool
     let select: () -> Void
     let write: () -> Void
@@ -326,11 +348,11 @@ struct AnswerCard: View {
                     Text("Answer: \(answer.choice)").font(.callout.weight(.medium))
                 }
                 Text(highlighted).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
-                flagged
+                if editable { flagged }
                 HStack {
                     Text(basedOn).font(.caption).foregroundStyle(.secondary).lineLimit(2)
                     Spacer()
-                    Button("Edit…", action: write).buttonStyle(.link)
+                    if editable { Button("Edit…", action: write).buttonStyle(.link) }
                 }
             }
         }
@@ -394,9 +416,17 @@ struct EvidencePanel: View {
     let store: AppStore
     let app: Application
     let answer: Answer?
+    var scrolls = true
 
     var body: some View {
-        ScrollView {
+        if scrolls {
+            ScrollView { content.padding(14) }
+        } else {
+            content
+        }
+    }
+
+    private var content: some View {
             VStack(alignment: .leading, spacing: 12) {
                 Text("Evidence").font(.headline)
                 if !app.unconfirmedFactIds.isEmpty {
@@ -433,8 +463,6 @@ struct EvidencePanel: View {
                     Text("Select an answer to see what it rests on.").foregroundStyle(.secondary)
                 }
             }
-            .padding(14)
-        }
     }
 
     private func uniqueFacts(_ answer: Answer) -> [Applyant_V1_MatchedFact] {
@@ -456,16 +484,25 @@ struct CvCard: View {
     let store: AppStore
     let app: Application
 
+    private func title(_ cv: Applyant_V1_Cv) -> String {
+        if cv.mode == "base" { return "CV · your base CV" }
+        switch cv.status {
+        case "skipped": return "CV · your base CV is sent (no tailored one)"
+        case "pending", "planned": return "CV · being tailored for this role…"
+        default: return "CV · tailored for this role"
+        }
+    }
+
     var body: some View {
         let cv = app.cv
         GroupBox {
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
-                    Text(cv.mode == "base" ? "CV · your base CV" : "CV · tailored for this role").font(.headline)
+                    Text(title(cv)).font(.headline)
                     Spacer()
-                    Text(cv.status).font(.caption).foregroundStyle(.secondary)
+                    if cv.status == "pending" || cv.status == "planned" { ProgressView().controlSize(.small) }
                 }
-                if cv.mode == "tailored" {
+                if cv.mode == "tailored" && cv.status == "ready" {
                     if !cv.projects.isEmpty {
                         Text("Projects in order: " + cv.projects.map(\.name).joined(separator: ", "))
                     }
@@ -487,7 +524,11 @@ struct CvCard: View {
                     if cv.hasPdfPath {
                         Button("Preview") { NSWorkspace.shared.open(URL(fileURLWithPath: cv.pdfPath)) }
                     }
-                    if cv.mode == "tailored" {
+                    if app.stage == .approved || app.stage == .applied {
+                        EmptyView()  // already sent or on its way: nothing to change
+                    } else if cv.mode == "tailored" && cv.status == "skipped" {
+                        Button("Try the tailored CV again") { Task { await store.setCvMode(application: app.id, mode: "tailored") } }
+                    } else if cv.mode == "tailored" {
                         Button("Use base CV instead") { Task { await store.setCvMode(application: app.id, mode: "base") } }
                     } else {
                         Button("Use the tailored CV") { Task { await store.setCvMode(application: app.id, mode: "tailored") } }

@@ -18,7 +18,7 @@ import {
 } from '../../db/schema.ts';
 import type { Handler, HandOff, Outcome, Tx } from '../../queue/types.ts';
 import { getStandardProfile } from '../knowledge/profile.ts';
-import { applicationView, emitStage } from './store.ts';
+import { ApplicationError, applicationView, emitStage } from './store.ts';
 
 /** Failed delivery attempts (a thrown error, not a hand-off) are retried this many times. */
 export const DELIVER_ATTEMPTS = 3;
@@ -221,4 +221,72 @@ export function catchUpDeliveries(tx: Tx): number {
     n++;
   }
   return n;
+}
+
+/**
+ * `applications mark-submitted`: the candidate finished a hand-off in the browser window and
+ * pressed submit themselves. The application becomes applied, with a receipt of the prepared
+ * values (what the window was filled with) marked as submitted by hand, and the hand-off closes.
+ */
+export function markSubmittedByHand(tx: Tx, applicationId: number): ApplicationRow {
+  const view = applicationView(tx.db, applicationId);
+  if (view.app.stage !== 'approved' || !view.handOff) {
+    throw new ApplicationError(
+      `application ${applicationId} has no delivery waiting on you (it is ${view.app.stage.replace(/_/g, ' ')})`,
+    );
+  }
+  const sent = view.fields
+    .filter((f) => f.active && f.value !== null && f.value !== '')
+    .map((f) => ({ ref: f.ref, label: f.label, value: f.value, source: f.source }));
+  const byRef = new Map(view.fields.map((f) => [f.ref, f]));
+  const cv = sent.find((s) => byRef.get(s.ref)?.meaning === 'resume');
+  const salary = sent.find((s) => byRef.get(s.ref)?.meaning === 'salary');
+  let cvHash: string | null = null;
+  if (cv?.value) {
+    try {
+      cvHash = createHash('sha256').update(readFileSync(cv.value)).digest('hex');
+    } catch {
+      cvHash = null;
+    }
+  }
+  const values = {
+    finalUrl: view.handOff.browser?.url ?? view.posting.formUrl ?? view.posting.canonicalUrl,
+    confirmationText: `submitted by you in the browser after a hand-off (${view.handOff.reason})`,
+    confirmationSnapshotPath: null,
+    cvPath: cv?.value ?? null,
+    cvHash,
+    salaryValue: salary?.value ?? null,
+    fieldValues: sent,
+    submittedAt: tx.now,
+  };
+  tx.db
+    .insert(receipts)
+    .values({ applicationId, ...values })
+    .onConflictDoUpdate({ target: receipts.applicationId, set: values })
+    .run();
+  // The hand-off is over: its task is done.
+  tx.db
+    .update(tasks)
+    .set({ status: 'done', updatedAt: tx.now })
+    .where(
+      and(
+        eq(tasks.kind, 'deliver_application'),
+        eq(tasks.entityId, applicationId),
+        eq(tasks.status, 'needs_candidate'),
+      ),
+    )
+    .run();
+  const row = tx.db
+    .update(applications)
+    .set({ stage: 'applied', appliedAt: tx.now, note: null, updatedAt: tx.now })
+    .where(eq(applications.id, applicationId))
+    .returning()
+    .get();
+  emitStage(
+    tx,
+    row,
+    'applied',
+    `application ${applicationId}: applied (submitted by you in the browser)`,
+  );
+  return row;
 }

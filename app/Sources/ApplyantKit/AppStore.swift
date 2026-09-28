@@ -13,6 +13,14 @@ public struct StoreNotification: Equatable, Sendable {
     public let postingId: Int64
     public let title: String
     public let body: String
+
+    public init(kind: Kind, applicationId: Int64, postingId: Int64, title: String, body: String) {
+        self.kind = kind
+        self.applicationId = applicationId
+        self.postingId = postingId
+        self.title = title
+        self.body = body
+    }
 }
 
 public struct Activity: Equatable, Sendable {
@@ -281,6 +289,12 @@ public final class AppStore {
     /// Retries a delivery that got stuck (or approves and delivers).
     public func submit(application id: Int64) async {
         guard let api, let app = await attempt({ try await api.submit(application: id) }) else { return }
+        record(app)
+    }
+
+    /// "I submitted it": a hand-off the candidate finished in the browser.
+    public func markSubmitted(application id: Int64) async {
+        guard let api, let app = await attempt({ try await api.markSubmitted(application: id) }) else { return }
         record(app)
     }
 

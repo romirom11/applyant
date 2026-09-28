@@ -4,6 +4,7 @@ import { Code, ConnectError, type ServiceImpl } from '@connectrpc/connect';
 import { eq } from 'drizzle-orm';
 import { postings } from '../db/schema.ts';
 import { editCvLine, setCvMode } from '../domain/applications/cv/store.ts';
+import { markSubmittedByHand } from '../domain/applications/deliver.ts';
 import {
   ApprovalBlocked,
   approveApplication,
@@ -70,6 +71,7 @@ export function applicationRpcs(
   | 'editAnswer'
   | 'approveApplication'
   | 'submitApplication'
+  | 'markSubmitted'
   | 'getHandOff'
   | 'setCvMode'
   | 'editCv'
@@ -175,6 +177,16 @@ export function applicationRpcs(
         runInTx(c.db, c.bus, { now: c.now() }, (tx) => {
           const appId = id(req.id, 'id');
           submitApplication(tx, appId);
+          return { application: applicationToPb(applicationView(tx.db, appId)) };
+        }),
+      );
+    },
+
+    markSubmitted(req) {
+      return guard(() =>
+        runInTx(c.db, c.bus, { now: c.now() }, (tx) => {
+          const appId = id(req.applicationId, 'application_id');
+          markSubmittedByHand(tx, appId);
           return { application: applicationToPb(applicationView(tx.db, appId)) };
         }),
       );

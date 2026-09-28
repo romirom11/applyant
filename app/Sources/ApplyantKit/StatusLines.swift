@@ -44,7 +44,8 @@ public struct StatusView: Equatable, Sendable {
 
     static func tool(_ name: String, _ t: ToolStatus) -> String {
         guard t.found else { return "\(name): ✗ not found" }
-        let version = t.version.split(separator: " ").first.map(String.init) ?? ""
+        // "2.1.283 (Claude Code)" · "codex-cli 0.157.1": the word with the number.
+        let version = t.version.split(separator: " ").first { $0.contains(where: \.isNumber) }.map(String.init) ?? ""
         let state = t.ready ? "✓" : (t.signedIn ? "!" : "✗ not signed in")
         return "\(name): \(state) \(version) · \(t.path)"
     }

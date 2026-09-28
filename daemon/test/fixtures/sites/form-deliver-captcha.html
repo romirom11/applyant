@@ -1,0 +1,15 @@
+<!doctype html>
+<!-- Synthetic, for the captcha hand-off: standard fields the profile answers, then a reCAPTCHA
+     frame before submit. The test answers the frame's google.com URL locally (page.route), so
+     it's offline; delivery must fill everything and only then hand the captcha over. -->
+<html lang="en"><head><meta charset="utf-8"><title>Apply · Captcha Co</title></head><body>
+<h1>Apply to Captcha Co</h1>
+<form id="apply" novalidate onsubmit="return false">
+  <div><label for="name">Full Name *</label><input id="name" required></div>
+  <div><label for="email">Email *</label><input id="email" type="email" required></div>
+  <div><label for="resume">Resume *</label><input id="resume" type="file" required></div>
+  <iframe title="reCAPTCHA" width="304" height="78"
+    src="https://www.google.com/recaptcha/api2/anchor?k=test-site-key"></iframe>
+  <button id="submit">Submit application</button>
+</form>
+</body></html>

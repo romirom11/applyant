@@ -5,14 +5,15 @@
 // doesn't have.
 //
 // The window only means something in a real, headed browser: this file needs a real DISPLAY
-// (run it under `xvfb-run -a pnpm -C daemon test`, which sets one). Plain `pnpm test` skips it
-// cleanly instead of failing.
+// on Linux (run it under `xvfb-run -a pnpm -C daemon test`, which sets one; plain `pnpm test`
+// skips it cleanly there). A Mac always has one.
 import { eq } from 'drizzle-orm';
-import { type Browser, chromium } from 'playwright';
+import { type Browser, type BrowserContext, chromium } from 'playwright';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { detectCaptcha } from '../src/browser/form-deliver.ts';
 import { getWindowBounds } from '../src/browser/window.ts';
 import { fieldValues } from '../src/db/schema.ts';
+import { markSubmittedByHand } from '../src/domain/applications/deliver.ts';
 import { approveApplication } from '../src/domain/applications/review.ts';
 import { applicationView, ensureApplication } from '../src/domain/applications/store.ts';
 import { runInTx } from '../src/queue/tx.ts';
@@ -49,7 +50,10 @@ describe('detectCaptcha', () => {
   });
 });
 
-describe.skipIf(!process.env.DISPLAY)('a browser hand-off (needs a real display)', () => {
+// macOS always has a window server; Linux needs DISPLAY (xvfb-run).
+const hasDisplay = process.platform === 'darwin' || Boolean(process.env.DISPLAY);
+
+describe.skipIf(!hasDisplay)('a browser hand-off (needs a real display)', () => {
   let site: SiteServer;
   let browser: Browser;
   const closers: Array<() => Promise<void>> = [];
@@ -131,5 +135,54 @@ describe.skipIf(!process.env.DISPLAY)('a browser hand-off (needs a real display)
     await expect(page.locator('#name').inputValue()).resolves.toBe(SYNTHETIC_PROFILE.full_name);
     const bounds = await getWindowBounds(page);
     expect(bounds.windowState).not.toBe('minimized');
+  });
+
+  it('fills the step first, then hands a captcha over with the window left filled', async () => {
+    t = tempDb();
+    h = await prepareHarness(t, {}, { headless: false });
+    // The captcha frame's google.com URL is answered locally: detection goes by the frame's URL.
+    const { context } = await (
+      h.submit as unknown as { ensure(): Promise<{ context: BrowserContext }> }
+    ).ensure();
+    await context.route('https://www.google.com/recaptcha/**', (route) =>
+      route.fulfill({ contentType: 'text/html', body: '<!doctype html><p>I am not a robot</p>' }),
+    );
+
+    const run = await runRead(browser, site.url('/form-deliver-captcha.html'));
+    closers.push(run.close);
+    setProfile(t.db, { ...SYNTHETIC_PROFILE, base_cv_file: cvFile(t.dir) }, now);
+    const postingId = seedPosting(t.db, run.read, { now, stage: 'verified' });
+    const id = runInTx(t.db, h.bus, { now }, (tx) => ensureApplication(tx, postingId, 't').app.id);
+    await h.worker.idle();
+    expect(applicationView(t.db, id).blockers).toEqual([]);
+    runInTx(t.db, h.bus, { now }, (tx) => approveApplication(tx, id));
+    await h.worker.idle();
+
+    const view = applicationView(t.db, id);
+    expect(view.app.stage).toBe('approved');
+    expect(view.handOff?.browser?.scope).toBe('captcha');
+    expect(view.handOff?.reason).toMatch(/captcha \(recaptcha\).*everything else is filled/);
+    const pages = await h.submit.openPages();
+    const page = pages.find((p) => p.url().includes('/form-deliver-captcha.html'));
+    if (!page) throw new Error('no hand-off page left open');
+    await expect(page.locator('#name').inputValue()).resolves.toBe(SYNTHETIC_PROFILE.full_name);
+    await expect(page.locator('#email').inputValue()).resolves.toBe(SYNTHETIC_PROFILE.email);
+    await expect(
+      page.locator('#resume').evaluate((el) => (el as HTMLInputElement).files?.length),
+    ).resolves.toBe(1);
+
+    // The person solves the captcha and presses submit; then tells Applyant so.
+    await page.locator('#submit').click();
+    runInTx(t.db, h.bus, { now }, (tx) => markSubmittedByHand(tx, id));
+    const done = applicationView(t.db, id);
+    expect(done.app.stage).toBe('applied');
+    expect(done.handOff).toBeNull();
+    expect(done.receipt?.confirmationText).toMatch(/submitted by you in the browser/);
+    expect(done.receipt?.fieldValues.map((f) => f.label)).toEqual(['Full Name', 'Email', 'Resume']);
+    expect(done.receipt?.cvHash).toMatch(/^[0-9a-f]{64}$/);
+    // Only a delivery that is waiting on the candidate can be marked.
+    expect(() => runInTx(t.db, h.bus, { now }, (tx) => markSubmittedByHand(tx, id))).toThrow(
+      /no delivery waiting on you/,
+    );
   });
 });

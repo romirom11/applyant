@@ -241,8 +241,11 @@ export function profileText(
     case 'phone_country':
       return { value: place.at(-1) ?? null, key: 'location' };
     case 'location': {
-      if (/\bcountry\b/i.test(spec.label)) return { value: place.at(-1) ?? null, key: 'location' };
-      if (/\bcity\b/i.test(spec.label)) return { value: place[0] ?? null, key: 'location' };
+      // "Location (city, country)" asks for both: the whole location, not one part of it.
+      const country = /\bcountry\b/i.test(spec.label);
+      const city = /\bcity\b/i.test(spec.label);
+      if (country && !city) return { value: place.at(-1) ?? null, key: 'location' };
+      if (city && !country) return { value: place[0] ?? null, key: 'location' };
       return { value: p.location, key: 'location' };
     }
     default: {

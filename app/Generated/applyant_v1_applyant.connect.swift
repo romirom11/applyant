@@ -147,6 +147,11 @@ public protocol Applyant_V1_ApplyantServiceClientInterface: Sendable {
     @available(iOS 13, *)
     func `submitApplication`(request: Applyant_V1_SubmitApplicationRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_SubmitApplicationResponse>
 
+    /// MarkSubmitted records that the candidate finished a hand-off in the browser and pressed
+    /// submit themselves: the application becomes APPLIED with a receipt of the prepared values.
+    @available(iOS 13, *)
+    func `markSubmitted`(request: Applyant_V1_MarkSubmittedRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_MarkSubmittedResponse>
+
     /// GetHandOff returns the most recent delivery hand-off still waiting on the candidate, if any.
     @available(iOS 13, *)
     func `getHandOff`(request: Applyant_V1_GetHandOffRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_GetHandOffResponse>
@@ -336,6 +341,11 @@ public final class Applyant_V1_ApplyantServiceClient: Applyant_V1_ApplyantServic
     }
 
     @available(iOS 13, *)
+    public func `markSubmitted`(request: Applyant_V1_MarkSubmittedRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_MarkSubmittedResponse> {
+        return await self.client.unary(path: "/applyant.v1.ApplyantService/MarkSubmitted", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
     public func `getHandOff`(request: Applyant_V1_GetHandOffRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_GetHandOffResponse> {
         return await self.client.unary(path: "/applyant.v1.ApplyantService/GetHandOff", idempotencyLevel: .unknown, request: request, headers: headers)
     }
@@ -385,6 +395,7 @@ public final class Applyant_V1_ApplyantServiceClient: Applyant_V1_ApplyantServic
             public static let editAnswer = Connect.MethodSpec(name: "EditAnswer", service: "applyant.v1.ApplyantService", type: .unary)
             public static let approveApplication = Connect.MethodSpec(name: "ApproveApplication", service: "applyant.v1.ApplyantService", type: .unary)
             public static let submitApplication = Connect.MethodSpec(name: "SubmitApplication", service: "applyant.v1.ApplyantService", type: .unary)
+            public static let markSubmitted = Connect.MethodSpec(name: "MarkSubmitted", service: "applyant.v1.ApplyantService", type: .unary)
             public static let getHandOff = Connect.MethodSpec(name: "GetHandOff", service: "applyant.v1.ApplyantService", type: .unary)
             public static let setCvMode = Connect.MethodSpec(name: "SetCvMode", service: "applyant.v1.ApplyantService", type: .unary)
             public static let editCv = Connect.MethodSpec(name: "EditCv", service: "applyant.v1.ApplyantService", type: .unary)

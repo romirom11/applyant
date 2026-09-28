@@ -99,16 +99,6 @@ export async function deliverForm(page: Page, o: DeliverFormOptions): Promise<De
   for (let i = 0; i < maxSteps; i++) {
     o.signal?.throwIfAborted();
     const step = i + 1;
-    const captcha = detectCaptcha(page);
-    if (captcha) {
-      return {
-        kind: 'handoff',
-        scope: 'captcha',
-        step,
-        fieldLabel: null,
-        reason: `a captcha (${captcha}) is on this step`,
-      };
-    }
     const snap = await snapshotForm(page);
     if (!snap) {
       return {
@@ -156,6 +146,19 @@ export async function deliverForm(page: Page, o: DeliverFormOptions): Promise<De
         step,
         fieldLabel: result.field.label,
         reason: `a required value is missing for "${result.field.label || result.field.kind}"`,
+      };
+    }
+
+    // A captcha is handed off only now, with the step filled: the candidate solves it and
+    // presses the button, nothing more.
+    const captcha = detectCaptcha(page);
+    if (captcha) {
+      return {
+        kind: 'handoff',
+        scope: 'captcha',
+        step,
+        fieldLabel: null,
+        reason: `a captcha (${captcha}) is on this step; everything else is filled`,
       };
     }
 

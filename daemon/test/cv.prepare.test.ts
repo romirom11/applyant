@@ -9,7 +9,11 @@ import { cvJson, cvLines, previewLines } from '../src/cli/applications.ts';
 import { cvs, facts } from '../src/db/schema.ts';
 import { CV_SYSTEM } from '../src/domain/applications/cv/select.ts';
 import { editCvLine, setCvMode } from '../src/domain/applications/cv/store.ts';
-import { ApprovalBlocked, approveApplication } from '../src/domain/applications/review.ts';
+import {
+  ApprovalBlocked,
+  approveApplication,
+  confirmApplicationFacts,
+} from '../src/domain/applications/review.ts';
 import {
   applicationView,
   ensureApplication,
@@ -250,6 +254,49 @@ describe('tailored CV in preparation', () => {
     tx((x) => requestPrepare(x, view(id).app, { rewrite: false, why: 'facts confirmed' }));
     await settle();
     expect(view(id).cv?.status).toBe('ready');
+    expect(cvRuns()).toHaveLength(1);
+  });
+
+  it('confirming the facts an answer relies on writes the CV that was skipped for lack of them', async () => {
+    const f = seedFacts(t.db, now);
+    t.db.update(facts).set({ status: 'unconfirmed' }).run();
+    const pid = seedPosting(
+      t.db,
+      form([
+        spec('Full name', 'text', { meaning: 'full_name', required: true }),
+        spec('Tell us about a system you built.', 'textarea', {
+          meaning: 'question',
+          required: true,
+        }),
+        spec('Resume', 'file', { meaning: 'resume', required: true }),
+      ]),
+      { now, matches: [{ text: 'Production Python', factIds: [f.pipeline] }] },
+    );
+    await start({
+      drafts: (qs) => [
+        {
+          question: qs[0]?.id ?? 'q1',
+          status: 'answered',
+          choice: null,
+          sentences: [
+            { text: 'At Harbor I built the Python call-analysis pipeline.', factIds: [f.pipeline] },
+          ],
+          missing: null,
+          adaptedFrom: null,
+        },
+      ],
+    });
+    const id = tx((x) => ensureApplication(x, pid, 'test').app.id);
+    await settle();
+    expect(view(id).cv).toMatchObject({ status: 'skipped', note: 'no confirmed facts yet' });
+
+    tx((x) => confirmApplicationFacts(x, id));
+    expect(view(id).app.stage).toBe('preparing');
+    await settle();
+    expect(view(id).cv?.status).toBe('ready');
+    expect(view(id).app.stage).toBe('ready_for_review');
+    expect(resume(id).value).not.toBe(base);
+    expect(resume(id).value).toMatch(/cv\/\d+-[0-9a-f]+\.pdf$/);
     expect(cvRuns()).toHaveLength(1);
   });
 

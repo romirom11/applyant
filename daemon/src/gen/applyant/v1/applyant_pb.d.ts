@@ -3216,6 +3216,38 @@ export declare type SubmitApplicationResponse = Message<"applyant.v1.SubmitAppli
 export declare const SubmitApplicationResponseSchema: GenMessage<SubmitApplicationResponse>;
 
 /**
+ * @generated from message applyant.v1.MarkSubmittedRequest
+ */
+export declare type MarkSubmittedRequest = Message<"applyant.v1.MarkSubmittedRequest"> & {
+  /**
+   * @generated from field: int64 application_id = 1;
+   */
+  applicationId: bigint;
+};
+
+/**
+ * Describes the message applyant.v1.MarkSubmittedRequest.
+ * Use `create(MarkSubmittedRequestSchema)` to create a new message.
+ */
+export declare const MarkSubmittedRequestSchema: GenMessage<MarkSubmittedRequest>;
+
+/**
+ * @generated from message applyant.v1.MarkSubmittedResponse
+ */
+export declare type MarkSubmittedResponse = Message<"applyant.v1.MarkSubmittedResponse"> & {
+  /**
+   * @generated from field: applyant.v1.Application application = 1;
+   */
+  application?: Application | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.MarkSubmittedResponse.
+ * Use `create(MarkSubmittedResponseSchema)` to create a new message.
+ */
+export declare const MarkSubmittedResponseSchema: GenMessage<MarkSubmittedResponse>;
+
+/**
  * @generated from message applyant.v1.GetHandOffRequest
  */
 export declare type GetHandOffRequest = Message<"applyant.v1.GetHandOffRequest"> & {
@@ -3888,6 +3920,17 @@ export declare const ApplyantService: GenService<{
     methodKind: "unary";
     input: typeof SubmitApplicationRequestSchema;
     output: typeof SubmitApplicationResponseSchema;
+  },
+  /**
+   * MarkSubmitted records that the candidate finished a hand-off in the browser and pressed
+   * submit themselves: the application becomes APPLIED with a receipt of the prepared values.
+   *
+   * @generated from rpc applyant.v1.ApplyantService.MarkSubmitted
+   */
+  markSubmitted: {
+    methodKind: "unary";
+    input: typeof MarkSubmittedRequestSchema;
+    output: typeof MarkSubmittedResponseSchema;
   },
   /**
    * GetHandOff returns the most recent delivery hand-off still waiting on the candidate, if any.

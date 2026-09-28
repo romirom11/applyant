@@ -180,7 +180,8 @@ public enum Score {
     public static func mainDeviation(_ p: Posting) -> String? {
         if let dealbreaker = p.dealbreakers.first { return "Dealbreaker: \(dealbreaker)" }
         let lossy = p.breakdown
-            .filter { $0.weight > 0 && !$0.uncertain && $0.hasNote && $0.value < 1 && $0.key != "must" }
+            // Must-haves and nice-to-haves are the score itself, not a deviation to flag.
+            .filter { $0.weight > 0 && !$0.uncertain && $0.hasNote && $0.value < 1 && $0.key != "must" && $0.key != "nice" }
             .max { lost($0) < lost($1) }
         guard let c = lossy, lost(c) >= 2 else { return nil }
         return c.note

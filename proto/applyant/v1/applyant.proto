@@ -81,6 +81,9 @@ service ApplyantService {
   // SubmitApplication approves the application if it isn't yet (same refusal rules), then
   // (re-)enqueues delivery either way: also how to retry a delivery stuck on a hand-off.
   rpc SubmitApplication(SubmitApplicationRequest) returns (SubmitApplicationResponse);
+  // MarkSubmitted records that the candidate finished a hand-off in the browser and pressed
+  // submit themselves: the application becomes APPLIED with a receipt of the prepared values.
+  rpc MarkSubmitted(MarkSubmittedRequest) returns (MarkSubmittedResponse);
   // GetHandOff returns the most recent delivery hand-off still waiting on the candidate, if any.
   rpc GetHandOff(GetHandOffRequest) returns (GetHandOffResponse);
   // SetCvMode sends the tailored CV (the default) or the profile's base CV for one application.
@@ -955,6 +958,14 @@ message SubmitApplicationRequest {
 }
 
 message SubmitApplicationResponse {
+  Application application = 1;
+}
+
+message MarkSubmittedRequest {
+  int64 application_id = 1;
+}
+
+message MarkSubmittedResponse {
   Application application = 1;
 }
 

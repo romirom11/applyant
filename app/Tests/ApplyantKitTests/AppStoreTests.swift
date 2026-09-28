@@ -76,6 +76,12 @@ final class FakeDaemon: DaemonAPI, @unchecked Sendable {
         return applications[id]!
     }
     func submit(application id: Int64) async throws -> Application { throw APIError("unused") }
+    func markSubmitted(application id: Int64) async throws -> Application {
+        log("markSubmitted \(id)")
+        applications[id]?.stage = .applied
+        applications[id]?.clearHandOff()
+        return applications[id]!
+    }
 }
 
 /// Hands out the daemons in order; nil (daemon down) once they run out.
@@ -217,6 +223,12 @@ func eventually(_ what: String, timeout: Duration = .seconds(3), _ condition: ()
         #expect(notes.last?.kind == .handOff)
         #expect(store.needsYou.map(\.id) == [9])
         #expect(store.items(.applied).first?.chips.first?.text == "Finish in browser")
+
+        // The candidate finishes it in the browser and says so.
+        await store.markSubmitted(application: 9)
+        #expect(daemon.calls.contains("markSubmitted 9"))
+        #expect(store.needsYou.isEmpty)
+        #expect(store.items(.applied).first?.chips.first?.text == "Applied")
     }
 
     @Test func approveStaysOffWhileAnythingBlocksIt() async throws {

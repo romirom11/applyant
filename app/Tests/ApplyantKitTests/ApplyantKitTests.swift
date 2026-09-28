@@ -129,6 +129,13 @@ final class Box<T>: @unchecked Sendable {
             "codex: ✗ not found",
             "Secrets: keychain · native helper ✓",
         ])
+        var codex = status.codex
+        codex.found = true
+        codex.signedIn = true
+        codex.error = ""
+        codex.version = "codex-cli 0.157.1"
+        codex.path = "/nvm/bin/codex"
+        #expect(StatusView.tool("codex", codex) == "codex: ✓ 0.157.1 · /nvm/bin/codex")
         var signedOut = status
         signedOut.claude.signedIn = false
         #expect(StatusView(.running(signedOut)).health == .warning)

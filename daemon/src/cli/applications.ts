@@ -673,6 +673,15 @@ export function registerApplications(program: Command, client: () => ApplyantCli
     });
 
   apps
+    .command('mark-submitted <id>')
+    .description('you finished a hand-off in the browser and pressed submit: record it as applied')
+    .action(async (idArg: string) => {
+      const res = await client().markSubmitted({ applicationId: BigInt(positiveInt(idArg)) });
+      const a = res.application;
+      out(`Application ${a?.id}: applied (submitted by you in the browser).`);
+    });
+
+  apps
     .command('submit <id>')
     .description(
       'approve (if needed) and deliver: same refusal rules as approve; also retries a delivery stuck on a hand-off',

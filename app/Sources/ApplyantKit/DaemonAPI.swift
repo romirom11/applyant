@@ -43,6 +43,8 @@ public protocol DaemonAPI: Sendable {
     func approve(application id: Int64) async throws -> Application
     /// Approve if needed and deliver, or retry a delivery that got stuck.
     func submit(application id: Int64) async throws -> Application
+    /// The candidate finished a hand-off in the browser and pressed submit themselves.
+    func markSubmitted(application id: Int64) async throws -> Application
 }
 
 /// Unary answers → value or APIError.
@@ -197,6 +199,10 @@ public final class ConnectDaemonAPI: DaemonAPI {
 
     public func submit(application id: Int64) async throws -> Application {
         try unwrap(await unary.submitApplication(request: .with { $0.id = id }, headers: headers)).application
+    }
+
+    public func markSubmitted(application id: Int64) async throws -> Application {
+        try unwrap(await unary.markSubmitted(request: .with { $0.applicationID = id }, headers: headers)).application
     }
 }
 

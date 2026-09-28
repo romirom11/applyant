@@ -11,7 +11,7 @@ struct MainView: View {
                 .navigationSplitViewColumnWidth(min: 190, ideal: 210)
         } content: {
             PostingList(store: store)
-                .navigationSplitViewColumnWidth(min: 300, ideal: 360)
+                .navigationSplitViewColumnWidth(min: 280, ideal: 330)
         } detail: {
             Detail(store: store)
         }

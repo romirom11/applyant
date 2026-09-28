@@ -77,6 +77,11 @@ export class NativeTextExtractor implements TextExtractor {
         );
         // A PDF without a text layer reads as blank here; pdfjs gets the same chance.
         if (got.pages.some((p) => p.trim() !== '')) {
+          this.log.info('document read', {
+            path,
+            reader: 'applyant-native',
+            pages: got.pages.length,
+          });
           return { format, pages: got.pages.map((p) => p.trim()), title: got.title ?? null };
         }
         this.log.info('applyant-native found no text; trying the Node reader', { path });
@@ -87,7 +92,9 @@ export class NativeTextExtractor implements TextExtractor {
         });
       }
     }
-    return this.fallback.extract(path);
+    const read = await this.fallback.extract(path);
+    this.log.info('document read', { path, reader: 'node', pages: read.pages.length });
+    return read;
   }
 }
 
