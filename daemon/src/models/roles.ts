@@ -16,6 +16,8 @@ export const ROLES = [
   'researcher',
   'application_writer',
   'claim_verifier',
+  // The agent interview (phase 9): answers → facts, and the next question.
+  'interviewer',
   'email_classify',
 ] as const;
 export type Role = (typeof ROLES)[number];
@@ -49,6 +51,7 @@ export const DEFAULT_ROLES: Record<Role, RoleConfig> = {
   researcher: { route: r('codex'), minConfidence: null, timeoutMs: 20 * MIN },
   application_writer: { route: r('claude', 'opus'), minConfidence: null, timeoutMs: 15 * MIN },
   claim_verifier: { route: r('claude', 'haiku'), minConfidence: null, timeoutMs: 5 * MIN },
+  interviewer: { route: r('claude', 'sonnet'), minConfidence: null, timeoutMs: 5 * MIN },
   // On-device; never falls back to a cloud model unless the candidate routes it there.
   email_classify: { route: r('apple'), minConfidence: 0.7, timeoutMs: MIN },
 };
@@ -104,6 +107,9 @@ export const TASK_ROLE: Partial<Record<string, Role>> = {
   prepare_application: 'application_writer',
   // Deterministic filling handles most of the form; form_agent only escalates for what it can't.
   deliver_application: 'form_agent',
+  // The agent interview: the first question about a project, and each answer → facts + next.
+  interview_open: 'interviewer',
+  interview_turn: 'interviewer',
 };
 
 /**

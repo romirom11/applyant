@@ -111,6 +111,32 @@ public protocol Applyant_V1_ApplyantServiceClientInterface: Sendable {
     @available(iOS 13, *)
     func `rejectFact`(request: Applyant_V1_RejectFactRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_RejectFactResponse>
 
+    /// The agent interview: questions about each project's gaps (own role, what the candidate
+    /// built, team, impact), and the facts applications found missing. Answers become confirmed
+    /// facts; an answered application question prepares its application again.
+    /// ListInterview returns what waits on the candidate (or every question) and each project's gaps.
+    @available(iOS 13, *)
+    func `listInterview`(request: Applyant_V1_ListInterviewRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_ListInterviewResponse>
+
+    /// GetInterview returns one thread: a project's interview, or an application question's.
+    @available(iOS 13, *)
+    func `getInterview`(request: Applyant_V1_GetInterviewRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_GetInterviewResponse>
+
+    /// StartInterview returns the open question for a project (or, with no project, whatever is
+    /// next), or asks the interviewer for one (`pending`; an `interview` event follows).
+    @available(iOS 13, *)
+    func `startInterview`(request: Applyant_V1_StartInterviewRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_StartInterviewResponse>
+
+    /// AnswerInterviewQuestion stores the candidate's answer; the interviewer then saves its facts
+    /// and may ask a follow-up (`interview` events follow).
+    @available(iOS 13, *)
+    func `answerInterviewQuestion`(request: Applyant_V1_AnswerInterviewQuestionRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_AnswerInterviewQuestionResponse>
+
+    /// DismissInterviewQuestion: "later". An application question is then left to the candidate
+    /// to answer in review.
+    @available(iOS 13, *)
+    func `dismissInterviewQuestion`(request: Applyant_V1_DismissInterviewQuestionRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_DismissInterviewQuestionResponse>
+
     /// Applications: one per posting, prepared for its real form, reviewed, then approved.
     @available(iOS 13, *)
     func `listApplications`(request: Applyant_V1_ListApplicationsRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_ListApplicationsResponse>
@@ -306,6 +332,31 @@ public final class Applyant_V1_ApplyantServiceClient: Applyant_V1_ApplyantServic
     }
 
     @available(iOS 13, *)
+    public func `listInterview`(request: Applyant_V1_ListInterviewRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_ListInterviewResponse> {
+        return await self.client.unary(path: "/applyant.v1.ApplyantService/ListInterview", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
+    public func `getInterview`(request: Applyant_V1_GetInterviewRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_GetInterviewResponse> {
+        return await self.client.unary(path: "/applyant.v1.ApplyantService/GetInterview", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
+    public func `startInterview`(request: Applyant_V1_StartInterviewRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_StartInterviewResponse> {
+        return await self.client.unary(path: "/applyant.v1.ApplyantService/StartInterview", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
+    public func `answerInterviewQuestion`(request: Applyant_V1_AnswerInterviewQuestionRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_AnswerInterviewQuestionResponse> {
+        return await self.client.unary(path: "/applyant.v1.ApplyantService/AnswerInterviewQuestion", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
+    public func `dismissInterviewQuestion`(request: Applyant_V1_DismissInterviewQuestionRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_DismissInterviewQuestionResponse> {
+        return await self.client.unary(path: "/applyant.v1.ApplyantService/DismissInterviewQuestion", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
     public func `listApplications`(request: Applyant_V1_ListApplicationsRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_ListApplicationsResponse> {
         return await self.client.unary(path: "/applyant.v1.ApplyantService/ListApplications", idempotencyLevel: .unknown, request: request, headers: headers)
     }
@@ -388,6 +439,11 @@ public final class Applyant_V1_ApplyantServiceClient: Applyant_V1_ApplyantServic
             public static let confirmFact = Connect.MethodSpec(name: "ConfirmFact", service: "applyant.v1.ApplyantService", type: .unary)
             public static let editFact = Connect.MethodSpec(name: "EditFact", service: "applyant.v1.ApplyantService", type: .unary)
             public static let rejectFact = Connect.MethodSpec(name: "RejectFact", service: "applyant.v1.ApplyantService", type: .unary)
+            public static let listInterview = Connect.MethodSpec(name: "ListInterview", service: "applyant.v1.ApplyantService", type: .unary)
+            public static let getInterview = Connect.MethodSpec(name: "GetInterview", service: "applyant.v1.ApplyantService", type: .unary)
+            public static let startInterview = Connect.MethodSpec(name: "StartInterview", service: "applyant.v1.ApplyantService", type: .unary)
+            public static let answerInterviewQuestion = Connect.MethodSpec(name: "AnswerInterviewQuestion", service: "applyant.v1.ApplyantService", type: .unary)
+            public static let dismissInterviewQuestion = Connect.MethodSpec(name: "DismissInterviewQuestion", service: "applyant.v1.ApplyantService", type: .unary)
             public static let listApplications = Connect.MethodSpec(name: "ListApplications", service: "applyant.v1.ApplyantService", type: .unary)
             public static let getApplication = Connect.MethodSpec(name: "GetApplication", service: "applyant.v1.ApplyantService", type: .unary)
             public static let prepareApplication = Connect.MethodSpec(name: "PrepareApplication", service: "applyant.v1.ApplyantService", type: .unary)

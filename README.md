@@ -79,6 +79,17 @@ pnpm -C daemon cli candidate fact confirm <id…>                       # or: fa
 pnpm -C daemon cli candidate sync [project | profile | github] [--force]
 ```
 
+The agent interview fills in what sources can't show (your own role, what you built, the team,
+the results) and asks for facts an application found missing. Answers are saved as confirmed
+facts; an answered application question prepares its application again:
+
+```sh
+pnpm -C daemon cli interview list                     # questions waiting for you, and each project's gaps
+pnpm -C daemon cli candidate interview [project]      # a chat in the terminal (:skip, :quit)
+pnpm -C daemon cli interview show <project | question id>
+pnpm -C daemon cli interview answer <id> "<text>"  ·  interview dismiss <id>
+```
+
 Scoring: a verified posting keeps its text and gets an explained 0–100 score. The `extractor`
 reads its requirements, salary, location and so on once; the `matcher` judges each requirement
 against facts found by hybrid retrieval (FTS5 + EmbeddingGemma vectors); the number itself comes

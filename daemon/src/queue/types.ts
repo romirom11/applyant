@@ -17,6 +17,10 @@ export const TASK_ENTITY = {
   // Fills and submits the real form through its channel, phase 6.
   deliver_application: 'application',
   sync_source: 'source',
+  // The agent interview (phase 9): the first question about a project…
+  interview_open: 'project',
+  // …and the candidate's answer to one question → facts and the next question.
+  interview_turn: 'interview_question',
   // The fact vector index as a whole: entity_id is always 0.
   embed_facts: 'index',
 } as const;

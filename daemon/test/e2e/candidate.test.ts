@@ -43,6 +43,25 @@ function cli(args: string[]): Promise<{ code: number; stdout: string; stderr: st
   });
 }
 
+/** `applyant …` with `input` piped to its stdin. */
+function cliInput(
+  args: string[],
+  input: string,
+): Promise<{ code: number; stdout: string; stderr: string }> {
+  return new Promise((resolve) => {
+    const child = execFile(
+      process.execPath,
+      ['src/cli/index.ts', ...args],
+      { cwd: DAEMON_DIR, env: env(), timeout: 30_000 },
+      (err, stdout, stderr) => {
+        const code = err ? ((err as { code?: number }).code ?? 1) : 0;
+        resolve({ code: typeof code === 'number' ? code : 1, stdout, stderr });
+      },
+    );
+    child.stdin?.end(input);
+  });
+}
+
 async function cliJson<T>(args: string[]): Promise<T> {
   const res = await cli([...args, '--json']);
   if (res.code !== 0) throw new Error(`applyant ${args.join(' ')} failed: ${res.stderr}`);
@@ -313,6 +332,62 @@ describe('applyant candidate', () => {
     expect(sync1.slice(0, 2)).toEqual(['queued', 'started']);
     expect(events.some((e) => /extractor · claude:sonnet · started/.test(e.message))).toBe(true);
     expect(events.some((e) => /^source \d+: 5 new facts/.test(e.message))).toBe(true);
+  });
+
+  it('interviews the candidate about a project in the terminal', async () => {
+    const list = await cliJson<{
+      questions: unknown[];
+      projects: Array<{ project: string; gaps: string[]; asked: number }>;
+    }>(['interview', 'list']);
+    expect(list.questions).toEqual([]);
+    // Ledgerly: its only contribution fact was rejected; its role and team are stated.
+    expect(list.projects.find((p) => p.project === 'ledgerly')).toMatchObject({
+      gaps: ['personal_contribution', 'impact'],
+      asked: 0,
+    });
+
+    // The fake interviewer asks one question, and the same one again after the answer (which
+    // is dropped: a question is never asked twice), so the chat ends there.
+    const output = join(home, 'fake-claude-output.json');
+    const cv = readFileSync(output, 'utf8');
+    writeFileSync(
+      output,
+      JSON.stringify({
+        facts: [],
+        question: 'Which part of Ledgerly did you build yourself?',
+        about: 'personal contribution',
+      }),
+    );
+    try {
+      const chat = await cliInput(
+        ['candidate', 'interview', 'ledgerly'],
+        'The payouts API, alone.\n',
+      );
+      expect(chat.stderr).toBe('');
+      expect(chat.code).toBe(0);
+      expect(chat.stdout).toContain('── Ledgerly · question');
+      expect(chat.stdout).toContain('(about: personal contribution)');
+      expect(chat.stdout).toContain('> The payouts API, alone.');
+      expect(chat.stdout).toContain('nothing saved from this answer');
+      expect(chat.stdout).toContain('nothing more to ask about Ledgerly for now');
+    } finally {
+      writeFileSync(output, cv);
+    }
+    const shown = await cliJson<Array<{ status: string; answer: string; origin: string }>>([
+      'interview',
+      'show',
+      'ledgerly',
+    ]);
+    expect(shown).toEqual([
+      expect.objectContaining({
+        status: 'answered',
+        answer: 'The payouts API, alone.',
+        origin: 'project',
+      }),
+    ]);
+    const human = await cli(['interview', 'list']);
+    expect(human.stdout).toMatch(/^No questions waiting for you\.$/m);
+    expect(human.stdout).toMatch(/^ {2}ledgerly: personal contribution, impact · 1 asked$/m);
   });
 
   it('reports bad input clearly', async () => {

@@ -1114,6 +1114,33 @@ export declare type HandOffEvent = Message<"applyant.v1.HandOffEvent"> & {
 export declare const HandOffEventSchema: GenMessage<HandOffEvent>;
 
 /**
+ * A question was asked, an answer read, or the interviewer has nothing more to ask.
+ *
+ * @generated from message applyant.v1.InterviewEvent
+ */
+export declare type InterviewEvent = Message<"applyant.v1.InterviewEvent"> & {
+  /**
+   * Unset when an interview couldn't start.
+   *
+   * @generated from field: optional int64 question_id = 1;
+   */
+  questionId?: bigint | undefined;
+
+  /**
+   * open | processing | answered | dismissed | done (nothing more to ask) | failed
+   *
+   * @generated from field: string status = 2;
+   */
+  status: string;
+};
+
+/**
+ * Describes the message applyant.v1.InterviewEvent.
+ * Use `create(InterviewEventSchema)` to create a new message.
+ */
+export declare const InterviewEventSchema: GenMessage<InterviewEvent>;
+
+/**
  * @generated from message applyant.v1.Event
  */
 export declare type Event = Message<"applyant.v1.Event"> & {
@@ -1166,6 +1193,12 @@ export declare type Event = Message<"applyant.v1.Event"> & {
      */
     value: HandOffEvent;
     case: "handoff";
+  } | {
+    /**
+     * @generated from field: applyant.v1.InterviewEvent interview = 14;
+     */
+    value: InterviewEvent;
+    case: "interview";
   } | { case: undefined; value?: undefined };
 };
 
@@ -2202,6 +2235,394 @@ export declare type RejectFactResponse = Message<"applyant.v1.RejectFactResponse
 export declare const RejectFactResponseSchema: GenMessage<RejectFactResponse>;
 
 /**
+ * @generated from message applyant.v1.InterviewQuestion
+ */
+export declare type InterviewQuestion = Message<"applyant.v1.InterviewQuestion"> & {
+  /**
+   * @generated from field: int64 id = 1;
+   */
+  id: bigint;
+
+  /**
+   * The project a project interview is about (unset for an application question).
+   *
+   * @generated from field: optional int64 project_id = 2;
+   */
+  projectId?: bigint | undefined;
+
+  /**
+   * @generated from field: optional string project_slug = 3;
+   */
+  projectSlug?: string | undefined;
+
+  /**
+   * @generated from field: optional string project_name = 4;
+   */
+  projectName?: string | undefined;
+
+  /**
+   * An application question: the application, its job ("Acme AI · Senior AI Engineer") and
+   * the form question's field ref.
+   *
+   * @generated from field: optional int64 application_id = 5;
+   */
+  applicationId?: bigint | undefined;
+
+  /**
+   * @generated from field: optional string application = 6;
+   */
+  application?: string | undefined;
+
+  /**
+   * @generated from field: optional string field_ref = 7;
+   */
+  fieldRef?: string | undefined;
+
+  /**
+   * @generated from field: string text = 8;
+   */
+  text: string;
+
+  /**
+   * Why it's asked: the gap, or for an application question what's missing.
+   *
+   * @generated from field: optional string context = 9;
+   */
+  context?: string | undefined;
+
+  /**
+   * open | processing (answered, being read) | answered | dismissed
+   *
+   * @generated from field: string status = 10;
+   */
+  status: string;
+
+  /**
+   * project (opens a project's interview) | follow_up | application
+   *
+   * @generated from field: string origin = 11;
+   */
+  origin: string;
+
+  /**
+   * What reading the answer gave, or why it failed.
+   *
+   * @generated from field: optional string note = 12;
+   */
+  note?: string | undefined;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp created_at = 13;
+   */
+  createdAt?: Timestamp | undefined;
+
+  /**
+   * @generated from field: optional google.protobuf.Timestamp answered_at = 14;
+   */
+  answeredAt?: Timestamp | undefined;
+
+  /**
+   * The candidate's answer.
+   *
+   * @generated from field: optional string answer = 15;
+   */
+  answer?: string | undefined;
+
+  /**
+   * Facts saved from the answer.
+   *
+   * @generated from field: repeated applyant.v1.Fact facts = 16;
+   */
+  facts: Fact[];
+};
+
+/**
+ * Describes the message applyant.v1.InterviewQuestion.
+ * Use `create(InterviewQuestionSchema)` to create a new message.
+ */
+export declare const InterviewQuestionSchema: GenMessage<InterviewQuestion>;
+
+/**
+ * @generated from message applyant.v1.ProjectInterview
+ */
+export declare type ProjectInterview = Message<"applyant.v1.ProjectInterview"> & {
+  /**
+   * @generated from field: applyant.v1.Project project = 1;
+   */
+  project?: Project | undefined;
+
+  /**
+   * What its facts don't show yet: personal_contribution | role | team | impact.
+   *
+   * @generated from field: repeated string gaps = 2;
+   */
+  gaps: string[];
+
+  /**
+   * Human-readable gaps, same order ("what the candidate personally built or did").
+   *
+   * @generated from field: repeated string gap_labels = 3;
+   */
+  gapLabels: string[];
+
+  /**
+   * Questions waiting on the candidate.
+   *
+   * @generated from field: int32 open = 4;
+   */
+  open: number;
+
+  /**
+   * Questions asked so far.
+   *
+   * @generated from field: int32 asked = 5;
+   */
+  asked: number;
+
+  /**
+   * The interviewer is writing a question or reading an answer about it.
+   *
+   * @generated from field: bool busy = 6;
+   */
+  busy: boolean;
+};
+
+/**
+ * Describes the message applyant.v1.ProjectInterview.
+ * Use `create(ProjectInterviewSchema)` to create a new message.
+ */
+export declare const ProjectInterviewSchema: GenMessage<ProjectInterview>;
+
+/**
+ * @generated from message applyant.v1.ListInterviewRequest
+ */
+export declare type ListInterviewRequest = Message<"applyant.v1.ListInterviewRequest"> & {
+  /**
+   * Every question, not only the open and processing ones.
+   *
+   * @generated from field: bool all = 1;
+   */
+  all: boolean;
+};
+
+/**
+ * Describes the message applyant.v1.ListInterviewRequest.
+ * Use `create(ListInterviewRequestSchema)` to create a new message.
+ */
+export declare const ListInterviewRequestSchema: GenMessage<ListInterviewRequest>;
+
+/**
+ * @generated from message applyant.v1.ListInterviewResponse
+ */
+export declare type ListInterviewResponse = Message<"applyant.v1.ListInterviewResponse"> & {
+  /**
+   * Application questions first, then project questions, oldest first.
+   *
+   * @generated from field: repeated applyant.v1.InterviewQuestion questions = 1;
+   */
+  questions: InterviewQuestion[];
+
+  /**
+   * @generated from field: repeated applyant.v1.ProjectInterview projects = 2;
+   */
+  projects: ProjectInterview[];
+};
+
+/**
+ * Describes the message applyant.v1.ListInterviewResponse.
+ * Use `create(ListInterviewResponseSchema)` to create a new message.
+ */
+export declare const ListInterviewResponseSchema: GenMessage<ListInterviewResponse>;
+
+/**
+ * @generated from message applyant.v1.GetInterviewRequest
+ */
+export declare type GetInterviewRequest = Message<"applyant.v1.GetInterviewRequest"> & {
+  /**
+   * @generated from oneof applyant.v1.GetInterviewRequest.target
+   */
+  target: {
+    /**
+     * Project id, slug or name.
+     *
+     * @generated from field: string project = 1;
+     */
+    value: string;
+    case: "project";
+  } | {
+    /**
+     * Any question of the thread.
+     *
+     * @generated from field: int64 question_id = 2;
+     */
+    value: bigint;
+    case: "questionId";
+  } | { case: undefined; value?: undefined };
+};
+
+/**
+ * Describes the message applyant.v1.GetInterviewRequest.
+ * Use `create(GetInterviewRequestSchema)` to create a new message.
+ */
+export declare const GetInterviewRequestSchema: GenMessage<GetInterviewRequest>;
+
+/**
+ * @generated from message applyant.v1.GetInterviewResponse
+ */
+export declare type GetInterviewResponse = Message<"applyant.v1.GetInterviewResponse"> & {
+  /**
+   * The thread, oldest first, each question with its answer and saved facts.
+   *
+   * @generated from field: repeated applyant.v1.InterviewQuestion questions = 1;
+   */
+  questions: InterviewQuestion[];
+
+  /**
+   * Set for a project's interview.
+   *
+   * @generated from field: optional applyant.v1.ProjectInterview project = 2;
+   */
+  project?: ProjectInterview | undefined;
+
+  /**
+   * The interviewer is working on this thread.
+   *
+   * @generated from field: bool pending = 3;
+   */
+  pending: boolean;
+};
+
+/**
+ * Describes the message applyant.v1.GetInterviewResponse.
+ * Use `create(GetInterviewResponseSchema)` to create a new message.
+ */
+export declare const GetInterviewResponseSchema: GenMessage<GetInterviewResponse>;
+
+/**
+ * @generated from message applyant.v1.StartInterviewRequest
+ */
+export declare type StartInterviewRequest = Message<"applyant.v1.StartInterviewRequest"> & {
+  /**
+   * Project id, slug or name; empty: whatever is next.
+   *
+   * @generated from field: string project = 1;
+   */
+  project: string;
+};
+
+/**
+ * Describes the message applyant.v1.StartInterviewRequest.
+ * Use `create(StartInterviewRequestSchema)` to create a new message.
+ */
+export declare const StartInterviewRequestSchema: GenMessage<StartInterviewRequest>;
+
+/**
+ * @generated from message applyant.v1.StartInterviewResponse
+ */
+export declare type StartInterviewResponse = Message<"applyant.v1.StartInterviewResponse"> & {
+  /**
+   * The question waiting for the candidate.
+   *
+   * @generated from field: optional applyant.v1.InterviewQuestion question = 1;
+   */
+  question?: InterviewQuestion | undefined;
+
+  /**
+   * The interviewer is writing one (or reading the last answer); an `interview` event follows.
+   *
+   * @generated from field: bool pending = 2;
+   */
+  pending: boolean;
+
+  /**
+   * @generated from field: optional int64 project_id = 3;
+   */
+  projectId?: bigint | undefined;
+
+  /**
+   * "Nothing to ask …" or what is pending.
+   *
+   * @generated from field: string message = 4;
+   */
+  message: string;
+};
+
+/**
+ * Describes the message applyant.v1.StartInterviewResponse.
+ * Use `create(StartInterviewResponseSchema)` to create a new message.
+ */
+export declare const StartInterviewResponseSchema: GenMessage<StartInterviewResponse>;
+
+/**
+ * @generated from message applyant.v1.AnswerInterviewQuestionRequest
+ */
+export declare type AnswerInterviewQuestionRequest = Message<"applyant.v1.AnswerInterviewQuestionRequest"> & {
+  /**
+   * @generated from field: int64 id = 1;
+   */
+  id: bigint;
+
+  /**
+   * @generated from field: string text = 2;
+   */
+  text: string;
+};
+
+/**
+ * Describes the message applyant.v1.AnswerInterviewQuestionRequest.
+ * Use `create(AnswerInterviewQuestionRequestSchema)` to create a new message.
+ */
+export declare const AnswerInterviewQuestionRequestSchema: GenMessage<AnswerInterviewQuestionRequest>;
+
+/**
+ * @generated from message applyant.v1.AnswerInterviewQuestionResponse
+ */
+export declare type AnswerInterviewQuestionResponse = Message<"applyant.v1.AnswerInterviewQuestionResponse"> & {
+  /**
+   * @generated from field: applyant.v1.InterviewQuestion question = 1;
+   */
+  question?: InterviewQuestion | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.AnswerInterviewQuestionResponse.
+ * Use `create(AnswerInterviewQuestionResponseSchema)` to create a new message.
+ */
+export declare const AnswerInterviewQuestionResponseSchema: GenMessage<AnswerInterviewQuestionResponse>;
+
+/**
+ * @generated from message applyant.v1.DismissInterviewQuestionRequest
+ */
+export declare type DismissInterviewQuestionRequest = Message<"applyant.v1.DismissInterviewQuestionRequest"> & {
+  /**
+   * @generated from field: int64 id = 1;
+   */
+  id: bigint;
+};
+
+/**
+ * Describes the message applyant.v1.DismissInterviewQuestionRequest.
+ * Use `create(DismissInterviewQuestionRequestSchema)` to create a new message.
+ */
+export declare const DismissInterviewQuestionRequestSchema: GenMessage<DismissInterviewQuestionRequest>;
+
+/**
+ * @generated from message applyant.v1.DismissInterviewQuestionResponse
+ */
+export declare type DismissInterviewQuestionResponse = Message<"applyant.v1.DismissInterviewQuestionResponse"> & {
+  /**
+   * @generated from field: applyant.v1.InterviewQuestion question = 1;
+   */
+  question?: InterviewQuestion | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.DismissInterviewQuestionResponse.
+ * Use `create(DismissInterviewQuestionResponseSchema)` to create a new message.
+ */
+export declare const DismissInterviewQuestionResponseSchema: GenMessage<DismissInterviewQuestionResponse>;
+
+/**
  * @generated from message applyant.v1.ApplicationField
  */
 export declare type ApplicationField = Message<"applyant.v1.ApplicationField"> & {
@@ -2458,6 +2879,13 @@ export declare type Answer = Message<"applyant.v1.Answer"> & {
    * @generated from field: repeated applyant.v1.AnswerSentence sentences = 13;
    */
   sentences: AnswerSentence[];
+
+  /**
+   * needs_candidate: the interview question asking the candidate for it (open or being read).
+   *
+   * @generated from field: optional int64 interview_question_id = 14;
+   */
+  interviewQuestionId?: bigint | undefined;
 };
 
 /**
@@ -3842,6 +4270,62 @@ export declare const ApplyantService: GenService<{
     methodKind: "unary";
     input: typeof RejectFactRequestSchema;
     output: typeof RejectFactResponseSchema;
+  },
+  /**
+   * The agent interview: questions about each project's gaps (own role, what the candidate
+   * built, team, impact), and the facts applications found missing. Answers become confirmed
+   * facts; an answered application question prepares its application again.
+   * ListInterview returns what waits on the candidate (or every question) and each project's gaps.
+   *
+   * @generated from rpc applyant.v1.ApplyantService.ListInterview
+   */
+  listInterview: {
+    methodKind: "unary";
+    input: typeof ListInterviewRequestSchema;
+    output: typeof ListInterviewResponseSchema;
+  },
+  /**
+   * GetInterview returns one thread: a project's interview, or an application question's.
+   *
+   * @generated from rpc applyant.v1.ApplyantService.GetInterview
+   */
+  getInterview: {
+    methodKind: "unary";
+    input: typeof GetInterviewRequestSchema;
+    output: typeof GetInterviewResponseSchema;
+  },
+  /**
+   * StartInterview returns the open question for a project (or, with no project, whatever is
+   * next), or asks the interviewer for one (`pending`; an `interview` event follows).
+   *
+   * @generated from rpc applyant.v1.ApplyantService.StartInterview
+   */
+  startInterview: {
+    methodKind: "unary";
+    input: typeof StartInterviewRequestSchema;
+    output: typeof StartInterviewResponseSchema;
+  },
+  /**
+   * AnswerInterviewQuestion stores the candidate's answer; the interviewer then saves its facts
+   * and may ask a follow-up (`interview` events follow).
+   *
+   * @generated from rpc applyant.v1.ApplyantService.AnswerInterviewQuestion
+   */
+  answerInterviewQuestion: {
+    methodKind: "unary";
+    input: typeof AnswerInterviewQuestionRequestSchema;
+    output: typeof AnswerInterviewQuestionResponseSchema;
+  },
+  /**
+   * DismissInterviewQuestion: "later". An application question is then left to the candidate
+   * to answer in review.
+   *
+   * @generated from rpc applyant.v1.ApplyantService.DismissInterviewQuestion
+   */
+  dismissInterviewQuestion: {
+    methodKind: "unary";
+    input: typeof DismissInterviewQuestionRequestSchema;
+    output: typeof DismissInterviewQuestionResponseSchema;
   },
   /**
    * Applications: one per posting, prepared for its real form, reviewed, then approved.

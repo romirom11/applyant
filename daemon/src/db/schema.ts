@@ -508,6 +508,78 @@ export const cvs = sqliteTable('cvs', {
   updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull().default(now),
 });
 
+// ---- The interview ---------------------------------------------------------------------
+
+/**
+ * open: waiting for the candidate · processing: answered, the interviewer is turning the
+ * answer into facts (and the next question) · answered: done · dismissed: "later" / not asked.
+ */
+export const INTERVIEW_STATUSES = ['open', 'processing', 'answered', 'dismissed'] as const;
+export type InterviewStatus = (typeof INTERVIEW_STATUSES)[number];
+/** project: opens a project's interview · follow_up: asked after an answer · application: a fact
+ * an application's preparation found missing. */
+export const INTERVIEW_ORIGINS = ['project', 'follow_up', 'application'] as const;
+export type InterviewOrigin = (typeof INTERVIEW_ORIGINS)[number];
+
+/**
+ * One question to the candidate. A project interview asks about one project's gaps (role,
+ * personal contribution, team, impact); an application question asks for a fact preparation
+ * found missing (`application_id` and the form question's `field_ref` set), and preparation
+ * resumes once it's answered.
+ */
+export const interviewQuestions = sqliteTable(
+  'interview_questions',
+  {
+    id: integer('id').primaryKey(),
+    /** The project the question is about; null for an application question. */
+    projectId: integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+    applicationId: integer('application_id').references(() => applications.id, {
+      onDelete: 'cascade',
+    }),
+    /** The form question (field_values.field_ref) an application question came from. */
+    fieldRef: text('field_ref'),
+    text: text('text').notNull(),
+    /** Why it's asked: the gap for a project question, the form question for an application's. */
+    context: text('context'),
+    status: text('status', { enum: INTERVIEW_STATUSES }).notNull().default('open'),
+    origin: text('origin', { enum: INTERVIEW_ORIGINS }).notNull(),
+    /** What the last turn did with the answer, or why reading it failed. */
+    note: text('note'),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull().default(now),
+    answeredAt: integer('answered_at', { mode: 'timestamp_ms' }),
+  },
+  (t) => [
+    index('interview_questions_status').on(t.status),
+    index('interview_questions_project').on(t.projectId),
+    index('interview_questions_application').on(t.applicationId),
+  ],
+);
+
+/**
+ * The transcript, Applyant's own (never the CLI's session files): the agent's questions and the
+ * candidate's answers, in order. The next turn is a fresh agent run seeded with it.
+ */
+export const interviewTurns = sqliteTable(
+  'interview_turns',
+  {
+    id: integer('id').primaryKey(),
+    questionId: integer('question_id')
+      .notNull()
+      .references(() => interviewQuestions.id, { onDelete: 'cascade' }),
+    projectId: integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+    applicationId: integer('application_id').references(() => applications.id, {
+      onDelete: 'cascade',
+    }),
+    role: text('role', { enum: ['agent', 'candidate'] }).notNull(),
+    text: text('text').notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull().default(now),
+  },
+  (t) => [
+    index('interview_turns_question').on(t.questionId),
+    index('interview_turns_project').on(t.projectId),
+  ],
+);
+
 /** Small daemon-internal state, key → JSON (e.g. which embedder made the fact vectors). */
 export const appState = sqliteTable('app_state', {
   key: text('key').primaryKey(),
@@ -533,3 +605,5 @@ export type AnswerSentenceRow = typeof answerSentences.$inferSelect;
 export type ReceiptRow = typeof receipts.$inferSelect;
 export type CvRow = typeof cvs.$inferSelect;
 export type NewReceiptRow = typeof receipts.$inferInsert;
+export type InterviewQuestionRow = typeof interviewQuestions.$inferSelect;
+export type InterviewTurnRow = typeof interviewTurns.$inferSelect;

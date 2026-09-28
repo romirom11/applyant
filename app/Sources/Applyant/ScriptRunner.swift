@@ -17,7 +17,8 @@ struct ScriptStep: Decodable {
     var section: String?
     var posting: Int64?
     var review: Int64?
-    /// skip · interested · prepare · confirmAll · confirmFacts · editAnswer · setField · approve · submit · setCvMode · wait
+    /// skip · interested · prepare · confirmAll · confirmFacts · editAnswer · setField · approve · submit · setCvMode ·
+    /// startInterview · answerInterview · dismissInterview · wait
     var action: String?
     var application: Int64?
     var facts: [Int64]?
@@ -29,8 +30,12 @@ struct ScriptStep: Decodable {
     var reason: String?
     /// Seconds to wait before rendering (for events to arrive).
     var wait: Double?
-    /// Keep waiting (up to `wait`) until this is true: "stage:<app>:<stage>", "posting:<id>".
+    /// Keep waiting (up to `wait`) until this is true: "stage:<app>:<stage>", "posting:<id>",
+    /// "handoff:<app>", "question" (the thread on screen has an open question), "settled".
     var until: String?
+    /// The Interview section: open a project's thread or a question's.
+    var interviewProject: Int64?
+    var interviewQuestion: Int64?
     var width: Double?
     var height: Double?
 }
@@ -96,6 +101,8 @@ final class ScriptRunner {
             store.navigation.reviewing = review
             if let app = store.applications[review] { store.navigation.postingId = app.postingID }
         }
+        if let p = s.interviewProject { store.navigation.showInterview(.project(p)) }
+        if let q = s.interviewQuestion { store.navigation.showInterview(.question(q)) }
         let app = s.application ?? store.navigation.reviewing ?? 0
         switch s.action {
         case "skip": await store.skip(posting: s.posting ?? 0, reason: s.reason ?? "")
@@ -138,6 +145,21 @@ final class ScriptRunner {
                 note("notifications: delivered now = \(delivered.map(\.request.identifier))")
             }
         case "regenerate": await store.regenerate(application: app)
+        case "startInterview": await store.startInterview(project: s.interviewProject ?? 0)
+        case "answerInterview", "dismissInterview":
+            // The open question of the thread on screen.
+            guard let target = store.navigation.interview,
+                  let thread = store.interviewThreads[target],
+                  let open = InterviewText.openQuestion(thread)
+            else {
+                note("\(s.action ?? ""): no open question on screen")
+                break
+            }
+            if s.action == "answerInterview" {
+                await store.answerInterview(target, question: open.id, text: s.text ?? "")
+            } else {
+                await store.dismissInterview(target, question: open.id)
+            }
         case "showBrowser": note("showBrowser: Applyant's Chrome brought forward = \(ChromeWindow.bringForward())")
         default: break
         }
@@ -156,6 +178,14 @@ final class ScriptRunner {
         case "handoff":
             guard parts.count == 2, let id = Int64(parts[1]) else { return false }
             return store.applications[id]?.hasHandOff == true
+        case "question":
+            // "question": the thread on screen has an open question to answer.
+            guard let target = store.navigation.interview, let thread = store.interviewThreads[target] else { return false }
+            return InterviewText.openQuestion(thread) != nil
+        case "settled":
+            // "settled": the thread on screen isn't waiting on the interviewer.
+            guard let target = store.navigation.interview, let thread = store.interviewThreads[target] else { return false }
+            return !thread.pending
         default:
             return false
         }
@@ -201,7 +231,10 @@ final class ScriptRunner {
         if let r = nav.reviewing, let app = store.applicationDetails[r] ?? store.applications[r] {
             parts.append("application=\(r) stage=\(app.stage) blockers=\(app.blockers)")
         }
-        parts.append("inbox=\(store.count(.inbox)) ready=\(store.count(.readyToReview)) applied=\(store.count(.applied))")
+        if let target = nav.interview, nav.section == .interview, let thread = store.interviewThreads[target] {
+            parts.append("interview=\(target) questions=\(thread.questions.map { "\($0.id):\($0.status)" }) pending=\(thread.pending)")
+        }
+        parts.append("inbox=\(store.count(.inbox)) ready=\(store.count(.readyToReview)) applied=\(store.count(.applied)) interview=\(store.count(.interview))")
         return parts.joined(separator: " ")
     }
 

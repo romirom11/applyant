@@ -190,6 +190,9 @@ struct ReviewApplication: View {
                     editable: app.stage != .approved && app.stage != .applied,
                     selected: selected(app)?.number == answer.number,
                     select: { selectedAnswer = answer.number },
+                    interview: answer.hasInterviewQuestionID
+                        ? { store.navigation.showInterview(.question(answer.interviewQuestionID)) }
+                        : nil,
                     write: {
                         editing = EditRequest(
                             title: answer.question,
@@ -331,6 +334,8 @@ struct AnswerCard: View {
     var editable = true
     let selected: Bool
     let select: () -> Void
+    /// Opens the interview question asking the candidate for this answer's facts.
+    var interview: (() -> Void)?
     let write: () -> Void
     let editSentence: (Sentence) -> Void
     let confirmSentence: (Sentence) -> Void
@@ -342,7 +347,14 @@ struct AnswerCard: View {
             if answer.status == "needs_candidate" {
                 Label("Needs you: " + (answer.hasMissing ? answer.missing : "no facts cover this"), systemImage: "person.fill.questionmark")
                     .foregroundStyle(.orange)
-                Button("Write the answer…", action: write)
+                HStack {
+                    if let interview {
+                        Button("Answer in the interview", action: interview)
+                            .buttonStyle(.borderedProminent)
+                            .help("Your answer is saved as facts, then this application is prepared again")
+                    }
+                    Button("Write the answer…", action: write)
+                }
             } else {
                 if answer.kind == "choice" && answer.hasChoice {
                     Text("Answer: \(answer.choice)").font(.callout.weight(.medium))

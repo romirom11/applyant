@@ -1,6 +1,7 @@
 // Applications for tests: a synthetic form, a synthetic candidate (never anyone's real data),
-// facts, and a scripted `claude` that plays application_writer, claim_verifier and the
-// option_match fallback. Everything runs through the real queue and handlers.
+// facts, and a scripted `claude` that plays application_writer, claim_verifier, the
+// option_match fallback, form_agent and the interviewer. Everything runs through the real
+// queue and handlers.
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { FieldKind, FieldMeaning, FieldSpec, FormRead } from '../../src/browser/form-types.ts';
@@ -15,6 +16,7 @@ import { CV_SYSTEM } from '../../src/domain/applications/cv/select.ts';
 import { deliverApplication } from '../../src/domain/applications/deliver.ts';
 import { prepareApplication } from '../../src/domain/applications/prepare.ts';
 import { embedFacts } from '../../src/domain/knowledge/embed-index.ts';
+import { interviewOpen, interviewTurn } from '../../src/domain/knowledge/interview-agent.ts';
 import { type StandardKey, setProfileValue } from '../../src/domain/knowledge/profile.ts';
 import { createProject } from '../../src/domain/knowledge/projects.ts';
 import { McpHub } from '../../src/mcp/server.ts';
@@ -25,6 +27,7 @@ import { HashEmbedder } from '../../src/models/embeddings.ts';
 import { FakeProvider } from '../../src/models/providers/fake.ts';
 import type { Draft } from '../../src/models/schemas/application.ts';
 import type { CvPlanOutput } from '../../src/models/schemas/cv.ts';
+import type { InterviewOutput } from '../../src/models/schemas/interview.ts';
 import { EventBus } from '../../src/queue/events.ts';
 import { Worker } from '../../src/queue/worker.ts';
 import type { TempDb } from './db.ts';
@@ -205,6 +208,8 @@ export interface Script {
   formAgent?(req: ProviderRequest): ProviderResult | Promise<ProviderResult>;
   /** The CV plan (phase 7); default: `defaultCvPlan` over the facts the prompt lists. */
   cv?(seen: CvPromptSeen, req: ProviderRequest): CvPlanOutput | Promise<CvPlanOutput>;
+  /** The interviewer (phase 9); default: saves nothing and asks nothing more. */
+  interview?(req: ProviderRequest): InterviewOutput | Promise<InterviewOutput>;
 }
 
 export interface CvPromptSeen {
@@ -308,6 +313,9 @@ export function scriptedClaude(script: Script = {}) {
       });
       return ok({ answers });
     }
+    if (req.role === 'interviewer') {
+      return ok((await script.interview?.(req)) ?? { facts: [], question: null, about: null });
+    }
     if (req.role === 'form_agent') {
       return (
         (await script.formAgent?.(req)) ??
@@ -394,6 +402,8 @@ export async function prepareHarness(
       prepare_application: prepareApplication,
       deliver_application: deliverApplication,
       embed_facts: embedFacts,
+      interview_open: interviewOpen,
+      interview_turn: interviewTurn,
     }),
     log: quietLog,
     concurrency: 1,

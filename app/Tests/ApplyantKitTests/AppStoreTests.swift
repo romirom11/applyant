@@ -82,6 +82,53 @@ final class FakeDaemon: DaemonAPI, @unchecked Sendable {
         applications[id]?.clearHandOff()
         return applications[id]!
     }
+
+    // The interview: questions by id, projects, and threads the test sets up.
+    var questions: [InterviewQuestion] = []
+    var projectInterviews: [ProjectInterview] = []
+    var threads: [InterviewTarget: InterviewThread] = [:]
+
+    func listInterview() async throws -> InterviewList {
+        log("listInterview")
+        return .with {
+            $0.questions = questions.filter { $0.status == "open" || $0.status == "processing" }
+            $0.projects = projectInterviews
+        }
+    }
+    func interview(_ target: InterviewTarget) async throws -> InterviewThread {
+        log("interview \(target)")
+        guard let thread = threads[target] else { throw APIError("no thread") }
+        return thread
+    }
+    func startInterview(project id: Int64) async throws -> InterviewStart {
+        log("startInterview \(id)")
+        threads[.project(id)]?.pending = true
+        return .with { $0.pending = true }
+    }
+    func answerInterview(question id: Int64, text: String) async throws -> InterviewQuestion {
+        log("answerInterview \(id) \(text)")
+        return try setQuestion(id) {
+            $0.status = "processing"
+            $0.answer = text
+        }
+    }
+    func dismissInterview(question id: Int64) async throws -> InterviewQuestion {
+        log("dismissInterview \(id)")
+        return try setQuestion(id) { $0.status = "dismissed" }
+    }
+
+    /// Changes a question everywhere it's listed.
+    func setQuestion(_ id: Int64, _ change: (inout InterviewQuestion) -> Void) throws -> InterviewQuestion {
+        guard let i = questions.firstIndex(where: { $0.id == id }) else { throw APIError("no question \(id)") }
+        change(&questions[i])
+        for (target, var thread) in threads {
+            if let j = thread.questions.firstIndex(where: { $0.id == id }) {
+                change(&thread.questions[j])
+                threads[target] = thread
+            }
+        }
+        return questions[i]
+    }
 }
 
 /// Hands out the daemons in order; nil (daemon down) once they run out.

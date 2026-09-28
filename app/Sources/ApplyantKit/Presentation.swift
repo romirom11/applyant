@@ -66,10 +66,10 @@ public enum Section: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
-    /// Sections with content in 8b; the rest show an empty state until their phase.
+    /// Sections with content so far; the rest show an empty state until their phase.
     public var isBuilt: Bool {
         switch self {
-        case .inbox, .readyToReview, .preparing, .interested, .skipped, .applied: true
+        case .inbox, .readyToReview, .preparing, .interested, .skipped, .applied, .interview: true
         default: false
         }
     }
@@ -80,7 +80,6 @@ public enum Section: String, CaseIterable, Identifiable, Sendable {
         case .overview: "the funnel view"
         case .interviews, .offers: "mail tracking (phase 13)"
         case .profile, .projects: "onboarding (phase 16); the CLI has them now"
-        case .interview: "the agent interview (phase 9)"
         case .search: "search strategies (phase 10)"
         case .agentRuns: "a later phase; `applyant runs show` has them now"
         case .companies: "company research (phase 12)"
@@ -95,7 +94,16 @@ public struct Navigation: Equatable, Sendable {
     public var postingId: Int64?
     /// Set when the detail pane shows the application's review instead of the posting.
     public var reviewing: Int64?
+    /// The interview thread open in the Interview section.
+    public var interview: InterviewTarget?
     public init() {}
+
+    public mutating func showInterview(_ target: InterviewTarget) {
+        section = .interview
+        postingId = nil
+        reviewing = nil
+        interview = target
+    }
 
     public mutating func showReview(application: Int64, posting: Int64) {
         section = .readyToReview

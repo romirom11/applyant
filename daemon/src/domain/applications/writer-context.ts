@@ -11,6 +11,7 @@ import type { PostingRow } from '../../db/schema.ts';
 import type { Embedder } from '../../models/embeddings.ts';
 import type { WriterOutput } from '../../models/schemas/application.ts';
 import { factRefs } from '../knowledge/facts.ts';
+import { interviewFactIds } from '../knowledge/interview.ts';
 import { listProjects } from '../knowledge/projects.ts';
 import { type FactRef, retrieveFacts } from '../knowledge/retrieve.ts';
 import { type PriorAnswer, priorAnswers } from './reuse.ts';
@@ -126,11 +127,15 @@ export async function buildWriterContext(
       { text: q.label, vector: vectors[i] ?? null },
       FACTS_PER_QUESTION,
     );
-    questions.push({
-      ...q,
-      pointsBack: POINTS_BACK.test(q.label),
-      retrieved: hits.map(({ score: _score, ...f }) => f),
-    });
+    // What the candidate told the interview for this very question comes first.
+    const told = [
+      ...factRefs(read, interviewFactIds(read, input.applicationId, q.fieldRef)).values(),
+    ];
+    const retrieved = [
+      ...told,
+      ...hits.map(({ score: _score, ...f }) => f).filter((f) => !told.some((t) => t.id === f.id)),
+    ];
+    questions.push({ ...q, pointsBack: POINTS_BACK.test(q.label), retrieved });
   }
 
   const prior = new Map<string, PriorAnswer>();

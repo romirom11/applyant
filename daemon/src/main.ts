@@ -18,6 +18,7 @@ import { prepareApplication } from './domain/applications/prepare.ts';
 import { readFormHandler, requestFormRead } from './domain/applications/read-form.ts';
 import { catchUpApplications } from './domain/applications/store.ts';
 import { embedFacts, ensureFactIndex } from './domain/knowledge/embed-index.ts';
+import { interviewOpen, interviewTurn } from './domain/knowledge/interview-agent.ts';
 import { syncSource } from './domain/knowledge/sync.ts';
 import { NativeTextExtractor, NodeTextExtractor } from './domain/knowledge/text/extract.ts';
 import { EcbFx } from './domain/scoring/fx.ts';
@@ -148,6 +149,8 @@ export async function runDaemon(config: Config = loadConfig()): Promise<() => Pr
     deliver_application: deliverApplication,
     sync_source: syncSource,
     embed_facts: embedFacts,
+    interview_open: interviewOpen,
+    interview_turn: interviewTurn,
   };
 
   // Catch up: vectors for facts that have none (or were made by another embedder), and a

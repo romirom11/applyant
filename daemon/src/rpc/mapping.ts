@@ -216,6 +216,7 @@ export function answerToPb(a: ApplicationView['answers'][number]) {
     edited: a.edited,
     active: a.active,
     overridden: a.overridden,
+    interviewQuestionId: a.interviewQuestionId === null ? undefined : BigInt(a.interviewQuestionId),
     sentences: a.sentences.map((s) => ({
       index: s.idx,
       text: s.text,
@@ -405,6 +406,18 @@ export function eventToPb(row: EventRow): Event {
           applicationId: BigInt(row.entityId ?? 0),
           postingId: BigInt(row.postingId ?? 0),
           reason: row.message,
+        },
+      },
+    });
+  }
+  if (row.kind === 'interview') {
+    return create(EventSchema, {
+      ...base,
+      payload: {
+        case: 'interview',
+        value: {
+          questionId: row.entityId === null ? undefined : BigInt(row.entityId),
+          status: row.stage ?? '',
         },
       },
     });

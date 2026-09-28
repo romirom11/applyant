@@ -19,6 +19,7 @@ import {
   type FieldValueRow,
   facts,
   fieldValues,
+  interviewQuestions,
   type PostingRow,
   postings,
   projects,
@@ -72,6 +73,8 @@ export interface AnswerView {
   active: boolean;
   /** The candidate set the field's value directly: this draft isn't used. */
   overridden: boolean;
+  /** needs_candidate: the interview question waiting on the candidate for it (open or being read). */
+  interviewQuestionId: number | null;
   sentences: SentenceView[];
 }
 
@@ -409,6 +412,20 @@ export function applicationView(conn: Conn, id: number): ApplicationView {
     conn,
     stored.flatMap((a) => a.sentences.flatMap((s) => s.factIds)),
   );
+  const asked = new Map(
+    conn
+      .select({ id: interviewQuestions.id, fieldRef: interviewQuestions.fieldRef })
+      .from(interviewQuestions)
+      .where(
+        and(
+          eq(interviewQuestions.applicationId, id),
+          inArray(interviewQuestions.status, ['open', 'processing']),
+        ),
+      )
+      .orderBy(asc(interviewQuestions.id))
+      .all()
+      .map((q) => [q.fieldRef, q.id]),
+  );
   const answerViews: AnswerView[] = stored.map((a, i) => {
     const field = fieldByRef.get(a.questionRef);
     return {
@@ -424,6 +441,8 @@ export function applicationView(conn: Conn, id: number): ApplicationView {
       edited: a.edited,
       active: field?.active ?? false,
       overridden: field?.source === 'override',
+      interviewQuestionId:
+        a.status === 'needs_candidate' ? (asked.get(a.questionRef) ?? null) : null,
       sentences: a.sentences.map((s) => {
         const f = s.factIds.map(
           (fid): CitedFactView =>

@@ -11,6 +11,11 @@ public typealias Application = Applyant_V1_Application
 public typealias DaemonEvent = Applyant_V1_Event
 public typealias ApplicationStage = Applyant_V1_ApplicationStage
 public typealias PostingStage = Applyant_V1_PostingStage
+public typealias InterviewQuestion = Applyant_V1_InterviewQuestion
+public typealias ProjectInterview = Applyant_V1_ProjectInterview
+public typealias InterviewThread = Applyant_V1_GetInterviewResponse
+public typealias InterviewList = Applyant_V1_ListInterviewResponse
+public typealias InterviewStart = Applyant_V1_StartInterviewResponse
 
 public struct APIError: Error, LocalizedError, Equatable {
     public let message: String
@@ -45,6 +50,16 @@ public protocol DaemonAPI: Sendable {
     func submit(application id: Int64) async throws -> Application
     /// The candidate finished a hand-off in the browser and pressed submit themselves.
     func markSubmitted(application id: Int64) async throws -> Application
+
+    /// Questions waiting on the candidate (or being read) and each project's gaps.
+    func listInterview() async throws -> InterviewList
+    /// One thread: a project's interview, or an application question's.
+    func interview(_ target: InterviewTarget) async throws -> InterviewThread
+    /// The project's open question, or the interviewer is asked for one (`pending`).
+    func startInterview(project id: Int64) async throws -> InterviewStart
+    func answerInterview(question id: Int64, text: String) async throws -> InterviewQuestion
+    /// "Later": an application question is then the candidate's to answer in review.
+    func dismissInterview(question id: Int64) async throws -> InterviewQuestion
 }
 
 /// Unary answers → value or APIError.
@@ -203,6 +218,36 @@ public final class ConnectDaemonAPI: DaemonAPI {
 
     public func markSubmitted(application id: Int64) async throws -> Application {
         try unwrap(await unary.markSubmitted(request: .with { $0.applicationID = id }, headers: headers)).application
+    }
+
+    public func listInterview() async throws -> InterviewList {
+        try unwrap(await unary.listInterview(request: .init(), headers: headers))
+    }
+
+    public func interview(_ target: InterviewTarget) async throws -> InterviewThread {
+        let request = Applyant_V1_GetInterviewRequest.with {
+            switch target {
+            case let .project(id): $0.project = String(id)
+            case let .question(id): $0.questionID = id
+            }
+        }
+        return try unwrap(await unary.getInterview(request: request, headers: headers))
+    }
+
+    public func startInterview(project id: Int64) async throws -> InterviewStart {
+        try unwrap(await unary.startInterview(request: .with { $0.project = String(id) }, headers: headers))
+    }
+
+    public func answerInterview(question id: Int64, text: String) async throws -> InterviewQuestion {
+        let request = Applyant_V1_AnswerInterviewQuestionRequest.with {
+            $0.id = id
+            $0.text = text
+        }
+        return try unwrap(await unary.answerInterviewQuestion(request: request, headers: headers)).question
+    }
+
+    public func dismissInterview(question id: Int64) async throws -> InterviewQuestion {
+        try unwrap(await unary.dismissInterviewQuestion(request: .with { $0.id = id }, headers: headers)).question
     }
 }
 

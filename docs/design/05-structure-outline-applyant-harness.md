@@ -642,6 +642,8 @@ Progress notes (2026-09-28, on the owner's Mac):
 
 ## Phase 9: The agent interview fills in what sources can't show
 
+> Built and checked by the agent on 2026-09-28 (progress notes below). The owner's real interview is still open.
+
 The interview comes before search on purpose. It's what supplies "what I personally built", the team and the impact. Without those, metric #4 is judged against a thin knowledge base, and preparation's "missing fact" stays a dead end. The interview is almost entirely in the daemon. The transcript is Applyant's own, stored in SQLite. Each turn is a fresh agent run seeded with the transcript and the project's facts, and answers become `interview`-origin `confirmed` facts. Preparation now opens an interview question for a missing fact instead of ending in `needs_candidate`, and resumes once it's answered. The app gains one chat view.
 
 ### Change Outline
@@ -669,12 +671,44 @@ interview_questions(id, project_id, application_id, text, status)         -- ope
 
 #### Automated Verification
 
-- [ ] `pnpm -C daemon typecheck && pnpm -C daemon lint && pnpm -C daemon test`
-- [ ] `xcodebuild … test` (Mac)
+- [x] `pnpm -C daemon typecheck && pnpm -C daemon lint && pnpm -C daemon test` (39 files, 280 tests; `buf lint && buf generate` clean)
+- [x] `xcodebuild … test` (Mac): 21 tests, including the store against a real daemon
+- [x] `APPLYANT_LIVE=1 pnpm -C daemon test:live -t interviewer` (added: the real claude:sonnet opens with one question and saves nothing, then turns an answer into facts that keep "helped build", leave a colleague's work as team_context and ask something new)
+
+Progress notes (2026-09-28, on the owner's Mac):
+
+- **Built as outlined**, with these shapes:
+  - `interview_questions` has `field_ref` (the form question an application question came from), `context` (the gap or what the writer found missing), `origin` (`project` | `follow_up` | `application`) and `note`.
+  - Status is `open → processing → answered | dismissed`. `processing` means the candidate answered and the interviewer is reading it.
+  - `interview_turns` stores both roles and belongs to its question.
+  - The output schema lives with the other role schemas (`models/schemas/interview.ts`, so the strict-schema test covers it), and facts name their project by slug: `{ facts: [{text, kind, project}], question, about }`.
+- **Role and tasks.** There is a new `interviewer` role (claude:sonnet, 5 min) and two tasks. `interview_open` (entity: project) asks the first question; `interview_turn` (entity: question) saves the answer's facts and asks the next question. Each turn is a fresh run seeded from SQLite: projects, the project's facts (confirmed first, ≤ 80), its gaps, the transcript and the latest answer.
+- **Gaps** (`projectGaps`), per project, in order: personal contribution, role, team, impact. A gap covered only by unconfirmed facts is still asked about.
+  - Role counts as covered when the project has a role line.
+  - Team is covered only by wording about who worked on it ("a team of 4", "alone", "co-founder"). The first check on a synthetic CV showed that neither a bare "team" ("for the finance team") nor the `team_context` kind works: extractors file the product description under that kind too.
+- **Facts from answers** are `confirmed`, `origin: interview`, with evidence `interview:<question>` and the answer as the excerpt. A fact that already exists in the project is confirmed and gains the evidence, rather than being added twice.
+- **Never asked twice.** A next question the thread already asked is dropped, so the thread ends. Follow-ups are capped at 8 questions in a row per project session, and one follow-up per application question.
+- **Preparation.** A writer `needs_candidate` becomes an application question: the form's own question, with the writer's `missing` as context. This happens once per form question, and never for instructions the posting holds.
+  - The field's "needs you" note says where it stands: asked in the interview, skipped there, or answered without settling it (the candidate then writes the answer).
+  - The answer carries `interview_question_id`.
+  - The writer gets that question's interview facts first in its facts for it.
+  - When the last open question of an application is answered or dismissed, and an answered one's form question still needs the candidate, the application is prepared again.
+- **Interface.**
+  - RPCs: `ListInterview · GetInterview · StartInterview · AnswerInterviewQuestion · DismissInterviewQuestion`, plus an `InterviewEvent` on the stream.
+  - CLI: `candidate interview [project]` is the terminal chat. Stdin lines are queued, so `printf 'answer\n' | applyant candidate interview x` works. `:skip` leaves a question for later and `:quit` stops. There are also `interview list | show | answer | dismiss | chat`.
+  - App: the Interview section with a sidebar badge for open questions. It lists what's waiting (application questions first), then projects by how much is missing. The chat shows the questions, answers and the facts saved, with Send (⌘↩), Later, and Start / Ask me more. The review screen's needs-you answers get "Answer in the interview".
+- **Checked on the Mac by the agent, not by hand.** This used a throwaway daemon (separate `APPLYANT_HOME`, real `claude`), a synthetic CV and the built app in `--script` mode (new steps: `interviewProject`, `startInterview`, `answerInterview`, `dismissInterview`; until `question` / `settled`). The owner's installed app and data weren't touched.
+  - The first question was "Harbor has a transcription step, a scoring API and dashboards. Which part of it did you build yourself?".
+  - One answer gave 5 facts, with the hedge kept and the colleague's work credited to the colleague.
+  - The follow-up asked about results, and the header's gaps narrowed to results.
+  - Later → "Ask me more".
+  - The one wording fix it found (facts saying "on their own") went into the prompt.
+- The installed `/Applications/Applyant.app` is still the 8b build: `scripts/bundle.sh` brings phase 9 to it.
 
 #### Manual Verification
 
 - [ ] Do a full interview on two real projects, then re-prepare the phase-5 application. Check that the answers now cite interview facts about personal contribution.
+  - Left for the owner (it needs their real answers). Rebuild the bundle first (`scripts/bundle.sh`), then run `applyant candidate interview <project>` or use the app's Interview section.
 
 ---
 

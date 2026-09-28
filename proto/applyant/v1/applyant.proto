@@ -59,6 +59,23 @@ service ApplyantService {
   // RejectFact marks a fact as untrue; a re-sync won't bring it back.
   rpc RejectFact(RejectFactRequest) returns (RejectFactResponse);
 
+  // The agent interview: questions about each project's gaps (own role, what the candidate
+  // built, team, impact), and the facts applications found missing. Answers become confirmed
+  // facts; an answered application question prepares its application again.
+  // ListInterview returns what waits on the candidate (or every question) and each project's gaps.
+  rpc ListInterview(ListInterviewRequest) returns (ListInterviewResponse);
+  // GetInterview returns one thread: a project's interview, or an application question's.
+  rpc GetInterview(GetInterviewRequest) returns (GetInterviewResponse);
+  // StartInterview returns the open question for a project (or, with no project, whatever is
+  // next), or asks the interviewer for one (`pending`; an `interview` event follows).
+  rpc StartInterview(StartInterviewRequest) returns (StartInterviewResponse);
+  // AnswerInterviewQuestion stores the candidate's answer; the interviewer then saves its facts
+  // and may ask a follow-up (`interview` events follow).
+  rpc AnswerInterviewQuestion(AnswerInterviewQuestionRequest) returns (AnswerInterviewQuestionResponse);
+  // DismissInterviewQuestion: "later". An application question is then left to the candidate
+  // to answer in review.
+  rpc DismissInterviewQuestion(DismissInterviewQuestionRequest) returns (DismissInterviewQuestionResponse);
+
   // Applications: one per posting, prepared for its real form, reviewed, then approved.
   rpc ListApplications(ListApplicationsRequest) returns (ListApplicationsResponse);
   // GetApplication returns everything review shows: every field with its value and where it
@@ -402,6 +419,14 @@ message HandOffEvent {
   string reason = 3;
 }
 
+// A question was asked, an answer read, or the interviewer has nothing more to ask.
+message InterviewEvent {
+  // Unset when an interview couldn't start.
+  optional int64 question_id = 1;
+  // open | processing | answered | dismissed | done (nothing more to ask) | failed
+  string status = 2;
+}
+
 message Event {
   int64 id = 1;
   google.protobuf.Timestamp at = 2;
@@ -413,6 +438,7 @@ message Event {
     PostingEvent posting = 11;
     ApplicationEvent application = 12;
     HandOffEvent handoff = 13;
+    InterviewEvent interview = 14;
   }
 }
 
@@ -692,6 +718,111 @@ message RejectFactResponse {
   repeated Fact facts = 1;
 }
 
+// ---- The interview ------------------------------------------------------------------------
+
+message InterviewQuestion {
+  int64 id = 1;
+  // The project a project interview is about (unset for an application question).
+  optional int64 project_id = 2;
+  optional string project_slug = 3;
+  optional string project_name = 4;
+  // An application question: the application, its job ("Acme AI · Senior AI Engineer") and
+  // the form question's field ref.
+  optional int64 application_id = 5;
+  optional string application = 6;
+  optional string field_ref = 7;
+  string text = 8;
+  // Why it's asked: the gap, or for an application question what's missing.
+  optional string context = 9;
+  // open | processing (answered, being read) | answered | dismissed
+  string status = 10;
+  // project (opens a project's interview) | follow_up | application
+  string origin = 11;
+  // What reading the answer gave, or why it failed.
+  optional string note = 12;
+  google.protobuf.Timestamp created_at = 13;
+  optional google.protobuf.Timestamp answered_at = 14;
+  // The candidate's answer.
+  optional string answer = 15;
+  // Facts saved from the answer.
+  repeated Fact facts = 16;
+}
+
+message ProjectInterview {
+  Project project = 1;
+  // What its facts don't show yet: personal_contribution | role | team | impact.
+  repeated string gaps = 2;
+  // Human-readable gaps, same order ("what the candidate personally built or did").
+  repeated string gap_labels = 3;
+  // Questions waiting on the candidate.
+  int32 open = 4;
+  // Questions asked so far.
+  int32 asked = 5;
+  // The interviewer is writing a question or reading an answer about it.
+  bool busy = 6;
+}
+
+message ListInterviewRequest {
+  // Every question, not only the open and processing ones.
+  bool all = 1;
+}
+
+message ListInterviewResponse {
+  // Application questions first, then project questions, oldest first.
+  repeated InterviewQuestion questions = 1;
+  repeated ProjectInterview projects = 2;
+}
+
+message GetInterviewRequest {
+  oneof target {
+    // Project id, slug or name.
+    string project = 1;
+    // Any question of the thread.
+    int64 question_id = 2;
+  }
+}
+
+message GetInterviewResponse {
+  // The thread, oldest first, each question with its answer and saved facts.
+  repeated InterviewQuestion questions = 1;
+  // Set for a project's interview.
+  optional ProjectInterview project = 2;
+  // The interviewer is working on this thread.
+  bool pending = 3;
+}
+
+message StartInterviewRequest {
+  // Project id, slug or name; empty: whatever is next.
+  string project = 1;
+}
+
+message StartInterviewResponse {
+  // The question waiting for the candidate.
+  optional InterviewQuestion question = 1;
+  // The interviewer is writing one (or reading the last answer); an `interview` event follows.
+  bool pending = 2;
+  optional int64 project_id = 3;
+  // "Nothing to ask …" or what is pending.
+  string message = 4;
+}
+
+message AnswerInterviewQuestionRequest {
+  int64 id = 1;
+  string text = 2;
+}
+
+message AnswerInterviewQuestionResponse {
+  InterviewQuestion question = 1;
+}
+
+message DismissInterviewQuestionRequest {
+  int64 id = 1;
+}
+
+message DismissInterviewQuestionResponse {
+  InterviewQuestion question = 1;
+}
+
 // ---- Applications -------------------------------------------------------------------------
 
 enum ApplicationStage {
@@ -774,6 +905,8 @@ message Answer {
   // The candidate set the field directly; this draft isn't used.
   bool overridden = 12;
   repeated AnswerSentence sentences = 13;
+  // needs_candidate: the interview question asking the candidate for it (open or being read).
+  optional int64 interview_question_id = 14;
 }
 
 message Application {

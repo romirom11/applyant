@@ -10,8 +10,14 @@ struct MainView: View {
             Sidebar(store: store)
                 .navigationSplitViewColumnWidth(min: 190, ideal: 210)
         } content: {
-            PostingList(store: store)
-                .navigationSplitViewColumnWidth(min: 280, ideal: 330)
+            Group {
+                if store.navigation.section == .interview {
+                    InterviewList(store: store)
+                } else {
+                    PostingList(store: store)
+                }
+            }
+            .navigationSplitViewColumnWidth(min: 280, ideal: 330)
         } detail: {
             Detail(store: store)
         }
@@ -31,7 +37,18 @@ struct Detail: View {
     let store: AppStore
 
     var body: some View {
-        if let app = store.navigation.reviewing {
+        if store.navigation.section == .interview {
+            if let target = store.navigation.interview {
+                InterviewThreadView(store: store, target: target)
+                    .id(target)
+            } else {
+                ContentUnavailableView(
+                    "The interview",
+                    systemImage: ApplyantKit.Section.interview.symbol,
+                    description: Text("Pick a question or a project on the left. Your answers become facts that applications can use.")
+                )
+            }
+        } else if let app = store.navigation.reviewing {
             ReviewApplication(store: store, applicationId: app)
                 .id(app)
         } else if let posting = store.navigation.postingId {

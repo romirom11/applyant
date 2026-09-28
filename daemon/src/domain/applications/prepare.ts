@@ -18,8 +18,8 @@
 // Two passes, like scoring, so the writer's (expensive) output is kept when the verifier then
 // hits a limit. A profile value that is missing is never invented: the field is left empty
 // and the application waits for the candidate (`applications set-field`, or the profile and
-// `applications prepare`). A missing fact ends the same way; phase 9 turns it into an
-// interview question.
+// `applications prepare`). A missing fact becomes an interview question (once per form
+// question); answering it saves facts and prepares the application again.
 import { join } from 'node:path';
 import { and, eq, inArray, notInArray } from 'drizzle-orm';
 import { type FormRead, refKey } from '../../browser/form-types.ts';
@@ -34,6 +34,7 @@ import {
   type FieldSource,
   type FieldValueRow,
   fieldValues,
+  type InterviewQuestionRow,
   type PostingRow,
   postings,
   tasks,
@@ -42,6 +43,7 @@ import type { Provider } from '../../models/roles.ts';
 import type { Draft } from '../../models/schemas/application.ts';
 import type { Handler, HandlerContext, Outcome, Task, Tx } from '../../queue/types.ts';
 import { factRefs } from '../knowledge/facts.ts';
+import { applicationQuestion, askQuestion } from '../knowledge/interview.ts';
 import { getStandardProfile, type StandardProfile } from '../knowledge/profile.ts';
 import { checkSentences, type SentenceToCheck } from './checks/verify.ts';
 import { cvHeader, cvHtml, loadTemplate, renderPdf, storePdf } from './cv/render.ts';
@@ -183,6 +185,7 @@ export const prepareApplication: Handler<'prepare_application'> = async (task, c
       commit: (tx) => {
         const current = tx.db.select().from(applications).where(eq(applications.id, app.id)).get();
         if (!current || current.stage === 'approved') return;
+        askInterview(tx, app.id, written);
         saveFields(tx, app.id, fields, defaults, written);
         syncCv(tx, app, takesCv, profile);
         tx.db
@@ -549,6 +552,45 @@ function contextProfile(
   return out;
 }
 
+/**
+ * A question the writer couldn't answer from the facts goes to the interview, once per form
+ * question: the answer becomes facts, and preparation resumes. Not asked again once answered
+ * or dismissed (the candidate writes it then), and never for instructions the posting holds.
+ */
+function askInterview(
+  tx: Tx,
+  applicationId: number,
+  written: Array<{ q: WriterQuestion; draft: Draft | null }>,
+): void {
+  for (const { q, draft } of written) {
+    if (draft?.status !== 'needs_candidate' || q.pointsBack) continue;
+    if (applicationQuestion(tx.db, applicationId, q.fieldRef)) continue;
+    askQuestion(tx, {
+      projectId: null,
+      applicationId,
+      fieldRef: q.fieldRef,
+      text: q.label,
+      // What the writer found missing; the job comes with the application.
+      context: draft.missing,
+      origin: 'application',
+    });
+  }
+}
+
+/** Where a question left to the candidate stands in the interview, for its field's note. */
+function interviewNote(q: InterviewQuestionRow | null): string | null {
+  if (!q) return null;
+  switch (q.status) {
+    case 'open':
+    case 'processing':
+      return `asked in the interview (question ${q.id})`;
+    case 'dismissed':
+      return `you skipped it in the interview (question ${q.id}): write the answer yourself`;
+    case 'answered':
+      return `your interview answer (question ${q.id}) didn't settle it: write the answer yourself`;
+  }
+}
+
 function saveFields(
   tx: Tx,
   applicationId: number,
@@ -667,6 +709,10 @@ function saveFields(
           source: 'none',
           note: f.spec.required ? null : 'optional question: left empty',
         };
+      }
+      if (d.value === null) {
+        const asked = interviewNote(applicationQuestion(tx.db, applicationId, f.ref));
+        if (asked) d = { ...d, note: [d.note, asked].filter(Boolean).join(' · ') };
       }
     } else {
       d = defaults.get(f.ref) ?? { value: null, source: 'none', note: null };

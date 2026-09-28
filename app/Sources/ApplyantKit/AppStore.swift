@@ -46,6 +46,12 @@ public final class AppStore {
     public private(set) var postingDetails: [Int64: Posting] = [:]
     public private(set) var applicationDetails: [Int64: Application] = [:]
     public private(set) var activity = Activity()
+    /// Interview questions waiting on the candidate or being read (application ones first).
+    public private(set) var interviewQuestions: [InterviewQuestion] = []
+    /// Every project with what its facts don't show yet.
+    public private(set) var projectInterviews: [ProjectInterview] = []
+    /// GetInterview results for the threads open on screen.
+    public private(set) var interviewThreads: [InterviewTarget: InterviewThread] = [:]
     /// The last failed action, for an alert.
     public var lastError: String?
     /// Where the main window is (notifications and the menu bar move it).
@@ -107,14 +113,18 @@ public final class AppStore {
     func reloadAll(_ api: DaemonAPI) async throws {
         async let postingList = api.listPostings()
         async let applicationList = api.listApplications()
-        let (p, a) = try await (postingList, applicationList)
+        async let interviewList = api.listInterview()
+        let (p, a, i) = try await (postingList, applicationList, interviewList)
         postings = Dictionary(p.map { ($0.id, $0) }, uniquingKeysWith: { _, last in last })
         applications = Dictionary(a.map { ($0.id, $0) }, uniquingKeysWith: { _, last in last })
+        interviewQuestions = i.questions
+        projectInterviews = i.projects
         activity = Activity()
         reloads += 1
         // What's open on screen may have changed while we were away.
         for id in postingDetails.keys { await refreshPosting(id, api) }
         for id in applicationDetails.keys { await refreshApplication(id, api) }
+        for target in interviewThreads.keys { await refreshThread(target, api) }
     }
 
     // MARK: Events
@@ -145,6 +155,8 @@ public final class AppStore {
                     body: h.reason
                 ))
             }
+        case .interview?:
+            await refreshInterview(api)
         case nil:
             break
         }
@@ -198,6 +210,19 @@ public final class AppStore {
         guard let app = try? await api.getApplication(id) else { return }
         applications[id] = app
         if applicationDetails[id] != nil { applicationDetails[id] = app }
+    }
+
+    private func refreshInterview(_ api: DaemonAPI) async {
+        if let list = try? await api.listInterview() {
+            interviewQuestions = list.questions
+            projectInterviews = list.projects
+        }
+        for target in interviewThreads.keys { await refreshThread(target, api) }
+    }
+
+    private func refreshThread(_ target: InterviewTarget, _ api: DaemonAPI) async {
+        guard let thread = try? await api.interview(target) else { return }
+        interviewThreads[target] = thread
     }
 
     /// Loads the full posting for its detail pane (and keeps it current from then on).
@@ -298,6 +323,42 @@ public final class AppStore {
         record(app)
     }
 
+    // MARK: The interview
+
+    /// Loads a thread for its chat view (and keeps it current from then on).
+    public func openInterview(_ target: InterviewTarget) async {
+        guard let api, let thread = await attempt({ try await api.interview(target) }) else { return }
+        interviewThreads[target] = thread
+    }
+
+    /// "Ask me about this project": its open question, or the interviewer writes one.
+    public func startInterview(project id: Int64) async {
+        guard let api, await attempt({ try await api.startInterview(project: id) }) != nil else { return }
+        await refreshInterview(api)
+        await refreshThread(.project(id), api)
+    }
+
+    public func answerInterview(_ target: InterviewTarget, question id: Int64, text: String) async {
+        guard let api, await attempt({ try await api.answerInterview(question: id, text: text) }) != nil else { return }
+        await refreshInterview(api)
+        await refreshThread(target, api)
+    }
+
+    public func dismissInterview(_ target: InterviewTarget, question id: Int64) async {
+        guard let api, await attempt({ try await api.dismissInterview(question: id) }) != nil else { return }
+        await refreshInterview(api)
+        await refreshThread(target, api)
+    }
+
+    /// Questions waiting for the candidate's answer (the sidebar badge).
+    public var openInterviewCount: Int {
+        interviewQuestions.filter { $0.status == "open" }.count
+    }
+
+    public var interviewRows: (waiting: [InterviewRow], projects: [InterviewRow]) {
+        InterviewText.rows(questions: interviewQuestions, projects: projectInterviews)
+    }
+
     private func attempt<T>(_ call: () async throws -> T) async -> T? {
         do {
             return try await call()
@@ -335,7 +396,8 @@ public final class AppStore {
     }
 
     public func count(_ section: Section) -> Int {
-        section.isBuilt ? items(section).count : 0
+        if section == .interview { return openInterviewCount }
+        return section.isBuilt ? items(section).count : 0
     }
 
     /// Applications waiting on the candidate: missing values, or a delivery to finish by hand.

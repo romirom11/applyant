@@ -126,6 +126,8 @@ export function handlers(partial: Partial<Handlers>): Handlers {
     embed_facts: never as Handler<'embed_facts'>,
     prepare_application: never as Handler<'prepare_application'>,
     deliver_application: never as Handler<'deliver_application'>,
+    interview_open: never as Handler<'interview_open'>,
+    interview_turn: never as Handler<'interview_turn'>,
     ...partial,
   };
 }

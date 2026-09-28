@@ -11,6 +11,7 @@ import {
 } from '../gen/applyant/v1/applyant_pb.js';
 import type { ApplyantClient } from './client.ts';
 import { iso, table, truncate } from './format.ts';
+import { registerInterview } from './interview.ts';
 import { registerPrefs } from './prefs.ts';
 
 /** Kept in step with domain/knowledge/profile.ts (importing it would load the DB layer into the CLI). */
@@ -233,6 +234,7 @@ export function registerCandidate(program: Command, client: () => ApplyantClient
     });
 
   registerPrefs(candidate, client);
+  registerInterview(program, candidate, client);
 
   const project = candidate.command('project').description('projects');
   project
