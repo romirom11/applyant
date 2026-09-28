@@ -2,6 +2,9 @@
 // temp dir. Anything a test cares about is passed in.
 import { join } from 'node:path';
 import type { ReaderPool } from '../../src/browser/reader-pool.ts';
+import { SubmitProfile } from '../../src/browser/submit-profile.ts';
+import { TaskPages } from '../../src/browser/task-pages.ts';
+import type { Channel } from '../../src/channels/channel.ts';
 import type { Db, ReadDb } from '../../src/db/client.ts';
 import { directExec, type ReadExec } from '../../src/db/read-pool.ts';
 import { agentRuns } from '../../src/db/schema.ts';
@@ -46,6 +49,9 @@ export interface TestDepsOptions {
   fx?: FxSource;
   jev?: AgentRunnerOptions['jev'];
   mcp?: McpAccess | null;
+  submit?: SubmitProfile;
+  taskPages?: TaskPages;
+  channels?: Record<string, Channel>;
 }
 
 /** Fixed reference rates (no network). */
@@ -82,6 +88,9 @@ export function testRunner(o: TestDepsOptions): AgentRunner {
 export function testDeps(o: TestDepsOptions): Deps {
   return {
     reader: o.reader ?? ({} as ReaderPool),
+    submit: o.submit ?? new SubmitProfile({ userDataDir: join(o.dir, 'browser'), log: quietLog }),
+    taskPages: o.taskPages ?? new TaskPages(),
+    channels: o.channels ?? {},
     secrets: new FileSecrets(join(o.dir, 'secrets.json')),
     models: testRunner(o),
     embedder: o.embedder ?? new HashEmbedder(),
@@ -97,7 +106,7 @@ export function testDeps(o: TestDepsOptions): Deps {
     fx: o.fx ?? fixedFx(),
     mcp: o.mcp ?? null,
     text: new NodeTextExtractor(),
-    dirs: { repos: join(o.dir, 'repos') },
+    dirs: { repos: join(o.dir, 'repos'), files: join(o.dir, 'files') },
     log: quietLog,
     ...(o.github !== undefined ? { github: o.github } : {}),
   };
@@ -116,6 +125,7 @@ export function handlers(partial: Partial<Handlers>): Handlers {
     sync_source: never as Handler<'sync_source'>,
     embed_facts: never as Handler<'embed_facts'>,
     prepare_application: never as Handler<'prepare_application'>,
+    deliver_application: never as Handler<'deliver_application'>,
     ...partial,
   };
 }

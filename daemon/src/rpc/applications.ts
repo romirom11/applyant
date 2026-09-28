@@ -10,6 +10,7 @@ import {
   editAnswer,
   findAnswer,
   setFieldValue,
+  submitApplication,
 } from '../domain/applications/review.ts';
 import {
   ApplicationError,
@@ -24,7 +25,7 @@ import type { ApplyantService, Fact } from '../gen/applyant/v1/applyant_pb.js';
 import { runInTx } from '../queue/tx.ts';
 import type { Tx } from '../queue/types.ts';
 import { factToPb } from './candidate.ts';
-import { answerToPb, applicationToPb, appStageFromPb } from './mapping.ts';
+import { answerToPb, applicationToPb, appStageFromPb, handOffToPb } from './mapping.ts';
 import type { RpcContext } from './postings.ts';
 
 type Impl = ServiceImpl<typeof ApplyantService>;
@@ -66,6 +67,8 @@ export function applicationRpcs(
   | 'setFieldValue'
   | 'editAnswer'
   | 'approveApplication'
+  | 'submitApplication'
+  | 'getHandOff'
   | 'confirmFact'
 > {
   return {
@@ -161,6 +164,24 @@ export function applicationRpcs(
           return { application: applicationToPb(applicationView(tx.db, appId)) };
         }),
       );
+    },
+
+    submitApplication(req) {
+      return guard(() =>
+        runInTx(c.db, c.bus, { now: c.now() }, (tx) => {
+          const appId = id(req.id, 'id');
+          submitApplication(tx, appId);
+          return { application: applicationToPb(applicationView(tx.db, appId)) };
+        }),
+      );
+    },
+
+    getHandOff(req) {
+      return guard(() => {
+        const appId = id(req.applicationId, 'application_id');
+        const view = applicationView(c.db, appId);
+        return { handOff: view.handOff ? handOffToPb(view.handOff) : undefined };
+      });
     },
 
     // Replaces candidate.ts's ConfirmFact: plain ids as before, or an application's facts.

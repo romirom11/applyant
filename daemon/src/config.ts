@@ -17,6 +17,8 @@ export interface Config {
   workDir: string;
   /** Partial clones of GitHub sources. */
   reposDir: string;
+  /** The submission browser's persistent Chrome profile (phase 6): logged-in sessions live here. */
+  browserDir: string;
   /** Downloaded models (EmbeddingGemma). APPLYANT_MODELS_DIR overrides. */
   modelsDir: string;
   /** Jev endpoint; APPLYANT_JEV_URL overrides it (tests point it nowhere). */
@@ -76,6 +78,7 @@ export function loadConfig(env: Env = process.env): Config {
     runsDir: join(home, 'files', 'runs'),
     workDir: join(home, 'files', 'work'),
     reposDir: join(home, 'repos'),
+    browserDir: join(home, 'browser'),
     modelsDir: env.APPLYANT_MODELS_DIR || join(home, 'models'),
     jevUrl: env.APPLYANT_JEV_URL || null,
     embedder: embedderKind(env.APPLYANT_EMBEDDER),

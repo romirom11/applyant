@@ -321,6 +321,107 @@ export async function advanceDeterministic(
   return { kind: 'stuck', errors: snap?.errors ?? [] };
 }
 
+export type SubmitResult =
+  | { kind: 'confirmed'; url: string; text: string | null }
+  | { kind: 'stuck'; errors: string[] };
+
+const CONFIRMED_TEXT =
+  /\b(thank you|application (has been |was )?(submitted|received|sent)|we('| ha)ve received|we('ll| will) be in touch|confirmation)\b/i;
+
+/**
+ * Presses the step's final (submit) control and waits for a sign the application went through:
+ * the page navigated, the form's controls disappeared, or the page now shows confirmation-like
+ * text. Anything else by the deadline is a validation error or an unexpected step: `stuck`,
+ * with whatever the page shows as an error.
+ */
+export async function submitFinal(
+  page: Page,
+  advance: Advance,
+  o: { signal?: AbortSignal; timeoutMs?: number } = {},
+): Promise<SubmitResult> {
+  if (!advance.ref) throw new Error('no submit control to press');
+  const before = await formSignature(page);
+  const url = page.url();
+  await locate(page, advance.ref).first().click({ timeout: ACTION_MS });
+  return waitForOutcome(page, url, before, o);
+}
+
+/**
+ * Waits for the same signs of success `submitFinal` looks for, without pressing anything itself:
+ * used to check what a step-scoped agent's own click already did.
+ */
+export async function waitForOutcome(
+  page: Page,
+  urlBefore: string,
+  signatureBefore: string,
+  o: { signal?: AbortSignal; timeoutMs?: number } = {},
+): Promise<SubmitResult> {
+  const url = urlBefore;
+  const before = signatureBefore;
+  const deadline = Date.now() + (o.timeoutMs ?? 15_000);
+  while (Date.now() < deadline) {
+    o.signal?.throwIfAborted();
+    await settle(page, 250);
+    if (page.url() !== url) {
+      await page.waitForLoadState('domcontentloaded').catch(() => {});
+      const text = await bodyText(page);
+      return { kind: 'confirmed', url: page.url(), text };
+    }
+    const sig = await formSignature(page).catch(() => '');
+    const text = await bodyText(page);
+    if (!sig.includes('#') || sig.split('#')[1] === '') {
+      // The form's controls are gone: a confirmation replaced it in place.
+      return { kind: 'confirmed', url: page.url(), text };
+    }
+    if (text && CONFIRMED_TEXT.test(text)) return { kind: 'confirmed', url: page.url(), text };
+    if (sig !== before) {
+      // Something changed but the form is still here: give it a moment to settle, then
+      // treat it as a validation error (or an unexpected extra step) if it's still stuck.
+      await settle(page, 500);
+      const snap = await snapshotForm(page).catch(() => null);
+      const alerts = await visibleAlerts(page);
+      if (snap?.errors.length || alerts.length) {
+        return { kind: 'stuck', errors: [...(snap?.errors ?? []), ...alerts] };
+      }
+    }
+  }
+  const snap = await snapshotForm(page).catch(() => null);
+  const alerts = await visibleAlerts(page);
+  return {
+    kind: 'stuck',
+    errors: [...(snap?.errors ?? []), ...alerts, ...(snap ? [] : ['no confirmation appeared'])],
+  };
+}
+
+async function bodyText(page: Page): Promise<string | null> {
+  return page
+    .locator('body')
+    .innerText({ timeout: 2000 })
+    .then((t) => t.replace(/\s+/g, ' ').trim().slice(0, 4000))
+    .catch(() => null);
+}
+
+/** Visible `role=alert` text anywhere on the page (a "click again to confirm" prompt, etc.). */
+async function visibleAlerts(page: Page): Promise<string[]> {
+  const out: string[] = [];
+  for (const frame of page.frames()) {
+    const alerts = frame.locator('[role=alert]').filter({ visible: true });
+    const n = Math.min(await alerts.count().catch(() => 0), 5);
+    for (let i = 0; i < n; i++) {
+      const text = (
+        await alerts
+          .nth(i)
+          .innerText()
+          .catch(() => '')
+      )
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (text) out.push(text.slice(0, 200));
+    }
+  }
+  return out;
+}
+
 /** Waits until the page shows form controls and they stop changing; false if none show. */
 export async function waitForForm(page: Page, timeoutMs = 10_000): Promise<boolean> {
   const deadline = Date.now() + timeoutMs;
@@ -348,6 +449,12 @@ export interface FillStepOptions {
   classify?(fields: SnapField[]): Promise<void>;
   /** Read: try each option of choice fields with at most `maxOptions` options. */
   explore?: { maxOptions: number; budget: number };
+  /**
+   * Deliver: a control the deterministic pass couldn't operate gets one field-scoped agent run
+   * (≤ N tool calls). `reason` is why the deterministic attempt failed. Returns whether the
+   * field now holds `value`; false ends the step in a field hand-off.
+   */
+  agentField?(field: SnapField, value: FillValue, reason: string): Promise<boolean>;
   signal?: AbortSignal;
   notes: string[];
   progress?(message: string): void;
@@ -468,13 +575,18 @@ export async function fillStep(page: Page, o: FillStepOptions): Promise<StepResu
     o.progress?.(`filling ${field.label || field.kind}`);
 
     const before = await formSignature(page);
-    const res = await fillField(page, field, value);
+    let res = await fillField(page, field, value);
     if (!res.ok) {
       o.notes.push(`${field.label || field.kind}: ${res.reason}`);
-      if (o.mode === 'deliver') {
-        return { kind: 'handoff', scope: 'field', field, reason: res.reason, fields: list };
+      const fixed = o.mode === 'deliver' && (await o.agentField?.(field, value, res.reason));
+      if (!fixed) {
+        if (o.mode === 'deliver') {
+          return { kind: 'handoff', scope: 'field', field, reason: res.reason, fields: list };
+        }
+        continue;
       }
-      continue;
+      // The agent operated the control itself; there's no discovered option list to record.
+      res = { ok: true };
     }
     if (res.options !== undefined && res.options !== null) field.options = res.options;
     const chosen: FillValue =

@@ -14,6 +14,8 @@ export const TASK_ENTITY = {
   read_form: 'posting',
   // Standard fields, answers (application_writer) and their checks (claim_verifier), phase 5.
   prepare_application: 'application',
+  // Fills and submits the real form through its channel, phase 6.
+  deliver_application: 'application',
   sync_source: 'source',
   // The fact vector index as a whole: entity_id is always 0.
   embed_facts: 'index',
@@ -42,6 +44,15 @@ export interface Task<K extends TaskKind = TaskKind> {
 export interface HandOff {
   reason: string;
   detail: string | null;
+  /** Delivery only: where it got stuck, and what the candidate finds in the window left open. */
+  browser?: {
+    scope: 'field' | 'step' | 'captcha';
+    step: number;
+    fieldLabel: string | null;
+    url: string;
+    /** A saved `ariaSnapshot` of the page at hand-off time. */
+    snapshotPath: string | null;
+  };
 }
 
 export interface EnqueueOptions {

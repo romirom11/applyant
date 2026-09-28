@@ -26,6 +26,7 @@ import {
 import type { Tx } from '../../queue/types.ts';
 import { enqueueEmbedFacts } from '../knowledge/embed-index.ts';
 import { confirmFact, MAX_FACT_LENGTH } from '../knowledge/facts.ts';
+import { enqueueDelivery } from './deliver.ts';
 import { entries } from './standard-fields.ts';
 import {
   type AnswerView,
@@ -435,6 +436,15 @@ export function approveApplication(tx: Tx, applicationId: number): ApplicationRo
     .returning()
     .get();
   emitStage(tx, row, 'approved', `application ${applicationId}: approved`);
+  // Approval is the human gate; delivery then runs on its own (candidate pulled in only on hand-off).
+  enqueueDelivery(tx, applicationId);
+  return row;
+}
+
+/** `applications submit`: approve if needed, then (re-)enqueue delivery either way. */
+export function submitApplication(tx: Tx, applicationId: number): ApplicationRow {
+  const row = approveApplication(tx, applicationId);
+  enqueueDelivery(tx, applicationId);
   return row;
 }
 

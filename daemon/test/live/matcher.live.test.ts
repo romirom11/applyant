@@ -11,6 +11,8 @@ import { fileURLToPath } from 'node:url';
 import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { ReaderPool } from '../../src/browser/reader-pool.ts';
+import { SubmitProfile } from '../../src/browser/submit-profile.ts';
+import { TaskPages } from '../../src/browser/task-pages.ts';
 import { closeDb, openDb, openReadDb } from '../../src/db/client.ts';
 import { ReadPool } from '../../src/db/read-pool.ts';
 import { agentRuns, type FactKind, facts, postings } from '../../src/db/schema.ts';
@@ -69,6 +71,9 @@ describe.skipIf(!live)('live matcher (real claude, real embeddings)', () => {
       bus,
       deps: {
         reader: {} as ReaderPool,
+        submit: new SubmitProfile({ userDataDir: join(dir, 'browser'), log: quietLog }),
+        taskPages: new TaskPages(),
+        channels: {},
         secrets: new FileSecrets(join(dir, 'secrets.json')),
         models,
         embedder,
@@ -76,7 +81,7 @@ describe.skipIf(!live)('live matcher (real claude, real embeddings)', () => {
         mcp: null,
         fx: fixedFx(),
         text: new NodeTextExtractor(),
-        dirs: { repos: join(dir, 'repos') },
+        dirs: { repos: join(dir, 'repos'), files: join(dir, 'files') },
         log: quietLog,
       },
       handlers: handlers({ score_posting: scorePosting, embed_facts: embedFacts }),

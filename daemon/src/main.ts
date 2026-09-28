@@ -2,12 +2,17 @@
 // applyantd: the composition root. Opens the database, starts the queue worker, the reader
 // browser and the Connect server, then writes {port, token} for clients.
 import { randomBytes } from 'node:crypto';
+import { join } from 'node:path';
 import { ReaderPool } from './browser/reader-pool.ts';
+import { SubmitProfile } from './browser/submit-profile.ts';
+import { TaskPages } from './browser/task-pages.ts';
+import { WebFormChannel } from './channels/web-form.ts';
 import { type Config, loadConfig } from './config.ts';
 import { closeDb, openDb, openReadDb } from './db/client.ts';
 import { ReadPool } from './db/read-pool.ts';
 import { agentRuns } from './db/schema.ts';
 import type { Deps } from './deps.ts';
+import { catchUpDeliveries, deliverApplication } from './domain/applications/deliver.ts';
 import { prepareApplication } from './domain/applications/prepare.ts';
 import { readFormHandler, requestFormRead } from './domain/applications/read-form.ts';
 import { catchUpApplications } from './domain/applications/store.ts';
@@ -21,6 +26,7 @@ import { requestScoring, unscoredPostings } from './domain/scoring/store.ts';
 import { verifyPosting } from './domain/search/verify.ts';
 import { isAlive, readEndpoint, removeEndpoint, writeEndpoint } from './endpoint.ts';
 import { McpHub } from './mcp/server.ts';
+import { browserTools } from './mcp/tools/browser.ts';
 import { knowledgeTools } from './mcp/tools/knowledge.ts';
 import { AgentRunner } from './models/agent-runner.ts';
 import { type Embedder, GemmaEmbedder, HashEmbedder } from './models/embeddings.ts';
@@ -74,14 +80,33 @@ export async function runDaemon(config: Config = loadConfig()): Promise<() => Pr
     size: config.readWorkers,
     log: log.child({ part: 'read-pool' }),
   });
-  // Tools for agent runs (the writer's knowledge lookups), on 127.0.0.1 behind per-task tokens.
+  // The submission browser (phase 6): one persistent Chrome profile, deliveries serialised.
+  const submit = new SubmitProfile({
+    userDataDir: config.browserDir,
+    log: log.child({ part: 'submit' }),
+  });
+  const taskPages = new TaskPages();
+  // Tools for agent runs (the writer's knowledge lookups, the form agent's browser control),
+  // on 127.0.0.1 behind per-task tokens.
   const mcp = new McpHub({
-    tools: knowledgeTools({ read, readPool, embedder }),
+    tools: [...knowledgeTools({ read, readPool, embedder }), ...browserTools(taskPages)],
     log: log.child({ part: 'mcp' }),
   });
   await mcp.start();
   const deps: Deps = {
     reader,
+    submit,
+    taskPages,
+    channels: {
+      web_form: new WebFormChannel({
+        reader,
+        submit,
+        taskPages,
+        models,
+        mcp,
+        snapshotsDir: join(config.filesDir, 'handoffs'),
+      }),
+    },
     secrets,
     models,
     embedder,
@@ -89,7 +114,7 @@ export async function runDaemon(config: Config = loadConfig()): Promise<() => Pr
     mcp,
     fx: new EcbFx(),
     text: new NodeTextExtractor(),
-    dirs: { repos: config.reposDir },
+    dirs: { repos: config.reposDir, files: config.filesDir },
     log,
   };
   const handlers: Handlers = {
@@ -97,6 +122,7 @@ export async function runDaemon(config: Config = loadConfig()): Promise<() => Pr
     score_posting: scorePosting,
     read_form: readFormHandler,
     prepare_application: prepareApplication,
+    deliver_application: deliverApplication,
     sync_source: syncSource,
     embed_facts: embedFacts,
   };
@@ -112,6 +138,8 @@ export async function runDaemon(config: Config = loadConfig()): Promise<() => Pr
   runInTx(db, bus, { now: new Date() }, (tx) =>
     catchUpApplications(tx, getPreferences(tx.db).threshold),
   );
+  // …and delivery for an approved application that never got one (a restart mid-delivery).
+  runInTx(db, bus, { now: new Date() }, (tx) => catchUpDeliveries(tx));
 
   const worker = new Worker({
     db,
@@ -152,6 +180,7 @@ export async function runDaemon(config: Config = loadConfig()): Promise<() => Pr
       await rpc.close();
       await worker.stop();
       await mcp.close();
+      await submit.close();
       await reader.close();
       await readPool.close();
       await embedder.close?.();

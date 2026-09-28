@@ -4,14 +4,19 @@
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { FieldKind, FieldMeaning, FieldSpec, FormRead } from '../../src/browser/form-types.ts';
+import { SubmitProfile } from '../../src/browser/submit-profile.ts';
+import { TaskPages } from '../../src/browser/task-pages.ts';
+import { WebFormChannel } from '../../src/channels/web-form.ts';
 import type { Db } from '../../src/db/client.ts';
 import { directExec } from '../../src/db/read-pool.ts';
 import { facts, postings } from '../../src/db/schema.ts';
+import { deliverApplication } from '../../src/domain/applications/deliver.ts';
 import { prepareApplication } from '../../src/domain/applications/prepare.ts';
 import { embedFacts } from '../../src/domain/knowledge/embed-index.ts';
 import { type StandardKey, setProfileValue } from '../../src/domain/knowledge/profile.ts';
 import { createProject } from '../../src/domain/knowledge/projects.ts';
 import { McpHub } from '../../src/mcp/server.ts';
+import { browserTools } from '../../src/mcp/tools/browser.ts';
 import { knowledgeTools } from '../../src/mcp/tools/knowledge.ts';
 import type { ProviderRequest, ProviderResult } from '../../src/models/agent-runner.ts';
 import { HashEmbedder } from '../../src/models/embeddings.ts';
@@ -193,6 +198,8 @@ export interface Script {
   verdict?(sentence: string): { supported: boolean; issue: string; note: string };
   /** option_match: which option the profile answer means; default: the "doesn't settle it" option. */
   option?(label: string, answer: string, options: string[]): string | null;
+  /** form_agent (phase 6): the field- or step-scoped run; default: refuses (done: false). */
+  formAgent?(req: ProviderRequest): ProviderResult | Promise<ProviderResult>;
 }
 
 export function writerQuestions(prompt: string): WriterQuestionSeen[] {
@@ -249,6 +256,12 @@ export function scriptedClaude(script: Script = {}) {
       });
       return ok({ answers });
     }
+    if (req.role === 'form_agent') {
+      return (
+        (await script.formAgent?.(req)) ??
+        ok({ done: false, note: 'no script for this form_agent run' })
+      );
+    }
     return { kind: 'error', message: `scripted claude: no script for ${req.role}`, usage: null };
   };
   return { provider: new FakeProvider('claude', [], reply), requests };
@@ -261,31 +274,71 @@ export interface PrepareHarness {
   bus: EventBus;
   hub: McpHub;
   claude: ReturnType<typeof scriptedClaude>;
+  submit: SubmitProfile;
+  taskPages: TaskPages;
   stop(): Promise<void>;
 }
 
-export async function prepareHarness(t: TempDb, script: Script = {}): Promise<PrepareHarness> {
+export interface PrepareHarnessOptions {
+  /** The submission browser runs headless unless a test needs to see (or minimise) a window. */
+  headless?: boolean;
+}
+
+/**
+ * A worker with prepare_application and deliver_application, so a test can run the whole
+ * pipeline: prepare → review → approve → deliver. The submission browser is real (Playwright
+ * chromium, headless by default) so delivery tests exercise the actual form engine.
+ */
+export async function prepareHarness(
+  t: TempDb,
+  script: Script = {},
+  o: PrepareHarnessOptions = {},
+): Promise<PrepareHarness> {
   const bus = new EventBus();
   const claude = scriptedClaude(script);
   const embedder = new HashEmbedder();
+  const taskPages = new TaskPages();
   const hub = new McpHub({
-    tools: knowledgeTools({ read: t.read, readPool: directExec(t.read), embedder }),
+    tools: [
+      ...knowledgeTools({ read: t.read, readPool: directExec(t.read), embedder }),
+      ...browserTools(taskPages),
+    ],
     log: quietLog,
   });
   await hub.start();
+  const submit = new SubmitProfile({
+    userDataDir: join(t.dir, 'browser'),
+    log: quietLog,
+    headless: o.headless ?? true,
+  });
+  const deps = testDeps({
+    dir: t.dir,
+    db: t.db,
+    providers: [claude.provider],
+    read: t.read,
+    embedder,
+    mcp: hub,
+    submit,
+    taskPages,
+  });
+  deps.channels.web_form = new WebFormChannel({
+    reader: deps.reader,
+    submit,
+    taskPages,
+    models: deps.models,
+    mcp: hub,
+    snapshotsDir: join(t.dir, 'handoffs'),
+  });
   const worker = new Worker({
     db: t.db,
     read: t.read,
     bus,
-    deps: testDeps({
-      dir: t.dir,
-      db: t.db,
-      providers: [claude.provider],
-      read: t.read,
-      embedder,
-      mcp: hub,
+    deps,
+    handlers: handlers({
+      prepare_application: prepareApplication,
+      deliver_application: deliverApplication,
+      embed_facts: embedFacts,
     }),
-    handlers: handlers({ prepare_application: prepareApplication, embed_facts: embedFacts }),
     log: quietLog,
     concurrency: 1,
     leaseMs: 60_000,
@@ -298,9 +351,12 @@ export async function prepareHarness(t: TempDb, script: Script = {}): Promise<Pr
     bus,
     hub,
     claude,
+    submit,
+    taskPages,
     async stop() {
       await worker.stop();
       await hub.close();
+      await submit.close();
     },
   };
 }

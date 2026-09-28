@@ -13,9 +13,12 @@ Connect API (`proto/applyant/v1/applyant.proto`).
 
 ```sh
 pnpm -C daemon install
-pnpm -C daemon exec playwright install --only-shell --with-deps chromium
+pnpm -C daemon exec playwright install --only-shell --with-deps chromium   # background reading
+# Delivery (phase 6) submits through the installed Google Chrome, headed. On a headless box the
+# window runs under xvfb (installed by --with-deps above); without a display the one test that
+# needs a real window skips.
 buf lint && buf generate          # after changing the .proto
-pnpm -C daemon typecheck && pnpm -C daemon lint && pnpm -C daemon test
+pnpm -C daemon typecheck && pnpm -C daemon lint && xvfb-run -a pnpm -C daemon test
 ```
 
 Run the daemon and talk to it:
@@ -103,7 +106,19 @@ endpoint). Every sentence is then checked: numbers and dates without a model (a 
 number is a hard flag, a number the facts don't have is confirmable), then by a separate
 `claim_verifier` (claude:haiku) that sees only the sentences and the cited facts. Approve is
 refused while a required value is missing, a sentence is flagged, or a relied-on fact is
-unconfirmed. In this phase approval only marks the application approved; delivery comes next.
+unconfirmed.
+
+Delivery: approval is the gate, and the daemon submits on its own after it. The web-form channel
+opens the form in Applyant's own persistent Chrome profile (`$APPLYANT_HOME/browser`, branded
+Chrome through Patchright, a headed window kept minimised), fills every step with the reviewed
+values, uploads the profile's base CV, presses submit and waits for a confirmation. Anything the
+deterministic fill can't operate goes to `form_agent` (claude:sonnet), scoped to one field or one
+step, with five browser tools (`snapshot`, `fill`, `select`, `upload`, `click`) over the MCP
+endpoint; it chooses how to operate a control, never what to enter. A captcha, a required field
+with no reviewed value, or a step that won't advance ends in a hand-off: the window is restored
+with the form filled, the application waits, and `handoff show` says what is left. A delivered
+application is `applied` with a receipt of exactly what was sent (every value and its source,
+the CV file hash, the final URL and the confirmation text).
 
 ```sh
 pnpm -C daemon cli candidate profile set visa_sponsorship "No sponsorship needed in the EU"  # also:
@@ -118,7 +133,9 @@ pnpm -C daemon cli applications confirm <id> [fact-id…]                # the u
 pnpm -C daemon cli applications edit <id> q2.3 "<your sentence>"       # your words → a confirmed fact
 pnpm -C daemon cli applications edit <id> q2.3 --confirm               # a flagged number is true as written
 pnpm -C daemon cli applications prepare <id> [--rewrite]               # again: current profile, overrides kept
-pnpm -C daemon cli applications approve <id>
+pnpm -C daemon cli applications approve <id>                           # delivery starts on its own
+pnpm -C daemon cli applications submit <id>                            # approve + deliver, or retry a stuck delivery
+pnpm -C daemon cli handoff show <id>                                   # why delivery stopped, and what is left
 ```
 
 Recorded forms: `pnpm -C daemon fixtures:record <url> --name <name> --about "<what it is>"` reads a

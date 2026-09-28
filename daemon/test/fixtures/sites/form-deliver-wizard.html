@@ -1,0 +1,37 @@
+<!doctype html>
+<!-- Synthetic, for phase 6 delivery tests. A plain 2-step wizard (no conditionals, no choice
+     fields): checks that Deliver presses a non-final "Next" and then the final submit, across
+     a fresh snapshot of the next step. -->
+<html lang="en"><head><meta charset="utf-8"><title>Apply · Steps Inc</title>
+<style>[hidden] { display: none !important; }</style>
+</head><body>
+<h1>Apply to Steps Inc</h1>
+<form id="apply" novalidate onsubmit="return false">
+  <section data-step="1">
+    <div><label for="name">Full Name *</label><input id="name" required></div>
+    <div><label for="email">Email *</label><input id="email" type="email" required></div>
+    <button type="button" id="next">Next</button>
+  </section>
+  <section data-step="2" hidden>
+    <div><label for="how">How did you hear about us?</label><input id="how"></div>
+    <div><label><input type="checkbox" id="consent" required> I agree to the privacy policy *</label></div>
+    <button type="button" id="submit">Submit application</button>
+  </section>
+</form>
+<div id="confirmation" hidden>Thanks — your application has been received.</div>
+<script>
+  window.__submitted = 0;
+  document.getElementById('next').addEventListener('click', () => {
+    if (!document.getElementById('name').value || !document.getElementById('email').value) return;
+    document.querySelector('[data-step="1"]').hidden = true;
+    document.querySelector('[data-step="2"]').hidden = false;
+  });
+  document.getElementById('submit').addEventListener('click', () => {
+    if (!document.getElementById('consent').checked) return;
+    window.__submitted++;
+    document.getElementById('apply').hidden = true;
+    document.getElementById('confirmation').hidden = false;
+    fetch('/submitted', { method: 'POST', body: 'ok' }).catch(() => {});
+  });
+</script>
+</body></html>

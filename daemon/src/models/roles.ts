@@ -102,6 +102,8 @@ export const TASK_ROLE: Partial<Record<string, Role>> = {
   read_form: 'field_classify',
   // The writer is the expensive part; standard fields (option_match) and claim_verifier also run.
   prepare_application: 'application_writer',
+  // Deterministic filling handles most of the form; form_agent only escalates for what it can't.
+  deliver_application: 'form_agent',
 };
 
 /**

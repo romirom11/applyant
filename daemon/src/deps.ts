@@ -1,5 +1,8 @@
 // What task handlers may use during their slow phase. Built once in main.ts.
 import type { ReaderPool } from './browser/reader-pool.ts';
+import type { SubmitProfile } from './browser/submit-profile.ts';
+import type { TaskPages } from './browser/task-pages.ts';
+import type { Channel } from './channels/channel.ts';
 import type { ReadExec } from './db/read-pool.ts';
 import type { GithubApi } from './domain/knowledge/sources/github.ts';
 import type { TextExtractor } from './domain/knowledge/text/extract.ts';
@@ -12,6 +15,12 @@ import type { Logger } from './util/log.ts';
 
 export interface Deps {
   reader: ReaderPool;
+  /** The headed, persistent submission browser (phase 6): delivery and logged-in sessions. */
+  submit: SubmitProfile;
+  /** Which task a browser MCP call belongs to, so it operates on the right live page. */
+  taskPages: TaskPages;
+  /** channel key ("web_form") → its Channel implementation. */
+  channels: Record<string, Channel>;
   secrets: Secrets;
   /** Every model call goes through a role here; handlers never name a provider. */
   models: AgentRunner;
@@ -28,6 +37,8 @@ export interface Deps {
   dirs: {
     /** Partial clones of GitHub sources. */
     repos: string;
+    /** files/: hand-off snapshots and delivery receipts live under here. */
+    files: string;
   };
   /** Overrides the `gh`-backed GitHub API client (tests only). */
   github?: GithubApi | null;

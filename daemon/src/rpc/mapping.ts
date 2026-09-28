@@ -10,7 +10,7 @@ import type {
   PostingSourceRow,
   PostingStage,
 } from '../db/schema.ts';
-import type { ApplicationView } from '../domain/applications/store.ts';
+import type { ApplicationView, ReceiptView } from '../domain/applications/store.ts';
 import { effectiveExtraction } from '../domain/scoring/structured.ts';
 import type { CitedFact } from '../domain/search/postings.ts';
 import {
@@ -21,17 +21,22 @@ import {
   ElementRefSchema,
   type Event,
   EventSchema,
+  HandOffSchema,
   ApplicationStage as PbAppStage,
   type ElementRef as PbElementRef,
   FactStatus as PbFactStatus,
+  type HandOff as PbHandOff,
+  type Receipt as PbReceipt,
   PostingStage as PbStage,
   type Posting,
   PostingSchema,
   PostingSourceSchema,
+  ReceiptSchema,
   RequirementMatchSchema,
   ScoreComponentSchema,
   TaskEventType,
 } from '../gen/applyant/v1/applyant_pb.js';
+import type { HandOff as HandOffRecord } from '../queue/types.ts';
 
 const FACT_STATUS_TO_PB = {
   unconfirmed: PbFactStatus.UNCONFIRMED,
@@ -52,7 +57,37 @@ const APP_STAGE_TO_PB: Record<ApplicationStage, PbAppStage> = {
   ready_for_review: PbAppStage.READY_FOR_REVIEW,
   needs_candidate: PbAppStage.NEEDS_CANDIDATE,
   approved: PbAppStage.APPROVED,
+  applied: PbAppStage.APPLIED,
 };
+
+export function receiptToPb(r: ReceiptView): PbReceipt {
+  return create(ReceiptSchema, {
+    finalUrl: r.finalUrl,
+    confirmationText: r.confirmationText ?? undefined,
+    cvPath: r.cvPath ?? undefined,
+    cvHash: r.cvHash ?? undefined,
+    salaryValue: r.salaryValue ?? undefined,
+    submittedAt: timestampFromDate(r.submittedAt),
+    fieldValues: r.fieldValues.map((f) => ({
+      ref: f.ref,
+      label: f.label,
+      value: f.value ?? undefined,
+      source: f.source,
+    })),
+  });
+}
+
+export function handOffToPb(h: HandOffRecord): PbHandOff {
+  return create(HandOffSchema, {
+    reason: h.reason,
+    detail: h.detail ?? undefined,
+    scope: h.browser?.scope ?? undefined,
+    step: h.browser?.step ?? undefined,
+    fieldLabel: h.browser?.fieldLabel ?? undefined,
+    url: h.browser?.url ?? undefined,
+    snapshotPath: h.browser?.snapshotPath ?? undefined,
+  });
+}
 
 export function appStageToPb(stage: string | null | undefined): PbAppStage {
   return APP_STAGE_TO_PB[stage as ApplicationStage] ?? PbAppStage.UNSPECIFIED;
@@ -82,6 +117,9 @@ export function applicationToPb(view: ApplicationView, full = true): Application
     createdAt: timestampFromDate(app.createdAt),
     preparedAt: app.preparedAt ? timestampFromDate(app.preparedAt) : undefined,
     approvedAt: app.approvedAt ? timestampFromDate(app.approvedAt) : undefined,
+    appliedAt: app.appliedAt ? timestampFromDate(app.appliedAt) : undefined,
+    receipt: view.receipt ? receiptToPb(view.receipt) : undefined,
+    handOff: view.handOff ? handOffToPb(view.handOff) : undefined,
     blockers: view.blockers,
     missing: view.missing,
     unconfirmedFactIds: view.unconfirmedFactIds.map((n) => BigInt(n)),
@@ -314,6 +352,19 @@ export function eventToPb(row: EventRow): Event {
           applicationId: BigInt(row.entityId ?? 0),
           postingId: BigInt(row.postingId ?? 0),
           stage: appStageToPb(row.stage),
+        },
+      },
+    });
+  }
+  if (row.kind === 'handoff') {
+    return create(EventSchema, {
+      ...base,
+      payload: {
+        case: 'handoff',
+        value: {
+          applicationId: BigInt(row.entityId ?? 0),
+          postingId: BigInt(row.postingId ?? 0),
+          reason: row.message,
         },
       },
     });

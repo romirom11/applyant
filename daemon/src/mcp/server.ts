@@ -31,7 +31,12 @@ export interface McpTool<R = unknown> {
   name: string;
   description: string;
   input: Record<string, z.ZodType>;
-  run(args: Record<string, unknown>, signal: AbortSignal): Promise<ToolResult<R>>;
+  /** `taskId` is the grant's: browser tools use it to find the task's live page. */
+  run(
+    args: Record<string, unknown>,
+    signal: AbortSignal,
+    taskId: number | null,
+  ): Promise<ToolResult<R>>;
 }
 
 export interface ToolCall {
@@ -230,7 +235,7 @@ export class McpHub implements McpAccess {
           }
           live.used++;
           try {
-            const result = await tool.run(args, live.ac.signal);
+            const result = await tool.run(args, live.ac.signal, live.options.taskId);
             live.calls.push({ tool: name, args, outcome: 'ok', items: result.items.length });
             live.options.onResult?.(name, result.items);
             return { content: [{ type: 'text' as const, text: result.text }] };

@@ -301,6 +301,9 @@ export const APPLICATION_STAGES = [
   'ready_for_review',
   'needs_candidate',
   'approved',
+  /** Delivered through its channel; see `receipts`. A delivery stuck mid-way stays `approved`
+   * (the human gate already passed) with a note; `handoff show` explains it. */
+  'applied',
 ] as const;
 export type ApplicationStage = (typeof APPLICATION_STAGES)[number];
 
@@ -415,6 +418,37 @@ export const answerSentences = sqliteTable(
   (t) => [uniqueIndex('answer_sentences_answer_idx').on(t.answerId, t.idx)],
 );
 
+/** One field as it was actually sent, kept in the receipt even if field_values changes later. */
+export interface ReceiptFieldValue {
+  ref: string;
+  label: string;
+  value: string | null;
+  source: FieldSource;
+}
+
+/**
+ * What was actually delivered: every field value sent (with its source), the CV file's hash
+ * and path, the salary value if any, the final URL, the confirmation and when. One row per
+ * application (a re-delivery replaces it).
+ */
+export const receipts = sqliteTable('receipts', {
+  id: integer('id').primaryKey(),
+  applicationId: integer('application_id')
+    .notNull()
+    .unique()
+    .references(() => applications.id, { onDelete: 'cascade' }),
+  finalUrl: text('final_url').notNull(),
+  confirmationText: text('confirmation_text'),
+  /** A saved page snapshot (ariaSnapshot text) of the confirmation, for `applications show`. */
+  confirmationSnapshotPath: text('confirmation_snapshot_path'),
+  cvPath: text('cv_path'),
+  cvHash: text('cv_hash'),
+  salaryValue: text('salary_value'),
+  fieldValues: text('field_values', { mode: 'json' }).$type<ReceiptFieldValue[]>().notNull(),
+  submittedAt: integer('submitted_at', { mode: 'timestamp_ms' }).notNull(),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull().default(now),
+});
+
 /** Small daemon-internal state, key → JSON (e.g. which embedder made the fact vectors). */
 export const appState = sqliteTable('app_state', {
   key: text('key').primaryKey(),
@@ -437,3 +471,5 @@ export type ApplicationRow = typeof applications.$inferSelect;
 export type FieldValueRow = typeof fieldValues.$inferSelect;
 export type AnswerRow = typeof answers.$inferSelect;
 export type AnswerSentenceRow = typeof answerSentences.$inferSelect;
+export type ReceiptRow = typeof receipts.$inferSelect;
+export type NewReceiptRow = typeof receipts.$inferInsert;

@@ -5,6 +5,7 @@ import { registerApplications } from './applications.ts';
 import { registerCandidate } from './candidate.ts';
 import { type ApplyantClient, connect, describeError } from './client.ts';
 import { eventJson, eventLine } from './format.ts';
+import { registerHandoff } from './handoff.ts';
 import { positiveInt, registerJobs } from './jobs.ts';
 
 const out = (text: string): void => {
@@ -60,6 +61,7 @@ export function buildCli(client: () => ApplyantClient): Command {
   registerJobs(program, client);
   registerCandidate(program, client);
   registerApplications(program, client);
+  registerHandoff(program, client);
 
   const runs = program.command('runs').description('task activity');
   runs

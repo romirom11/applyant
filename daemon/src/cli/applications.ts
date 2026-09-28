@@ -21,6 +21,7 @@ const STAGES: Record<string, ApplicationStage> = {
   ready_for_review: ApplicationStage.READY_FOR_REVIEW,
   needs_candidate: ApplicationStage.NEEDS_CANDIDATE,
   approved: ApplicationStage.APPROVED,
+  applied: ApplicationStage.APPLIED,
 };
 
 export function appStageName(stage: ApplicationStage): string {
@@ -55,6 +56,35 @@ const FACT_MARK: Record<number, string> = {
   [FactStatus.REJECTED]: '✗',
 };
 
+function receiptJson(r: NonNullable<Application['receipt']>) {
+  return {
+    finalUrl: r.finalUrl,
+    confirmationText: r.confirmationText ?? null,
+    cvPath: r.cvPath ?? null,
+    cvHash: r.cvHash ?? null,
+    salaryValue: r.salaryValue ?? null,
+    submittedAt: iso(r.submittedAt),
+    fieldValues: r.fieldValues.map((f) => ({
+      ref: f.ref,
+      label: f.label,
+      value: f.value ?? null,
+      source: f.source,
+    })),
+  };
+}
+
+export function handOffJson(h: NonNullable<Application['handOff']>) {
+  return {
+    reason: h.reason,
+    detail: h.detail ?? null,
+    scope: h.scope ?? null,
+    step: h.step ?? null,
+    fieldLabel: h.fieldLabel ?? null,
+    url: h.url ?? null,
+    snapshotPath: h.snapshotPath ?? null,
+  };
+}
+
 export function applicationJson(a: Application) {
   return {
     id: Number(a.id),
@@ -70,6 +100,9 @@ export function applicationJson(a: Application) {
     createdAt: iso(a.createdAt),
     preparedAt: iso(a.preparedAt),
     approvedAt: iso(a.approvedAt),
+    appliedAt: iso(a.appliedAt),
+    receipt: a.receipt ? receiptJson(a.receipt) : null,
+    handOff: a.handOff ? handOffJson(a.handOff) : null,
     blockers: a.blockers,
     missing: a.missing,
     unconfirmedFactIds: a.unconfirmedFactIds.map(Number),
@@ -155,6 +188,26 @@ export function previewLines(a: Application, o: { all?: boolean } = {}): string[
   );
   if (a.formUrl) lines.push(`Form    ${a.formUrl}`);
   if (a.note) lines.push(`Note    ${a.note}`);
+  if (a.receipt) {
+    lines.push(
+      '',
+      `Applied ${iso(a.appliedAt) ?? ''} → ${a.receipt.finalUrl}`,
+      a.receipt.confirmationText
+        ? `  "${truncate(a.receipt.confirmationText, 200)}"`
+        : '  (no confirmation text captured)',
+      `  ${a.receipt.fieldValues.length} field value(s) sent${a.receipt.cvPath ? ` · CV ${a.receipt.cvHash ? `(${a.receipt.cvHash.slice(0, 12)}…)` : ''}` : ''}${a.receipt.salaryValue ? ` · salary "${a.receipt.salaryValue}"` : ''}`,
+    );
+  }
+  if (a.handOff) {
+    lines.push(
+      '',
+      `Needs you: ${a.handOff.reason}`,
+      a.handOff.url
+        ? `  window left open at ${a.handOff.url}${a.handOff.step ? ` (step ${a.handOff.step})` : ''}`
+        : '',
+      `  \`applyant handoff show ${id}\` for details`,
+    );
+  }
 
   const answers = new Map(a.answers.map((x) => [x.fieldRef, x]));
   const shown = a.fields.filter((f) => (o.all || f.active) && f.entryOf === undefined);
@@ -233,8 +286,14 @@ export function previewLines(a: Application, o: { all?: boolean } = {}): string[
   }
 
   lines.push('');
-  if (a.stage === ApplicationStage.APPROVED) {
-    lines.push(`Approved ${iso(a.approvedAt) ?? ''}.`);
+  if (a.stage === ApplicationStage.APPLIED) {
+    lines.push(`Applied ${iso(a.appliedAt) ?? ''}.`);
+  } else if (a.stage === ApplicationStage.APPROVED) {
+    lines.push(
+      a.handOff
+        ? `Approved ${iso(a.approvedAt) ?? ''}; delivery needs you (see above).`
+        : `Approved ${iso(a.approvedAt) ?? ''}; delivering.`,
+    );
   } else if (a.blockers.length === 0) {
     lines.push(`Ready: \`applyant applications approve ${id}\``);
   } else {
@@ -440,13 +499,26 @@ export function registerApplications(program: Command, client: () => ApplyantCli
   apps
     .command('approve <id>')
     .description(
-      'approve the application (refused while anything required is missing, flagged or unconfirmed)',
+      'approve the application (refused while anything required is missing, flagged or unconfirmed); delivery then runs on its own',
     )
     .action(async (idArg: string) => {
       const res = await client().approveApplication({ id: BigInt(positiveInt(idArg)) });
       const a = res.application;
       out(
-        `Approved application ${a?.id}${a?.title ? ` (${a.title}${a.company ? ` · ${a.company}` : ''})` : ''}. Delivery comes in the next phase.`,
+        `Approved application ${a?.id}${a?.title ? ` (${a.title}${a.company ? ` · ${a.company}` : ''})` : ''}. Delivering through its channel; follow with \`applyant runs show --follow\`.`,
+      );
+    });
+
+  apps
+    .command('submit <id>')
+    .description(
+      'approve (if needed) and deliver: same refusal rules as approve; also retries a delivery stuck on a hand-off',
+    )
+    .action(async (idArg: string) => {
+      const res = await client().submitApplication({ id: BigInt(positiveInt(idArg)) });
+      const a = res.application;
+      out(
+        `Application ${a?.id}${a?.title ? ` (${a.title}${a.company ? ` · ${a.company}` : ''})` : ''}: delivering. Follow with \`applyant runs show --follow\`.`,
       );
     });
 }

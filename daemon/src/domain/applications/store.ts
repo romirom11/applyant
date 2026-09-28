@@ -22,9 +22,11 @@ import {
   type PostingRow,
   postings,
   projects,
+  type ReceiptFieldValue,
+  receipts,
   tasks,
 } from '../../db/schema.ts';
-import type { Tx } from '../../queue/types.ts';
+import type { HandOff, Tx } from '../../queue/types.ts';
 import { activeRefs, type FieldRole, fieldRole } from './standard-fields.ts';
 
 export class ApplicationError extends Error {}
@@ -97,6 +99,16 @@ export interface FieldView {
   condition: string | null;
 }
 
+export interface ReceiptView {
+  finalUrl: string;
+  confirmationText: string | null;
+  cvPath: string | null;
+  cvHash: string | null;
+  salaryValue: string | null;
+  submittedAt: Date;
+  fieldValues: ReceiptFieldValue[];
+}
+
 export interface ApplicationView {
   app: ApplicationRow;
   posting: Pick<PostingRow, 'id' | 'title' | 'company' | 'score' | 'canonicalUrl' | 'formNote'> & {
@@ -110,6 +122,10 @@ export interface ApplicationView {
   missing: string[];
   /** Unconfirmed facts the application relies on. */
   unconfirmedFactIds: number[];
+  /** Set once delivery has submitted the application. */
+  receipt: ReceiptView | null;
+  /** The most recent delivery hand-off still waiting on the candidate, if any. */
+  handOff: HandOff | null;
 }
 
 // ---- creating and (re-)preparing ------------------------------------------------------------
@@ -466,7 +482,29 @@ export function applicationView(conn: Conn, id: number): ApplicationView {
       `${unconfirmed.size} unconfirmed fact(s): ${[...unconfirmed].map((n) => `#${n}`).join(', ')}`,
     );
   }
-  if (app.stage === 'approved') blockers.length = 0;
+  if (app.stage === 'approved' || app.stage === 'applied') blockers.length = 0;
+
+  const receiptRow = conn.select().from(receipts).where(eq(receipts.applicationId, id)).get();
+  const hoTask = conn
+    .select({ note: tasks.note })
+    .from(tasks)
+    .where(
+      and(
+        eq(tasks.kind, 'deliver_application'),
+        eq(tasks.entityId, id),
+        eq(tasks.status, 'needs_candidate'),
+      ),
+    )
+    .orderBy(desc(tasks.id))
+    .get();
+  let handOff: HandOff | null = null;
+  if (hoTask?.note) {
+    try {
+      handOff = JSON.parse(hoTask.note) as HandOff;
+    } catch {
+      handOff = null;
+    }
+  }
 
   return {
     app,
@@ -481,6 +519,18 @@ export function applicationView(conn: Conn, id: number): ApplicationView {
     },
     fields,
     answers: answerViews,
+    receipt: receiptRow
+      ? {
+          finalUrl: receiptRow.finalUrl,
+          confirmationText: receiptRow.confirmationText,
+          cvPath: receiptRow.cvPath,
+          cvHash: receiptRow.cvHash,
+          salaryValue: receiptRow.salaryValue,
+          submittedAt: receiptRow.submittedAt,
+          fieldValues: receiptRow.fieldValues,
+        }
+      : null,
+    handOff,
     blockers,
     missing,
     unconfirmedFactIds: [...unconfirmed],

@@ -1086,6 +1086,34 @@ export declare type ApplicationEvent = Message<"applyant.v1.ApplicationEvent"> &
 export declare const ApplicationEventSchema: GenMessage<ApplicationEvent>;
 
 /**
+ * Delivery got stuck and left a browser window open for the candidate to finish.
+ *
+ * @generated from message applyant.v1.HandOffEvent
+ */
+export declare type HandOffEvent = Message<"applyant.v1.HandOffEvent"> & {
+  /**
+   * @generated from field: int64 application_id = 1;
+   */
+  applicationId: bigint;
+
+  /**
+   * @generated from field: int64 posting_id = 2;
+   */
+  postingId: bigint;
+
+  /**
+   * @generated from field: string reason = 3;
+   */
+  reason: string;
+};
+
+/**
+ * Describes the message applyant.v1.HandOffEvent.
+ * Use `create(HandOffEventSchema)` to create a new message.
+ */
+export declare const HandOffEventSchema: GenMessage<HandOffEvent>;
+
+/**
  * @generated from message applyant.v1.Event
  */
 export declare type Event = Message<"applyant.v1.Event"> & {
@@ -1132,6 +1160,12 @@ export declare type Event = Message<"applyant.v1.Event"> & {
      */
     value: ApplicationEvent;
     case: "application";
+  } | {
+    /**
+     * @generated from field: applyant.v1.HandOffEvent handoff = 13;
+     */
+    value: HandOffEvent;
+    case: "handoff";
   } | { case: undefined; value?: undefined };
 };
 
@@ -2390,6 +2424,25 @@ export declare type Application = Message<"applyant.v1.Application"> & {
    * @generated from field: repeated applyant.v1.Answer answers = 18;
    */
   answers: Answer[];
+
+  /**
+   * @generated from field: optional google.protobuf.Timestamp applied_at = 19;
+   */
+  appliedAt?: Timestamp | undefined;
+
+  /**
+   * Set once delivery has submitted the application.
+   *
+   * @generated from field: optional applyant.v1.Receipt receipt = 20;
+   */
+  receipt?: Receipt | undefined;
+
+  /**
+   * The most recent delivery hand-off still waiting on the candidate, if any.
+   *
+   * @generated from field: optional applyant.v1.HandOff hand_off = 21;
+   */
+  handOff?: HandOff | undefined;
 };
 
 /**
@@ -2397,6 +2450,139 @@ export declare type Application = Message<"applyant.v1.Application"> & {
  * Use `create(ApplicationSchema)` to create a new message.
  */
 export declare const ApplicationSchema: GenMessage<Application>;
+
+/**
+ * @generated from message applyant.v1.ReceiptFieldValue
+ */
+export declare type ReceiptFieldValue = Message<"applyant.v1.ReceiptFieldValue"> & {
+  /**
+   * @generated from field: string ref = 1;
+   */
+  ref: string;
+
+  /**
+   * @generated from field: string label = 2;
+   */
+  label: string;
+
+  /**
+   * @generated from field: optional string value = 3;
+   */
+  value?: string | undefined;
+
+  /**
+   * profile | override | answer | file | rule | none
+   *
+   * @generated from field: string source = 4;
+   */
+  source: string;
+};
+
+/**
+ * Describes the message applyant.v1.ReceiptFieldValue.
+ * Use `create(ReceiptFieldValueSchema)` to create a new message.
+ */
+export declare const ReceiptFieldValueSchema: GenMessage<ReceiptFieldValue>;
+
+/**
+ * Exactly what was sent when delivery submitted the application.
+ *
+ * @generated from message applyant.v1.Receipt
+ */
+export declare type Receipt = Message<"applyant.v1.Receipt"> & {
+  /**
+   * @generated from field: string final_url = 1;
+   */
+  finalUrl: string;
+
+  /**
+   * @generated from field: optional string confirmation_text = 2;
+   */
+  confirmationText?: string | undefined;
+
+  /**
+   * @generated from field: optional string cv_path = 3;
+   */
+  cvPath?: string | undefined;
+
+  /**
+   * @generated from field: optional string cv_hash = 4;
+   */
+  cvHash?: string | undefined;
+
+  /**
+   * @generated from field: optional string salary_value = 5;
+   */
+  salaryValue?: string | undefined;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp submitted_at = 6;
+   */
+  submittedAt?: Timestamp | undefined;
+
+  /**
+   * @generated from field: repeated applyant.v1.ReceiptFieldValue field_values = 7;
+   */
+  fieldValues: ReceiptFieldValue[];
+};
+
+/**
+ * Describes the message applyant.v1.Receipt.
+ * Use `create(ReceiptSchema)` to create a new message.
+ */
+export declare const ReceiptSchema: GenMessage<Receipt>;
+
+/**
+ * Why delivery needs the candidate, and (for a browser hand-off) where it got stuck.
+ *
+ * @generated from message applyant.v1.HandOff
+ */
+export declare type HandOff = Message<"applyant.v1.HandOff"> & {
+  /**
+   * @generated from field: string reason = 1;
+   */
+  reason: string;
+
+  /**
+   * @generated from field: optional string detail = 2;
+   */
+  detail?: string | undefined;
+
+  /**
+   * field | step | captcha
+   *
+   * @generated from field: optional string scope = 3;
+   */
+  scope?: string | undefined;
+
+  /**
+   * @generated from field: optional int32 step = 4;
+   */
+  step?: number | undefined;
+
+  /**
+   * @generated from field: optional string field_label = 5;
+   */
+  fieldLabel?: string | undefined;
+
+  /**
+   * @generated from field: optional string url = 6;
+   */
+  url?: string | undefined;
+
+  /**
+   * A saved `ariaSnapshot` of the page at hand-off time.
+   *
+   * @generated from field: optional string snapshot_path = 7;
+   */
+  snapshotPath?: string | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.HandOff.
+ * Use `create(HandOffSchema)` to create a new message.
+ */
+export declare const HandOffSchema: GenMessage<HandOff>;
 
 /**
  * @generated from message applyant.v1.ListApplicationsRequest
@@ -2669,6 +2855,70 @@ export declare type ApproveApplicationResponse = Message<"applyant.v1.ApproveApp
 export declare const ApproveApplicationResponseSchema: GenMessage<ApproveApplicationResponse>;
 
 /**
+ * @generated from message applyant.v1.SubmitApplicationRequest
+ */
+export declare type SubmitApplicationRequest = Message<"applyant.v1.SubmitApplicationRequest"> & {
+  /**
+   * @generated from field: int64 id = 1;
+   */
+  id: bigint;
+};
+
+/**
+ * Describes the message applyant.v1.SubmitApplicationRequest.
+ * Use `create(SubmitApplicationRequestSchema)` to create a new message.
+ */
+export declare const SubmitApplicationRequestSchema: GenMessage<SubmitApplicationRequest>;
+
+/**
+ * @generated from message applyant.v1.SubmitApplicationResponse
+ */
+export declare type SubmitApplicationResponse = Message<"applyant.v1.SubmitApplicationResponse"> & {
+  /**
+   * @generated from field: applyant.v1.Application application = 1;
+   */
+  application?: Application | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.SubmitApplicationResponse.
+ * Use `create(SubmitApplicationResponseSchema)` to create a new message.
+ */
+export declare const SubmitApplicationResponseSchema: GenMessage<SubmitApplicationResponse>;
+
+/**
+ * @generated from message applyant.v1.GetHandOffRequest
+ */
+export declare type GetHandOffRequest = Message<"applyant.v1.GetHandOffRequest"> & {
+  /**
+   * @generated from field: int64 application_id = 1;
+   */
+  applicationId: bigint;
+};
+
+/**
+ * Describes the message applyant.v1.GetHandOffRequest.
+ * Use `create(GetHandOffRequestSchema)` to create a new message.
+ */
+export declare const GetHandOffRequestSchema: GenMessage<GetHandOffRequest>;
+
+/**
+ * @generated from message applyant.v1.GetHandOffResponse
+ */
+export declare type GetHandOffResponse = Message<"applyant.v1.GetHandOffResponse"> & {
+  /**
+   * @generated from field: optional applyant.v1.HandOff hand_off = 1;
+   */
+  handOff?: HandOff | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.GetHandOffResponse.
+ * Use `create(GetHandOffResponseSchema)` to create a new message.
+ */
+export declare const GetHandOffResponseSchema: GenMessage<GetHandOffResponse>;
+
+/**
  * @generated from enum applyant.v1.PostingStage
  */
 export enum PostingStage {
@@ -2874,6 +3124,14 @@ export enum ApplicationStage {
    * @generated from enum value: APPLICATION_STAGE_APPROVED = 4;
    */
   APPROVED = 4,
+
+  /**
+   * Delivered through its channel; see `receipt`. A delivery stuck mid-way stays APPROVED
+   * (the human gate already passed) with `note` and `hand_off` set.
+   *
+   * @generated from enum value: APPLICATION_STAGE_APPLIED = 5;
+   */
+  APPLIED = 5,
 }
 
 /**
@@ -3176,7 +3434,9 @@ export declare const ApplyantService: GenService<{
   },
   /**
    * ApproveApplication is refused (FailedPrecondition, listing why) while a required value is
-   * missing, a sentence is flagged or unchecked, or a relied-on fact is unconfirmed.
+   * missing, a sentence is flagged or unchecked, or a relied-on fact is unconfirmed. Approval
+   * enqueues delivery through the application's channel; the candidate isn't asked again unless
+   * delivery gets stuck.
    *
    * @generated from rpc applyant.v1.ApplyantService.ApproveApplication
    */
@@ -3184,6 +3444,27 @@ export declare const ApplyantService: GenService<{
     methodKind: "unary";
     input: typeof ApproveApplicationRequestSchema;
     output: typeof ApproveApplicationResponseSchema;
+  },
+  /**
+   * SubmitApplication approves the application if it isn't yet (same refusal rules), then
+   * (re-)enqueues delivery either way: also how to retry a delivery stuck on a hand-off.
+   *
+   * @generated from rpc applyant.v1.ApplyantService.SubmitApplication
+   */
+  submitApplication: {
+    methodKind: "unary";
+    input: typeof SubmitApplicationRequestSchema;
+    output: typeof SubmitApplicationResponseSchema;
+  },
+  /**
+   * GetHandOff returns the most recent delivery hand-off still waiting on the candidate, if any.
+   *
+   * @generated from rpc applyant.v1.ApplyantService.GetHandOff
+   */
+  getHandOff: {
+    methodKind: "unary";
+    input: typeof GetHandOffRequestSchema;
+    output: typeof GetHandOffResponseSchema;
   },
 }>;
 

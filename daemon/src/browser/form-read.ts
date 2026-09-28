@@ -172,7 +172,7 @@ async function followApply(page: Page, signal?: AbortSignal): Promise<boolean> {
 
 // ---- reading ------------------------------------------------------------------------------
 
-function toSpec(f: SnapField): FieldSpec {
+export function toSpec(f: SnapField): FieldSpec {
   return {
     ref: f.ref,
     label: f.label,

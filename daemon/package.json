@@ -36,6 +36,7 @@
     "drizzle-orm": "^0.45.3",
     "linkedom": "^0.18.13",
     "mammoth": "^1.12.3",
+    "patchright": "^1.63.0",
     "pdfjs-dist": "^6.3.289",
     "playwright": "^1.63.0",
     "sqlite-vec": "0.1.9",

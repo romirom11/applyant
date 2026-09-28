@@ -18,6 +18,9 @@ export type EventKind =
   | 'posting.form'
   // An application moved (entity_id = application id, posting_id set, stage = its stage).
   | 'application.stage'
+  // Delivery got stuck and left a browser window open for the candidate to finish (entity_id =
+  // application id, posting_id set; message = the hand-off reason).
+  | 'handoff'
   | 'source.synced';
 
 export interface EventInput {

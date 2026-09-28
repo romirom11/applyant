@@ -2,6 +2,7 @@
 import { type ChildProcess, execFile, spawn } from 'node:child_process';
 import {
   existsSync,
+  lstatSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
@@ -522,15 +523,21 @@ describe('applyant CLI against a live daemon', () => {
     expect(existsSync(join(home, 'endpoint.json'))).toBe(false);
     expect(daemonOutput).toContain('applyantd stopped');
     expect(daemonOutput).not.toContain(SECRET);
+    // The submission browser's Chrome profile (browser/) has its own lock symlinks
+    // (SingletonCookie and friends), sometimes dangling once Chrome exits: skip symlinks, only
+    // plain files can leak the secret or have the wrong mode.
     const walk = (dir: string): string[] =>
-      readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
-        e.isDirectory() ? walk(join(dir, e.name)) : [join(dir, e.name)],
-      );
+      readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+        const path = join(dir, e.name);
+        if (e.isSymbolicLink()) return [];
+        return e.isDirectory() ? walk(path) : [path];
+      });
     const others = walk(home).filter((f) => !f.endsWith('secrets.json'));
     expect(others.length).toBeGreaterThan(0);
     for (const file of others) {
+      if (!statSync(file).isFile()) continue;
       expect(readFileSync(file).includes(SECRET), file).toBe(false);
-      expect(statSync(file).mode & 0o077, file).toBe(0);
+      expect(lstatSync(file).mode & 0o077, file).toBe(0);
     }
   });
 });

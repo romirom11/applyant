@@ -46,6 +46,7 @@ const APP_STAGE: Record<number, string> = {
   [ApplicationStage.READY_FOR_REVIEW]: 'ready_for_review',
   [ApplicationStage.NEEDS_CANDIDATE]: 'needs_candidate',
   [ApplicationStage.APPROVED]: 'approved',
+  [ApplicationStage.APPLIED]: 'applied',
 };
 
 const TASK_TYPE: Record<number, string> = {
@@ -175,6 +176,16 @@ export function eventJson(e: Event) {
       stage: APP_STAGE[a.stage] ?? 'unknown',
     };
   }
+  if (e.payload.case === 'handoff') {
+    const h = e.payload.value;
+    return {
+      ...base,
+      type: 'handoff',
+      applicationId: Number(h.applicationId),
+      postingId: Number(h.postingId),
+      reason: h.reason,
+    };
+  }
   return { ...base, type: 'unknown' };
 }
 
@@ -196,6 +207,10 @@ export function eventLine(e: Event): string {
   if (e.payload.case === 'application') {
     const a = e.payload.value;
     return `${time(e)}${run}  application ${a.applicationId} → ${APP_STAGE[a.stage] ?? 'unknown'}${msg}`;
+  }
+  if (e.payload.case === 'handoff') {
+    const h = e.payload.value;
+    return `${time(e)}${run}  application ${h.applicationId} needs you: ${h.reason}`;
   }
   return `${time(e)}${run}${msg}`;
 }

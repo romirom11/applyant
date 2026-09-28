@@ -69,8 +69,15 @@ service ApplyantService {
   // confirmed review_edit facts), or confirms a flagged sentence as true as written.
   rpc EditAnswer(EditAnswerRequest) returns (EditAnswerResponse);
   // ApproveApplication is refused (FailedPrecondition, listing why) while a required value is
-  // missing, a sentence is flagged or unchecked, or a relied-on fact is unconfirmed.
+  // missing, a sentence is flagged or unchecked, or a relied-on fact is unconfirmed. Approval
+  // enqueues delivery through the application's channel; the candidate isn't asked again unless
+  // delivery gets stuck.
   rpc ApproveApplication(ApproveApplicationRequest) returns (ApproveApplicationResponse);
+  // SubmitApplication approves the application if it isn't yet (same refusal rules), then
+  // (re-)enqueues delivery either way: also how to retry a delivery stuck on a hand-off.
+  rpc SubmitApplication(SubmitApplicationRequest) returns (SubmitApplicationResponse);
+  // GetHandOff returns the most recent delivery hand-off still waiting on the candidate, if any.
+  rpc GetHandOff(GetHandOffRequest) returns (GetHandOffResponse);
 }
 
 enum PostingStage {
@@ -374,6 +381,13 @@ message ApplicationEvent {
   ApplicationStage stage = 3;
 }
 
+// Delivery got stuck and left a browser window open for the candidate to finish.
+message HandOffEvent {
+  int64 application_id = 1;
+  int64 posting_id = 2;
+  string reason = 3;
+}
+
 message Event {
   int64 id = 1;
   google.protobuf.Timestamp at = 2;
@@ -384,6 +398,7 @@ message Event {
     TaskEvent task = 10;
     PostingEvent posting = 11;
     ApplicationEvent application = 12;
+    HandOffEvent handoff = 13;
   }
 }
 
@@ -633,6 +648,9 @@ enum ApplicationStage {
   // base lacks (see `note` and the missing fields).
   APPLICATION_STAGE_NEEDS_CANDIDATE = 3;
   APPLICATION_STAGE_APPROVED = 4;
+  // Delivered through its channel; see `receipt`. A delivery stuck mid-way stays APPROVED
+  // (the human gate already passed) with `note` and `hand_off` set.
+  APPLICATION_STAGE_APPLIED = 5;
 }
 
 message ApplicationField {
@@ -727,6 +745,43 @@ message Application {
   // Only filled by GetApplication (and the review RPCs).
   repeated ApplicationField fields = 17;
   repeated Answer answers = 18;
+  optional google.protobuf.Timestamp applied_at = 19;
+  // Set once delivery has submitted the application.
+  optional Receipt receipt = 20;
+  // The most recent delivery hand-off still waiting on the candidate, if any.
+  optional HandOff hand_off = 21;
+}
+
+message ReceiptFieldValue {
+  string ref = 1;
+  string label = 2;
+  optional string value = 3;
+  // profile | override | answer | file | rule | none
+  string source = 4;
+}
+
+// Exactly what was sent when delivery submitted the application.
+message Receipt {
+  string final_url = 1;
+  optional string confirmation_text = 2;
+  optional string cv_path = 3;
+  optional string cv_hash = 4;
+  optional string salary_value = 5;
+  google.protobuf.Timestamp submitted_at = 6;
+  repeated ReceiptFieldValue field_values = 7;
+}
+
+// Why delivery needs the candidate, and (for a browser hand-off) where it got stuck.
+message HandOff {
+  string reason = 1;
+  optional string detail = 2;
+  // field | step | captcha
+  optional string scope = 3;
+  optional int32 step = 4;
+  optional string field_label = 5;
+  optional string url = 6;
+  // A saved `ariaSnapshot` of the page at hand-off time.
+  optional string snapshot_path = 7;
 }
 
 message ListApplicationsRequest {
@@ -796,4 +851,20 @@ message ApproveApplicationRequest {
 
 message ApproveApplicationResponse {
   Application application = 1;
+}
+
+message SubmitApplicationRequest {
+  int64 id = 1;
+}
+
+message SubmitApplicationResponse {
+  Application application = 1;
+}
+
+message GetHandOffRequest {
+  int64 application_id = 1;
+}
+
+message GetHandOffResponse {
+  optional HandOff hand_off = 1;
 }
