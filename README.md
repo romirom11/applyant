@@ -25,6 +25,12 @@ applyant status                   # the daemon, where claude/codex were found, h
 swift test --package-path native && swift test --package-path app   # app: Node 24 on PATH runs the daemon test too
 ```
 
+Checking the app without applying anywhere real: `node daemon/scripts/demo-board.ts` serves three
+synthetic postings on 127.0.0.1:4400 that log what they receive (`applyant jobs add
+http://127.0.0.1:4400/jobs/lumen-ai-engineer`), and `/Applications/Applyant.app/Contents/MacOS/Applyant
+--script steps.json --out dir/` drives the app through its store actions and renders each step to a
+PNG (see `app/Sources/Applyant/ScriptRunner.swift` for the step format).
+
 The first launch installs the daemon's launch agent (`~/Library/LaunchAgents/com.applyant.daemon.plist`,
 restarted by launchd after a crash) and registers the app as a login item; the window opens from the
 menu bar icon. State lives in
