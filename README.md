@@ -22,11 +22,12 @@ Node ≥ 24 and pnpm (corepack) on PATH, and the `claude` CLI signed in (`codex`
 scripts/bundle.sh                 # build, sign, install to /Applications, link ~/.local/bin/applyant, open
 scripts/smoke-bundle.sh           # the installed bundle, run the way launchd runs it
 applyant status                   # the daemon, where claude/codex were found, helper, secrets backend
-swift test --package-path native && swift test --package-path app
+swift test --package-path native && swift test --package-path app   # app: Node 24 on PATH runs the daemon test too
 ```
 
-The first launch registers the daemon as a launch agent (`com.applyant.daemon`, restarted by
-launchd after a crash) and the app as a login item. State lives in
+The first launch installs the daemon's launch agent (`~/Library/LaunchAgents/com.applyant.daemon.plist`,
+restarted by launchd after a crash) and registers the app as a login item; the window opens from the
+menu bar icon. State lives in
 `~/Library/Application Support/Applyant`, secrets in the login keychain (service `com.applyant`;
 an old `secrets.json` is moved in once), the daemon's log in `~/Library/Logs/Applyant`. A launchd
 agent has no shell PATH, so the daemon finds `claude` and `codex` itself: `$APPLYANT_CLAUDE_PATH` /
