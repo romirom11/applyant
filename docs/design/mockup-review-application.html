@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Review application — options</title>
+<style>
+  :root {
+    --accent: #007AFF; --green: #34C759; --orange: #FF9500; --red: #FF3B30;
+    --label: #1D1D1F; --secondary: #6E6E73; --tertiary: #AEAEB2; --sep: #E5E5EA; --sidebar: #F2F2F5;
+    --unconf: rgba(255,149,0,.18);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif; font-size: 13px; color: var(--label); background: #D9D9DE; padding: 24px; }
+  .caption { font-size: 12px; color: var(--secondary); margin: 0 0 10px; max-width: 1180px; }
+  .caption b { color: var(--label); }
+  .window { width: 1180px; border-radius: 12px; overflow: hidden; box-shadow: 0 20px 50px rgba(0,0,0,.25), 0 0 0 .5px rgba(0,0,0,.2); background: #fff; margin-bottom: 40px; }
+  .titlebar { height: 52px; border-bottom: 1px solid var(--sep); display: flex; align-items: center; gap: 12px; padding: 0 16px; background: #FAFAFC; }
+  .traffic { display: flex; gap: 8px; }
+  .traffic span { width: 12px; height: 12px; border-radius: 50%; }
+  .titlebar h2 { font-size: 14px; font-weight: 700; }
+  .titlebar .sub { color: var(--secondary); font-size: 12px; }
+  .titlebar .right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+  .btn { padding: 5px 12px; border-radius: 6px; font-size: 12.5px; border: 1px solid #D1D1D6; background: #fff; }
+  .btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; }
+  .btn.dis { opacity: .45; }
+  .warn { font-size: 12px; color: #B25E00; }
+  .body { display: grid; grid-template-columns: 1fr 320px; min-height: 560px; }
+  .main { padding: 18px 22px; border-right: 1px solid var(--sep); }
+  .side { background: var(--sidebar); padding: 16px; }
+  .side h3, .main h3 { font-size: 11px; font-weight: 600; color: var(--secondary); text-transform: uppercase; letter-spacing: .4px; margin: 14px 0 8px; }
+  .side h3:first-child, .main h3:first-child { margin-top: 0; }
+  .field { display: grid; grid-template-columns: 170px 1fr; gap: 10px; padding: 6px 0; border-bottom: 1px solid #F0F0F3; align-items: start; }
+  .field .l { color: var(--secondary); }
+  .field .req::after { content: " *"; color: var(--red); }
+  .val { }
+  .q { border: 1px solid var(--sep); border-radius: 10px; padding: 12px 14px; margin-bottom: 12px; }
+  .q.sel { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(0,122,255,.12); }
+  .q .qt { font-weight: 600; margin-bottom: 6px; }
+  .q .qt .req::after { content: " *"; color: var(--red); }
+  .q .a { line-height: 1.5; }
+  .u { background: var(--unconf); border-bottom: 1.5px dashed var(--orange); padding: 0 2px; border-radius: 2px; }
+  .q .foot { display: flex; gap: 10px; margin-top: 8px; font-size: 11.5px; color: var(--secondary); }
+  .q .foot a { color: var(--accent); text-decoration: none; }
+  .summary { border: 1px solid var(--sep); border-radius: 10px; padding: 10px 14px; margin-bottom: 14px; display: flex; align-items: center; gap: 10px; }
+  .summary .ok { color: var(--green); font-weight: 700; }
+  .summary .more { margin-left: auto; color: var(--accent); font-size: 12px; }
+  .ev { background: #fff; border-radius: 8px; padding: 9px 10px; margin-bottom: 8px; box-shadow: 0 0 0 .5px rgba(0,0,0,.08); }
+  .ev .src { font-weight: 600; font-size: 12px; }
+  .ev .txt { color: var(--secondary); font-size: 11.5px; margin-top: 2px; }
+  .ev .st { font-size: 10.5px; margin-top: 5px; display: inline-block; padding: 1px 6px; border-radius: 4px; }
+  .st.c { background: rgba(52,199,89,.15); color: #1E8E3E; }
+  .st.uc { background: var(--unconf); color: #B25E00; }
+  .ev .act { font-size: 11px; color: var(--accent); margin-left: 8px; }
+  .compact .field { padding: 4px 0; }
+  .ta { color: var(--label); line-height: 1.45; }
+</style>
+</head>
+<body>
+
+<div class="caption"><b>Review application — answers first.</b> Standard fields shrink to one summary line with problems surfaced. Long answers get the space, unconfirmed claims are highlighted in the text, and evidence sits on the right.</div>
+<div class="window">
+  <div class="titlebar">
+    <div class="traffic"><span style="background:#FF5F57"></span><span style="background:#FEBC2E"></span><span style="background:#28C840"></span></div>
+    <h2>Senior AI Engineer</h2><span class="sub">Acme AI · Ashby · score 91</span>
+    <div class="right"><span class="warn">2 unconfirmed facts left</span><span class="btn">Regenerate…</span><span class="btn primary dis">Review &amp; fill</span></div>
+  </div>
+  <div class="body">
+    <div class="main">
+      <div class="summary"><span class="ok">✓</span><span><b>11 standard fields</b> ready — name, email, phone, links, location, EU work authorization, notice period, salary €6,000</span><span class="more">Show all</span></div>
+
+      <h3>CV · tailored for this role</h3>
+      <div class="q">
+        <div class="qt">📄 Roman Kudin — Senior AI Engineer (Acme AI).pdf</div>
+        <div class="a">Summary leads with production LLM systems and agents · Projects in order: <b>Solovei</b>, <b>AgentPass</b>, Ordi · Stack line puts Python, FastAPI, LLM agents, PostgreSQL first · all claims from confirmed facts</div>
+        <div class="foot"><span>Template: Clean (your default)</span><a href="#">Preview</a><a href="#">Edit</a><a href="#">Use base CV instead</a></div>
+      </div>
+
+      <h3>Questions · 3</h3>
+      <div class="q sel">
+        <div class="qt"><span class="req">Tell us about an LLM system you built in production.</span></div>
+        <div class="a">At Solovei I designed and built an <span class="u">asynchronous speech-analysis pipeline</span> that transcribes and scores sales calls for a team of 40 managers. I owned the architecture end to end: queue-based ingestion, diarisation, LLM scoring with structured outputs, and a review UI. It processes <span class="u">~3,000 calls per day</span> and cut manual QA time by 70%.</div>
+        <div class="foot"><span>Based on: Solovei project · repo · 2 manual facts</span><a href="#">Edit</a><a href="#">Shorter</a><a href="#">Use another project…</a></div>
+      </div>
+      <div class="q">
+        <div class="qt">Why are you interested in Acme AI?</div>
+        <div class="a">Acme's agent platform for logistics is close to what I built in AgentPass: long-running agents that act on real systems and have to be reliable, not just impressive in a demo…</div>
+        <div class="foot"><span>Based on: company research · AgentPass · adapted from answer sent to Orbit (Sep 12)</span><a href="#">Edit</a></div>
+      </div>
+      <div class="q">
+        <div class="qt"><span class="req">Have you led a team?</span></div>
+        <div class="a">Yes. At Ordi I led a team of 4 engineers for 18 months…</div>
+        <div class="foot"><span>Based on: manual fact (interview, Sep 20)</span><a href="#">Edit</a></div>
+      </div>
+    </div>
+    <div class="side">
+      <h3>Evidence · selected answer</h3>
+      <div class="ev"><div class="src">Solovei · project description</div><div class="txt">Role: tech lead &amp; architect; team of 3</div><span class="st c">confirmed</span></div>
+      <div class="ev"><div class="src">Solovei · GitHub · backend/pipeline/</div><div class="txt">"asynchronous speech-analysis pipeline": 42 commits by romirom11</div><span class="st uc">unconfirmed</span><span class="act">Confirm</span><span class="act">Edit</span></div>
+      <div class="ev"><div class="src">Solovei · docs/metrics.md</div><div class="txt">"~3,000 calls/day" (dashboard screenshot, Mar 2026)</div><span class="st uc">unconfirmed</span><span class="act">Confirm</span><span class="act">Edit</span></div>
+      <div class="ev"><div class="src">Manual fact · interview Sep 20</div><div class="txt">QA time reduced ~70% after launch</div><span class="st c">confirmed</span></div>
+      <h3>Company research</h3>
+      <div class="ev"><div class="txt">Series A (€18M, 2026) · 45 people · logistics agents · remote-first EU</div></div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

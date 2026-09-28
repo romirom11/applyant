@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Option A — Inbox (Mail-style)</title>
+<style>
+  :root {
+    --accent: #007AFF; --green: #34C759; --orange: #FF9500; --red: #FF3B30; --purple: #AF52DE;
+    --label: #1D1D1F; --secondary: #6E6E73; --tertiary: #AEAEB2; --sep: #E5E5EA;
+    --sidebar: #F2F2F5; --list: #FFFFFF; --detail: #FFFFFF; --hover: #F5F5F7;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif; font-size: 13px; color: var(--label); background: #D9D9DE; padding: 24px; }
+  .caption { font-size: 12px; color: var(--secondary); margin-bottom: 10px; }
+  .caption b { color: var(--label); }
+  .window { width: 1180px; height: 720px; border-radius: 12px; overflow: hidden; box-shadow: 0 20px 50px rgba(0,0,0,.25), 0 0 0 .5px rgba(0,0,0,.2); display: grid; grid-template-columns: 210px 380px 1fr; background: var(--list); }
+  .sidebar { background: var(--sidebar); border-right: 1px solid var(--sep); padding: 12px 8px; }
+  .traffic { display: flex; gap: 8px; padding: 2px 8px 16px; }
+  .traffic span { width: 12px; height: 12px; border-radius: 50%; }
+  .group { font-size: 11px; font-weight: 600; color: var(--tertiary); padding: 12px 10px 4px; }
+  .item { display: flex; align-items: center; gap: 8px; padding: 5px 10px; border-radius: 6px; color: var(--label); }
+  .item .ic { width: 16px; text-align: center; color: var(--accent); }
+  .item .badge { margin-left: auto; font-size: 11px; color: var(--secondary); }
+  .item.active { background: rgba(0,122,255,.14); }
+  .item.active .badge { color: var(--accent); font-weight: 600; }
+  .list { border-right: 1px solid var(--sep); display: flex; flex-direction: column; }
+  .toolbar { height: 52px; border-bottom: 1px solid var(--sep); display: flex; align-items: center; gap: 8px; padding: 0 14px; }
+  .toolbar h2 { font-size: 15px; font-weight: 700; }
+  .seg { margin-left: auto; display: flex; background: #EDEDF0; border-radius: 7px; padding: 2px; font-size: 11px; }
+  .seg span { padding: 3px 8px; border-radius: 5px; color: var(--secondary); }
+  .seg span.on { background: #fff; color: var(--label); box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+  .row { display: grid; grid-template-columns: 44px 1fr; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--sep); }
+  .row.sel { background: rgba(0,122,255,.08); }
+  .score { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 15px; color: #fff; }
+  .s-hi { background: var(--green); } .s-mid { background: var(--orange); } .s-lo { background: var(--tertiary); }
+  .row .t { font-weight: 600; }
+  .row .c { color: var(--secondary); font-size: 12px; margin-top: 1px; }
+  .chips { display: flex; gap: 5px; margin-top: 5px; flex-wrap: wrap; }
+  .chip { font-size: 10.5px; padding: 1px 6px; border-radius: 4px; background: #F0F0F3; color: var(--secondary); }
+  .chip.ready { background: rgba(52,199,89,.15); color: #1E8E3E; font-weight: 600; }
+  .chip.prep { background: rgba(0,122,255,.12); color: var(--accent); }
+  .chip.warn { background: rgba(255,149,0,.15); color: #B25E00; }
+  .detail { overflow: hidden; display: flex; flex-direction: column; }
+  .dhead { padding: 18px 24px 14px; border-bottom: 1px solid var(--sep); }
+  .dhead h1 { font-size: 20px; font-weight: 700; }
+  .dhead .meta { color: var(--secondary); margin-top: 3px; }
+  .actions { display: flex; gap: 8px; margin-top: 12px; }
+  .btn { padding: 5px 12px; border-radius: 6px; font-size: 12.5px; border: 1px solid #D1D1D6; background: #fff; }
+  .btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; }
+  .dbody { padding: 16px 24px; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .card { border: 1px solid var(--sep); border-radius: 10px; padding: 12px 14px; }
+  .card h3 { font-size: 11px; font-weight: 600; color: var(--secondary); text-transform: uppercase; letter-spacing: .4px; margin-bottom: 8px; }
+  .big { font-size: 34px; font-weight: 700; color: var(--green); }
+  .bar { display: grid; grid-template-columns: 120px 1fr 34px; align-items: center; gap: 8px; margin: 5px 0; font-size: 12px; }
+  .bar .track { height: 6px; background: #EDEDF0; border-radius: 3px; overflow: hidden; }
+  .bar .fill { height: 100%; background: var(--green); }
+  .bar .fill.o { background: var(--orange); }
+  .req { font-size: 12.5px; margin: 3px 0; }
+  .ok { color: var(--green); font-weight: 700; } .part { color: var(--orange); font-weight: 700; } .miss { color: var(--red); font-weight: 700; }
+  .ev { color: var(--tertiary); font-size: 11px; }
+</style>
+</head>
+<body>
+<div class="caption"><b>Option A — Inbox.</b> Mail-style three columns: sections → postings sorted by score → the selected posting with its breakdown and actions.</div>
+<div class="window">
+  <aside class="sidebar">
+    <div class="traffic"><span style="background:#FF5F57"></span><span style="background:#FEBC2E"></span><span style="background:#28C840"></span></div>
+    <div class="item"><span class="ic">◔</span>Overview</div>
+    <div class="group">Jobs</div>
+    <div class="item active"><span class="ic">◉</span>Inbox<span class="badge">14</span></div>
+    <div class="item"><span class="ic">✎</span>Ready to review<span class="badge">5</span></div>
+    <div class="item"><span class="ic">⌛</span>Preparing<span class="badge">3</span></div>
+    <div class="item"><span class="ic">★</span>Interested<span class="badge">7</span></div>
+    <div class="item"><span class="ic">✕</span>Skipped</div>
+    <div class="group">Applications</div>
+    <div class="item"><span class="ic">➤</span>Applied<span class="badge">22</span></div>
+    <div class="item"><span class="ic">☎</span>Interviews<span class="badge">3</span></div>
+    <div class="item"><span class="ic">✓</span>Offers</div>
+    <div class="group">Me</div>
+    <div class="item"><span class="ic">◎</span>Profile</div>
+    <div class="item"><span class="ic">▣</span>Projects<span class="badge">6</span></div>
+    <div class="item"><span class="ic">💬</span>Interview<span class="badge">4</span></div>
+    <div class="group">System</div>
+    <div class="item"><span class="ic">⌕</span>Search</div>
+    <div class="item"><span class="ic">⟳</span>Agent runs</div>
+    <div class="item"><span class="ic">⌂</span>Companies</div>
+    <div class="item"><span class="ic">⚙</span>Settings</div>
+  </aside>
+
+  <section class="list">
+    <div class="toolbar"><h2>Inbox</h2><div class="seg"><span class="on">Score</span><span>Newest</span></div></div>
+    <div class="row sel">
+      <div class="score s-hi">91</div>
+      <div><div class="t">Senior AI Engineer</div><div class="c">Acme AI · Remote EU · €5,000–7,000</div>
+        <div class="chips"><span class="chip ready">Ready to review</span><span class="chip">Ashby</span></div></div>
+    </div>
+    <div class="row">
+      <div class="score s-hi">86</div>
+      <div><div class="t">Founding Engineer</div><div class="c">Foo Labs · Remote EU · €6,000</div>
+        <div class="chips"><span class="chip prep">Preparing…</span><span class="chip">Greenhouse</span></div></div>
+    </div>
+    <div class="row">
+      <div class="score s-mid">74</div>
+      <div><div class="t">Backend Engineer (Python)</div><div class="c">Lumen Health · Limassol, Cyprus · €2,800</div>
+        <div class="chips"><span class="chip warn">Salary 7% below target</span><span class="chip">Workable</span></div></div>
+    </div>
+    <div class="row">
+      <div class="score s-mid">69</div>
+      <div><div class="t">LLM Platform Engineer</div><div class="c">Northwind · Athens, hybrid · €4,500</div>
+        <div class="chips"><span class="chip warn">Hybrid 2d/week</span><span class="chip">Lever</span></div></div>
+    </div>
+    <div class="row">
+      <div class="score s-lo">52</div>
+      <div><div class="t">ML Engineer, Vision</div><div class="c">Bar Systems · Remote EU · not stated</div>
+        <div class="chips"><span class="chip">Missing: PyTorch, Triton</span></div></div>
+    </div>
+  </section>
+
+  <section class="detail">
+    <div class="dhead">
+      <h1>Senior AI Engineer</h1>
+      <div class="meta">Acme AI · Remote EU · €5,000–7,000 · Full-time · found 2 h ago · ✓ apply form verified</div>
+      <div class="actions"><span class="btn primary">Review application</span><span class="btn">Company research</span><span class="btn">Skip…</span><span class="btn">Open posting ↗</span></div>
+    </div>
+    <div class="dbody">
+      <div class="card">
+        <h3>Score</h3>
+        <div class="big">91</div>
+        <div class="bar"><span>Must-haves</span><div class="track"><div class="fill" style="width:95%"></div></div><span>38/40</span></div>
+        <div class="bar"><span>Nice-to-haves</span><div class="track"><div class="fill o" style="width:60%"></div></div><span>6/10</span></div>
+        <div class="bar"><span>Role & seniority</span><div class="track"><div class="fill" style="width:100%"></div></div><span>15/15</span></div>
+        <div class="bar"><span>Location & remote</span><div class="track"><div class="fill" style="width:100%"></div></div><span>15/15</span></div>
+        <div class="bar"><span>Salary</span><div class="track"><div class="fill" style="width:100%"></div></div><span>10/10</span></div>
+        <div class="bar"><span>Language</span><div class="track"><div class="fill o" style="width:70%"></div></div><span>7/10</span></div>
+      </div>
+      <div class="card">
+        <h3>Requirements</h3>
+        <div class="req"><span class="ok">✓</span> Python <span class="ev">· Solovei, AgentPass</span></div>
+        <div class="req"><span class="ok">✓</span> LLM production systems <span class="ev">· Solovei repo</span></div>
+        <div class="req"><span class="ok">✓</span> Agents <span class="ev">· AgentPass</span></div>
+        <div class="req"><span class="ok">✓</span> PostgreSQL, Docker <span class="ev">· 4 projects</span></div>
+        <div class="req"><span class="part">~</span> PyTorch <span class="ev">· 1 unconfirmed fact</span></div>
+        <div class="req"><span class="miss">✗</span> Triton</div>
+        <h3 style="margin-top:12px">Potential issues</h3>
+        <div class="req"><span class="part">!</span> Daily calls with US team, 2 h overlap</div>
+      </div>
+    </div>
+  </section>
+</div>
+</body>
+</html>

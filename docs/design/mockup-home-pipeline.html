@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Option B — Pipeline board</title>
+<style>
+  :root {
+    --accent: #007AFF; --green: #34C759; --orange: #FF9500; --red: #FF3B30;
+    --label: #1D1D1F; --secondary: #6E6E73; --tertiary: #AEAEB2; --sep: #E5E5EA;
+    --sidebar: #F2F2F5; --col: #F5F5F7;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif; font-size: 13px; color: var(--label); background: #D9D9DE; padding: 24px; }
+  .caption { font-size: 12px; color: var(--secondary); margin-bottom: 10px; }
+  .caption b { color: var(--label); }
+  .window { width: 1180px; height: 720px; border-radius: 12px; overflow: hidden; box-shadow: 0 20px 50px rgba(0,0,0,.25), 0 0 0 .5px rgba(0,0,0,.2); display: grid; grid-template-columns: 190px 1fr; background: #fff; }
+  .sidebar { background: var(--sidebar); border-right: 1px solid var(--sep); padding: 12px 8px; }
+  .traffic { display: flex; gap: 8px; padding: 2px 8px 16px; }
+  .traffic span { width: 12px; height: 12px; border-radius: 50%; }
+  .group { font-size: 11px; font-weight: 600; color: var(--tertiary); padding: 12px 10px 4px; }
+  .item { display: flex; align-items: center; gap: 8px; padding: 5px 10px; border-radius: 6px; }
+  .item .ic { width: 16px; text-align: center; color: var(--accent); }
+  .item.active { background: rgba(0,122,255,.14); }
+  .main { display: flex; flex-direction: column; }
+  .toolbar { height: 52px; border-bottom: 1px solid var(--sep); display: flex; align-items: center; padding: 0 18px; gap: 10px; }
+  .toolbar h2 { font-size: 15px; font-weight: 700; }
+  .toolbar .status { margin-left: auto; font-size: 12px; color: var(--secondary); }
+  .board { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; padding: 14px 16px; flex: 1; }
+  .col { background: var(--col); border-radius: 10px; padding: 10px; }
+  .col h3 { font-size: 12px; font-weight: 600; color: var(--secondary); display: flex; justify-content: space-between; margin-bottom: 8px; }
+  .card { background: #fff; border-radius: 8px; padding: 9px 10px; margin-bottom: 8px; box-shadow: 0 1px 2px rgba(0,0,0,.08), 0 0 0 .5px rgba(0,0,0,.06); }
+  .card .top { display: flex; justify-content: space-between; align-items: center; }
+  .card .t { font-weight: 600; font-size: 12.5px; }
+  .card .c { color: var(--secondary); font-size: 11.5px; margin-top: 2px; }
+  .sc { font-size: 11px; font-weight: 700; color: #fff; padding: 1px 6px; border-radius: 5px; }
+  .hi { background: var(--green); } .mid { background: var(--orange); } .lo { background: var(--tertiary); }
+  .tag { display: inline-block; margin-top: 6px; font-size: 10.5px; padding: 1px 6px; border-radius: 4px; background: #F0F0F3; color: var(--secondary); }
+  .tag.warn { background: rgba(255,149,0,.15); color: #B25E00; }
+  .tag.go { background: rgba(0,122,255,.12); color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="caption"><b>Option B — Pipeline board.</b> One Kanban board across the whole cycle. Each card moves left to right, and clicking a card opens its detail as a sheet.</div>
+<div class="window">
+  <aside class="sidebar">
+    <div class="traffic"><span style="background:#FF5F57"></span><span style="background:#FEBC2E"></span><span style="background:#28C840"></span></div>
+    <div class="item active"><span class="ic">▦</span>Pipeline</div>
+    <div class="group">Me</div>
+    <div class="item"><span class="ic">◎</span>Profile</div>
+    <div class="item"><span class="ic">▣</span>Projects</div>
+    <div class="item"><span class="ic">💬</span>Interview</div>
+    <div class="group">System</div>
+    <div class="item"><span class="ic">⟳</span>Agent runs</div>
+    <div class="item"><span class="ic">⌂</span>Companies</div>
+    <div class="item"><span class="ic">⚙</span>Settings</div>
+  </aside>
+  <section class="main">
+    <div class="toolbar"><h2>Pipeline</h2><span class="status">Search run #391 · 12 workers · last run 14:20</span></div>
+    <div class="board">
+      <div class="col"><h3>New <span>14</span></h3>
+        <div class="card"><div class="top"><span class="t">Backend Engineer</span><span class="sc mid">74</span></div><div class="c">Lumen Health · Cyprus</div><span class="tag warn">Salary −7%</span></div>
+        <div class="card"><div class="top"><span class="t">LLM Platform Eng.</span><span class="sc mid">69</span></div><div class="c">Northwind · Athens</div><span class="tag warn">Hybrid</span></div>
+        <div class="card"><div class="top"><span class="t">ML Engineer, Vision</span><span class="sc lo">52</span></div><div class="c">Bar Systems · Remote EU</div></div>
+      </div>
+      <div class="col"><h3>Preparing <span>3</span></h3>
+        <div class="card"><div class="top"><span class="t">Founding Engineer</span><span class="sc hi">86</span></div><div class="c">Foo Labs · Remote EU</div><span class="tag go">Research 2/3</span></div>
+      </div>
+      <div class="col"><h3>Ready to review <span>5</span></h3>
+        <div class="card"><div class="top"><span class="t">Senior AI Engineer</span><span class="sc hi">91</span></div><div class="c">Acme AI · Remote EU</div><span class="tag warn">2 unconfirmed facts</span></div>
+        <div class="card"><div class="top"><span class="t">AI Engineer</span><span class="sc hi">88</span></div><div class="c">Quanta · Remote EU</div></div>
+      </div>
+      <div class="col"><h3>Applied <span>22</span></h3>
+        <div class="card"><div class="top"><span class="t">Staff Backend Eng.</span><span class="sc hi">83</span></div><div class="c">Delta Pay · applied 3 d ago</div></div>
+        <div class="card"><div class="top"><span class="t">AI Engineer</span><span class="sc hi">81</span></div><div class="c">Orbit · applied 6 d ago</div></div>
+      </div>
+      <div class="col"><h3>Interview / Offer <span>3</span></h3>
+        <div class="card"><div class="top"><span class="t">Founding AI Eng.</span><span class="sc hi">90</span></div><div class="c">Helix · tech call Tue 15:00</div></div>
+      </div>
+    </div>
+  </section>
+</div>
+</body>
+</html>

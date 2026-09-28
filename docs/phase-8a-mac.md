@@ -4,10 +4,7 @@ Phases 1–7 are done on `ai-serv` and live on `main` (git@github.com:romirom11/
 
 **Applyant is for the owner's own Mac only, with no distribution.** So there's no Apple Developer Program, no Developer ID certificate and no notarisation. The bundle is signed **ad-hoc** (`codesign --force --sign -`). A locally built app isn't quarantined, so Gatekeeper doesn't ask for notarisation. Arm64 still needs every Mach-O (Node, the helper, each `*.node`) signed, and ad-hoc is enough for that.
 
-The plan and the TDD live in the cloud-synced task artifacts, not in the repo (`.humanlayer/tasks/` is gitignored), so this note carries everything 8a needs. Delete it from `docs/` once 8a is done.
-
-- Task artifacts: https://cloud.humanlayer.com/tasks/01a0df5b-7868-701c-8b7e-8454fcd23c06/artifacts
-- Plan (structure outline): https://cloud.humanlayer.com/artifacts/01a0e292-ef3a-75f3-8f76-9eba88eed5e9
+The full design is in `docs/design/` (see its README): the PRD, the TDD, the research it rests on, and the plan (`05-structure-outline-applyant-harness.md`, the phase list with progress notes). Read the TDD's parts on the process layout, packaging and `applyant-native` before starting. This note adds what the plan doesn't know yet and the owner's decisions since. Delete it once 8a is done.
 
 ## Before the session: what only the owner can do
 
@@ -134,4 +131,4 @@ Manual:
 - Import the PDF CV through the native path; the Jev key has moved into the Keychain.
 - Put the Mac to sleep and wake it: the daemon logs the wake event (the catch-up run itself comes with phase 10's scheduler).
 
-When it's done, bring the summary back to the `ai-serv` session (or just say "8a is on main"), and the plan gets its progress notes there.
+When it's done: tick 8a's boxes in `docs/design/05-structure-outline-applyant-harness.md` and add its progress notes there (what was built differently, what was checked by hand), in the same commit as the work.
