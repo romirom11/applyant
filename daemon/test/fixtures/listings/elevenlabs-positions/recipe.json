@@ -1,0 +1,1218 @@
+{
+  "url": "https://elevenlabs.io/careers/positions",
+  "source": "page:https://elevenlabs.io/careers/positions",
+  "builtAt": "2026-09-28T20:30:40.776Z",
+  "recipe": {
+    "kind": "locators",
+    "list": {
+      "css": "main#main ul.tw-w-full.tw-min-h-full.tw-bg-paper"
+    },
+    "item": {
+      "role": "article",
+      "name": null
+    },
+    "fields": {
+      "title": {
+        "role": "link",
+        "name": null
+      },
+      "url": null,
+      "location": {
+        "role": "definition",
+        "name": null
+      },
+      "team": null
+    },
+    "pagination": null
+  },
+  "expected": [
+    {
+      "title": "Full-Stack Engineer",
+      "url": "https://elevenlabs.io/careers/6a530871-b6c6-4783-ac6b-69cc3b084192/full-stack-engineer",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Full-Stack Engineer (Front-End Leaning)",
+      "url": "https://elevenlabs.io/careers/ada7cd2c-8b9f-4f19-a88b-7c2ca1be1fde/full-stack-engineer-front-end-leaning",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Data Scientist - AI Safety",
+      "url": "https://elevenlabs.io/careers/507e390a-eaeb-4000-936e-83e3e498c760/data-scientist-ai-safety",
+      "location": "London",
+      "team": null
+    },
+    {
+      "title": "Safety Engineer - Free Tier Abuse",
+      "url": "https://elevenlabs.io/careers/3b57cc5c-f019-4a0b-a5ff-e1046e4f1fa1/safety-engineer-free-tier-abuse",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Engineering - Internal AI Transformation",
+      "url": "https://elevenlabs.io/careers/a3097257-a07a-4a7e-b9fe-b8555c1a0fa7/engineering-internal-ai-transformation",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Design Engineer - Creative & Studio",
+      "url": "https://elevenlabs.io/careers/5494be31-7899-4f7a-b10f-4c49378b44ef/design-engineer-creative-studio",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Data Engineer",
+      "url": "https://elevenlabs.io/careers/e53c5be6-5c1a-4870-ad85-8397a1f201de/data-engineer",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Full-Stack Engineer (Back-End Leaning)",
+      "url": "https://elevenlabs.io/careers/c7d59014-b918-4c15-ae33-79f5c9f2cf9f/full-stack-engineer-back-end-leaning",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Full-Stack Engineer - Creative Studio",
+      "url": "https://elevenlabs.io/careers/17c06970-0b47-43bc-beb7-ce34cc98f93c/full-stack-engineer-creative-studio",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Martech Engineer",
+      "url": "https://elevenlabs.io/careers/b6b6aca9-e9bc-4a6c-955d-60adbbe56d51/martech-engineer",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Website Growth Engineer",
+      "url": "https://elevenlabs.io/careers/71992118-5b37-4a4a-a862-99e82e02916f/website-growth-engineer",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Product Designer",
+      "url": "https://elevenlabs.io/careers/89da00ec-11b0-4359-913b-c3a89c1013bc/product-designer",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Content Creator & Strategist",
+      "url": "https://elevenlabs.io/careers/13fcee94-512f-4229-b7ab-f91d3fdd24e3/content-creator-strategist",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Deployment Strategist - Brazil",
+      "url": "https://elevenlabs.io/careers/a43b7e72-22e0-4d75-8f23-b477fb38eef6/deployment-strategist-brazil",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Deployment Strategist - Canada",
+      "url": "https://elevenlabs.io/careers/74b8610d-697c-404b-9620-8b934e3c65bd/deployment-strategist-canada",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Deployment Strategist - France - Global Expansion",
+      "url": "https://elevenlabs.io/careers/063115f6-3780-4920-97dd-c99489b6cfc2/deployment-strategist-france-global-expansion",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Deployment Strategist - Italy",
+      "url": "https://elevenlabs.io/careers/b85d7749-5b12-4f3c-87e9-61a477da77aa/deployment-strategist-italy",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Deployment Strategist - LATAM",
+      "url": "https://elevenlabs.io/careers/b36c7a45-a888-49b5-9130-584eb7c2aa95/deployment-strategist-latam",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Deployment Strategist Lead - India",
+      "url": "https://elevenlabs.io/careers/6b5a902d-49ea-4fa9-ab67-d6e88c361695/deployment-strategist-lead-india",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Deployment Strategist Lead - Middle East",
+      "url": "https://elevenlabs.io/careers/829d5af0-3581-4d49-8073-866f30d09503/deployment-strategist-lead-middle-east",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Deployment Strategist Lead - Nordics",
+      "url": "https://elevenlabs.io/careers/6b84bd1f-05cb-4b54-b0db-ff64c84217ae/deployment-strategist-lead-nordics",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Deployment Strategist Lead - USA",
+      "url": "https://elevenlabs.io/careers/203ef08b-7bb0-42b7-8099-d3d770fe3615/deployment-strategist-lead-usa",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Deployment Strategist - Netherlands",
+      "url": "https://elevenlabs.io/careers/ca7bd675-9bef-4459-ad12-cd423184d856/deployment-strategist-netherlands",
+      "location": "Netherlands",
+      "team": null
+    },
+    {
+      "title": "Deployment Strategist - North America",
+      "url": "https://elevenlabs.io/careers/8c068ebf-c79f-4f12-97ef-b4c9a4f7ae5f/deployment-strategist-north-america",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Deployment Strategist - Poland",
+      "url": "https://elevenlabs.io/careers/f0cccf77-a255-4620-9639-2f1cc5f9c0ab/deployment-strategist-poland",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Deployment Strategist - Singapore",
+      "url": "https://elevenlabs.io/careers/eb0cc725-ac18-46a7-a0b5-a8ca58f5779d/deployment-strategist-singapore",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Deployment Strategist - Spain",
+      "url": "https://elevenlabs.io/careers/6848ece5-1ce5-4ab4-9dd6-0704cd0f8ecd/deployment-strategist-spain",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Deployment Strategist - Sweden",
+      "url": "https://elevenlabs.io/careers/e66bf8b7-45a0-4cbf-bc37-43d20a388ff8/deployment-strategist-sweden",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Enterprise Deployment - Chief of Staff",
+      "url": "https://elevenlabs.io/careers/a0389dc2-77d8-439b-960b-2acb8712991e/enterprise-deployment-chief-of-staff",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Enterprise Solutions Engineer - Brazil",
+      "url": "https://elevenlabs.io/careers/8a88f764-27f5-46d7-8ce0-0ba15401efb1/enterprise-solutions-engineer-brazil",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Enterprise Solutions Engineer - Canada",
+      "url": "https://elevenlabs.io/careers/0d68b2a2-887e-491c-8b9b-56e8354f75fb/enterprise-solutions-engineer-canada",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Enterprise Solutions Engineer - France",
+      "url": "https://elevenlabs.io/careers/ce00fe7b-a93a-436b-bd5e-2eff87c48f23/enterprise-solutions-engineer-france",
+      "location": "France",
+      "team": null
+    },
+    {
+      "title": "Enterprise Solutions Engineer - Italy",
+      "url": "https://elevenlabs.io/careers/9dc3f256-3c42-4368-8d7e-ba9a3b3505e7/enterprise-solutions-engineer-italy",
+      "location": "Italy",
+      "team": null
+    },
+    {
+      "title": "Enterprise Solutions Engineer - LATAM",
+      "url": "https://elevenlabs.io/careers/46bad7dc-c8d7-403d-8b10-a2d71c005384/enterprise-solutions-engineer-latam",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Enterprise Solutions Engineer - Netherlands",
+      "url": "https://elevenlabs.io/careers/3f10ccc9-56a9-40bf-b5f1-33ab5834ff4a/enterprise-solutions-engineer-netherlands",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Enterprise Solutions Engineer - North America",
+      "url": "https://elevenlabs.io/careers/275f43d0-b62d-401d-830c-7c1ac0e688aa/enterprise-solutions-engineer-north-america",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Enterprise Solutions Engineer - Poland",
+      "url": "https://elevenlabs.io/careers/49233713-725b-4501-8360-6006b673fd2b/enterprise-solutions-engineer-poland",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Enterprise Solutions Engineer - Saudi Arabia",
+      "url": "https://elevenlabs.io/careers/62bd5d49-6122-421a-8f18-3aa65dbdbd1d/enterprise-solutions-engineer-saudi-arabia",
+      "location": "Saudi Arabia",
+      "team": null
+    },
+    {
+      "title": "Enterprise Solutions Engineer - Singapore",
+      "url": "https://elevenlabs.io/careers/85b7489f-5b0c-4f21-9c1c-7b76ed904c44/enterprise-solutions-engineer-singapore",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Enterprise Solutions Engineer - Spain",
+      "url": "https://elevenlabs.io/careers/b081fafb-3659-4bf6-8e87-eb5ccc3ff234/enterprise-solutions-engineer-spain",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Enterprise Solutions Engineer - Sweden",
+      "url": "https://elevenlabs.io/careers/4738893a-de4f-4a06-b104-315c6a4d366c/enterprise-solutions-engineer-sweden",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Forward Deployed Engineer - Software Engineer - Brazil",
+      "url": "https://elevenlabs.io/careers/6ce3306e-a546-4e11-83d6-3eaff5dd366b/forward-deployed-engineer-software-engineer-brazil",
+      "location": "Brazil",
+      "team": null
+    },
+    {
+      "title": "Forward Deployed Engineer - Software Engineer - France",
+      "url": "https://elevenlabs.io/careers/38e0b741-5bfa-4481-891e-e95b503d4aff/forward-deployed-engineer-software-engineer-france",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Forward Deployed Engineer - Software Engineer - Italy",
+      "url": "https://elevenlabs.io/careers/cd610558-4a8e-4746-81c1-10e3902f5576/forward-deployed-engineer-software-engineer-italy",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Forward Deployed Engineer - Software Engineer - LATAM",
+      "url": "https://elevenlabs.io/careers/39d438fa-8070-4660-968b-055493860c4c/forward-deployed-engineer-software-engineer-latam",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Forward Deployed Engineer - Software Engineer - Netherlands",
+      "url": "https://elevenlabs.io/careers/50d20869-819d-4ae3-be8d-71c3c9bf3394/forward-deployed-engineer-software-engineer-netherlands",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Forward Deployed Engineer - Software Engineer - North America",
+      "url": "https://elevenlabs.io/careers/6c4c57c1-ec72-42ba-af3a-eb7aebbde2e6/forward-deployed-engineer-software-engineer-north-america",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Forward Deployed Engineer - Software Engineer - Poland",
+      "url": "https://elevenlabs.io/careers/29aed1f3-26f8-4d3b-8cc4-7ca7d9342eeb/forward-deployed-engineer-software-engineer-poland",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Forward Deployed Engineer - Software Engineer - Spain",
+      "url": "https://elevenlabs.io/careers/7664e3c4-2336-4d1a-90cf-91d1268de10d/forward-deployed-engineer-software-engineer-spain",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Forward Deployed Engineer - Software Engineer - Sweden",
+      "url": "https://elevenlabs.io/careers/c6fc071f-c80e-4d3b-921a-3ec02a2ad25d/forward-deployed-engineer-software-engineer-sweden",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "IT Support",
+      "url": "https://elevenlabs.io/careers/750a8325-7ce1-45ea-b0b1-61dab78a456e/it-support",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Audiobook Specialists (Freelance)",
+      "url": "https://elevenlabs.io/careers/356d08ba-6119-4c76-93ad-362ca7283569/audiobook-specialists-freelance",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Audio Engineering (Freelance)",
+      "url": "https://elevenlabs.io/careers/4389da7f-b5c9-4660-aaf2-d097f4caba07/audio-engineering-freelance",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Dubbing Specialist (Freelance)",
+      "url": "https://elevenlabs.io/careers/1713bfd7-a63b-4dd4-b6e7-b0b8b8560a4a/dubbing-specialist-freelance",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Localization Specialist",
+      "url": "https://elevenlabs.io/careers/ef819b07-d617-42c7-873f-798d1a7d4024/localization-specialist",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Post-Production Lead",
+      "url": "https://elevenlabs.io/careers/3eede250-d2a7-4f13-b0b2-d8a530cb6130/post-production-lead",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Production Manager (Arabic speaking)",
+      "url": "https://elevenlabs.io/careers/cf173c80-b9b9-4e27-85fa-a26c68693ea9/production-manager-arabic-speaking",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Transcription / Subtitling Specialist (Freelance)",
+      "url": "https://elevenlabs.io/careers/ef0a1e14-40ee-43d2-aab9-59fc9f6a4b8c/transcription-subtitling-specialist-freelance",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Translator/Linguist (Freelance)",
+      "url": "https://elevenlabs.io/careers/bd230a18-2ff4-493c-8555-8476bf7de0e4/translatorlinguist-freelance",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Compliance Engineer",
+      "url": "https://elevenlabs.io/careers/f80d0420-b6e6-4110-940c-293f64b9761e/compliance-engineer",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Infrastructure Security Engineer",
+      "url": "https://elevenlabs.io/careers/687394d7-fbf8-49ed-822e-c0690191330c/infrastructure-security-engineer",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "IT Engineer",
+      "url": "https://elevenlabs.io/careers/9aca205e-b2bc-405b-85d6-3d2aadbe49b1/it-engineer",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Brand Marketing",
+      "url": "https://elevenlabs.io/careers/31b1c0e3-ca53-428d-8f15-2e3ffda491b8/brand-marketing",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Events Lead - Brazil",
+      "url": "https://elevenlabs.io/careers/9ce2cd02-c7f2-4705-8b70-accab2f863e1/events-lead-brazil",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Field Marketer - LATAM",
+      "url": "https://elevenlabs.io/careers/2007f7af-84b5-4e37-bff9-84b8b0831dc9/field-marketer-latam",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Field Marketer - North America",
+      "url": "https://elevenlabs.io/careers/9a2a69a5-cba1-47e5-ac4a-9fa5b78b7da7/field-marketer-north-america",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Forward Deployed Creative",
+      "url": "https://elevenlabs.io/careers/1f668ed5-49e9-4726-881f-7818733103b1/forward-deployed-creative",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Product Marketing - Agents",
+      "url": "https://elevenlabs.io/careers/f2ae7fe0-67da-48ae-b126-b942899ec7e9/product-marketing-agents",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Analyst Relations",
+      "url": "https://elevenlabs.io/careers/1941b5f6-a89f-4f35-bc07-a123e17d011f/analyst-relations",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "B2B Growth Marketer - Belgium",
+      "url": "https://elevenlabs.io/careers/7c9abf17-1e6b-4038-92ba-bea97293627a/b2b-growth-marketer-belgium",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "B2B Growth Marketer - Colombia",
+      "url": "https://elevenlabs.io/careers/c340cedd-6453-4d48-a580-359c1d7d9d49/b2b-growth-marketer-colombia",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "B2B Growth Marketer - Denmark",
+      "url": "https://elevenlabs.io/careers/2d4272f3-8cf3-487a-a399-1d3a5e74dca8/b2b-growth-marketer-denmark",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "B2B Growth Marketer - Italy",
+      "url": "https://elevenlabs.io/careers/68316753-ec69-428d-bd8a-3adea30f7807/b2b-growth-marketer-italy",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "B2B Growth Marketer - Netherlands",
+      "url": "https://elevenlabs.io/careers/3717c857-9f59-40fd-b9eb-7d5e507082ee/b2b-growth-marketer-netherlands",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "B2B Growth Marketer - Switzerland",
+      "url": "https://elevenlabs.io/careers/6363a777-0bb0-4e1b-8302-25419f88e909/b2b-growth-marketer-switzerland",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "B2B Marketing Lead- India",
+      "url": "https://elevenlabs.io/careers/7f829e53-a3f1-42be-9e3e-5d4c417f3efd/b2b-marketing-lead-india",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "B2B Marketing - Sweden",
+      "url": "https://elevenlabs.io/careers/084978b8-b63d-4c61-8a15-362da4348ef4/b2b-marketing-sweden",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Marketing Operations",
+      "url": "https://elevenlabs.io/careers/1c1f4cc9-08f7-4fbb-867f-7e87e7fa19d9/marketing-operations",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Social Growth Strategist",
+      "url": "https://elevenlabs.io/careers/56a211b6-e298-4f71-b211-27023628d195/social-growth-strategist",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "APAC Communications",
+      "url": "https://elevenlabs.io/careers/222122a3-24e9-4dd6-908a-5c9cd91f7e27/apac-communications",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Developer Experience Engineer",
+      "url": "https://elevenlabs.io/careers/d16a7ad6-ffbd-4655-8716-4872263f99ce/developer-experience-engineer",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Account Executive - Creative Specialist - Enterprise",
+      "url": "https://elevenlabs.io/careers/92997f8a-9f90-40fe-a76e-89ffbc44d0cc/account-executive-creative-specialist-enterprise",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Account Executive - ElevenCreative - Germany",
+      "url": "https://elevenlabs.io/careers/42167cd0-3736-45b3-a1de-3fb6bedfe71d/account-executive-elevencreative-germany",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "AI Creative Producer",
+      "url": "https://elevenlabs.io/careers/3178581d-ea70-4dee-b018-2ce2d2a18bbe/ai-creative-producer",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Brand Design",
+      "url": "https://elevenlabs.io/careers/d5fb656f-a8ac-457a-ab26-07304791e097/brand-design",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Experiential Graphic Designer - Events",
+      "url": "https://elevenlabs.io/careers/18d52799-7b88-4516-9d8f-e9db312ad195/experiential-graphic-designer-events",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Creative Strategist, Mobile",
+      "url": "https://elevenlabs.io/careers/5da4bb46-0bac-4e35-8731-9e182ad02bee/creative-strategist-mobile",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Growth Marketing - Consumer App Channels",
+      "url": "https://elevenlabs.io/careers/5ae34b0f-8f60-4762-9e54-d2eada3acc76/growth-marketing-consumer-app-channels",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Affiliate Marketing Manager",
+      "url": "https://elevenlabs.io/careers/b0a0fdb7-f202-4d58-b2e2-38e847b96e49/affiliate-marketing-manager",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Automation Engineer - Influencers",
+      "url": "https://elevenlabs.io/careers/5bcd3475-8e38-42f1-897a-fa010ee6f9bd/automation-engineer-influencers",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Growth PM",
+      "url": "https://elevenlabs.io/careers/14d0ad09-fa26-4aa5-9bb3-f22a7f5917b9/growth-pm",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Influencer Marketer",
+      "url": "https://elevenlabs.io/careers/ba1c19cc-3b0e-4f3e-b7c1-a96d5fb4bbf9/influencer-marketer",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Paid Media Manager",
+      "url": "https://elevenlabs.io/careers/0e690a2f-0a1a-4c4e-adf6-4dc3c6cbc3bd/paid-media-manager",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "System Architect Lifecycle Marketing",
+      "url": "https://elevenlabs.io/careers/bf20b446-c839-4869-bac9-cc05740e03e1/system-architect-lifecycle-marketing",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "B2B SEO/AEO Expert",
+      "url": "https://elevenlabs.io/careers/a21ec926-88d3-4f95-98be-c551fe1ec49f/b2b-seoaeo-expert",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Deal Operations Strategist",
+      "url": "https://elevenlabs.io/careers/7d01b1ec-511d-40bf-a6ed-88b212932edb/deal-operations-strategist",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Technical Customer Support Specialist",
+      "url": "https://elevenlabs.io/careers/f2bf078d-d104-4a7b-96fd-5187a550f4a0/technical-customer-support-specialist",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Accounts Payable Specialist",
+      "url": "https://elevenlabs.io/careers/e7b83599-1b70-4830-85da-7132b99a3b57/accounts-payable-specialist",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Executive Assistant - Finance",
+      "url": "https://elevenlabs.io/careers/aa387988-9983-46a0-a265-d678af9939cb/executive-assistant-finance",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Sales Finance",
+      "url": "https://elevenlabs.io/careers/33e129a4-b818-4563-932c-719ce49d138a/sales-finance",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Commercial Counsel - Partnerships",
+      "url": "https://elevenlabs.io/careers/ff152bcd-af7d-408d-88a1-883e03502c4c/commercial-counsel-partnerships",
+      "location": "New York",
+      "team": null
+    },
+    {
+      "title": "Commercial Counsel - US",
+      "url": "https://elevenlabs.io/careers/daaab5ab-88d1-4d67-a65f-d3c4ebb8fe71/commercial-counsel-us",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Corporate Counsel",
+      "url": "https://elevenlabs.io/careers/3b87fadd-0da6-4cc6-aaef-5d84726ac35a/corporate-counsel",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Paralegal, Entity Management & Corporate Governance",
+      "url": "https://elevenlabs.io/careers/faf6f3a3-c215-4f25-aaee-5111dddde3c9/paralegal-entity-management-corporate-governance",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Public Sector Partnerships - Canada",
+      "url": "https://elevenlabs.io/careers/e5c45832-a952-4584-9874-25580b5b4993/public-sector-partnerships-canada",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Public Sector Partnerships - Europe Lead",
+      "url": "https://elevenlabs.io/careers/2c9dfcd0-0aa3-466a-8a5a-2b2351afbf81/public-sector-partnerships-europe-lead",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Public Sector Partnerships Lead - France",
+      "url": "https://elevenlabs.io/careers/ed5d50eb-e41a-48e4-bea0-3686176f0461/public-sector-partnerships-lead-france",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Public Sector Partnerships Lead - India",
+      "url": "https://elevenlabs.io/careers/af017d44-96d3-4ee7-9684-b414376a71b9/public-sector-partnerships-lead-india",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Public Sector Partnerships Lead - Middle East",
+      "url": "https://elevenlabs.io/careers/ba9014c9-0d42-4b19-a984-3ab2a0e45c1e/public-sector-partnerships-lead-middle-east",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Compensation & Total Rewards",
+      "url": "https://elevenlabs.io/careers/c7a2504b-d3a2-43fa-bb50-f060de6c2927/compensation-total-rewards",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Workplace Operations - New York",
+      "url": "https://elevenlabs.io/careers/d2443707-b19e-49c2-b2ec-de0c4c889089/workplace-operations-new-york",
+      "location": "New York",
+      "team": null
+    },
+    {
+      "title": "Workplace Operations - Warsaw",
+      "url": "https://elevenlabs.io/careers/490897d3-5c62-46d8-b26a-806ed60c7940/workplace-operations-warsaw",
+      "location": "Poland",
+      "team": null
+    },
+    {
+      "title": "GTM Recruiter",
+      "url": "https://elevenlabs.io/careers/fef4499d-6191-43ad-b4f4-e646544f510d/gtm-recruiter",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Operations Recruiter",
+      "url": "https://elevenlabs.io/careers/3f4b2c2a-38d4-45f5-abcf-c3f4ddb50569/operations-recruiter",
+      "location": "New York",
+      "team": null
+    },
+    {
+      "title": "HPC Infrastructure Engineer - GPU Clusters",
+      "url": "https://elevenlabs.io/careers/120da2b3-d88b-4e3c-9b89-d19ff73db9d9/hpc-infrastructure-engineer-gpu-clusters",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Research Engineer",
+      "url": "https://elevenlabs.io/careers/3d650946-5ac2-4729-9ae4-129c43fcd0b5/research-engineer",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Research Engineer - Data Infrastructure",
+      "url": "https://elevenlabs.io/careers/9fbd9227-57e0-4221-9255-1a1d967be8ed/research-engineer-data-infrastructure",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Research Engineer - Inference",
+      "url": "https://elevenlabs.io/careers/2d7f9a7c-a9e6-4877-bb38-34e4d989054c/research-engineer-inference",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Research Engineer - Web Crawlers",
+      "url": "https://elevenlabs.io/careers/a89a7892-3d9d-40ab-a3f1-1c6ed1f7b84f/research-engineer-web-crawlers",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Proposal Manager",
+      "url": "https://elevenlabs.io/careers/db8e1ff9-5a5a-49ed-89ea-93f993e5a65f/proposal-manager",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Sales Development - ANZ",
+      "url": "https://elevenlabs.io/careers/aac94946-449f-4822-8299-2c0c19cf6a7d/sales-development-anz",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Strategic Account Executive - Brazil",
+      "url": "https://elevenlabs.io/careers/89e1a99c-d2c6-43bb-b556-55dd73aeded2/strategic-account-executive-brazil",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Account Manager - Corporate",
+      "url": "https://elevenlabs.io/careers/4e544a96-ed24-42c0-ba70-7f0bab6ffbb2/account-manager-corporate",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Sales Development - Canada",
+      "url": "https://elevenlabs.io/careers/09c29417-956b-4849-8108-7cc0a2970517/sales-development-canada",
+      "location": "Toronto",
+      "team": null
+    },
+    {
+      "title": "Account Executive - Spain - Mid-Market",
+      "url": "https://elevenlabs.io/careers/347282a4-74ff-4e56-a92d-3c4249ee6c28/account-executive-spain-mid-market",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Customer Success - DACH",
+      "url": "https://elevenlabs.io/careers/830e66a8-892c-4c68-b61c-494591236eef/customer-success-dach",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Customer Success - EMEA (German speaking)",
+      "url": "https://elevenlabs.io/careers/3db51b70-d22b-46f7-8888-763f4d73029a/customer-success-emea-german-speaking",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Customer Success Lead - Western Europe",
+      "url": "https://elevenlabs.io/careers/0dbfbe3e-7218-4045-ba78-28b0d2e5ab6d/customer-success-lead-western-europe",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Customer Success (Polish Speaking)",
+      "url": "https://elevenlabs.io/careers/1bd5957c-6799-4b0d-b33d-1d8f7fc56c09/customer-success-polish-speaking",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "General Manager - Germany",
+      "url": "https://elevenlabs.io/careers/1ef264b8-ee9e-4713-a10a-0603f2cdbb94/general-manager-germany",
+      "location": "Germany",
+      "team": null
+    },
+    {
+      "title": "Sales Development - France",
+      "url": "https://elevenlabs.io/careers/a7804250-c35d-4d32-bfab-2ec9694ea13a/sales-development-france",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Sales Development Lead - Europe",
+      "url": "https://elevenlabs.io/careers/bb4f0758-f039-46c7-9a3f-71c145824298/sales-development-lead-europe",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Sales Development - Netherlands",
+      "url": "https://elevenlabs.io/careers/2db2a637-1b47-44d3-a506-069e97216946/sales-development-netherlands",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Strategic Account Executive - Belgium",
+      "url": "https://elevenlabs.io/careers/a5a999e3-17f6-4f1f-aef3-bab73518244a/strategic-account-executive-belgium",
+      "location": "Belgium",
+      "team": null
+    },
+    {
+      "title": "Strategic Account Executive - Denmark - Consumer & Retail",
+      "url": "https://elevenlabs.io/careers/d29d23d8-703f-4448-8d80-255d141cac10/strategic-account-executive-denmark-consumer-retail",
+      "location": "Denmark",
+      "team": null
+    },
+    {
+      "title": "Strategic Account Executive - Denmark - Financial Services",
+      "url": "https://elevenlabs.io/careers/6c5d4386-8a3f-473f-9a39-394added49a5/strategic-account-executive-denmark-financial-services",
+      "location": "Denmark",
+      "team": null
+    },
+    {
+      "title": "Strategic Account Executive - Denmark - Telecom, Infrastructure & Public Sector",
+      "url": "https://elevenlabs.io/careers/3de325f9-98e1-41df-b34e-9f6fddb34fa4/strategic-account-executive-denmark-telecom-infrastructure-public-sector",
+      "location": "Denmark",
+      "team": null
+    },
+    {
+      "title": "Strategic Account Executive - France",
+      "url": "https://elevenlabs.io/careers/db2c5c2f-5d76-4086-af1d-d1a8347712ad/strategic-account-executive-france",
+      "location": "France",
+      "team": null
+    },
+    {
+      "title": "Strategic Account Executive - Germany",
+      "url": "https://elevenlabs.io/careers/f090d901-2305-4e72-b09d-32b7e2e0ca49/strategic-account-executive-germany",
+      "location": "Germany",
+      "team": null
+    },
+    {
+      "title": "Strategic Account Executive - Italy",
+      "url": "https://elevenlabs.io/careers/4ea5b175-fa5c-46d4-8cd2-ca26513bd821/strategic-account-executive-italy",
+      "location": "Italy",
+      "team": null
+    },
+    {
+      "title": "Strategic Account Executive - Netherlands",
+      "url": "https://elevenlabs.io/careers/d2d1efed-213f-45f4-8e18-ba48eaf22020/strategic-account-executive-netherlands",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Strategic Account Executive - Netherlands - Financial Services & Insurance",
+      "url": "https://elevenlabs.io/careers/03d5ffd2-5cfd-43a0-a767-3cb08d107233/strategic-account-executive-netherlands-financial-services-insurance",
+      "location": "Netherlands",
+      "team": null
+    },
+    {
+      "title": "Strategic Account Executive - Netherlands - Government, Healthcare & Utilities",
+      "url": "https://elevenlabs.io/careers/9a6b86ac-6c84-4423-9555-853723dd74ca/strategic-account-executive-netherlands-government-healthcare-utilities",
+      "location": "Netherlands",
+      "team": null
+    },
+    {
+      "title": "Strategic Account Executive - Poland - Consumer & Retail",
+      "url": "https://elevenlabs.io/careers/6255f8a9-1ff8-49b3-8409-c104f8b46e56/strategic-account-executive-poland-consumer-retail",
+      "location": "Poland",
+      "team": null
+    },
+    {
+      "title": "Strategic Account Executive - Poland - Financial Services",
+      "url": "https://elevenlabs.io/careers/daf083cd-feda-4f28-ae49-7922b1a26ed7/strategic-account-executive-poland-financial-services",
+      "location": "Poland",
+      "team": null
+    },
+    {
+      "title": "Strategic Account Executive - Poland - Government & Utilities",
+      "url": "https://elevenlabs.io/careers/2de358a6-ebea-4205-be57-33d1191154e3/strategic-account-executive-poland-government-utilities",
+      "location": "Poland",
+      "team": null
+    },
+    {
+      "title": "Strategic Account Executive - Sweden - Financial Services",
+      "url": "https://elevenlabs.io/careers/34e9eed1-3fd4-4a25-8f02-dff7f12bebf6/strategic-account-executive-sweden-financial-services",
+      "location": "Sweden",
+      "team": null
+    },
+    {
+      "title": "Strategic Account Executive - Sweden - Industrials & Telecom",
+      "url": "https://elevenlabs.io/careers/0ceda3d9-d02f-4daa-b9e6-c8d1ca1404bc/strategic-account-executive-sweden-industrials-telecom",
+      "location": "Sweden",
+      "team": null
+    },
+    {
+      "title": "Strategic Account Executive - Sweden - Retail",
+      "url": "https://elevenlabs.io/careers/cb90c8ba-dc35-4e86-9103-9564751ccaf7/strategic-account-executive-sweden-retail",
+      "location": "Sweden",
+      "team": null
+    },
+    {
+      "title": "Strategic Account Executive - Switzerland",
+      "url": "https://elevenlabs.io/careers/f00cd4ae-3429-43a9-9e78-247ca3e4c404/strategic-account-executive-switzerland",
+      "location": "Switzerland",
+      "team": null
+    },
+    {
+      "title": "Account Executive, Mid Market - India",
+      "url": "https://elevenlabs.io/careers/90873fda-95c3-4d21-bae8-c5a30f5b7ac8/account-executive-mid-market-india",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Account Manager - India",
+      "url": "https://elevenlabs.io/careers/a571b8e4-8176-4e31-aab6-2287ee810236/account-manager-india",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Enterprise Proposals Lead",
+      "url": "https://elevenlabs.io/careers/ca4b5225-a18c-42b4-85d5-48734c30a586/enterprise-proposals-lead",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Partner Programs & Marketplace",
+      "url": "https://elevenlabs.io/careers/3b88528a-b59e-4d43-b510-2fb675fbabab/partner-programs-marketplace",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Account Executive - Korea",
+      "url": "https://elevenlabs.io/careers/592954c4-0c40-4198-9fa3-2ed82a84518f/account-executive-korea",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Account Manager - Japan",
+      "url": "https://elevenlabs.io/careers/15eb4b53-fdd8-49e6-8c7c-0951f6e40b99/account-manager-japan",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Account Executive - Public Sector",
+      "url": "https://elevenlabs.io/careers/15f537a5-276d-45e3-82a5-49b7ba9f8e67/account-executive-public-sector",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "General Manager - Saudi Arabia",
+      "url": "https://elevenlabs.io/careers/b42a0f43-f5e9-4a9d-83d0-8b8bc2d669fa/general-manager-saudi-arabia",
+      "location": "Saudi Arabia",
+      "team": null
+    },
+    {
+      "title": "Revenue Partnerships - Middle East",
+      "url": "https://elevenlabs.io/careers/5bdcbdda-3643-453d-9af5-0ea53da97d8d/revenue-partnerships-middle-east",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Sales Development Lead - Middle East",
+      "url": "https://elevenlabs.io/careers/48c17c4e-f2ce-40a7-8eff-f22c15a13f53/sales-development-lead-middle-east",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Sales Development - Middle East",
+      "url": "https://elevenlabs.io/careers/84a75f68-c964-4ad7-994d-a44506e333b2/sales-development-middle-east",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Strategic Account Executive - Saudi Arabia",
+      "url": "https://elevenlabs.io/careers/c5f6c9f4-593f-4ab9-9b08-466eee6c3fb8/strategic-account-executive-saudi-arabia",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Strategic Account Executive - UAE",
+      "url": "https://elevenlabs.io/careers/f805267e-2f77-4cdf-8d8a-a3ed5b07e726/strategic-account-executive-uae",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Account Executive - North Asia",
+      "url": "https://elevenlabs.io/careers/b647ad26-3e3a-4e0b-8ef4-6bab2cacd5c7/account-executive-north-asia",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Account Executive - Southeast Asia",
+      "url": "https://elevenlabs.io/careers/f0d1e869-4874-45af-9bc3-81479d88565b/account-executive-southeast-asia",
+      "location": "Singapore",
+      "team": null
+    },
+    {
+      "title": "Adoption Strategist - APAC",
+      "url": "https://elevenlabs.io/careers/8d25dd85-5b50-4dfa-b410-273b1ddd437c/adoption-strategist-apac",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Strategic Account Executive - Singapore",
+      "url": "https://elevenlabs.io/careers/75f7890c-2d11-4c18-a95f-03ef85e6bd15/strategic-account-executive-singapore",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Account Executive - LATAM",
+      "url": "https://elevenlabs.io/careers/3953e70b-86e8-47a0-9300-3113f64f5d44/account-executive-latam",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Account Manager - LATAM",
+      "url": "https://elevenlabs.io/careers/cdcf48bf-b6cf-41ce-88ee-34674768fb0d/account-manager-latam",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Enterprise Account Executive - Chile",
+      "url": "https://elevenlabs.io/careers/91dd600a-d0dd-4a75-a53d-f59aa9855626/enterprise-account-executive-chile",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "General Manager - Mexico",
+      "url": "https://elevenlabs.io/careers/500f3674-8a80-414b-b6a9-4bce6cda0c13/general-manager-mexico",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Sales Development Lead - LATAM",
+      "url": "https://elevenlabs.io/careers/37701c94-715c-40c9-b02f-4a6217552b01/sales-development-lead-latam",
+      "location": "Argentina",
+      "team": null
+    },
+    {
+      "title": "Strategic Account Executive - Colombia",
+      "url": "https://elevenlabs.io/careers/6e1b66a8-8d2e-43b0-9076-9748b84bcfab/strategic-account-executive-colombia",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Account Executive - Enterprise",
+      "url": "https://elevenlabs.io/careers/813f6b98-fa14-4d8f-902d-5d09029be20a/account-executive-enterprise",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Account Executive - Government",
+      "url": "https://elevenlabs.io/careers/68a1ad0b-d74e-4ebe-b6d0-877c53c9df7f/account-executive-government",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Account Executive Lead - Government",
+      "url": "https://elevenlabs.io/careers/b43e388f-f204-41c5-a2bc-ee3bc1281e39/account-executive-lead-government",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Account Executive Lead - Mid-Market",
+      "url": "https://elevenlabs.io/careers/6d4c4080-b53b-4b00-8b1d-3ec1e0955135/account-executive-lead-mid-market",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Account Executive - Mid-Market",
+      "url": "https://elevenlabs.io/careers/aa87b7bf-2fd5-4d94-9673-142f6349cf9e/account-executive-mid-market",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Account Executive - SMB/Corporate",
+      "url": "https://elevenlabs.io/careers/144dafdb-03aa-46ff-8555-a16ffec52abc/account-executive-smbcorporate",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Account Executive - Strategic",
+      "url": "https://elevenlabs.io/careers/b89ff518-824e-4736-a4c7-c68ea3b6b62f/account-executive-strategic",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Account Manager - Enterprise",
+      "url": "https://elevenlabs.io/careers/3a25ed8a-5870-4a0e-90e4-6e5a4b2c7e04/account-manager-enterprise",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Account Manager Lead - Corporate",
+      "url": "https://elevenlabs.io/careers/9271907b-1aad-4868-8995-b9ed32fb92ac/account-manager-lead-corporate",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Account Manager Lead - Enterprise",
+      "url": "https://elevenlabs.io/careers/71f84d23-fda9-45af-a249-8bbdb258bc18/account-manager-lead-enterprise",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Account Manager - Mid-Market",
+      "url": "https://elevenlabs.io/careers/3b7a423c-01fd-4405-ab9a-ee51ed354ba9/account-manager-mid-market",
+      "location": "New York",
+      "team": null
+    },
+    {
+      "title": "Account Manager - Strategic",
+      "url": "https://elevenlabs.io/careers/7563e051-8de0-48ac-bcf2-70eaf22e3f8b/account-manager-strategic",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Events Lead - North America",
+      "url": "https://elevenlabs.io/careers/d0e217ba-4de6-48db-9127-0b73a752649b/events-lead-north-america",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Executive Assistant - Revenue",
+      "url": "https://elevenlabs.io/careers/620d2558-77c0-4783-97fb-f51a79e6b392/executive-assistant-revenue",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "GTM Enablement - Expansion",
+      "url": "https://elevenlabs.io/careers/eee2abfb-bd2f-410d-a339-3923e9c95043/gtm-enablement-expansion",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Private Equity Partnerships",
+      "url": "https://elevenlabs.io/careers/f1427164-3037-47d1-a768-11cfb87953ae/private-equity-partnerships",
+      "location": "New York",
+      "team": null
+    },
+    {
+      "title": "Sales Development - Government",
+      "url": "https://elevenlabs.io/careers/229d026d-3967-476c-a3e5-3d65a8e4a52b/sales-development-government",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Sales Development Lead - United States",
+      "url": "https://elevenlabs.io/careers/a605e308-0d28-42b6-8cbb-03cc7799cecc/sales-development-lead-united-states",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Sales Development - United States",
+      "url": "https://elevenlabs.io/careers/158034c9-eb7c-4348-a0b8-fa9e817b29f1/sales-development-united-states",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "GTM Enablement - APAC",
+      "url": "https://elevenlabs.io/careers/55b21715-6e89-456e-af07-0b17b1e455e8/gtm-enablement-apac",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Revenue Compensation Lead",
+      "url": "https://elevenlabs.io/careers/059c1527-71b9-46f5-a691-0e3b0a1be7f5/revenue-compensation-lead",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Revenue Strategy & Operations - APAC",
+      "url": "https://elevenlabs.io/careers/0bbf2519-4f28-4de3-836a-aabc302050d7/revenue-strategy-operations-apac",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Revenue Strategy & Operations - EMEA",
+      "url": "https://elevenlabs.io/careers/13dbc714-dc3e-4743-9c25-3400c23b6673/revenue-strategy-operations-emea",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Revenue Strategy & Operations - North America",
+      "url": "https://elevenlabs.io/careers/b28719ff-833d-49b4-8286-f59082732186/revenue-strategy-operations-north-america",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Systems Architect",
+      "url": "https://elevenlabs.io/careers/b92059ea-d71f-4eef-a184-8510265752fb/systems-architect",
+      "location": "Remote",
+      "team": null
+    }
+  ]
+}

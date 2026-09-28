@@ -56,6 +56,8 @@ public final class AppStore {
     public private(set) var search = SearchList()
     /// Recent search runs, newest first.
     public private(set) var searchRuns: [SearchRun] = []
+    /// Sources open in the Search detail pane, with their recipe's listings.
+    public private(set) var sourceDetails: [String: SearchSource] = [:]
     /// The events of the runs open on screen (Agent runs).
     public private(set) var runEvents: [Int64: [DaemonEvent]] = [:]
     /// The last failed action, for an alert.
@@ -243,6 +245,9 @@ public final class AppStore {
     private func refreshSearch(_ api: DaemonAPI) async {
         if let list = try? await api.listSearch() { search = list }
         if let runs = try? await api.listSearchRuns(limit: 50) { searchRuns = runs }
+        for key in sourceDetails.keys {
+            if let source = try? await api.searchSource(key) { sourceDetails[key] = source }
+        }
     }
 
     private func refreshRunEvents(_ run: Int64, _ api: DaemonAPI) async {
@@ -375,6 +380,31 @@ public final class AppStore {
         await refreshSearch(api)
     }
 
+    /// Starts the search planner: new strategies (agent-generated) and boards for the watch list.
+    /// Returns the plan, or nil when one was already going.
+    @discardableResult
+    public func planSearch() async -> Int64? {
+        guard let api else { return nil }
+        let plan = await attempt({ try await api.planSearch() })
+        await refreshSearch(api)
+        return plan ?? nil
+    }
+
+    /// The planner is waiting or running.
+    public var planning: Bool { search.plans.first?.status == "queued" }
+
+    /// Loads a source for its detail pane, with its recipe's listings (kept current from then on).
+    public func openSource(_ key: String) async {
+        guard let api, let source = await attempt({ try await api.searchSource(key) }) else { return }
+        sourceDetails[key] = source
+    }
+
+    /// Asks for a new listing recipe for a career page.
+    public func rebuildRecipe(_ key: String) async {
+        guard let api, await attempt({ try await api.rebuildRecipe(key) }) != nil else { return }
+        await refreshSearch(api)
+    }
+
     /// Loads a run's events for its detail pane (and keeps them current from then on).
     public func openRun(_ id: Int64) async {
         guard let api, let events = await attempt({ try await api.runEvents(id) }) else { return }
@@ -464,7 +494,7 @@ public final class AppStore {
     public func count(_ section: Section) -> Int {
         if section == .interview { return openInterviewCount }
         // A badge on Search only while a run is going.
-        if section == .search { return search.strategies.filter(\.running).count }
+        if section == .search { return search.strategies.filter(\.running).count + (planning ? 1 : 0) }
         if section == .agentRuns { return 0 }
         return section.isBuilt ? items(section).count : 0
     }

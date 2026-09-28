@@ -26,6 +26,8 @@ import { scorePosting } from './domain/scoring/handlers.ts';
 import { getPreferences } from './domain/scoring/prefs.ts';
 import { requestScoring, unscoredPostings } from './domain/scoring/store.ts';
 import { searchHandler } from './domain/search/handlers.ts';
+import { planSearch } from './domain/search/planner.ts';
+import { buildRecipe } from './domain/search/recipes/build.ts';
 import { ensureBuiltinSources } from './domain/search/sources.ts';
 import { verifyPosting } from './domain/search/verify.ts';
 import { isAlive, readEndpoint, removeEndpoint, writeEndpoint } from './endpoint.ts';
@@ -37,7 +39,9 @@ import { defaultCliPaths } from './models/cli-paths.ts';
 import { CliStatus } from './models/cli-status.ts';
 import { type Embedder, GemmaEmbedder, HashEmbedder } from './models/embeddings.ts';
 import { ClaudeProvider, claudeEnv } from './models/providers/claude.ts';
+import { CodexProvider, codexEnv } from './models/providers/codex.ts';
 import { JevClient } from './models/providers/jev.ts';
+import { loadRouting } from './models/roles.ts';
 import { openNative } from './native/client.ts';
 import { EventBus } from './queue/events.ts';
 import { Scheduler } from './queue/scheduler.ts';
@@ -86,7 +90,13 @@ export async function runDaemon(config: Config = loadConfig()): Promise<() => Pr
         resolvePath: () => cliPaths.require('claude'),
         env: (path) => claudeEnv({ ...process.env, PATH: cliPaths.childPath(path) }),
       }),
+      new CodexProvider({
+        resolvePath: () => cliPaths.require('codex'),
+        env: (path) => codexEnv({ ...process.env, PATH: cliPaths.childPath(path) }),
+      }),
     ],
+    // The candidate's routing (`applyant config roles`), read for every run.
+    routing: () => loadRouting(read),
     // Decision roles ask Jev when its key is stored (`applyant secrets set jev`).
     jev: new JevClient({ secrets, ...(config.jevUrl ? { url: config.jevUrl } : {}) }),
     runsDir: config.runsDir,
@@ -155,6 +165,8 @@ export async function runDaemon(config: Config = loadConfig()): Promise<() => Pr
     interview_open: interviewOpen,
     interview_turn: interviewTurn,
     search: searchHandler,
+    build_recipe: buildRecipe,
+    plan_search: planSearch,
   };
 
   // Catch up: vectors for facts that have none (or were made by another embedder), and a

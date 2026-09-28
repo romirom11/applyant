@@ -208,3 +208,45 @@ describe('search from the CLI', () => {
     expect(bad.stderr).toContain('at most every 60 minutes');
   });
 });
+
+describe('model roles and the planner from the CLI', () => {
+  it('config roles: list, set, refuse, reset', async () => {
+    const roles = await cliJson<Array<{ role: string; route: string; overridden: boolean }>>([
+      'config',
+      'roles',
+    ]);
+    expect(roles.find((r) => r.role === 'search_planner')).toMatchObject({
+      route: 'codex',
+      overridden: false,
+    });
+    expect(roles.find((r) => r.role === 'reader_builder')?.route).toBe('claude:sonnet');
+
+    const set = await cli(['config', 'roles', 'set', 'matcher', 'codex']);
+    expect(set.stdout).toContain('matcher → codex (default claude:sonnet)');
+    const table = await cli(['config', 'roles']);
+    expect(table.stdout).toMatch(/matcher\s+codex \*\s+claude:sonnet/);
+
+    const bad = await cli(['config', 'roles', 'set', 'matcher', 'jev']);
+    expect(bad.code).not.toBe(0);
+    expect(bad.stderr).toContain('jev only answers bounded decisions');
+
+    const reset = await cli(['config', 'roles', 'reset']);
+    expect(reset.stdout).toContain('Back on the default route: matcher.');
+  });
+
+  it('search plan starts one planner run at a time; a feed page needs no recipe', async () => {
+    const first = await cli(['search', 'plan']);
+    expect(first.stdout).toMatch(/Planning searches as plan 1/);
+    const second = await cli(['search', 'plan']);
+    expect(second.stdout).toContain('The planner is already running.');
+    const plans = await cliJson<Array<{ id: number; trigger: string }>>(['search', 'plans']);
+    expect(plans[0]).toMatchObject({ id: 1, trigger: 'manual' });
+
+    const careers = site.url('/careers-jsonld.html');
+    const show = await cli(['search', 'sources', 'show', `page:${careers}`]);
+    expect(show.stdout).toContain('Read as      json-ld feed');
+    const rebuild = await cli(['search', 'sources', 'rebuild', `page:${careers}`]);
+    expect(rebuild.code).not.toBe(0);
+    expect(rebuild.stderr).toContain('it needs no listing recipe');
+  });
+});

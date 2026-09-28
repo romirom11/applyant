@@ -346,6 +346,7 @@ describe('ClaudeProvider (fake `claude` executable)', () => {
     jsonSchema: toStrictJsonSchema(answerSchema),
     cwd,
     tools: null,
+    webSearch: false,
     signal: new AbortController().signal,
     onEvent: () => {},
     onProgress: () => {},

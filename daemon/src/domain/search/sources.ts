@@ -37,11 +37,12 @@ export function isAts(kind: string): kind is Ats {
 /**
  * Whether a source of this kind gives its whole list (so absence closes postings). ATS list
  * APIs and feeds do; boards show their latest jobs or a search. A page is complete when it
- * resolved to a feed or an ATS board; each run still reports what it actually got.
+ * resolved to a feed or an ATS board, never when its listing recipe reads it; each run still
+ * reports what it actually got.
  */
 export function completeList(kind: SearchSourceKind, resolved: ResolvedSource | null): boolean {
   if (kind === 'board') return false;
-  if (kind === 'page') return resolved !== null;
+  if (kind === 'page') return resolved !== null && resolved.via !== 'recipe';
   return true;
 }
 

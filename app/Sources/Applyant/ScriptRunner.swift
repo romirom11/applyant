@@ -19,7 +19,8 @@ struct ScriptStep: Decodable {
     var review: Int64?
     /// skip · interested · prepare · confirmAll · confirmFacts · editAnswer · setField · approve · submit · setCvMode ·
     /// startInterview · answerInterview · dismissInterview · pauseStrategy · resumeStrategy · runStrategy ·
-    /// sourceOff · sourceOn (value: a source key or kind) · wait
+    /// sourceOff · sourceOn (value: a source key or kind) · planSearch · rebuildRecipe (value: a source
+    /// key) · wait
     var action: String?
     var application: Int64?
     var facts: [Int64]?
@@ -33,7 +34,8 @@ struct ScriptStep: Decodable {
     var wait: Double?
     /// Keep waiting (up to `wait`) until this is true: "stage:<app>:<stage>", "posting:<id>",
     /// "handoff:<app>", "question" (the thread on screen has an open question), "settled",
-    /// "run:<strategy>" (its latest run finished).
+    /// "run:<strategy>" (its latest run finished), "plan" (the latest planner run finished),
+    /// "recipe:<source key>" (its recipe is built or failed).
     var until: String?
     /// The Search section: a strategy or a source; the Agent runs section: a run.
     var searchStrategy: Int64?
@@ -185,6 +187,11 @@ final class ScriptRunner {
             note("runStrategy: run \(run.map(String.init) ?? "none (one is already going)")")
         case "sourceOff", "sourceOn":
             await store.setSource(s.value ?? "", enabled: s.action == "sourceOn")
+        case "planSearch":
+            let plan = await store.planSearch()
+            note("planSearch: plan \(plan.map(String.init) ?? "none (one is already going)")")
+        case "rebuildRecipe":
+            await store.rebuildRecipe(s.value ?? "")
         case "showBrowser": note("showBrowser: Applyant's Chrome brought forward = \(ChromeWindow.bringForward())")
         default: break
         }
@@ -211,6 +218,14 @@ final class ScriptRunner {
             // "run:<strategy>": its latest run is no longer waiting or running.
             guard parts.count == 2, let id = Int64(parts[1]), let latest = store.runs(of: id).first else { return false }
             return latest.status != "queued" && store.strategy(id)?.running == false
+        case "plan":
+            guard let latest = store.search.plans.first else { return false }
+            return latest.status != "queued"
+        case "recipe":
+            // "recipe:<source key>" (the key has colons of its own).
+            let key = parts.dropFirst().joined(separator: ":")
+            guard let source = store.source(key), source.hasRecipe else { return false }
+            return source.recipe.status != "building"
         case "settled":
             // "settled": the thread on screen isn't waiting on the interviewer.
             guard let target = store.navigation.interview, let thread = store.interviewThreads[target] else { return false }
@@ -264,7 +279,7 @@ final class ScriptRunner {
             parts.append("interview=\(target) questions=\(thread.questions.map { "\($0.id):\($0.status)" }) pending=\(thread.pending)")
         }
         if nav.section == .search {
-            parts.append("strategies=\(store.search.strategies.map { "\($0.id):\($0.state):\($0.stats.found)" }) sources on=\(store.search.sources.filter { $0.enabled && $0.kindEnabled }.count)/\(store.search.sources.count)")
+            parts.append("strategies=\(store.search.strategies.map { "\($0.id):\($0.state):\($0.origin):\($0.stats.found)" }) sources on=\(store.search.sources.filter { $0.enabled && $0.kindEnabled }.count)/\(store.search.sources.count) agent sources=\(store.search.sources.filter { $0.origin == "agent" }.count) plan=\(store.search.plans.first.map { "\($0.id):\($0.status)" } ?? "none")")
         }
         if nav.section == .agentRuns, let run = nav.run {
             parts.append("run=\(run) events=\(store.runEvents[run]?.count ?? 0)")

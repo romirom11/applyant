@@ -1,7 +1,8 @@
 // Search strategies: which sources, which queries, how often, and how well each one does.
-// A strategy is a row the candidate (and, from phase 11, the search_planner) can see and edit.
-// The scheduler starts a run when its time comes; a run is one `search` task whose run_id
-// every task it spawns carries.
+// A strategy is a row the candidate (and the search_planner, marked agent-generated) can see
+// and edit. The scheduler starts a run when its time comes; a run is one `search` task whose
+// run_id every task it spawns carries. A strategy whose postings the candidate rarely marks
+// interested runs less often, and says so; it is never paused or removed on its own.
 import { and, desc, eq, inArray, lte, sql } from 'drizzle-orm';
 import type { Conn } from '../../db/client.ts';
 import {
@@ -41,6 +42,52 @@ export function parseEvery(text: string): number {
     throw new SearchError(`strategies run at most every ${MIN_EVERY_MINUTES} minutes`);
   }
   return minutes;
+}
+
+// ---- Cadence: weak strategies run less often --------------------------------------------------
+
+/** A strategy's interested rate counts only once the candidate decided on this many postings. */
+export const CADENCE_MIN_DECIDED = 8;
+/** However weak, a strategy still runs at least weekly. */
+export const MAX_EVERY_MINUTES = 7 * 1440;
+
+export interface Cadence {
+  /** 1 (its own schedule), 2 or 4. */
+  factor: number;
+  /** The interval it actually runs at. */
+  everyMinutes: number;
+  /** Why it runs less often; null when it doesn't. */
+  note: string | null;
+}
+
+/**
+ * How often a strategy runs, given how its postings went: below 25% interested (of those the
+ * candidate decided on) it runs half as often, below 10% a quarter as often.
+ */
+export function cadenceFor(everyMinutes: number, stats: SearchStats): Cadence {
+  const decided = stats.interested + stats.skipped;
+  if (decided < CADENCE_MIN_DECIDED) return { factor: 1, everyMinutes, note: null };
+  const rate = stats.interested / decided;
+  const factor = rate < 0.1 ? 4 : rate < 0.25 ? 2 : 1;
+  if (factor === 1) return { factor, everyMinutes, note: null };
+  const every = Math.max(everyMinutes, Math.min(everyMinutes * factor, MAX_EVERY_MINUTES));
+  return {
+    factor,
+    everyMinutes: every,
+    note: `runs less often (every ${formatEvery(every)} instead of ${formatEvery(everyMinutes)}): ${stats.interested} of ${decided} postings you decided on were interesting (${Math.round(rate * 100)}%)`,
+  };
+}
+
+function statsOf(conn: Conn, strategyId: number): SearchStats {
+  const row = conn
+    .select(statsColumns)
+    .from(strategyPostings)
+    .innerJoin(postings, eq(postings.id, strategyPostings.postingId))
+    .where(eq(strategyPostings.strategyId, strategyId))
+    .get();
+  return row
+    ? { found: row.found, verified: row.verified, interested: row.interested, skipped: row.skipped }
+    : NO_STATS;
 }
 
 export function formatEvery(minutes: number): string {
@@ -132,6 +179,8 @@ export interface StrategyInput {
   everyMinutes?: number;
   state?: StrategyState;
   origin?: 'candidate' | 'agent';
+  /** Why it exists (the planner's reason for an agent-generated one). */
+  note?: string | null;
 }
 
 /** Adds a strategy; an active one runs right away (then on its schedule). */
@@ -157,6 +206,7 @@ export function addStrategy(
       everyMinutes: every,
       state: input.state ?? 'active',
       origin: input.origin ?? 'candidate',
+      note: input.note ?? null,
       nextRunAt: tx.now,
       createdAt: tx.now,
       updatedAt: tx.now,
@@ -203,8 +253,9 @@ export function updateStrategy(
       throw new SearchError(`strategies run at most every ${MIN_EVERY_MINUTES} minutes`);
     }
     set.everyMinutes = patch.everyMinutes;
-    // The new schedule counts from the last run.
-    set.nextRunAt = new Date((row.lastRunAt ?? tx.now).getTime() + patch.everyMinutes * 60_000);
+    // The new schedule counts from the last run (slowed down as before, if it was).
+    const every = cadenceFor(patch.everyMinutes, statsOf(tx.db, row.id)).everyMinutes;
+    set.nextRunAt = new Date((row.lastRunAt ?? tx.now).getTime() + every * 60_000);
   }
   if (patch.state !== undefined && patch.state !== row.state) {
     set.state = patch.state;
@@ -265,9 +316,10 @@ export function startSearchRun(
     .values({ strategyId: strategy.id, trigger, status: 'queued', startedAt: tx.now })
     .returning({ id: searchRuns.id })
     .get();
+  const cadence = cadenceFor(strategy.everyMinutes, statsOf(tx.db, strategy.id));
   tx.db
     .update(searchStrategies)
-    .set({ nextRunAt: new Date(tx.now.getTime() + strategy.everyMinutes * 60_000) })
+    .set({ nextRunAt: new Date(tx.now.getTime() + cadence.everyMinutes * 60_000) })
     .where(eq(searchStrategies.id, strategy.id))
     .run();
   tx.enqueue('search', strategy.id, { runId: run.id });
@@ -318,6 +370,8 @@ export function strategyStats(conn: Conn): Map<number, SearchStats> {
 
 export interface StrategyView extends SearchStrategyRow {
   stats: SearchStats;
+  /** How often it actually runs (weak strategies run less often). */
+  cadence: Cadence;
   lastRun: SearchRunRow | null;
   /** The source keys a run would query now (selected, switched on). */
   sourceKeys: string[];
@@ -337,9 +391,11 @@ function latestRuns(conn: Conn): Map<number, SearchRunRow> {
 }
 
 export function strategyView(conn: Conn, row: SearchStrategyRow): StrategyView {
+  const stats = strategyStats(conn).get(row.id) ?? NO_STATS;
   return {
     ...row,
-    stats: strategyStats(conn).get(row.id) ?? NO_STATS,
+    stats,
+    cadence: cadenceFor(row.everyMinutes, stats),
     lastRun: latestRuns(conn).get(row.id) ?? null,
     sourceKeys: sourcesFor(conn, row.sources).map((s) => s.key),
     running: runBusy(conn, row.id),
@@ -357,6 +413,7 @@ export function listStrategies(conn: Conn): StrategyView[] {
     .map((row) => ({
       ...row,
       stats: stats.get(row.id) ?? NO_STATS,
+      cadence: cadenceFor(row.everyMinutes, stats.get(row.id) ?? NO_STATS),
       lastRun: last.get(row.id) ?? null,
       sourceKeys: sourcesFor(conn, row.sources).map((s) => s.key),
       running: runBusy(conn, row.id),

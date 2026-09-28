@@ -153,6 +153,30 @@ final class FakeDaemon: DaemonAPI, @unchecked Sendable {
         }
     }
     func runEvents(_ runId: Int64) async throws -> [DaemonEvent] { log("runEvents \(runId)"); return eventsByRun[runId] ?? [] }
+    /// Sources with their recipe's listings (GetSearchSource).
+    var sourceDetails: [String: SearchSource] = [:]
+    var nextPlan: Int64 = 0
+    func planSearch() async throws -> Int64? {
+        log("planSearch")
+        if searchList.plans.first?.status == "queued" { return nil }
+        nextPlan += 1
+        let id = nextPlan
+        searchList.plans.insert(.with { $0.id = id; $0.status = "queued"; $0.trigger = "manual" }, at: 0)
+        return id
+    }
+    func searchSource(_ key: String) async throws -> SearchSource {
+        log("searchSource \(key)")
+        guard let s = sourceDetails[key] ?? searchList.sources.first(where: { $0.key == key }) else { throw APIError("no source \(key)") }
+        return s
+    }
+    func rebuildRecipe(_ key: String) async throws -> Bool {
+        log("rebuildRecipe \(key)")
+        for i in searchList.sources.indices where searchList.sources[i].key == key {
+            searchList.sources[i].recipe.status = "building"
+        }
+        sourceDetails[key]?.recipe.status = "building"
+        return true
+    }
 
     /// Changes a question everywhere it's listed.
     func setQuestion(_ id: Int64, _ change: (inout InterviewQuestion) -> Void) throws -> InterviewQuestion {

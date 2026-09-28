@@ -20,6 +20,7 @@ public typealias SearchList = Applyant_V1_ListSearchResponse
 public typealias SearchStrategy = Applyant_V1_SearchStrategy
 public typealias SearchSource = Applyant_V1_SearchSource
 public typealias SearchRun = Applyant_V1_SearchRun
+public typealias SearchPlan = Applyant_V1_SearchPlan
 
 public struct APIError: Error, LocalizedError, Equatable {
     public let message: String
@@ -74,6 +75,12 @@ public protocol DaemonAPI: Sendable {
     func runStrategy(_ id: Int64) async throws -> Int64?
     /// A source by key (board:hn) or a whole kind (greenhouse, board, …).
     func setSource(_ target: String, enabled: Bool) async throws
+    /// Starts the search planner; nil when it's already running.
+    func planSearch() async throws -> Int64?
+    /// One source with its listing recipe and what the recipe read when it was built.
+    func searchSource(_ key: String) async throws -> SearchSource
+    /// A new listing recipe for a career page; false when a build was already going.
+    func rebuildRecipe(_ key: String) async throws -> Bool
     /// The events of one run (its tasks, the postings it found), oldest first.
     func runEvents(_ runId: Int64) async throws -> [DaemonEvent]
 }
@@ -293,6 +300,19 @@ public final class ConnectDaemonAPI: DaemonAPI {
             $0.enabled = enabled
         }
         _ = try unwrap(await unary.setSearchSourceEnabled(request: request, headers: headers))
+    }
+
+    public func planSearch() async throws -> Int64? {
+        let response = try unwrap(await unary.planSearch(request: .init(), headers: headers))
+        return response.hasPlanID ? response.planID : nil
+    }
+
+    public func searchSource(_ key: String) async throws -> SearchSource {
+        try unwrap(await unary.getSearchSource(request: .with { $0.source = key }, headers: headers)).source
+    }
+
+    public func rebuildRecipe(_ key: String) async throws -> Bool {
+        try unwrap(await unary.rebuildRecipe(request: .with { $0.source = key }, headers: headers)).queued
     }
 
     public func runEvents(_ runId: Int64) async throws -> [DaemonEvent] {

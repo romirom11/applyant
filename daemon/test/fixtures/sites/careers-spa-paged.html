@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Jobs · Vireo (pages turn in place)</title></head>
+<body>
+  <main>
+    <h1>Open roles at Vireo</h1>
+    <ul id="jobs" aria-label="Open roles"></ul>
+    <button id="next" aria-label="next page">›</button>
+  </main>
+  <script>
+    // 3 pages of 3 jobs; "next" swaps the list in place 600 ms after the click (as a list
+    // fetched from an API does), and is disabled on the last page.
+    const pages = [
+      ['Data Engineer', 'Platform Engineer', 'QA Engineer'],
+      ['Backend Engineer', 'Frontend Engineer', 'SRE'],
+      ['ML Engineer', 'Product Manager', 'Designer'],
+    ];
+    let at = 0;
+    const list = document.getElementById('jobs');
+    const next = document.getElementById('next');
+    const show = () => {
+      list.innerHTML = pages[at]
+        .map((t, i) => '<li><a href="/jobs/v' + (at * 3 + i + 1) + '">' + t + '</a></li>')
+        .join('');
+      next.disabled = at === pages.length - 1;
+    };
+    next.addEventListener('click', () => {
+      if (at >= pages.length - 1) return;
+      setTimeout(() => { at++; show(); }, 600);
+    });
+    show();
+  </script>
+</body>
+</html>

@@ -29,7 +29,13 @@ export type EventKind =
   | 'system.wake'
   // A search run was queued, finished or failed (entity_id = strategy id, run_id = the run,
   // stage = queued | done | failed; message = what it found).
-  | 'search.run';
+  | 'search.run'
+  // A page's listing recipe is being built, was built, or couldn't be (entity_id = source id,
+  // stage = building | built | failed).
+  | 'search.recipe'
+  // A search_planner run was queued, finished or failed (entity_id = plan id, stage = queued |
+  // done | failed; message = what it added).
+  | 'search.plan';
 
 export interface EventInput {
   kind: EventKind;

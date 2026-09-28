@@ -154,4 +154,57 @@ func searchList() -> SearchList {
         try await eventually("search refreshed") { store.searchRuns.first?.status == "done" }
         #expect(store.strategy(1)?.stats.found == 39)
     }
+
+    @Test func agentStrategiesWeakOnesAndRecipesSaySo() {
+        var list = searchList()
+        list.strategies[0].origin = "agent"
+        list.strategies[0].effectiveEveryMinutes = 720
+        list.strategies[0].cadenceNote = "runs less often (every 12h instead of 6h): 1 of 8 postings you decided on were interesting (13%)"
+        let rows = SearchText.strategyRows(list)
+        #expect(rows[0].chips.map(\.text) == ["Every 12 h", "Runs less often", "Agent-generated"])
+        var page = source("page:https://acme.example/careers", "Acme", kind: "page", complete: false)
+        page.origin = "agent"
+        page.recipe = .with { $0.status = "ok"; $0.lastCount = 12 }
+        #expect(SearchText.sourceRow(page).chips.map(\.text) == ["Latest jobs", "Listing recipe", "Found by the agent"])
+        page.recipe.status = "building"
+        #expect(SearchText.sourceRow(page).chips.map(\.text).contains("Building recipe…"))
+        page.recipe.status = "failed"
+        #expect(SearchText.sourceRow(page).chips.map(\.text).contains("No recipe yet"))
+        let plan = SearchPlan.with { $0.status = "done"; $0.note = "2 new strategies · 5 new boards watched" }
+        #expect(SearchText.planSummary(plan) == "2 new strategies · 5 new boards watched")
+        #expect(SearchText.planSummary(.with { $0.status = "queued"; $0.trigger = "schedule" }) == "Planning searches (weekly)…")
+    }
+
+    @Test func planSearchesAndOpenASourcesRecipeThroughTheDaemon() async throws {
+        let daemon = FakeDaemon()
+        daemon.searchList = searchList()
+        let key = "page:https://acme.example/careers"
+        var page = source(key, "Acme", kind: "page", complete: false)
+        page.recipe = .with { $0.status = "ok" }
+        daemon.searchList.sources.append(page)
+        page.recipe.listings = [.with { $0.title = "Senior AI Engineer"; $0.url = "https://acme.example/jobs/1"; $0.location = "Remote" }]
+        daemon.sourceDetails[key] = page
+        let store = AppStore(connector: FakeConnector([daemon]), backoff: { _ in })
+        let run = Task { await store.run() }
+        defer { run.cancel() }
+        try await eventually("connected") { store.connection == .connected }
+
+        #expect(await store.planSearch() == 1)
+        #expect(store.planning)
+        #expect(store.count(.search) == 1)
+        // One at a time.
+        #expect(await store.planSearch() == nil)
+
+        await store.openSource(key)
+        #expect(store.sourceDetails[key]?.recipe.listings.map(\.title) == ["Senior AI Engineer"])
+        await store.rebuildRecipe(key)
+        #expect(daemon.calls.contains("rebuildRecipe \(key)"))
+        #expect(store.sourceDetails[key]?.recipe.status == "building")
+        #expect(store.source(key)?.recipe.status == "building")
+
+        // The planner finishes: a search event refreshes the list.
+        daemon.searchList.plans[0].status = "done"
+        daemon.feed.yield(event(20, .search(.with { $0.status = "plan_done"; $0.planID = 1 })))
+        try await eventually("plan done") { !store.planning }
+    }
 }

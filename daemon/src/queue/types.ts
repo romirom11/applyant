@@ -26,6 +26,11 @@ export const TASK_ENTITY = {
   // One run of a search strategy (phase 10): its sources' lists → found postings. The task's
   // run_id is the search run, and every task it spawns carries it.
   search: 'strategy',
+  // A listing recipe for a page source (phase 11): reader_builder writes it, it's checked on the
+  // same page and stored with that page as its fixture.
+  build_recipe: 'search_source',
+  // One search_planner run (phase 11): strategies from the profile, boards from web search.
+  plan_search: 'search_plan',
 } as const;
 export type TaskKind = keyof typeof TASK_ENTITY;
 export const TASK_KINDS = Object.keys(TASK_ENTITY) as TaskKind[];

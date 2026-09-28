@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Jobs · Orbit (infinite list)</title>
+  <style>.job { height: 400px; } </style>
+</head>
+<body>
+  <main>
+    <h1>Jobs at Orbit</h1>
+    <div id="list" role="feed" aria-label="Jobs"></div>
+  </main>
+  <script>
+    // 5 jobs at first, 5 more on each of the first two scrolls to the bottom, then no more.
+    let next = 1;
+    let batches = 0;
+    const list = document.getElementById('list');
+    const add = (n) => {
+      for (let i = 0; i < n; i++, next++) {
+        const a = document.createElement('article');
+        a.className = 'job';
+        a.innerHTML = '<h3><a href="/jobs/o' + next + '">Engineer ' + next + '</a></h3><p class="loc">Remote</p>';
+        list.appendChild(a);
+      }
+    };
+    add(5);
+    window.addEventListener('scroll', () => {
+      if (window.innerHeight + window.scrollY < document.body.scrollHeight - 50) return;
+      if (batches >= 2) return;
+      batches++;
+      setTimeout(() => add(5), 50);
+    });
+  </script>
+</body>
+</html>

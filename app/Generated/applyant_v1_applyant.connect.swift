@@ -226,6 +226,33 @@ public protocol Applyant_V1_ApplyantServiceClientInterface: Sendable {
     /// ListSearchRuns returns recent runs, newest first, each with what every source gave.
     @available(iOS 13, *)
     func `listSearchRuns`(request: Applyant_V1_ListSearchRunsRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_ListSearchRunsResponse>
+
+    /// PlanSearch starts the search planner (search_planner, Codex by default): it proposes
+    /// strategies from the profile (added active, marked agent-generated) and finds company boards
+    /// with web search (added to the watch list). Once run, it runs again weekly by itself.
+    @available(iOS 13, *)
+    func `planSearch`(request: Applyant_V1_PlanSearchRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_PlanSearchResponse>
+
+    /// GetSearchSource returns one source with its listing recipe and what the recipe read from
+    /// the page it was built on.
+    @available(iOS 13, *)
+    func `getSearchSource`(request: Applyant_V1_GetSearchSourceRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_GetSearchSourceResponse>
+
+    /// RebuildRecipe asks reader_builder for a new listing recipe for a career page now.
+    @available(iOS 13, *)
+    func `rebuildRecipe`(request: Applyant_V1_RebuildRecipeRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_RebuildRecipeResponse>
+
+    /// Model roles: which provider and model answer each role. Changes apply to the next run.
+    @available(iOS 13, *)
+    func `listRoles`(request: Applyant_V1_ListRolesRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_ListRolesResponse>
+
+    /// SetRole routes a role to "claude", "codex", "claude:sonnet", "jev" (decisions only), …
+    @available(iOS 13, *)
+    func `setRole`(request: Applyant_V1_SetRoleRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_SetRoleResponse>
+
+    /// ResetRoles puts one role (or every role) back on its default route.
+    @available(iOS 13, *)
+    func `resetRoles`(request: Applyant_V1_ResetRolesRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_ResetRolesResponse>
 }
 
 /// Concrete implementation of `Applyant_V1_ApplyantServiceClientInterface`.
@@ -486,6 +513,36 @@ public final class Applyant_V1_ApplyantServiceClient: Applyant_V1_ApplyantServic
         return await self.client.unary(path: "/applyant.v1.ApplyantService/ListSearchRuns", idempotencyLevel: .unknown, request: request, headers: headers)
     }
 
+    @available(iOS 13, *)
+    public func `planSearch`(request: Applyant_V1_PlanSearchRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_PlanSearchResponse> {
+        return await self.client.unary(path: "/applyant.v1.ApplyantService/PlanSearch", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
+    public func `getSearchSource`(request: Applyant_V1_GetSearchSourceRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_GetSearchSourceResponse> {
+        return await self.client.unary(path: "/applyant.v1.ApplyantService/GetSearchSource", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
+    public func `rebuildRecipe`(request: Applyant_V1_RebuildRecipeRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_RebuildRecipeResponse> {
+        return await self.client.unary(path: "/applyant.v1.ApplyantService/RebuildRecipe", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
+    public func `listRoles`(request: Applyant_V1_ListRolesRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_ListRolesResponse> {
+        return await self.client.unary(path: "/applyant.v1.ApplyantService/ListRoles", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
+    public func `setRole`(request: Applyant_V1_SetRoleRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_SetRoleResponse> {
+        return await self.client.unary(path: "/applyant.v1.ApplyantService/SetRole", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
+    public func `resetRoles`(request: Applyant_V1_ResetRolesRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_ResetRolesResponse> {
+        return await self.client.unary(path: "/applyant.v1.ApplyantService/ResetRoles", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
     public enum Metadata {
         public enum Methods {
             public static let addPosting = Connect.MethodSpec(name: "AddPosting", service: "applyant.v1.ApplyantService", type: .unary)
@@ -538,6 +595,12 @@ public final class Applyant_V1_ApplyantServiceClient: Applyant_V1_ApplyantServic
             public static let addSearchSource = Connect.MethodSpec(name: "AddSearchSource", service: "applyant.v1.ApplyantService", type: .unary)
             public static let setSearchSourceEnabled = Connect.MethodSpec(name: "SetSearchSourceEnabled", service: "applyant.v1.ApplyantService", type: .unary)
             public static let listSearchRuns = Connect.MethodSpec(name: "ListSearchRuns", service: "applyant.v1.ApplyantService", type: .unary)
+            public static let planSearch = Connect.MethodSpec(name: "PlanSearch", service: "applyant.v1.ApplyantService", type: .unary)
+            public static let getSearchSource = Connect.MethodSpec(name: "GetSearchSource", service: "applyant.v1.ApplyantService", type: .unary)
+            public static let rebuildRecipe = Connect.MethodSpec(name: "RebuildRecipe", service: "applyant.v1.ApplyantService", type: .unary)
+            public static let listRoles = Connect.MethodSpec(name: "ListRoles", service: "applyant.v1.ApplyantService", type: .unary)
+            public static let setRole = Connect.MethodSpec(name: "SetRole", service: "applyant.v1.ApplyantService", type: .unary)
+            public static let resetRoles = Connect.MethodSpec(name: "ResetRoles", service: "applyant.v1.ApplyantService", type: .unary)
         }
     }
 }

@@ -438,6 +438,22 @@ export function eventToPb(row: EventRow): Event {
       },
     });
   }
+  if (row.kind === 'search.plan' || row.kind === 'search.recipe') {
+    const plan = row.kind === 'search.plan';
+    return create(EventSchema, {
+      ...base,
+      payload: {
+        case: 'search',
+        value: {
+          strategyId: 0n,
+          status: `${plan ? 'plan' : 'recipe'}_${row.stage ?? ''}`,
+          ...(plan
+            ? { planId: BigInt(row.entityId ?? 0) }
+            : { sourceId: BigInt(row.entityId ?? 0) }),
+        },
+      },
+    });
+  }
   if (row.kind === 'posting.stage' || row.kind === 'posting.form') {
     return create(EventSchema, {
       ...base,

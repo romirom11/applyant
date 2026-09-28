@@ -1,0 +1,35 @@
+{
+  "url": "http://127.0.0.1:49683/careers-text.html",
+  "source": "live reader_builder test: /careers-text.html",
+  "builtAt": "2026-09-28T20:20:02.107Z",
+  "recipe": {
+    "kind": "textPattern",
+    "pattern": "^(.+?) — (.+?) — details <(https?://[^>]+)>",
+    "flags": "m",
+    "groups": {
+      "title": 1,
+      "url": 3,
+      "location": 2
+    }
+  },
+  "expected": [
+    {
+      "title": "Backend Engineer",
+      "url": "http://127.0.0.1:49683/jobs/k1",
+      "location": "Berlin",
+      "team": null
+    },
+    {
+      "title": "Frontend Engineer",
+      "url": "http://127.0.0.1:49683/jobs/k2",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "ML Engineer",
+      "url": "http://127.0.0.1:49683/jobs/k3",
+      "location": "Athens",
+      "team": null
+    }
+  ]
+}

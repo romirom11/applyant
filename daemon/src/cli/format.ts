@@ -203,6 +203,8 @@ export function eventJson(e: Event) {
       type: 'search',
       strategyId: Number(r.strategyId),
       searchRunId: r.runId === undefined ? null : Number(r.runId),
+      planId: r.planId === undefined ? null : Number(r.planId),
+      sourceId: r.sourceId === undefined ? null : Number(r.sourceId),
       status: r.status,
     };
   }
@@ -234,6 +236,12 @@ export function eventLine(e: Event): string {
   }
   if (e.payload.case === 'search') {
     const r = e.payload.value;
+    if (r.planId !== undefined) {
+      return `${time(e)}${run}  search plan ${r.planId} ${r.status.replace(/^plan_/, '')}${msg}`;
+    }
+    if (r.sourceId !== undefined) {
+      return `${time(e)}${run}  recipe for source ${r.sourceId} ${r.status.replace(/^recipe_/, '')}${msg}`;
+    }
     return `${time(e)}${run}  search strategy ${r.strategyId} ${r.status}${msg}`;
   }
   return `${time(e)}${run}${msg}`;

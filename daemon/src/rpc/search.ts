@@ -3,9 +3,18 @@ import { create } from '@bufbuild/protobuf';
 import { timestampFromDate } from '@bufbuild/protobuf/wkt';
 import { Code, ConnectError, type ServiceImpl } from '@connectrpc/connect';
 import type { Conn } from '../db/client.ts';
-import type { ResolvedSource, StrategyState } from '../db/schema.ts';
+import type {
+  ListingRecipeRow,
+  ResolvedSource,
+  SearchPlanRow,
+  StrategyState,
+} from '../db/schema.ts';
+import { latestPlans, startPlan } from '../domain/search/planner.ts';
+import { recipeRow, recipeSummaries, requestRecipe } from '../domain/search/recipes/store.ts';
+import { describeRecipe } from '../domain/search/recipes/types.ts';
 import {
   addSource,
+  findSource,
   type KindView,
   listSources,
   parseSourceInput,
@@ -29,7 +38,11 @@ import {
 } from '../domain/search/strategies.ts';
 import {
   type ApplyantService,
+  type ListingRecipe,
+  ListingRecipeSchema,
   type SearchStats as PbStats,
+  type SearchPlan,
+  SearchPlanSchema,
   type SearchRun,
   SearchRunSchema,
   type SearchSource,
@@ -86,6 +99,43 @@ export function strategyToPb(s: StrategyView): SearchStrategy {
     lastRun: s.lastRun ? runToPb({ ...s.lastRun, strategyName: s.name }) : undefined,
     sourceKeys: s.sourceKeys,
     running: s.running,
+    effectiveEveryMinutes: s.cadence.everyMinutes,
+    cadenceNote: s.cadence.note ?? undefined,
+  });
+}
+
+type RecipeSummary = Omit<ListingRecipeRow, 'fixtureHtml' | 'expected' | 'fixtureUrl'> &
+  Partial<Pick<ListingRecipeRow, 'expected'>>;
+
+export function recipeToPb(r: RecipeSummary): ListingRecipe {
+  return create(ListingRecipeSchema, {
+    status: r.status,
+    builtAt: r.builtAt ? timestampFromDate(r.builtAt) : undefined,
+    lastCount: r.lastCount ?? undefined,
+    note: r.note ?? undefined,
+    description: r.recipe ? describeRecipe(r.recipe) : [],
+    builds: r.builds,
+    listings: (r.expected ?? []).map((l) => ({
+      title: l.title,
+      url: l.url,
+      location: l.location ?? undefined,
+      team: l.team ?? undefined,
+    })),
+    lastSampledAt: r.lastSampledAt ? timestampFromDate(r.lastSampledAt) : undefined,
+  });
+}
+
+export function planToPb(p: SearchPlanRow): SearchPlan {
+  return create(SearchPlanSchema, {
+    id: BigInt(p.id),
+    trigger: p.trigger,
+    status: p.status,
+    startedAt: timestampFromDate(p.startedAt),
+    finishedAt: p.finishedAt ? timestampFromDate(p.finishedAt) : undefined,
+    strategyIds: p.strategies.map((id) => BigInt(id)),
+    boardKeys: p.boards,
+    searches: p.searches,
+    note: p.note ?? undefined,
   });
 }
 
@@ -93,11 +143,14 @@ export function describeResolved(r: ResolvedSource | null): string | undefined {
   if (!r) return undefined;
   if (r.via === 'feed') return `${r.format} feed ${r.url}`;
   if (r.via === 'ats') return `${r.ats} board ${r.token}`;
+  if (r.via === 'recipe') return 'listing recipe';
   return `Lever API ${r.apiHost}`;
 }
 
-export function sourceToPb(s: SourceView): SearchSource {
+export function sourceToPb(s: SourceView, recipe?: RecipeSummary | null): SearchSource {
   return create(SearchSourceSchema, {
+    note: s.note ?? undefined,
+    recipe: recipe ? recipeToPb(recipe) : undefined,
     id: BigInt(s.id),
     key: s.key,
     kind: s.kind,
@@ -141,6 +194,13 @@ function sourceView(conn: Conn, key: string): SourceView | undefined {
   return listSources(conn).sources.find((s) => s.key === key);
 }
 
+function requireSource(conn: Conn, ref: string) {
+  const row = findSource(conn, ref.trim());
+  if (!row)
+    throw new SearchError(`no search source "${ref}" (see \`applyant search sources list\`)`);
+  return row;
+}
+
 function stateFrom(value: string): StrategyState {
   if (value !== 'active' && value !== 'paused') {
     throw new ConnectError(`state must be active or paused, not "${value}"`, Code.InvalidArgument);
@@ -160,15 +220,63 @@ export function searchRpcs(
   | 'addSearchSource'
   | 'setSearchSourceEnabled'
   | 'listSearchRuns'
+  | 'planSearch'
+  | 'getSearchSource'
+  | 'rebuildRecipe'
 > {
   return {
     listSearch() {
       const { sources, kinds } = listSources(c.db);
+      const recipes = recipeSummaries(c.db);
       return {
         strategies: listStrategies(c.db).map(strategyToPb),
-        sources: sources.map(sourceToPb),
+        sources: sources.map((s) => sourceToPb(s, recipes.get(s.id))),
         kinds: kinds.map(kindToPb),
+        plans: latestPlans(c.db, 5).map(planToPb),
       };
+    },
+
+    planSearch() {
+      const planId = runInTx(c.db, c.bus, { now: c.now() }, (tx) => startPlan(tx, 'manual'));
+      return { planId: planId === null ? undefined : BigInt(planId) };
+    },
+
+    getSearchSource(req) {
+      return guard(() => {
+        const row = requireSource(c.db, req.source);
+        const view = sourceView(c.db, row.key);
+        const recipe = recipeRow(c.db, row.id);
+        return { source: view ? sourceToPb(view, recipe) : undefined };
+      });
+    },
+
+    rebuildRecipe(req) {
+      return guard(() =>
+        runInTx(c.db, c.bus, { now: c.now() }, (tx) => {
+          const row = requireSource(tx.db, req.source);
+          if (row.kind !== 'page') {
+            throw new SearchError(
+              `${row.key} is read through its ${row.kind === 'board' ? 'API' : 'ATS list API'}: only career pages have listing recipes`,
+            );
+          }
+          if (row.resolved && row.resolved.via !== 'recipe') {
+            throw new SearchError(
+              `${row.key} is read as ${describeResolved(row.resolved)}: it needs no listing recipe`,
+            );
+          }
+          const queued = requestRecipe(
+            tx,
+            row,
+            { kind: 'broken', detail: 'rebuild asked for by you' },
+            { force: true },
+          );
+          const view = sourceView(tx.db, row.key);
+          return {
+            queued,
+            source: view ? sourceToPb(view, recipeRow(tx.db, row.id)) : undefined,
+          };
+        }),
+      );
     },
 
     addStrategy(req) {
@@ -236,7 +344,7 @@ export function searchRpcs(
         );
         const { source, created } = addSource(c.db, input, c.now());
         const view = sourceView(c.db, source.key);
-        return { source: view ? sourceToPb(view) : undefined, created };
+        return { source: view ? sourceToPb(view, recipeRow(c.db, source.id)) : undefined, created };
       });
     },
 
@@ -250,7 +358,7 @@ export function searchRpcs(
           kind: kind ? kindToPb(kind) : undefined,
           sources: sources
             .filter((s) => (res.kind ? s.kind === res.kind : keys.has(s.key)))
-            .map(sourceToPb),
+            .map((s) => sourceToPb(s)),
         };
       });
     },

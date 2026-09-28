@@ -50,6 +50,8 @@ export interface TestDepsOptions {
   readPool?: ReadExec;
   fx?: FxSource;
   jev?: AgentRunnerOptions['jev'];
+  /** The routing table, or how to read it (the candidate's routing: `loadRouting(db)`). */
+  routing?: AgentRunnerOptions['routing'];
   mcp?: McpAccess | null;
   submit?: SubmitProfile;
   taskPages?: TaskPages;
@@ -86,6 +88,7 @@ export function testRunner(o: TestDepsOptions): AgentRunner {
     log: quietLog,
     ...(o.now ? { now: o.now } : {}),
     ...(o.jev ? { jev: o.jev } : {}),
+    ...(o.routing ? { routing: o.routing } : {}),
   });
 }
 
@@ -134,6 +137,8 @@ export function handlers(partial: Partial<Handlers>): Handlers {
     interview_open: never as Handler<'interview_open'>,
     interview_turn: never as Handler<'interview_turn'>,
     search: never as Handler<'search'>,
+    build_recipe: never as Handler<'build_recipe'>,
+    plan_search: never as Handler<'plan_search'>,
     ...partial,
   };
 }

@@ -120,6 +120,39 @@ pnpm -C daemon cli runs show <run>                                     # the run
 `node daemon/scripts/search-fixtures.ts` re-records the trimmed public list responses the reader
 tests replay offline (`daemon/test/fixtures/search/`).
 
+The search planner (`search_planner`, Codex by default) proposes strategies from your
+preferences, projects and skills, and finds company boards with web search (`site:` queries on
+the ATS hosts, careers pages). Its strategies are added active and marked agent-generated; its
+boards join the watch list as sources, each with the reason it was picked. After the first run
+you start, it runs again weekly. A career page with no feed and no known ATS gets a listing
+recipe: `reader_builder` writes it once from the page's ARIA snapshot, DOM outline and text, the
+recipe must read the page it was written for (including titles the model read off it), and it's
+stored with that page. Every later read is plain Playwright, checked by cheap invariants (links
+on the site or a known ATS, varied titles, a count within 0.3–3× of the last read) and a
+Jev spot-check every few days; a recipe that fails is rebuilt. A recipe's list is never
+complete, so it never closes a posting. Strategies whose postings you rarely mark interested run
+less often (every 2× or 4× their interval), and say so; none is paused or removed on its own.
+
+```sh
+pnpm -C daemon cli search plan                                         # propose strategies, find boards (then weekly)
+pnpm -C daemon cli search plans                                        # what each plan added, and its web searches
+pnpm -C daemon cli search sources show page:https://acme.com/careers   # its recipe and what it read when built
+pnpm -C daemon cli search sources rebuild page:https://acme.com/careers
+```
+
+Every model call goes through a role; `config roles` shows and changes which provider and model
+answers each one (the next run uses it; no restart). Codex runs `codex exec` read-only in an
+empty directory, with your own MCP servers and notify hook switched off for Applyant's runs.
+
+```sh
+pnpm -C daemon cli config roles                                        # every role, its route and default
+pnpm -C daemon cli config roles set matcher codex                      # or claude:opus, jev (decisions only), …
+pnpm -C daemon cli config roles reset [role]
+```
+
+`APPLYANT_HOME=<dir> node daemon/scripts/recipe-fixtures.ts <source> <name>` copies a stored
+recipe and its page into `daemon/test/fixtures/listings/`, where every recipe is replayed offline.
+
 Scoring: a verified posting keeps its text and gets an explained 0–100 score. The `extractor`
 reads its requirements, salary, location and so on once; the `matcher` judges each requirement
 against facts found by hybrid retrieval (FTS5 + EmbeddingGemma vectors); the number itself comes

@@ -3,9 +3,12 @@
 //   slow phase  read each selected source that is switched on (4 at a time): its reader returns
 //               the whole list it saw and whether that list is complete · keep the listings the
 //               strategy's queries and locations match · group them into postings (dedupe.ts)
+//               career pages read by their listing recipe (phase 11) get a sample of their
+//               listings checked every few days (listing_check: "a job title with its link?")
 //   commit      new postings at `found` (+ verify_posting), every listing as a posting source,
 //               the strategy's claim on them · the absence rule per source (absence.ts) · the
-//               run's per-source results · a `search.run` event
+//               run's per-source results · a build_recipe for pages that need one (recipes/) ·
+//               a `search.run` event
 //
 // Tasks created here (verify, and from it score and read_form) carry the run's id.
 import { and, eq, isNull } from 'drizzle-orm';
@@ -28,8 +31,17 @@ import { applyAbsence, reopenPosting } from './absence.ts';
 import { type Cluster, DedupeIndex } from './dedupe.ts';
 import { readAtsBoard } from './readers/ats-api.ts';
 import { isBoardId, readBoard } from './readers/boards.ts';
-import { readPage } from './readers/page.ts';
+import { NeedsRecipeError, readPage } from './readers/page.ts';
 import type { Listing, ReaderContext, ReaderRun } from './readers/types.ts';
+import {
+  type RecipeForRun,
+  type RecipeRequest,
+  recipesFor,
+  recordRecipeRead,
+  requestRecipe,
+  SAMPLE_EVERY_MS,
+} from './recipes/store.ts';
+import type { RecipeListing } from './recipes/types.ts';
 import { isAts, sourcesFor } from './sources.ts';
 import { matchesStrategy } from './strategies.ts';
 
@@ -46,6 +58,10 @@ export interface SourceRead {
   resolved: ResolvedSource | null;
   /** The company the source belongs to, when the API names it. */
   company: string | null;
+  /** A career page that needs a (new) listing recipe, and why. */
+  needsRecipe: RecipeRequest | null;
+  /** Read by its listing recipe: the recipe, how many it read, whether a sample was checked. */
+  recipe: { id: number; count: number; sampled: boolean } | null;
 }
 
 function message(err: unknown): string {
@@ -54,8 +70,20 @@ function message(err: unknown): string {
 }
 
 /** Reads one source with the reader its kind needs. Failures become the read's error. */
-export async function readSource(source: SearchSourceRow, ctx: ReaderContext): Promise<SourceRead> {
-  const read: SourceRead = { source, run: null, error: null, resolved: null, company: null };
+export async function readSource(
+  source: SearchSourceRow,
+  ctx: ReaderContext,
+  recipe: RecipeForRun | null = null,
+): Promise<SourceRead> {
+  const read: SourceRead = {
+    source,
+    run: null,
+    error: null,
+    resolved: null,
+    company: null,
+    needsRecipe: null,
+    recipe: null,
+  };
   try {
     if (isAts(source.kind)) {
       const apiHost = source.resolved?.via === 'lever' ? source.resolved.apiHost : undefined;
@@ -67,16 +95,85 @@ export async function readSource(source: SearchSourceRow, ctx: ReaderContext): P
       if (!isBoardId(source.locator)) throw new Error(`unknown board "${source.locator}"`);
       read.run = await readBoard(source.locator, ctx);
     } else {
-      const run = await readPage(source.locator, ctx, source.resolved ?? null);
+      const run = await readPage(source.locator, ctx, source.resolved ?? null, recipe);
       read.run = run;
       read.resolved = run.resolved;
       read.company = run.company;
+      if (run.recipe)
+        read.recipe = { id: run.recipe.id, count: run.listings.length, sampled: false };
     }
   } catch (err) {
     ctx.signal.throwIfAborted();
     read.error = message(err);
+    if (err instanceof NeedsRecipeError)
+      read.needsRecipe = { kind: err.reason, detail: err.message };
   }
   return read;
+}
+
+/** Listings a sample check looks at: the first, the middle and the last. */
+function sampleOf(listings: RecipeListing[]): RecipeListing[] {
+  if (listings.length <= 3) return listings;
+  return [listings[0], listings[Math.floor(listings.length / 2)], listings.at(-1)].filter(
+    (l): l is RecipeListing => !!l,
+  );
+}
+
+/**
+ * Every few days a sample of a recipe's listings goes to listing_check (Jev by default): is each
+ * a job posting's title with its link? Two "no" answers of three mean the recipe reads something
+ * else now (a redesign moved the list), and it's rebuilt. An unsure or failed check changes
+ * nothing and is tried at the next read.
+ */
+async function sampleCheck(
+  read: SourceRead,
+  listings: RecipeListing[],
+  ctx: Parameters<typeof searchHandler>[1],
+  taskId: number,
+): Promise<void> {
+  const sample = sampleOf(listings);
+  if (sample.length === 0 || !read.recipe) return;
+  const res = await ctx.deps.models.decide('listing_check', {
+    state: { page: read.source.locator },
+    questions: Object.fromEntries(
+      sample.map((l, i) => [
+        `l${i + 1}`,
+        {
+          instructions: {
+            question: 'Is this a job posting: a job title with the link to its own page?',
+            title: l.title,
+            link: l.url,
+            ...(l.location ? { location: l.location } : {}),
+          },
+          options: {
+            job: 'A job posting: a role title and a link to that job',
+            other: 'Something else: navigation, a department or category, a blog post, a filter',
+          },
+        },
+      ]),
+    ),
+    taskId,
+    signal: ctx.signal,
+  });
+  const answers = Object.values(res.answers).filter((a) => a.sure);
+  if (answers.length < sample.length) return;
+  const other = answers.filter((a) => a.choice === 'other').length;
+  if (other >= 2 || (sample.length === 1 && other === 1)) {
+    read.error = `its listing recipe reads something other than jobs now (${other} of ${sample.length} sampled listings)`;
+    read.needsRecipe = { kind: 'broken', detail: read.error };
+    read.run = null;
+    read.recipe = null;
+    return;
+  }
+  read.recipe.sampled = true;
+}
+
+function sampleDue(recipe: RecipeForRun, now: Date): boolean {
+  return !recipe.lastSampledAt || now.getTime() - recipe.lastSampledAt.getTime() >= SAMPLE_EVERY_MS;
+}
+
+function asRecipeListing(l: Listing): RecipeListing {
+  return { title: l.title, url: l.url, location: l.location, team: l.team };
 }
 
 async function mapLimit<T, R>(
@@ -103,6 +200,10 @@ export const searchHandler: Handler<'search'> = async (task, ctx) => {
   if (!strategy) return { kind: 'done', commit: () => {} };
 
   const sources = sourcesFor(ctx.read, strategy.sources);
+  const recipes = recipesFor(
+    ctx.read,
+    sources.filter((s) => s.kind === 'page').map((s) => s.id),
+  );
   ctx.progress({ message: `${strategy.name}: reading ${sources.length} source(s)` });
   const reader = ctx.deps.reader as ReaderPool | undefined;
   const rctx: ReaderContext = {
@@ -113,7 +214,11 @@ export const searchHandler: Handler<'search'> = async (task, ctx) => {
     now: ctx.now(),
   };
   const reads = await mapLimit(sources, PARALLEL_SOURCES, async (s) => {
-    const r = await readSource(s, rctx);
+    const recipe = recipes.get(s.id) ?? null;
+    const r = await readSource(s, rctx, recipe);
+    if (r.recipe && r.run && recipe && sampleDue(recipe, rctx.now)) {
+      await sampleCheck(r, r.run.listings.map(asRecipeListing), ctx, task.id);
+    }
     ctx.progress({
       message: `${s.key}: ${r.error ? `failed: ${r.error}` : (r.run?.note ?? `${r.run?.listings.length ?? 0} jobs`)}`,
     });
@@ -326,6 +431,13 @@ export function commitSearch(tx: Tx, input: CommitInput): void {
     }
   }
 
+  // Career pages: a build for those that need a recipe; the count and sample time of the rest.
+  for (const r of input.reads) {
+    if (r.needsRecipe) requestRecipe(tx, r.source, r.needsRecipe);
+    if (r.recipe)
+      recordRecipeRead(tx, r.recipe.id, { count: r.recipe.count, sampled: r.recipe.sampled });
+  }
+
   // The sources' own state: last read, and what a page resolved to.
   for (const r of input.reads) {
     const label =
@@ -338,7 +450,7 @@ export function commitSearch(tx: Tx, input: CommitInput): void {
         lastRunAt: tx.now,
         lastCount: r.run ? r.run.listings.length : null,
         lastComplete: r.run ? r.run.complete : null,
-        lastNote: r.error ? `failed: ${r.error}` : (r.run?.note ?? null),
+        lastNote: r.needsRecipe ? r.error : r.error ? `failed: ${r.error}` : (r.run?.note ?? null),
         label,
         ...(r.resolved ? { resolved: r.resolved } : {}),
       })

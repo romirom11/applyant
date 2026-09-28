@@ -1,0 +1,82 @@
+#!/usr/bin/env node
+// A stand-in for the `codex` CLI that speaks just enough of `codex exec --experimental-json`
+// (the JSONL the Codex SDK reads). It records how it was started, so tests can check the SDK
+// spawned exactly the path Applyant passed (and not the binary bundled in its npm package).
+//
+//   FAKE_CODEX_ARGV    file to append {argv, cwd, env, prompt, schema} to, one JSON line per start
+//   FAKE_CODEX_MODE    ok (default) | fenced | limit | limit-in | limit-exit | error
+//   FAKE_CODEX_OUTPUT  JSON file with the final message to return in ok mode
+(async () => {
+  const fs = await import('node:fs');
+  const env = process.env;
+  const args = process.argv.slice(2);
+  if (args[0] === '--version') {
+    process.stdout.write('codex-cli 9.9.9\n');
+    return;
+  }
+  if (args[0] === 'login' && args[1] === 'status') {
+    process.stdout.write('Logged in using ChatGPT\n');
+    return;
+  }
+  let prompt = '';
+  for await (const chunk of process.stdin) prompt += chunk;
+  const schemaAt = args.indexOf('--output-schema');
+  const schema = schemaAt >= 0 ? JSON.parse(fs.readFileSync(args[schemaAt + 1], 'utf8')) : null;
+  if (env.FAKE_CODEX_ARGV) {
+    fs.appendFileSync(
+      env.FAKE_CODEX_ARGV,
+      `${JSON.stringify({
+        argv: process.argv,
+        cwd: process.cwd(),
+        env: Object.keys(env)
+          .filter((k) => k.startsWith('CODEX') || k.startsWith('CLAUDE'))
+          .sort(),
+        prompt,
+        schema,
+      })}\n`,
+    );
+  }
+  const mode = env.FAKE_CODEX_MODE || 'ok';
+  const send = (m) => process.stdout.write(`${JSON.stringify(m)}\n`);
+  if (mode === 'limit-exit') {
+    process.stderr.write(
+      "You've hit your usage limit. Upgrade to Pro (https://openai.com/chatgpt/pricing) or try again at Oct 3rd, 2026 9:00 AM.\n",
+    );
+    process.exit(1);
+  }
+  send({ type: 'thread.started', thread_id: '00000000-0000-4000-8000-00000000c0de' });
+  // A non-fatal notice, as codex prints for settings it doesn't know.
+  send({
+    type: 'item.completed',
+    item: { id: 'item_0', type: 'error', message: 'Codex is ignoring 1 unrecognized setting' },
+  });
+  send({ type: 'turn.started' });
+  if (mode === 'limit' || mode === 'limit-in') {
+    const when = mode === 'limit' ? 'at 3:45 PM' : 'in 2 hours 5 minutes';
+    const message = `You've hit your usage limit. Upgrade to Pro (https://openai.com/chatgpt/pricing) or try again ${when}.`;
+    send({ type: 'error', message });
+    send({ type: 'turn.failed', error: { message } });
+    process.stderr.write(`${message}\n`);
+    process.exit(1);
+  }
+  if (mode === 'error') {
+    send({ type: 'turn.failed', error: { message: 'stream disconnected before completion' } });
+    process.exit(1);
+  }
+  if (args.includes('web_search="live"')) {
+    send({ type: 'item.started', item: { id: 'item_1', type: 'web_search', query: 'site:jobs.ashbyhq.com "AI Engineer"' } });
+    send({ type: 'item.completed', item: { id: 'item_1', type: 'web_search', query: 'site:jobs.ashbyhq.com "AI Engineer"' } });
+  }
+  const output = env.FAKE_CODEX_OUTPUT ? fs.readFileSync(env.FAKE_CODEX_OUTPUT, 'utf8').trim() : '{}';
+  const text = mode === 'fenced' ? `\`\`\`json\n${output}\n\`\`\`` : output;
+  send({ type: 'item.completed', item: { id: 'item_2', type: 'agent_message', text } });
+  send({
+    type: 'turn.completed',
+    usage: {
+      input_tokens: 21000,
+      cached_input_tokens: 7000,
+      output_tokens: 180,
+      reasoning_output_tokens: 40,
+    },
+  });
+})();

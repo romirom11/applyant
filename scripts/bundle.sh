@@ -79,6 +79,10 @@ find "$STAGE/node_modules/onnxruntime-node/bin" -path '*/darwin/x64' -type d -ex
 # The Agent SDK's own `claude` build (~200 MB): the daemon always passes the candidate's
 # signed-in CLI (cli-paths.ts), and without this the SDK can't silently fall back to it.
 rm -rf "$STAGE"/node_modules/@anthropic-ai/claude-agent-sdk-darwin-*
+# Likewise the Codex SDK's own `codex` build (~130 MB): the daemon always passes the
+# candidate's signed-in CLI as codexPathOverride.
+rm -rf "$STAGE"/node_modules/@openai/codex-darwin-* "$STAGE"/node_modules/@openai/codex-linux-* \
+  "$STAGE"/node_modules/@openai/codex-win32-*
 rm -f "$STAGE/pnpm-lock.yaml" "$STAGE/pnpm-workspace.yaml"
 mv "$STAGE" "$C/Resources/daemon"
 

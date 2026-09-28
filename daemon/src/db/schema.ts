@@ -4,6 +4,11 @@ import { sql } from 'drizzle-orm';
 import { index, integer, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 import type { FieldSpec, FormRead } from '../browser/form-types.ts';
 import type { Component, StoredExtraction, StoredMatch } from '../domain/scoring/types.ts';
+import {
+  type ListingRecipe,
+  RECIPE_STATUSES,
+  type RecipeListing,
+} from '../domain/search/recipes/types.ts';
 
 const now = sql`(cast(unixepoch('subsec') * 1000 as integer))`;
 
@@ -124,7 +129,9 @@ export type SearchSourceKind = (typeof SEARCH_SOURCE_KINDS)[number];
 export type ResolvedSource =
   | { via: 'feed'; url: string; format: string }
   | { via: 'ats'; ats: 'greenhouse' | 'ashby' | 'lever' | 'workable'; token: string }
-  | { via: 'lever'; apiHost: string };
+  | { via: 'lever'; apiHost: string }
+  // Its listing recipe (phase 11): a partial list, never complete.
+  | { via: 'recipe' };
 
 /** One place postings can be listed. A disabled source (or kind) is never queried. */
 export const searchSources = sqliteTable('search_sources', {
@@ -140,6 +147,8 @@ export const searchSources = sqliteTable('search_sources', {
   origin: text('origin', { enum: ['builtin', 'candidate', 'agent'] })
     .notNull()
     .default('candidate'),
+  /** Why it's watched: the search planner's reason and the web search that found it. */
+  note: text('note'),
   resolved: text('resolved', { mode: 'json' }).$type<ResolvedSource>(),
   lastRunAt: integer('last_run_at', { mode: 'timestamp_ms' }),
   /** Listings the last read returned (before any strategy's queries). */
@@ -255,6 +264,73 @@ export const strategyPostings = sqliteTable(
     index('strategy_postings_posting').on(t.postingId),
   ],
 );
+
+/**
+ * A page's listing recipe (phase 11): written once by reader_builder, checked against the page
+ * it was built from, stored with that page (the fixture) and what it read there, then run as
+ * plain Playwright on every read. One per source.
+ */
+export const listingRecipes = sqliteTable('listing_recipes', {
+  id: integer('id').primaryKey(),
+  sourceId: integer('source_id')
+    .notNull()
+    .unique()
+    .references(() => searchSources.id, { onDelete: 'cascade' }),
+  /** The recipe in use; null while none could be built. */
+  recipe: text('recipe', { mode: 'json' }).$type<ListingRecipe>(),
+  status: text('status', { enum: RECIPE_STATUSES }).notNull(),
+  /** The page the recipe was built from: its URL and HTML (scripts removed, hidden marked). */
+  fixtureUrl: text('fixture_url'),
+  fixtureHtml: text('fixture_html'),
+  /** What the recipe read from that page when it was built (the first page only). */
+  expected: text('expected', { mode: 'json' }).$type<RecipeListing[]>(),
+  /** Listings of the last good read (all pages): the count window's reference. */
+  lastCount: integer('last_count'),
+  builtAt: integer('built_at', { mode: 'timestamp_ms' }),
+  /** When a sample of its listings was last checked by Jev ("is this a job title and link?"). */
+  lastSampledAt: integer('last_sampled_at', { mode: 'timestamp_ms' }),
+  /** The last build attempt, good or not (failed builds are retried after a few days). */
+  lastBuildAt: integer('last_build_at', { mode: 'timestamp_ms' }),
+  builds: integer('builds').notNull().default(0),
+  /** Why it's broken or failed, or what the last build did. */
+  note: text('note'),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull().default(now),
+});
+
+export const SEARCH_PLAN_TRIGGERS = ['manual', 'schedule'] as const;
+
+/**
+ * One search_planner run (phase 11): the strategies it proposed and the boards its web
+ * searches found, which join the watch list as sources.
+ */
+export const searchPlans = sqliteTable('search_plans', {
+  id: integer('id').primaryKey(),
+  trigger: text('trigger', { enum: SEARCH_PLAN_TRIGGERS }).notNull(),
+  /** queued (waiting or running) · done · failed */
+  status: text('status', { enum: ['queued', 'done', 'failed'] })
+    .notNull()
+    .default('queued'),
+  startedAt: integer('started_at', { mode: 'timestamp_ms' }).notNull().default(now),
+  finishedAt: integer('finished_at', { mode: 'timestamp_ms' }),
+  /** Ids of the strategies it added. */
+  strategies: text('strategies', { mode: 'json' }).$type<number[]>().notNull().default(sql`'[]'`),
+  /** Keys of the sources it added to the watch list. */
+  boards: text('boards', { mode: 'json' }).$type<string[]>().notNull().default(sql`'[]'`),
+  /** The web searches it says it ran. */
+  searches: text('searches', { mode: 'json' }).$type<string[]>().notNull().default(sql`'[]'`),
+  note: text('note'),
+});
+
+/**
+ * Role routing overrides (phase 11): a row replaces the default route of its role (roles.ts);
+ * `applyant config roles reset` deletes it.
+ */
+export const roleRoutes = sqliteTable('role_routes', {
+  role: text('role').primaryKey(),
+  provider: text('provider').notNull(),
+  model: text('model'),
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull().default(now),
+});
 
 export const TASK_STATUSES = ['queued', 'running', 'done', 'failed', 'needs_candidate'] as const;
 export type TaskStatus = (typeof TASK_STATUSES)[number];
@@ -788,3 +864,6 @@ export type InterviewTurnRow = typeof interviewTurns.$inferSelect;
 export type SearchSourceRow = typeof searchSources.$inferSelect;
 export type SearchStrategyRow = typeof searchStrategies.$inferSelect;
 export type SearchRunRow = typeof searchRuns.$inferSelect;
+export type ListingRecipeRow = typeof listingRecipes.$inferSelect;
+export type SearchPlanRow = typeof searchPlans.$inferSelect;
+export type RoleRouteRow = typeof roleRoutes.$inferSelect;

@@ -1,8 +1,10 @@
 // The scheduler: starts search runs when their strategies are due. It ticks once a minute and
 // when the Mac wakes (applyant-native's `wake` event). Node can't see sleep, so a strategy
 // whose slots passed while the Mac slept is simply due at the next tick, and runs once, not
-// once per missed slot: its next run counts from when it started.
+// once per missed slot: its next run counts from when it started. Once the candidate has run
+// the search planner, it also starts a new plan a week after the last one.
 import type { Db } from '../db/client.ts';
+import { schedulePlanner } from '../domain/search/planner.ts';
 import { scheduleDue } from '../domain/search/strategies.ts';
 import type { Logger } from '../util/log.ts';
 import type { EventBus } from './events.ts';
@@ -40,8 +42,12 @@ export class Scheduler {
   tick(trigger: 'schedule' | 'wake'): number[] {
     try {
       const now = this.o.now?.() ?? new Date();
-      const runs = runInTx(this.o.db, this.o.bus, { now }, (tx) => scheduleDue(tx, trigger));
+      const { runs, plan } = runInTx(this.o.db, this.o.bus, { now }, (tx) => ({
+        runs: scheduleDue(tx, trigger),
+        plan: schedulePlanner(tx),
+      }));
       if (runs.length) this.o.log.info('search runs started', { trigger, runs });
+      if (plan !== null) this.o.log.info('search planner started', { plan });
       return runs;
     } catch (err) {
       this.o.log.error('scheduler tick failed', { err });

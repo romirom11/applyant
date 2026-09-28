@@ -1,0 +1,64 @@
+{
+  "url": "http://127.0.0.1:49683/careers-hard.html",
+  "source": "live reader_builder test: /careers-hard.html",
+  "builtAt": "2026-09-28T20:19:51.744Z",
+  "recipe": {
+    "kind": "locators",
+    "list": {
+      "css": ".css-m5n6b7"
+    },
+    "item": {
+      "role": "link",
+      "name": null
+    },
+    "fields": {
+      "title": {
+        "css": ".css-q1w2e3"
+      },
+      "url": null,
+      "location": {
+        "css": ".css-r4t5y6"
+      },
+      "team": null
+    },
+    "pagination": null
+  },
+  "expected": [
+    {
+      "title": "Robotics Software Engineer",
+      "url": "http://127.0.0.1:49683/careers/5f1c2a90-robotics-software-engineer",
+      "location": "Munich, Germany · Full-time",
+      "team": null
+    },
+    {
+      "title": "ML Engineer, Perception",
+      "url": "http://127.0.0.1:49683/careers/7b3e1d22-ml-engineer-perception",
+      "location": "Remote (Europe) · Full-time",
+      "team": null
+    },
+    {
+      "title": "Senior Backend Engineer",
+      "url": "http://127.0.0.1:49683/careers/0a9d8c71-senior-backend-engineer",
+      "location": "Remote (Europe) · Full-time",
+      "team": null
+    },
+    {
+      "title": "Field Service Technician",
+      "url": "http://127.0.0.1:49683/careers/c4e5f6a7-field-service-technician",
+      "location": "Lyon, France · Full-time",
+      "team": null
+    },
+    {
+      "title": "Account Executive, DACH",
+      "url": "http://127.0.0.1:49683/careers/e8f9a0b1-account-executive-dach",
+      "location": "Berlin, Germany · Full-time",
+      "team": null
+    },
+    {
+      "title": "Solutions Engineer",
+      "url": "http://127.0.0.1:49683/careers/f2a3b4c5-solutions-engineer",
+      "location": "Remote (Europe) · Full-time",
+      "team": null
+    }
+  ]
+}

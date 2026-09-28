@@ -1,5 +1,6 @@
 // Subscription limits pause a provider, not the system. The CLIs say so in text
-// ("You've hit your session limit · resets 3:45pm") and, for Claude, in a
+// ("You've hit your session limit · resets 3:45pm"; Codex: "You've hit your usage limit …
+// try again at 3:45 PM" or "… try again in 2 hours 5 minutes") and, for Claude, in a
 // `rate_limit_event` with the reset time. Either becomes `pause_provider` until the reset.
 
 /** When the reset time can't be read, check again after this long. */
@@ -120,19 +121,55 @@ function fromWall(y: number, mo: number, d: number, c: Clock, tz: string | null)
   return new Date(guess - tzOffsetMs(first, tz));
 }
 
+const DURATION_UNITS: Record<string, number> = {
+  d: 86_400_000,
+  h: 3_600_000,
+  m: 60_000,
+  s: 1_000,
+};
+
+/** "2 days 3 hours 5 minutes" · "45 min" · "1h 30m" → ms; null when there's no amount. */
+function parseDuration(expr: string): number | null {
+  let ms = 0;
+  let any = false;
+  for (const m of expr.matchAll(
+    /(\d+(?:\.\d+)?)\s*(d|days?|h|hrs?|hours?|m|mins?|minutes?|s|secs?|seconds?)\b/gi,
+  )) {
+    const unit = DURATION_UNITS[(m[2] ?? '').toLowerCase()[0] ?? ''];
+    if (!unit) continue;
+    ms += Number(m[1]) * unit;
+    any = true;
+  }
+  return any ? ms : null;
+}
+
 export function parseResetTime(text: string, now: Date): Date | null {
   // Older CLIs: "Claude AI usage limit reached|1759000000".
   const epoch = /\|(\d{10,13})\b/.exec(text);
   if (epoch?.[1]) return resetFromEpoch(Number(epoch[1]));
 
-  const m = /\bresets?\s+(?:at\s+|on\s+)?([^\n·|]+?)(?:\s*\(([^)]+)\))?\s*(?:[.·|]|$)/im.exec(text);
+  // Codex: "… or try again in 2 days 3 hours."
+  const within = /\btry again in\s+([^\n·|]+)/i.exec(text);
+  if (within?.[1]) {
+    const ms = parseDuration(within[1]);
+    if (ms !== null) return new Date(now.getTime() + ms);
+  }
+
+  // Claude: "resets 3:45pm (Europe/Athens)"; Codex: "try again at Oct 3rd, 2026 5:43 PM".
+  const m =
+    /\b(?:resets?|try again)\s+(?:at\s+|on\s+)?([^\n·|]+?)(?:\s*\(([^)]+)\))?\s*(?:[.·|]|$)/im.exec(
+      text,
+    );
   if (!m?.[1]) return null;
   const expr = m[1].trim();
   const tz = validZone(m[2]?.trim());
   const clock = parseClock(expr) ?? { hour: 0, minute: 0 };
   const today = wallParts(now, tz);
 
-  const month = new RegExp(`\\b(${MONTHS.join('|')})[a-z]*\\.?\\s+(\\d{1,2})\\b`, 'i').exec(expr);
+  const month = new RegExp(
+    `\\b(${MONTHS.join('|')})[a-z]*\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?\\b`,
+    'i',
+  ).exec(expr);
   if (month?.[1] && month[2]) {
     const mo = MONTHS.indexOf(month[1].toLowerCase().slice(0, 3));
     let at = fromWall(today.y, mo, Number(month[2]), clock, tz);

@@ -15,13 +15,30 @@ struct SearchList: View {
             get: { store.navigation.search },
             set: { store.navigation.search = $0 }
         )) {
-            SwiftUI.Section("Strategies") {
+            SwiftUI.Section {
+                if let plan = store.search.plans.first {
+                    Label(SearchText.planSummary(plan), systemImage: "sparkle.magnifyingglass")
+                        .font(.caption).foregroundStyle(.secondary).lineLimit(3)
+                }
                 if strategies.isEmpty {
-                    Text("No strategies yet. Add one with `applyant search strategies add`.")
+                    Text("No strategies yet. Plan searches, or add one with `applyant search strategies add`.")
                         .font(.callout).foregroundStyle(.secondary)
                 }
                 ForEach(strategies) { row in
                     SearchRowView(row: row).tag(row.selection)
+                }
+            } header: {
+                HStack {
+                    Text("Strategies")
+                    Spacer()
+                    if store.planning { ProgressView().controlSize(.mini) }
+                    Button("Plan searches") { Task { await store.planSearch() } }
+                        .buttonStyle(.link)
+                        .controlSize(.small)
+                        .disabled(store.planning)
+                        .help(store.planning
+                            ? "The planner is running"
+                            : "Let the agent propose strategies from your profile and find new boards with web search")
                 }
             }
             ForEach(groups, id: \.kind.kind) { group in
@@ -129,9 +146,21 @@ struct StrategyDetail: View {
                         Text("Where").foregroundStyle(.secondary)
                         Text(s.locations.isEmpty ? "anywhere" : s.locations.joined(separator: ", "))
                     }
+                    if s.hasNote {
+                        GridRow {
+                            Text("Why").foregroundStyle(.secondary)
+                            Text(s.note)
+                        }
+                    }
                     GridRow {
                         Text("Schedule").foregroundStyle(.secondary)
-                        Text(schedule(s))
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(schedule(s))
+                            if s.hasCadenceNote {
+                                Text(s.cadenceNote.prefix(1).uppercased() + s.cadenceNote.dropFirst())
+                                    .font(.caption).foregroundStyle(.orange)
+                            }
+                        }
                     }
                     GridRow {
                         Text("Reads").foregroundStyle(.secondary)
@@ -155,7 +184,7 @@ struct StrategyDetail: View {
     }
 
     private func schedule(_ s: SearchStrategy) -> String {
-        var parts = ["every \(SearchText.every(s.everyMinutes))"]
+        var parts = ["every \(SearchText.every(SearchText.effectiveEvery(s)))"]
         if s.hasLastRunAt { parts.append("last run " + s.lastRunAt.date.formatted(.relative(presentation: .named))) }
         parts.append(s.state == "paused" ? "paused" : "next " + s.nextRunAt.date.formatted(date: .omitted, time: .shortened))
         return parts.joined(separator: " · ")
@@ -202,8 +231,12 @@ struct SourceDetail: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(s.label).font(.title2.weight(.semibold))
+                    HStack(spacing: 6) {
+                        Text(s.label).font(.title2.weight(.semibold))
+                        if s.origin == "agent" { ChipView(chip: Chip(text: "Found by the agent", tone: .accent)) }
+                    }
                     Text(s.key).font(.callout).foregroundStyle(.secondary).textSelection(.enabled)
+                    if s.hasNote { Text(s.note).font(.callout) }
                 }
                 Toggle(isOn: Binding(
                     get: { s.enabled },
@@ -240,10 +273,60 @@ struct SourceDetail: View {
                             : "not yet")
                     }
                 }
+                if let detail = store.sourceDetails[s.key], detail.hasRecipe {
+                    RecipeView(store: store, source: detail)
+                }
             }
             .padding(20)
             .frame(maxWidth: 820, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .task(id: source.key) { await store.openSource(source.key) }
+    }
+}
+
+/// A career page's listing recipe: how it reads the page, and the jobs it read when it was built,
+/// to check against the page itself.
+struct RecipeView: View {
+    let store: AppStore
+    let source: SearchSource
+
+    var body: some View {
+        let r = source.recipe
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Text("Listing recipe").font(.headline)
+                ChipView(chip: SearchText.recipeChip(r))
+                Spacer()
+                Button("Rebuild") { Task { await store.rebuildRecipe(source.key) } }
+                    .disabled(r.status == "building")
+                    .help("Ask the agent to write a new recipe for this page now")
+            }
+            if r.hasNote { Text(r.note).font(.callout).foregroundStyle(.secondary) }
+            if r.hasBuiltAt {
+                Text("Built \(r.builtAt.date.formatted(.relative(presentation: .named))) · \(r.builds) build(s)"
+                    + (r.hasLastCount ? " · last read \(r.lastCount) jobs" : ""))
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            ForEach(r.description_p, id: \.self) { line in
+                Text(line).font(.caption.monospaced()).foregroundStyle(.secondary).textSelection(.enabled)
+            }
+            if !r.listings.isEmpty {
+                Text("Read when it was built (\(r.listings.count), first page)").font(.subheadline.weight(.medium))
+                ForEach(r.listings, id: \.url) { l in
+                    VStack(alignment: .leading, spacing: 1) {
+                        if let url = URL(string: l.url) {
+                            Link(l.title, destination: url)
+                        } else {
+                            Text(l.title)
+                        }
+                        let meta = [l.hasLocation ? l.location : nil, l.hasTeam ? l.team : nil].compactMap { $0 }
+                        if !meta.isEmpty { Text(meta.joined(separator: " · ")).font(.caption).foregroundStyle(.secondary) }
+                    }
+                }
+            }
+        }
+        .padding(10)
+        .background(Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
     }
 }

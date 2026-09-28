@@ -8,6 +8,7 @@ import { cvPlanSchema } from './cv.ts';
 import { sourceExtractionSchema } from './extractor.ts';
 import { interviewSchema } from './interview.ts';
 import { matcherSchema, postingExtractionSchema } from './posting.ts';
+import { plannerSchema, recipeOutputSchema } from './search.ts';
 
 export const ROLE_SCHEMAS: Record<string, z.ZodType> = {
   source_extraction: sourceExtractionSchema,
@@ -18,6 +19,8 @@ export const ROLE_SCHEMAS: Record<string, z.ZodType> = {
   posting_extraction: postingExtractionSchema,
   matcher: matcherSchema,
   interviewer: interviewSchema,
+  reader_builder: recipeOutputSchema,
+  search_planner: plannerSchema,
   // Fallback for the Jev decision roles (field_classify, option_match, posting_liveness).
   decision: decisionSchema,
 };
@@ -28,3 +31,4 @@ export * from './cv.ts';
 export { type SourceExtraction, sourceExtractionSchema } from './extractor.ts';
 export * from './interview.ts';
 export * from './posting.ts';
+export * from './search.ts';

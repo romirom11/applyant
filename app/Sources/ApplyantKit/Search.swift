@@ -48,7 +48,8 @@ public enum SearchText {
         list.strategies.map { s in
             var chips: [Chip] = []
             if s.running { chips.append(Chip(text: "Running…", tone: .accent)) }
-            chips.append(s.state == "paused" ? Chip(text: "Paused", tone: .neutral) : Chip(text: "Every \(every(s.everyMinutes))", tone: .good))
+            chips.append(s.state == "paused" ? Chip(text: "Paused", tone: .neutral) : Chip(text: "Every \(every(effectiveEvery(s)))", tone: .good))
+            if s.hasCadenceNote { chips.append(Chip(text: "Runs less often", tone: .warning)) }
             if s.origin == "agent" { chips.append(Chip(text: "Agent-generated", tone: .accent)) }
             if s.sourceKeys.isEmpty { chips.append(Chip(text: "No source on", tone: .warning)) }
             if s.hasLastRun, s.lastRun.status == "failed" { chips.append(Chip(text: "Last run failed", tone: .warning)) }
@@ -59,6 +60,30 @@ public enum SearchText {
                 chips: chips,
                 on: s.state != "paused"
             )
+        }
+    }
+
+    /// How often a strategy actually runs (a weak one runs less often than it's set to).
+    public static func effectiveEvery(_ s: SearchStrategy) -> Int32 {
+        s.effectiveEveryMinutes > 0 ? s.effectiveEveryMinutes : s.everyMinutes
+    }
+
+    /// "Plan 3 · by you · 2 new strategies · 5 new boards watched · …", or that it's running.
+    public static func planSummary(_ p: SearchPlan) -> String {
+        let who = p.trigger == "schedule" ? "weekly" : "by you"
+        switch p.status {
+        case "queued": return "Planning searches (\(who))…"
+        case "failed": return "The last plan failed: \(p.hasNote ? p.note : "no reason given")"
+        default: return p.hasNote ? p.note : "Planned \(who)"
+        }
+    }
+
+    /// A career page's listing recipe as a chip.
+    public static func recipeChip(_ r: Applyant_V1_ListingRecipe) -> Chip {
+        switch r.status {
+        case "ok": Chip(text: "Listing recipe", tone: .good)
+        case "building": Chip(text: "Building recipe…", tone: .accent)
+        default: Chip(text: "No recipe yet", tone: .warning)
         }
     }
 
@@ -75,6 +100,8 @@ public enum SearchText {
         if !s.enabled { chips.append(Chip(text: "Off", tone: .neutral)) }
         else if !s.kindEnabled { chips.append(Chip(text: "Off (\(kindTitles[s.kind] ?? s.kind))", tone: .neutral)) }
         chips.append(s.completeList ? Chip(text: "Complete list", tone: .good) : Chip(text: "Latest jobs", tone: .neutral))
+        if s.hasRecipe { chips.append(recipeChip(s.recipe)) }
+        if s.origin == "agent" { chips.append(Chip(text: "Found by the agent", tone: .accent)) }
         if s.hasLastNote, s.lastNote.hasPrefix("failed") { chips.append(Chip(text: "Last read failed", tone: .warning)) }
         return SearchRow(
             selection: .source(s.key),

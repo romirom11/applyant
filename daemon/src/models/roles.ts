@@ -1,6 +1,10 @@
 // Every model call names a role; this table decides which provider and model answer it.
-// Code never names a provider. The defaults below are the TDD's; phase 11 persists the
-// table in SQLite and lets the candidate edit it (`applyant config roles`).
+// Code never names a provider. The defaults below are the TDD's. The candidate's changes
+// (`applyant config roles set matcher codex`) are rows in `role_routes`, one per changed role,
+// laid over the defaults; `reset` deletes them, so a role then follows the default again.
+import { and, eq, inArray } from 'drizzle-orm';
+import type { Conn } from '../db/client.ts';
+import { roleRoutes, tasks } from '../db/schema.ts';
 
 export type Provider = 'claude' | 'codex' | 'jev' | 'apple';
 
@@ -18,6 +22,8 @@ export const ROLES = [
   'claim_verifier',
   // The agent interview (phase 9): answers → facts, and the next question.
   'interviewer',
+  // Every few days, a sample of a listing recipe's output: "is this a job title with its link?"
+  'listing_check',
   'email_classify',
 ] as const;
 export type Role = (typeof ROLES)[number];
@@ -52,9 +58,36 @@ export const DEFAULT_ROLES: Record<Role, RoleConfig> = {
   application_writer: { route: r('claude', 'opus'), minConfidence: null, timeoutMs: 15 * MIN },
   claim_verifier: { route: r('claude', 'haiku'), minConfidence: null, timeoutMs: 5 * MIN },
   interviewer: { route: r('claude', 'sonnet'), minConfidence: null, timeoutMs: 5 * MIN },
+  listing_check: { route: r('jev'), minConfidence: 0.8, timeoutMs: MIN },
   // On-device; never falls back to a cloud model unless the candidate routes it there.
   email_classify: { route: r('apple'), minConfidence: 0.7, timeoutMs: MIN },
 };
+
+/** What each role does, for `applyant config roles`. */
+export const ROLE_INFO: Record<Role, string> = {
+  field_classify: 'what each form field asks for (batched per form)',
+  option_match: 'which option of a choice field means the prepared value',
+  posting_liveness: 'whether a posting is still open',
+  form_agent: 'operates form controls and wizard steps the deterministic pass cannot',
+  extractor: 'facts from sources · requirements, salary and location from postings',
+  search_planner: 'proposes search strategies and finds new boards with web search',
+  reader_builder: 'writes a listing recipe for a career page without a feed',
+  matcher: 'strong / partial / missing per requirement, with facts',
+  researcher: 'company research (phase 12)',
+  application_writer: 'answers and the tailored CV',
+  claim_verifier: 'checks each written sentence against its facts',
+  interviewer: 'the agent interview',
+  listing_check: "spot-checks a listing recipe's output every few days",
+  email_classify: 'reads replies to applications (phase 13; on-device)',
+};
+
+/** Roles that are Choice decisions (AgentRunner.decide): the only ones Jev can answer. */
+export const DECISION_ROLES: readonly Role[] = [
+  'field_classify',
+  'option_match',
+  'posting_liveness',
+  'listing_check',
+];
 
 /** Used when a provider is off, unavailable, or (Jev) not confident. */
 export const DEFAULT_FALLBACKS: Partial<Record<Provider, Route>> = {
@@ -110,6 +143,9 @@ export const TASK_ROLE: Partial<Record<string, Role>> = {
   // The agent interview: the first question about a project, and each answer → facts + next.
   interview_open: 'interviewer',
   interview_turn: 'interviewer',
+  // Search (phase 11): a listing recipe for a page, and the planner's strategies and boards.
+  build_recipe: 'reader_builder',
+  plan_search: 'search_planner',
 };
 
 /**
@@ -122,4 +158,151 @@ export function providerForTask(
 ): Provider | null {
   const role = TASK_ROLE[kind];
   return role ? table.roles[role].route.provider : null;
+}
+
+// ---- The candidate's routing (role_routes) ---------------------------------------------------
+
+export const PROVIDERS: readonly Provider[] = ['claude', 'codex', 'jev', 'apple'];
+
+export function isRole(role: string): role is Role {
+  return (ROLES as readonly string[]).includes(role);
+}
+
+/** "codex" · "claude:sonnet" · "claude:claude-opus-5" → a route. */
+export function parseRoute(text: string): Route {
+  const t = text.trim();
+  const at = t.indexOf(':');
+  const provider = (at < 0 ? t : t.slice(0, at)).trim().toLowerCase();
+  const model = at < 0 ? null : t.slice(at + 1).trim() || null;
+  if (!(PROVIDERS as readonly string[]).includes(provider)) {
+    throw new RoleRoutingError(
+      `unknown provider "${provider}" (${PROVIDERS.join(' | ')}, optionally with :model)`,
+    );
+  }
+  return { provider: provider as Provider, model };
+}
+
+/** Refuses routes that can't work: Jev only answers decisions, apple only reads mail. */
+export function checkRoute(role: Role, route: Route): void {
+  if (route.provider === 'jev' && !DECISION_ROLES.includes(role)) {
+    throw new RoleRoutingError(
+      `jev only answers bounded decisions (${DECISION_ROLES.join(', ')}); ${role} needs claude or codex`,
+    );
+  }
+  if (route.provider === 'jev' && route.model) {
+    throw new RoleRoutingError('jev has one model; use plain "jev"');
+  }
+  if (route.provider === 'apple' && role !== 'email_classify') {
+    throw new RoleRoutingError('the on-device model only reads email (email_classify)');
+  }
+}
+
+/** The defaults with the candidate's overrides laid over them. */
+export function loadRouting(conn: Conn): RoutingTable {
+  const rows = conn.select().from(roleRoutes).all();
+  if (rows.length === 0) return DEFAULT_ROUTING;
+  const roles = { ...DEFAULT_ROLES };
+  for (const row of rows) {
+    if (!isRole(row.role) || !(PROVIDERS as readonly string[]).includes(row.provider)) continue;
+    roles[row.role] = {
+      ...DEFAULT_ROLES[row.role],
+      route: { provider: row.provider as Provider, model: row.model },
+    };
+  }
+  return { roles, fallbacks: DEFAULT_FALLBACKS };
+}
+
+export interface RoleView {
+  role: Role;
+  route: Route;
+  default: Route;
+  overridden: boolean;
+  /** Where a jev decision goes when Jev is off or unsure. */
+  fallback: Route | null;
+  info: string;
+}
+
+export function listRoles(conn: Conn): RoleView[] {
+  const table = loadRouting(conn);
+  const overridden = new Set(
+    conn
+      .select({ role: roleRoutes.role })
+      .from(roleRoutes)
+      .all()
+      .map((r) => r.role),
+  );
+  return ROLES.map((role) => {
+    const route = table.roles[role].route;
+    return {
+      role,
+      route,
+      default: DEFAULT_ROLES[role].route,
+      overridden: overridden.has(role),
+      fallback: table.fallbacks[route.provider] ?? null,
+      info: ROLE_INFO[role],
+    };
+  });
+}
+
+/** Task kinds whose model work runs under `role` (TASK_ROLE). */
+function kindsOf(role: Role): string[] {
+  return Object.entries(TASK_ROLE)
+    .filter(([, r]) => r === role)
+    .map(([kind]) => kind);
+}
+
+/** Routes a role to a provider (and model); a route equal to the default removes the override. */
+export function setRoleRoute(conn: Conn, role: string, routeText: string, now: Date): RoleView {
+  if (!isRole(role)) {
+    throw new RoleRoutingError(`unknown role "${role}" (${ROLES.join(', ')})`);
+  }
+  const route = parseRoute(routeText);
+  checkRoute(role, route);
+  const def = DEFAULT_ROLES[role].route;
+  if (def.provider === route.provider && def.model === route.model) {
+    conn.delete(roleRoutes).where(eq(roleRoutes.role, role)).run();
+  } else {
+    conn
+      .insert(roleRoutes)
+      .values({ role, provider: route.provider, model: route.model, updatedAt: now })
+      .onConflictDoUpdate({
+        target: roleRoutes.role,
+        set: { provider: route.provider, model: route.model, updatedAt: now },
+      })
+      .run();
+  }
+  retagQueuedTasks(conn, role);
+  const view = listRoles(conn).find((v) => v.role === role);
+  if (!view) throw new RoleRoutingError(`unknown role "${role}"`);
+  return view;
+}
+
+/** Back to the defaults: one role, or every role. Returns the roles that changed. */
+export function resetRoleRoutes(conn: Conn, role: string | null): Role[] {
+  if (role !== null && !isRole(role)) {
+    throw new RoleRoutingError(`unknown role "${role}" (${ROLES.join(', ')})`);
+  }
+  const rows = conn.select({ role: roleRoutes.role }).from(roleRoutes).all();
+  const reset = rows
+    .map((r) => r.role)
+    .filter((r): r is Role => isRole(r) && (!role || r === role));
+  if (reset.length === 0) return [];
+  conn.delete(roleRoutes).where(inArray(roleRoutes.role, reset)).run();
+  for (const r of reset) retagQueuedTasks(conn, r);
+  return reset;
+}
+
+/**
+ * Queued tasks of the role's kinds follow its new route, so a limit pause on the old provider
+ * doesn't hold them (and a pause on the new one does).
+ */
+function retagQueuedTasks(conn: Conn, role: Role): void {
+  const provider = loadRouting(conn).roles[role].route.provider;
+  const kinds = kindsOf(role);
+  if (kinds.length === 0) return;
+  conn
+    .update(tasks)
+    .set({ provider })
+    .where(and(inArray(tasks.kind, kinds), eq(tasks.status, 'queued')))
+    .run();
 }

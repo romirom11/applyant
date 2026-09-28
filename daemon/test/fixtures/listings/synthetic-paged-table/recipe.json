@@ -1,0 +1,51 @@
+{
+  "url": "http://127.0.0.1:49683/careers-paged.html",
+  "source": "live reader_builder test: /careers-paged.html",
+  "builtAt": "2026-09-28T20:19:57.338Z",
+  "recipe": {
+    "kind": "locators",
+    "list": {
+      "css": "table.jobs"
+    },
+    "item": {
+      "css": "tr.job"
+    },
+    "fields": {
+      "title": {
+        "role": "link",
+        "name": null
+      },
+      "url": null,
+      "location": {
+        "css": "td.where"
+      },
+      "team": null
+    },
+    "pagination": {
+      "next": {
+        "role": "link",
+        "name": "Next page"
+      }
+    }
+  },
+  "expected": [
+    {
+      "title": "Founding Engineer",
+      "url": "http://127.0.0.1:49683/jobs/t1",
+      "location": "Remote",
+      "team": null
+    },
+    {
+      "title": "Staff Backend Engineer",
+      "url": "http://127.0.0.1:49683/jobs/t2",
+      "location": "Lisbon",
+      "team": null
+    },
+    {
+      "title": "Engineering Manager",
+      "url": "http://127.0.0.1:49683/jobs/t3",
+      "location": "Remote",
+      "team": null
+    }
+  ]
+}

@@ -1160,7 +1160,8 @@ export declare type InterviewEvent = Message<"applyant.v1.InterviewEvent"> & {
 export declare const InterviewEventSchema: GenMessage<InterviewEvent>;
 
 /**
- * A search run was queued, finished or failed, or a strategy changed.
+ * A search run was queued, finished or failed, a strategy changed, the planner ran, or a page's
+ * listing recipe was built.
  *
  * @generated from message applyant.v1.SearchEvent
  */
@@ -1173,16 +1174,30 @@ export declare type SearchEvent = Message<"applyant.v1.SearchEvent"> & {
   runId?: bigint | undefined;
 
   /**
+   * 0 for planner and recipe events.
+   *
    * @generated from field: int64 strategy_id = 2;
    */
   strategyId: bigint;
 
   /**
-   * queued | done | failed | updated | deleted
+   * Runs and strategies: queued | done | failed | updated | deleted.
+   * The planner: plan_queued | plan_done | plan_failed.
+   * Recipes: recipe_building | recipe_built | recipe_failed.
    *
    * @generated from field: string status = 3;
    */
   status: string;
+
+  /**
+   * @generated from field: optional int64 plan_id = 4;
+   */
+  planId?: bigint | undefined;
+
+  /**
+   * @generated from field: optional int64 source_id = 5;
+   */
+  sourceId?: bigint | undefined;
 };
 
 /**
@@ -3988,6 +4003,21 @@ export declare type SearchStrategy = Message<"applyant.v1.SearchStrategy"> & {
    * @generated from field: bool running = 15;
    */
   running: boolean;
+
+  /**
+   * How often it actually runs: longer than every_minutes when few of its postings were
+   * interesting (a weak strategy runs less often; it's never paused or removed on its own).
+   *
+   * @generated from field: int32 effective_every_minutes = 16;
+   */
+  effectiveEveryMinutes: number;
+
+  /**
+   * Why it runs less often; unset when it doesn't.
+   *
+   * @generated from field: optional string cadence_note = 17;
+   */
+  cadenceNote?: string | undefined;
 };
 
 /**
@@ -4078,7 +4108,7 @@ export declare type SearchSource = Message<"applyant.v1.SearchSource"> & {
   lastNote?: string | undefined;
 
   /**
-   * How a career page was read: "feed https://…" or "greenhouse board gitlab".
+   * How a career page was read: "feed https://…", "greenhouse board gitlab", "listing recipe".
    *
    * @generated from field: optional string resolved = 14;
    */
@@ -4088,6 +4118,20 @@ export declare type SearchSource = Message<"applyant.v1.SearchSource"> & {
    * @generated from field: applyant.v1.SearchStats stats = 15;
    */
   stats?: SearchStats | undefined;
+
+  /**
+   * Why it's watched (the search planner's reason and the web search that found it).
+   *
+   * @generated from field: optional string note = 16;
+   */
+  note?: string | undefined;
+
+  /**
+   * Career pages: its listing recipe (listings only from GetSearchSource).
+   *
+   * @generated from field: optional applyant.v1.ListingRecipe recipe = 17;
+   */
+  recipe?: ListingRecipe | undefined;
 };
 
 /**
@@ -4095,6 +4139,168 @@ export declare type SearchSource = Message<"applyant.v1.SearchSource"> & {
  * Use `create(SearchSourceSchema)` to create a new message.
  */
 export declare const SearchSourceSchema: GenMessage<SearchSource>;
+
+/**
+ * A career page's listing recipe: written once by reader_builder, run as plain Playwright.
+ *
+ * @generated from message applyant.v1.ListingRecipe
+ */
+export declare type ListingRecipe = Message<"applyant.v1.ListingRecipe"> & {
+  /**
+   * ok (in use) | building (a build is waiting or running) | failed (none could be built yet)
+   *
+   * @generated from field: string status = 1;
+   */
+  status: string;
+
+  /**
+   * @generated from field: optional google.protobuf.Timestamp built_at = 2;
+   */
+  builtAt?: Timestamp | undefined;
+
+  /**
+   * Listings of the last good read.
+   *
+   * @generated from field: optional int32 last_count = 3;
+   */
+  lastCount?: number | undefined;
+
+  /**
+   * What the last build did, or why it's being rebuilt or failed.
+   *
+   * @generated from field: optional string note = 4;
+   */
+  note?: string | undefined;
+
+  /**
+   * How it reads the page, one line per part.
+   *
+   * @generated from field: repeated string description = 5;
+   */
+  description: string[];
+
+  /**
+   * @generated from field: int32 builds = 6;
+   */
+  builds: number;
+
+  /**
+   * What it read from the page it was built on (the first page).
+   *
+   * @generated from field: repeated applyant.v1.RecipeListing listings = 7;
+   */
+  listings: RecipeListing[];
+
+  /**
+   * @generated from field: optional google.protobuf.Timestamp last_sampled_at = 8;
+   */
+  lastSampledAt?: Timestamp | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.ListingRecipe.
+ * Use `create(ListingRecipeSchema)` to create a new message.
+ */
+export declare const ListingRecipeSchema: GenMessage<ListingRecipe>;
+
+/**
+ * @generated from message applyant.v1.RecipeListing
+ */
+export declare type RecipeListing = Message<"applyant.v1.RecipeListing"> & {
+  /**
+   * @generated from field: string title = 1;
+   */
+  title: string;
+
+  /**
+   * @generated from field: string url = 2;
+   */
+  url: string;
+
+  /**
+   * @generated from field: optional string location = 3;
+   */
+  location?: string | undefined;
+
+  /**
+   * @generated from field: optional string team = 4;
+   */
+  team?: string | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.RecipeListing.
+ * Use `create(RecipeListingSchema)` to create a new message.
+ */
+export declare const RecipeListingSchema: GenMessage<RecipeListing>;
+
+/**
+ * One search_planner run.
+ *
+ * @generated from message applyant.v1.SearchPlan
+ */
+export declare type SearchPlan = Message<"applyant.v1.SearchPlan"> & {
+  /**
+   * @generated from field: int64 id = 1;
+   */
+  id: bigint;
+
+  /**
+   * manual | schedule
+   *
+   * @generated from field: string trigger = 2;
+   */
+  trigger: string;
+
+  /**
+   * queued (waiting or running) | done | failed
+   *
+   * @generated from field: string status = 3;
+   */
+  status: string;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp started_at = 4;
+   */
+  startedAt?: Timestamp | undefined;
+
+  /**
+   * @generated from field: optional google.protobuf.Timestamp finished_at = 5;
+   */
+  finishedAt?: Timestamp | undefined;
+
+  /**
+   * The strategies it added.
+   *
+   * @generated from field: repeated int64 strategy_ids = 6;
+   */
+  strategyIds: bigint[];
+
+  /**
+   * The sources it added to the watch list.
+   *
+   * @generated from field: repeated string board_keys = 7;
+   */
+  boardKeys: string[];
+
+  /**
+   * The web searches it ran.
+   *
+   * @generated from field: repeated string searches = 8;
+   */
+  searches: string[];
+
+  /**
+   * @generated from field: optional string note = 9;
+   */
+  note?: string | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.SearchPlan.
+ * Use `create(SearchPlanSchema)` to create a new message.
+ */
+export declare const SearchPlanSchema: GenMessage<SearchPlan>;
 
 /**
  * @generated from message applyant.v1.SearchSourceKind
@@ -4310,6 +4516,13 @@ export declare type ListSearchResponse = Message<"applyant.v1.ListSearchResponse
    * @generated from field: repeated applyant.v1.SearchSourceKind kinds = 3;
    */
   kinds: SearchSourceKind[];
+
+  /**
+   * The latest planner runs, newest first.
+   *
+   * @generated from field: repeated applyant.v1.SearchPlan plans = 4;
+   */
+  plans: SearchPlan[];
 };
 
 /**
@@ -4675,6 +4888,259 @@ export declare type ListSearchRunsResponse = Message<"applyant.v1.ListSearchRuns
  * Use `create(ListSearchRunsResponseSchema)` to create a new message.
  */
 export declare const ListSearchRunsResponseSchema: GenMessage<ListSearchRunsResponse>;
+
+/**
+ * @generated from message applyant.v1.PlanSearchRequest
+ */
+export declare type PlanSearchRequest = Message<"applyant.v1.PlanSearchRequest"> & {
+};
+
+/**
+ * Describes the message applyant.v1.PlanSearchRequest.
+ * Use `create(PlanSearchRequestSchema)` to create a new message.
+ */
+export declare const PlanSearchRequestSchema: GenMessage<PlanSearchRequest>;
+
+/**
+ * @generated from message applyant.v1.PlanSearchResponse
+ */
+export declare type PlanSearchResponse = Message<"applyant.v1.PlanSearchResponse"> & {
+  /**
+   * Unset when a planner run was already waiting or running.
+   *
+   * @generated from field: optional int64 plan_id = 1;
+   */
+  planId?: bigint | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.PlanSearchResponse.
+ * Use `create(PlanSearchResponseSchema)` to create a new message.
+ */
+export declare const PlanSearchResponseSchema: GenMessage<PlanSearchResponse>;
+
+/**
+ * @generated from message applyant.v1.GetSearchSourceRequest
+ */
+export declare type GetSearchSourceRequest = Message<"applyant.v1.GetSearchSourceRequest"> & {
+  /**
+   * A source key (page:https://…), id or unique locator.
+   *
+   * @generated from field: string source = 1;
+   */
+  source: string;
+};
+
+/**
+ * Describes the message applyant.v1.GetSearchSourceRequest.
+ * Use `create(GetSearchSourceRequestSchema)` to create a new message.
+ */
+export declare const GetSearchSourceRequestSchema: GenMessage<GetSearchSourceRequest>;
+
+/**
+ * @generated from message applyant.v1.GetSearchSourceResponse
+ */
+export declare type GetSearchSourceResponse = Message<"applyant.v1.GetSearchSourceResponse"> & {
+  /**
+   * @generated from field: applyant.v1.SearchSource source = 1;
+   */
+  source?: SearchSource | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.GetSearchSourceResponse.
+ * Use `create(GetSearchSourceResponseSchema)` to create a new message.
+ */
+export declare const GetSearchSourceResponseSchema: GenMessage<GetSearchSourceResponse>;
+
+/**
+ * @generated from message applyant.v1.RebuildRecipeRequest
+ */
+export declare type RebuildRecipeRequest = Message<"applyant.v1.RebuildRecipeRequest"> & {
+  /**
+   * @generated from field: string source = 1;
+   */
+  source: string;
+};
+
+/**
+ * Describes the message applyant.v1.RebuildRecipeRequest.
+ * Use `create(RebuildRecipeRequestSchema)` to create a new message.
+ */
+export declare const RebuildRecipeRequestSchema: GenMessage<RebuildRecipeRequest>;
+
+/**
+ * @generated from message applyant.v1.RebuildRecipeResponse
+ */
+export declare type RebuildRecipeResponse = Message<"applyant.v1.RebuildRecipeResponse"> & {
+  /**
+   * False when a build was already waiting or running.
+   *
+   * @generated from field: bool queued = 1;
+   */
+  queued: boolean;
+
+  /**
+   * @generated from field: applyant.v1.SearchSource source = 2;
+   */
+  source?: SearchSource | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.RebuildRecipeResponse.
+ * Use `create(RebuildRecipeResponseSchema)` to create a new message.
+ */
+export declare const RebuildRecipeResponseSchema: GenMessage<RebuildRecipeResponse>;
+
+/**
+ * @generated from message applyant.v1.RoleRoute
+ */
+export declare type RoleRoute = Message<"applyant.v1.RoleRoute"> & {
+  /**
+   * @generated from field: string role = 1;
+   */
+  role: string;
+
+  /**
+   * "claude:sonnet", "codex", "jev", …
+   *
+   * @generated from field: string route = 2;
+   */
+  route: string;
+
+  /**
+   * @generated from field: string default_route = 3;
+   */
+  defaultRoute: string;
+
+  /**
+   * Set by the candidate (not the default).
+   *
+   * @generated from field: bool overridden = 4;
+   */
+  overridden: boolean;
+
+  /**
+   * Where a jev decision goes when Jev is off or unsure.
+   *
+   * @generated from field: optional string fallback = 5;
+   */
+  fallback?: string | undefined;
+
+  /**
+   * @generated from field: string description = 6;
+   */
+  description: string;
+};
+
+/**
+ * Describes the message applyant.v1.RoleRoute.
+ * Use `create(RoleRouteSchema)` to create a new message.
+ */
+export declare const RoleRouteSchema: GenMessage<RoleRoute>;
+
+/**
+ * @generated from message applyant.v1.ListRolesRequest
+ */
+export declare type ListRolesRequest = Message<"applyant.v1.ListRolesRequest"> & {
+};
+
+/**
+ * Describes the message applyant.v1.ListRolesRequest.
+ * Use `create(ListRolesRequestSchema)` to create a new message.
+ */
+export declare const ListRolesRequestSchema: GenMessage<ListRolesRequest>;
+
+/**
+ * @generated from message applyant.v1.ListRolesResponse
+ */
+export declare type ListRolesResponse = Message<"applyant.v1.ListRolesResponse"> & {
+  /**
+   * @generated from field: repeated applyant.v1.RoleRoute roles = 1;
+   */
+  roles: RoleRoute[];
+};
+
+/**
+ * Describes the message applyant.v1.ListRolesResponse.
+ * Use `create(ListRolesResponseSchema)` to create a new message.
+ */
+export declare const ListRolesResponseSchema: GenMessage<ListRolesResponse>;
+
+/**
+ * @generated from message applyant.v1.SetRoleRequest
+ */
+export declare type SetRoleRequest = Message<"applyant.v1.SetRoleRequest"> & {
+  /**
+   * @generated from field: string role = 1;
+   */
+  role: string;
+
+  /**
+   * provider[:model]: claude | codex | jev | apple, e.g. "codex" or "claude:opus".
+   *
+   * @generated from field: string route = 2;
+   */
+  route: string;
+};
+
+/**
+ * Describes the message applyant.v1.SetRoleRequest.
+ * Use `create(SetRoleRequestSchema)` to create a new message.
+ */
+export declare const SetRoleRequestSchema: GenMessage<SetRoleRequest>;
+
+/**
+ * @generated from message applyant.v1.SetRoleResponse
+ */
+export declare type SetRoleResponse = Message<"applyant.v1.SetRoleResponse"> & {
+  /**
+   * @generated from field: applyant.v1.RoleRoute role = 1;
+   */
+  role?: RoleRoute | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.SetRoleResponse.
+ * Use `create(SetRoleResponseSchema)` to create a new message.
+ */
+export declare const SetRoleResponseSchema: GenMessage<SetRoleResponse>;
+
+/**
+ * @generated from message applyant.v1.ResetRolesRequest
+ */
+export declare type ResetRolesRequest = Message<"applyant.v1.ResetRolesRequest"> & {
+  /**
+   * Unset: every role.
+   *
+   * @generated from field: optional string role = 1;
+   */
+  role?: string | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.ResetRolesRequest.
+ * Use `create(ResetRolesRequestSchema)` to create a new message.
+ */
+export declare const ResetRolesRequestSchema: GenMessage<ResetRolesRequest>;
+
+/**
+ * @generated from message applyant.v1.ResetRolesResponse
+ */
+export declare type ResetRolesResponse = Message<"applyant.v1.ResetRolesResponse"> & {
+  /**
+   * The roles that went back to their defaults.
+   *
+   * @generated from field: repeated string roles = 1;
+   */
+  roles: string[];
+};
+
+/**
+ * Describes the message applyant.v1.ResetRolesResponse.
+ * Use `create(ResetRolesResponseSchema)` to create a new message.
+ */
+export declare const ResetRolesResponseSchema: GenMessage<ResetRolesResponse>;
 
 /**
  * @generated from enum applyant.v1.PostingStage
@@ -5413,6 +5879,69 @@ export declare const ApplyantService: GenService<{
     methodKind: "unary";
     input: typeof ListSearchRunsRequestSchema;
     output: typeof ListSearchRunsResponseSchema;
+  },
+  /**
+   * PlanSearch starts the search planner (search_planner, Codex by default): it proposes
+   * strategies from the profile (added active, marked agent-generated) and finds company boards
+   * with web search (added to the watch list). Once run, it runs again weekly by itself.
+   *
+   * @generated from rpc applyant.v1.ApplyantService.PlanSearch
+   */
+  planSearch: {
+    methodKind: "unary";
+    input: typeof PlanSearchRequestSchema;
+    output: typeof PlanSearchResponseSchema;
+  },
+  /**
+   * GetSearchSource returns one source with its listing recipe and what the recipe read from
+   * the page it was built on.
+   *
+   * @generated from rpc applyant.v1.ApplyantService.GetSearchSource
+   */
+  getSearchSource: {
+    methodKind: "unary";
+    input: typeof GetSearchSourceRequestSchema;
+    output: typeof GetSearchSourceResponseSchema;
+  },
+  /**
+   * RebuildRecipe asks reader_builder for a new listing recipe for a career page now.
+   *
+   * @generated from rpc applyant.v1.ApplyantService.RebuildRecipe
+   */
+  rebuildRecipe: {
+    methodKind: "unary";
+    input: typeof RebuildRecipeRequestSchema;
+    output: typeof RebuildRecipeResponseSchema;
+  },
+  /**
+   * Model roles: which provider and model answer each role. Changes apply to the next run.
+   *
+   * @generated from rpc applyant.v1.ApplyantService.ListRoles
+   */
+  listRoles: {
+    methodKind: "unary";
+    input: typeof ListRolesRequestSchema;
+    output: typeof ListRolesResponseSchema;
+  },
+  /**
+   * SetRole routes a role to "claude", "codex", "claude:sonnet", "jev" (decisions only), …
+   *
+   * @generated from rpc applyant.v1.ApplyantService.SetRole
+   */
+  setRole: {
+    methodKind: "unary";
+    input: typeof SetRoleRequestSchema;
+    output: typeof SetRoleResponseSchema;
+  },
+  /**
+   * ResetRoles puts one role (or every role) back on its default route.
+   *
+   * @generated from rpc applyant.v1.ApplyantService.ResetRoles
+   */
+  resetRoles: {
+    methodKind: "unary";
+    input: typeof ResetRolesRequestSchema;
+    output: typeof ResetRolesResponseSchema;
   },
 }>;
 

@@ -129,6 +129,22 @@ service ApplyantService {
   rpc SetSearchSourceEnabled(SetSearchSourceEnabledRequest) returns (SetSearchSourceEnabledResponse);
   // ListSearchRuns returns recent runs, newest first, each with what every source gave.
   rpc ListSearchRuns(ListSearchRunsRequest) returns (ListSearchRunsResponse);
+  // PlanSearch starts the search planner (search_planner, Codex by default): it proposes
+  // strategies from the profile (added active, marked agent-generated) and finds company boards
+  // with web search (added to the watch list). Once run, it runs again weekly by itself.
+  rpc PlanSearch(PlanSearchRequest) returns (PlanSearchResponse);
+  // GetSearchSource returns one source with its listing recipe and what the recipe read from
+  // the page it was built on.
+  rpc GetSearchSource(GetSearchSourceRequest) returns (GetSearchSourceResponse);
+  // RebuildRecipe asks reader_builder for a new listing recipe for a career page now.
+  rpc RebuildRecipe(RebuildRecipeRequest) returns (RebuildRecipeResponse);
+
+  // Model roles: which provider and model answer each role. Changes apply to the next run.
+  rpc ListRoles(ListRolesRequest) returns (ListRolesResponse);
+  // SetRole routes a role to "claude", "codex", "claude:sonnet", "jev" (decisions only), …
+  rpc SetRole(SetRoleRequest) returns (SetRoleResponse);
+  // ResetRoles puts one role (or every role) back on its default route.
+  rpc ResetRoles(ResetRolesRequest) returns (ResetRolesResponse);
 }
 
 enum PostingStage {
@@ -454,13 +470,19 @@ message InterviewEvent {
   string status = 2;
 }
 
-// A search run was queued, finished or failed, or a strategy changed.
+// A search run was queued, finished or failed, a strategy changed, the planner ran, or a page's
+// listing recipe was built.
 message SearchEvent {
   // Unset when a strategy changed without a run.
   optional int64 run_id = 1;
+  // 0 for planner and recipe events.
   int64 strategy_id = 2;
-  // queued | done | failed | updated | deleted
+  // Runs and strategies: queued | done | failed | updated | deleted.
+  // The planner: plan_queued | plan_done | plan_failed.
+  // Recipes: recipe_building | recipe_built | recipe_failed.
   string status = 3;
+  optional int64 plan_id = 4;
+  optional int64 source_id = 5;
 }
 
 message Event {
@@ -1208,6 +1230,11 @@ message SearchStrategy {
   repeated string source_keys = 14;
   // A run is waiting or running.
   bool running = 15;
+  // How often it actually runs: longer than every_minutes when few of its postings were
+  // interesting (a weak strategy runs less often; it's never paused or removed on its own).
+  int32 effective_every_minutes = 16;
+  // Why it runs less often; unset when it doesn't.
+  optional string cadence_note = 17;
 }
 
 message SearchSource {
@@ -1230,9 +1257,55 @@ message SearchSource {
   optional bool last_complete = 12;
   // What the last read did, or why it failed.
   optional string last_note = 13;
-  // How a career page was read: "feed https://…" or "greenhouse board gitlab".
+  // How a career page was read: "feed https://…", "greenhouse board gitlab", "listing recipe".
   optional string resolved = 14;
   SearchStats stats = 15;
+  // Why it's watched (the search planner's reason and the web search that found it).
+  optional string note = 16;
+  // Career pages: its listing recipe (listings only from GetSearchSource).
+  optional ListingRecipe recipe = 17;
+}
+
+// A career page's listing recipe: written once by reader_builder, run as plain Playwright.
+message ListingRecipe {
+  // ok (in use) | building (a build is waiting or running) | failed (none could be built yet)
+  string status = 1;
+  optional google.protobuf.Timestamp built_at = 2;
+  // Listings of the last good read.
+  optional int32 last_count = 3;
+  // What the last build did, or why it's being rebuilt or failed.
+  optional string note = 4;
+  // How it reads the page, one line per part.
+  repeated string description = 5;
+  int32 builds = 6;
+  // What it read from the page it was built on (the first page).
+  repeated RecipeListing listings = 7;
+  optional google.protobuf.Timestamp last_sampled_at = 8;
+}
+
+message RecipeListing {
+  string title = 1;
+  string url = 2;
+  optional string location = 3;
+  optional string team = 4;
+}
+
+// One search_planner run.
+message SearchPlan {
+  int64 id = 1;
+  // manual | schedule
+  string trigger = 2;
+  // queued (waiting or running) | done | failed
+  string status = 3;
+  google.protobuf.Timestamp started_at = 4;
+  optional google.protobuf.Timestamp finished_at = 5;
+  // The strategies it added.
+  repeated int64 strategy_ids = 6;
+  // The sources it added to the watch list.
+  repeated string board_keys = 7;
+  // The web searches it ran.
+  repeated string searches = 8;
+  optional string note = 9;
 }
 
 message SearchSourceKind {
@@ -1285,6 +1358,8 @@ message ListSearchResponse {
   repeated SearchStrategy strategies = 1;
   repeated SearchSource sources = 2;
   repeated SearchSourceKind kinds = 3;
+  // The latest planner runs, newest first.
+  repeated SearchPlan plans = 4;
 }
 
 message AddStrategyRequest {
@@ -1376,4 +1451,70 @@ message ListSearchRunsRequest {
 
 message ListSearchRunsResponse {
   repeated SearchRun runs = 1;
+}
+
+message PlanSearchRequest {}
+
+message PlanSearchResponse {
+  // Unset when a planner run was already waiting or running.
+  optional int64 plan_id = 1;
+}
+
+message GetSearchSourceRequest {
+  // A source key (page:https://…), id or unique locator.
+  string source = 1;
+}
+
+message GetSearchSourceResponse {
+  SearchSource source = 1;
+}
+
+message RebuildRecipeRequest {
+  string source = 1;
+}
+
+message RebuildRecipeResponse {
+  // False when a build was already waiting or running.
+  bool queued = 1;
+  SearchSource source = 2;
+}
+
+// ---- Model roles --------------------------------------------------------------------------
+
+message RoleRoute {
+  string role = 1;
+  // "claude:sonnet", "codex", "jev", …
+  string route = 2;
+  string default_route = 3;
+  // Set by the candidate (not the default).
+  bool overridden = 4;
+  // Where a jev decision goes when Jev is off or unsure.
+  optional string fallback = 5;
+  string description = 6;
+}
+
+message ListRolesRequest {}
+
+message ListRolesResponse {
+  repeated RoleRoute roles = 1;
+}
+
+message SetRoleRequest {
+  string role = 1;
+  // provider[:model]: claude | codex | jev | apple, e.g. "codex" or "claude:opus".
+  string route = 2;
+}
+
+message SetRoleResponse {
+  RoleRoute role = 1;
+}
+
+message ResetRolesRequest {
+  // Unset: every role.
+  optional string role = 1;
+}
+
+message ResetRolesResponse {
+  // The roles that went back to their defaults.
+  repeated string roles = 1;
 }

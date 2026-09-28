@@ -11,7 +11,7 @@ import {
 } from '../src/domain/search/readers/ats-embed.ts';
 import { hnFirstLine, hnJobLink, readBoard } from '../src/domain/search/readers/boards.ts';
 import { feedLinks, parseFeed } from '../src/domain/search/readers/feed.ts';
-import { readPage } from '../src/domain/search/readers/page.ts';
+import { NeedsRecipeError, readPage } from '../src/domain/search/readers/page.ts';
 import { plainText, type ReaderContext } from '../src/domain/search/readers/types.ts';
 import { fixtureJson, type RecordedFetch, recordedFetch } from './helpers/search.ts';
 
@@ -439,12 +439,12 @@ describe('career pages: a feed first, then a known ATS embed', () => {
     expect(run.listings[0]?.title).toBe('SRE');
   });
 
-  it('a page with neither says so (recipes come in phase 11)', async () => {
+  it('a page with neither says it needs a listing recipe', async () => {
     const fetch = recordedFetch({
       'https://acme.example/careers': '<html><body><ul><li>Engineer</li></ul></body></html>',
     });
-    await expect(readPage('https://acme.example/careers', ctx(fetch))).rejects.toThrow(
-      /listing recipe \(phase 11\)/,
-    );
+    const read = readPage('https://acme.example/careers', ctx(fetch));
+    await expect(read).rejects.toThrow(/it needs a listing recipe/);
+    await expect(read).rejects.toBeInstanceOf(NeedsRecipeError);
   });
 });

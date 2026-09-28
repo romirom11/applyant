@@ -60,6 +60,8 @@ export interface ProviderRequest {
   cwd: string;
   /** No tools at all when null (the default for every role but the writer). */
   tools: RunTools | null;
+  /** The provider's own web search (search_planner, researcher); off otherwise. */
+  webSearch: boolean;
   signal: AbortSignal;
   /** Every raw provider event, in order; the runner writes them to the run log. */
   onEvent(event: unknown): void;
@@ -88,6 +90,8 @@ export interface RunRequest<T> {
   /** Checks the zod type can't express (lengths, cross-references). Returns a problem or null. */
   validate?(output: T): string | null;
   tools?: RunTools | null;
+  /** Lets the model search the web with its provider's built-in search. */
+  webSearch?: boolean;
 }
 
 export type RunResult<T> =
@@ -104,7 +108,11 @@ export interface AgentRunnerOptions {
   record(row: NewAgentRunRow): void;
   log: Logger;
   now?: () => Date;
-  routing?: RoutingTable;
+  /**
+   * The routing table, or how to read it: the daemon reads the candidate's routing from SQLite
+   * on every run, so `applyant config roles set` applies to the next run without a restart.
+   */
+  routing?: RoutingTable | (() => RoutingTable);
   /** Jev, for the decision roles. Without it (or without its key) they use the fallback. */
   jev?: Pick<JevClient, 'available' | 'ask'> | null;
 }
@@ -135,22 +143,28 @@ export class AgentRunner {
     return new Set(this.providers.keys());
   }
 
-  routeFor(role: Role): Route {
-    return routeFor(role, this.available, this.o.routing ?? DEFAULT_ROUTING);
+  /** The routing table as of now. */
+  routing(): RoutingTable {
+    const r = this.o.routing;
+    return (typeof r === 'function' ? r() : r) ?? DEFAULT_ROUTING;
+  }
+
+  routeFor(role: Role, table: RoutingTable = this.routing()): Route {
+    return routeFor(role, this.available, table);
   }
 
   async run<T>(role: Role, req: RunRequest<T>): Promise<RunResult<T>> {
     req.signal.throwIfAborted();
+    const table = this.routing();
     let route: Route;
     try {
-      route = this.routeFor(role);
+      route = this.routeFor(role, table);
     } catch (err) {
       return { kind: 'failed', reason: (err as Error).message, route: null };
     }
     const provider = this.providers.get(route.provider);
     if (!provider) return { kind: 'failed', reason: `provider ${route.provider} missing`, route };
 
-    const table = this.o.routing ?? DEFAULT_ROUTING;
     const started = this.now();
     const stamp = `${started.getTime()}-${++this.seq}`;
     ensurePrivateDir(this.o.runsDir);
@@ -166,6 +180,7 @@ export class AgentRunner {
       taskId: req.taskId,
       role,
       route: describeRoute(route),
+      ...(req.webSearch ? { webSearch: true } : {}),
       system: req.system,
       prompt: req.prompt,
       schema: jsonSchema,
@@ -185,6 +200,7 @@ export class AgentRunner {
         jsonSchema,
         cwd,
         tools: req.tools ?? null,
+        webSearch: req.webSearch ?? false,
         signal,
         onEvent: (event) => log.write(event),
         onProgress: (message) => req.progress?.(`${role} · ${message}`),
@@ -281,7 +297,7 @@ export class AgentRunner {
    */
   async decide(role: Role, req: DecideRequest): Promise<DecideResult> {
     req.signal.throwIfAborted();
-    const table = this.o.routing ?? DEFAULT_ROUTING;
+    const table = this.routing();
     const config = table.roles[role];
     const min = config.minConfidence ?? 0;
     const answers: DecideResult['answers'] = {};

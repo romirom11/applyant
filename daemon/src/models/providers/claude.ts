@@ -11,6 +11,9 @@ import { parseLimitMessage, resetFromEpoch } from '../limits.ts';
 
 type Env = Record<string, string | undefined>;
 
+/** Claude Code's own web tools, given to roles that search the web. */
+const WEB_TOOLS = ['WebSearch', 'WebFetch'] as const;
+
 /**
  * The environment for the CLI: ours, minus the variables a parent Claude Code session sets
  * (so a daemon started from inside a Claude session doesn't look like a nested child).
@@ -76,13 +79,16 @@ export class ClaudeProvider implements ModelProvider {
       ...(req.model ? { model: req.model } : {}),
       systemPrompt: req.system,
       outputFormat: { type: 'json_schema', schema: req.jsonSchema },
-      // No built-in tools: roles that need tools get Applyant's MCP tools (the writer's
-      // search_facts / get_project), allowed by name; `dontAsk` denies anything else.
-      tools: [],
+      // No built-in tools but web search for the roles that search (search_planner): roles that
+      // need tools get Applyant's MCP tools (the writer's search_facts / get_project), allowed
+      // by name; `dontAsk` denies anything else.
+      tools: req.webSearch ? [...WEB_TOOLS] : [],
       // Only MCP servers Applyant passes. Without this the account's claude.ai connectors
       // are attached as tools too: hundreds of schemas, ~550k tokens on every run.
       mcpServers: req.tools?.servers ?? {},
-      ...(req.tools ? { allowedTools: req.tools.allowed } : {}),
+      ...(req.tools || req.webSearch
+        ? { allowedTools: [...(req.tools?.allowed ?? []), ...(req.webSearch ? WEB_TOOLS : [])] }
+        : {}),
       strictMcpConfig: true,
       permissionMode: 'dontAsk',
       // Nothing from ~/.claude or a project directory leaks into a task.

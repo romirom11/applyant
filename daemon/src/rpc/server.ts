@@ -9,6 +9,7 @@ import type { Secrets } from '../secrets/secrets.ts';
 import type { Logger } from '../util/log.ts';
 import { applicationRpcs } from './applications.ts';
 import { candidateRpcs } from './candidate.ts';
+import { configRpcs } from './config.ts';
 import { interviewRpcs } from './interview.ts';
 import { postingRpcs, type RpcContext } from './postings.ts';
 import { prefsRpcs } from './prefs.ts';
@@ -52,6 +53,7 @@ export async function startRpcServer(o: RpcServerOptions): Promise<RpcServer> {
         ...applicationRpcs(o),
         ...prefsRpcs(o),
         ...searchRpcs(o),
+        ...configRpcs(o),
         ...secretRpcs(o.secrets),
         ...setupRpcs(o.setup),
       }),

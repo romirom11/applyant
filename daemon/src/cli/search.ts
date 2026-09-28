@@ -2,6 +2,8 @@
 import { timestampDate } from '@bufbuild/protobuf/wkt';
 import type { Command } from 'commander';
 import type {
+  ListingRecipe,
+  SearchPlan,
   SearchRun,
   SearchSource,
   SearchStats,
@@ -101,6 +103,9 @@ export function strategyJson(s: SearchStrategy) {
     sources: s.sources,
     sourceKeys: s.sourceKeys,
     everyMinutes: s.everyMinutes,
+    effectiveEveryMinutes: s.effectiveEveryMinutes,
+    cadenceNote: s.cadenceNote ?? null,
+    note: s.note ?? null,
     lastRunAt: iso(s.lastRunAt),
     nextRunAt: iso(s.nextRunAt),
     running: s.running,
@@ -125,8 +130,67 @@ function sourceJson(s: SearchSource) {
     lastComplete: s.lastComplete ?? null,
     lastNote: s.lastNote ?? null,
     resolved: s.resolved ?? null,
+    note: s.note ?? null,
     stats: stats(s.stats),
+    recipe: s.recipe ? recipeJson(s.recipe) : null,
   };
+}
+
+function recipeJson(r: ListingRecipe) {
+  return {
+    status: r.status,
+    builtAt: iso(r.builtAt),
+    lastCount: r.lastCount ?? null,
+    note: r.note ?? null,
+    description: r.description,
+    builds: r.builds,
+    lastSampledAt: iso(r.lastSampledAt),
+    listings: r.listings.map((l) => ({
+      title: l.title,
+      url: l.url,
+      location: l.location ?? null,
+      team: l.team ?? null,
+    })),
+  };
+}
+
+function planJson(p: SearchPlan) {
+  return {
+    id: Number(p.id),
+    trigger: p.trigger,
+    status: p.status,
+    startedAt: iso(p.startedAt),
+    finishedAt: iso(p.finishedAt),
+    strategies: p.strategyIds.map(Number),
+    boards: p.boardKeys,
+    searches: p.searches,
+    note: p.note ?? null,
+  };
+}
+
+export function planLines(p: SearchPlan): string[] {
+  const lines = [
+    `Plan ${p.id} · ${p.trigger === 'schedule' ? 'weekly' : 'by you'} · ${p.status} · ${when(p.startedAt)}${p.note ? ` · ${p.note}` : ''}`,
+  ];
+  if (p.strategyIds.length) lines.push(`  strategies added: ${p.strategyIds.join(', ')}`);
+  if (p.boardKeys.length) lines.push(`  boards watched: ${p.boardKeys.join(', ')}`);
+  if (p.searches.length) lines.push(`  web searches: ${p.searches.join(' · ')}`);
+  return lines;
+}
+
+function recipeLines(r: ListingRecipe): string[] {
+  const lines = [
+    `Recipe       ${r.status}${r.builtAt ? ` · built ${when(r.builtAt)}` : ''}${r.lastCount !== undefined ? ` · last read ${r.lastCount} jobs` : ''} · ${r.builds} build(s)${r.note ? ` · ${r.note}` : ''}`,
+    ...r.description.map((d) => `             ${d}`),
+  ];
+  if (r.listings.length) {
+    lines.push(`Read when built (${r.listings.length}, first page):`);
+    for (const l of r.listings) {
+      const where = [l.location, l.team].filter(Boolean).join(' · ');
+      lines.push(`  ${l.title}${where ? `  (${where})` : ''}\n    ${l.url}`);
+    }
+  }
+  return lines;
 }
 
 function runSourceLine(s: SearchRun['sources'][number]): string {
@@ -157,10 +221,12 @@ function strategyLines(s: SearchStrategy): string[] {
   const st = s.stats;
   return [
     `Strategy ${s.id} · ${s.name} · ${s.state}${s.origin === 'agent' ? ' · agent-generated' : ''}${s.running ? ' · running' : ''}`,
+    ...(s.note ? [`Why          ${s.note}`] : []),
     `Queries      ${s.queries.length ? s.queries.map((q) => `"${q}"`).join(', ') : '(every listing)'}`,
     `Locations    ${s.locations.length ? s.locations.join(', ') : '(anywhere)'}`,
     `Sources      ${s.sources.join(', ')}  →  ${s.sourceKeys.length ? s.sourceKeys.join(', ') : 'none switched on'}`,
     `Schedule     every ${formatEvery(s.everyMinutes)} · last run ${when(s.lastRunAt)} · next ${s.state === 'paused' ? '(paused)' : when(s.nextRunAt)}`,
+    ...(s.cadenceNote ? [`             ${s.cadenceNote}`] : []),
     `Results      ${st?.found ?? 0} found · ${st?.verified ?? 0} verified · ${interestedText(st)} interested · ${st?.skipped ?? 0} skipped`,
   ];
 }
@@ -204,7 +270,8 @@ export function registerSearch(program: Command, client: () => ApplyantClient): 
             String(s.id),
             truncate(s.name, 32),
             s.state + (s.running ? '*' : '') + (s.origin === 'agent' ? ' (agent)' : ''),
-            formatEvery(s.everyMinutes),
+            formatEvery(s.effectiveEveryMinutes || s.everyMinutes) +
+              (s.cadenceNote ? ' (slowed)' : ''),
             when(s.lastRunAt),
             String(s.stats?.found ?? 0),
             String(s.stats?.verified ?? 0),
@@ -214,6 +281,11 @@ export function registerSearch(program: Command, client: () => ApplyantClient): 
         ),
       );
       if (res.strategies.some((s) => s.running)) out('* a run is waiting or running');
+      if (res.strategies.some((s) => s.cadenceNote)) {
+        out(
+          '(slowed): few of its postings were interesting, so it runs less often (`search strategies show`)',
+        );
+      }
     });
 
   strategies
@@ -412,19 +484,72 @@ export function registerSearch(program: Command, client: () => ApplyantClient): 
       out('');
       out(
         table(
-          ['KEY', 'LABEL', 'ON', 'LIST', 'LAST READ', 'FOUND', 'VERIFIED', 'INTERESTED', 'NOTE'],
+          [
+            'KEY',
+            'LABEL',
+            'BY',
+            'ON',
+            'LIST',
+            'LAST READ',
+            'FOUND',
+            'VERIFIED',
+            'INTERESTED',
+            'NOTE',
+          ],
           res.sources.map((s) => [
             truncate(s.key, 48),
             truncate(s.label, 28),
+            s.origin === 'candidate' ? 'you' : s.origin,
             s.enabled && s.kindEnabled ? 'on' : s.enabled ? 'off (kind)' : 'off',
             s.completeList ? 'complete' : 'partial',
             when(s.lastRunAt),
             String(s.stats?.found ?? 0),
             String(s.stats?.verified ?? 0),
             interestedText(s.stats),
-            truncate(s.lastNote ?? s.resolved ?? '', 70),
+            truncate(
+              s.recipe && s.recipe.status !== 'ok'
+                ? `recipe ${s.recipe.status}: ${s.recipe.note ?? ''}`
+                : (s.lastNote ?? s.resolved ?? ''),
+              70,
+            ),
           ]),
         ),
+      );
+    });
+
+  sources
+    .command('show <source>')
+    .description("one source: why it's watched, how it's read, and a career page's listing recipe")
+    .option('--json', 'print JSON')
+    .action(async (ref: string, opts: { json?: boolean }) => {
+      const res = await client().getSearchSource({ source: ref });
+      const s = res.source;
+      if (!s) throw new Error(`no search source "${ref}"`);
+      if (opts.json) return json(sourceJson(s));
+      out(
+        `Source ${s.key} · ${s.label} · ${s.enabled && s.kindEnabled ? 'on' : 'off'} · added by ${s.origin === 'candidate' ? 'you' : s.origin}`,
+      );
+      if (s.note) out(`Why          ${s.note}`);
+      out(
+        `List         ${s.completeList ? 'complete: a posting it stops listing is closed' : 'partial: a posting it stops listing is re-verified, never closed'}`,
+      );
+      if (s.resolved) out(`Read as      ${s.resolved}`);
+      out(`Last read    ${when(s.lastRunAt)}${s.lastNote ? ` · ${s.lastNote}` : ''}`);
+      out(
+        `Results      ${s.stats?.found ?? 0} found · ${s.stats?.verified ?? 0} verified · ${interestedText(s.stats)} interested`,
+      );
+      if (s.recipe) for (const line of recipeLines(s.recipe)) out(line);
+    });
+
+  sources
+    .command('rebuild <source>')
+    .description('ask reader_builder for a new listing recipe for a career page now')
+    .action(async (ref: string) => {
+      const res = await client().rebuildRecipe({ source: ref });
+      out(
+        res.queued
+          ? `Building a new listing recipe for ${res.source?.key ?? ref} (\`applyant runs show --follow\`).`
+          : `A recipe build for ${res.source?.key ?? ref} is already waiting or running.`,
       );
     });
 
@@ -477,6 +602,33 @@ export function registerSearch(program: Command, client: () => ApplyantClient): 
         }
       });
   }
+
+  // ---- the planner ----
+  search
+    .command('plan')
+    .description(
+      'let the search planner propose strategies and find new boards with web search (then weekly)',
+    )
+    .action(async () => {
+      const res = await client().planSearch({});
+      out(
+        res.planId !== undefined
+          ? `Planning searches as plan ${res.planId}: new strategies show up as agent-generated, new boards join the watch list. \`applyant search plans\` shows what it did.`
+          : 'The planner is already running.',
+      );
+    });
+
+  search
+    .command('plans')
+    .description('recent planner runs: what each added, and the web searches it ran')
+    .option('--json', 'print JSON')
+    .action(async (opts: { json?: boolean }) => {
+      const res = await client().listSearch({});
+      if (opts.json) return json(res.plans.map(planJson));
+      if (res.plans.length === 0)
+        return out('The planner has not run yet (`applyant search plan`).');
+      for (const p of res.plans) for (const line of planLines(p)) out(line);
+    });
 
   // ---- runs ----
   search
