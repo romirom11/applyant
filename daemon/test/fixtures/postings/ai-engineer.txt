@@ -1,0 +1,38 @@
+# Senior AI Engineer (Remote, EU)
+Structured data (JobPosting):
+title: Senior AI Engineer
+hiringOrganization: Helix Labs
+employmentType: FULL_TIME
+jobLocationType: TELECOMMUTE
+applicantLocationRequirements: Country, European Union
+baseSalary: MonetaryAmount, currency: EUR, value: QuantitativeValue, minValue: 70000, maxValue: 85000, unitText: YEAR
+
+## About Helix Labs
+
+Helix Labs builds conversation intelligence for sales teams. We analyse millions of calls to
+help reps close deals, and we are a team of 40 people across Europe.
+
+## The role
+
+You will design and ship LLM-powered features end to end: from data pipelines to evaluation
+and production monitoring. You will work closely with product and own services in production.
+
+## What you bring
+
+- 5+ years of backend engineering, mostly in Python
+- Experience building and running LLM features in production
+- Experience with Kafka or another event-streaming platform
+- Kubernetes in production
+- Fluent English
+
+## Nice to have
+
+- Rust
+- Elixir
+- Experience with speech-to-text systems
+
+## What we offer
+
+- €70,000 – €85,000 gross per year, plus equity
+- Fully remote within the EU, full-time
+- 30 days of paid holiday

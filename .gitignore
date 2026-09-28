@@ -1,0 +1,6 @@
+# Riptide artifacts (cloud-synced)
+.humanlayer/tasks/
+
+node_modules/
+*.tsbuildinfo
+.DS_Store

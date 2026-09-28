@@ -1,0 +1,35 @@
+<!doctype html>
+<!-- Synthetic, for phase 6 delivery tests. A one-step form whose Submit button needs pressing
+     twice: the first click shows a `role=alert` "click again to confirm" prompt instead of
+     going through, which the step-scoped form_agent reads and acts on. -->
+<html lang="en"><head><meta charset="utf-8"><title>Apply · Confirm Co</title></head><body>
+<h1>Apply to Confirm Co</h1>
+<form id="apply" novalidate onsubmit="return false">
+  <div><label for="name">Full Name *</label><input id="name" required></div>
+  <div><label for="email">Email *</label><input id="email" type="email" required></div>
+  <div><label><input type="checkbox" id="consent" required> I agree to the privacy policy *</label></div>
+  <div id="confirm-alert" role="alert" hidden>Click Submit again to confirm your application.</div>
+  <button id="submit">Submit application</button>
+</form>
+<div id="confirmation" hidden>Thanks — your application has been received.</div>
+<script>
+  window.__submitted = 0;
+  let confirmed = false;
+  document.getElementById('submit').addEventListener('click', () => {
+    const required = document.querySelectorAll('#apply [required]');
+    for (const el of required) {
+      const empty = el.type === 'checkbox' ? !el.checked : !el.value;
+      if (empty) return;
+    }
+    if (!confirmed) {
+      confirmed = true;
+      document.getElementById('confirm-alert').hidden = false;
+      return;
+    }
+    window.__submitted++;
+    document.getElementById('apply').hidden = true;
+    document.getElementById('confirmation').hidden = false;
+    fetch('/submitted', { method: 'POST', body: 'ok' }).catch(() => {});
+  });
+</script>
+</body></html>

@@ -1,0 +1,68 @@
+<!doctype html>
+<!-- Synthetic. The embedded application form (served from another origin): react-select-style
+     comboboxes (role=combobox input + role=listbox menu that renders only while open), a
+     location search whose options load as you type, and a resume upload. -->
+<html lang="en"><head><meta charset="utf-8"><title>Application</title>
+<style>
+  .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .menu { border: 1px solid #ccc; } .menu [role=option] { padding: 2px; cursor: pointer; }
+  .field { margin: 10px 0; position: relative; }
+</style>
+</head><body>
+<form id="application-form" onsubmit="event.preventDefault(); fetch('/submitted', { method: 'POST', body: 'x' })">
+  <div class="field"><label for="first_name">First Name*</label><input id="first_name" aria-required="true" autocomplete="given-name"></div>
+  <div class="field"><label for="last_name">Last Name*</label><input id="last_name" aria-required="true" autocomplete="family-name"></div>
+  <div class="field"><label for="email">Email*</label><input id="email" type="text" autocomplete="email" aria-required="true"></div>
+  <div class="field" role="group" aria-labelledby="resume-label" aria-required="true">
+    <div id="resume-label">Resume/CV*</div>
+    <button type="button">Attach</button>
+    <input id="resume" class="visually-hidden" type="file">
+  </div>
+  <div class="field combo" data-options="Yes|No">
+    <label id="relocate-label" for="relocate">Are you open to relocating to Athens?*</label>
+    <input id="relocate" role="combobox" aria-labelledby="relocate-label" aria-expanded="false" aria-haspopup="true" aria-required="true" autocomplete="off">
+  </div>
+  <div class="field combo" data-options="0-2 years|3-5 years|6-9 years|10+ years">
+    <label id="exp-label" for="exp">How many years of Python experience do you have?</label>
+    <input id="exp" role="combobox" aria-labelledby="exp-label" aria-expanded="false" aria-haspopup="true" autocomplete="off">
+  </div>
+  <div class="field combo" data-search="Athens, Attica, Greece|Athens, Georgia, United States|Nicosia, Cyprus|London, United Kingdom|Berlin, Germany">
+    <label id="loc-label" for="loc">Location (City)*</label>
+    <input id="loc" role="combobox" aria-labelledby="loc-label" aria-expanded="false" aria-autocomplete="list" aria-required="true" autocomplete="off" placeholder="Start typing...">
+  </div>
+  <div class="field"><label for="q_llm">Tell us about an LLM system you shipped to production*</label><textarea id="q_llm" aria-required="true"></textarea></div>
+  <button type="submit">Submit application</button>
+</form>
+<script>
+  // A small react-select look-alike: the menu exists only while open.
+  for (const box of document.querySelectorAll('.combo')) {
+    const input = box.querySelector('input');
+    const fixed = box.dataset.options ? box.dataset.options.split('|') : null;
+    const search = box.dataset.search ? box.dataset.search.split('|') : null;
+    let menu = null;
+    const close = () => { menu?.remove(); menu = null; input.setAttribute('aria-expanded', 'false'); input.removeAttribute('aria-controls'); };
+    const open = (items) => {
+      close();
+      if (!items.length) return;
+      menu = document.createElement('div');
+      menu.className = 'menu'; menu.id = `${input.id}-listbox`; menu.setAttribute('role', 'listbox');
+      for (const text of items) {
+        const o = document.createElement('div');
+        o.setAttribute('role', 'option'); o.textContent = text;
+        o.addEventListener('mousedown', (e) => { e.preventDefault(); input.value = text; close(); input.dispatchEvent(new Event('change', { bubbles: true })); });
+        menu.append(o);
+      }
+      box.append(menu);
+      input.setAttribute('aria-expanded', 'true'); input.setAttribute('aria-controls', menu.id);
+    };
+    input.addEventListener('click', () => { if (fixed) open(fixed); });
+    input.addEventListener('input', () => {
+      if (!search) return;
+      const q = input.value.trim().toLowerCase();
+      setTimeout(() => open(q.length >= 2 ? search.filter((s) => s.toLowerCase().includes(q)) : []), 250);
+    });
+    input.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+    input.addEventListener('blur', () => setTimeout(close, 100));
+  }
+</script>
+</body></html>

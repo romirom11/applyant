@@ -1,0 +1,13 @@
+<!doctype html>
+<!-- Synthetic. Modelled on an ATS that asks candidates to sign in before the application
+     (Workday's "Sign In" / "Create Account" step): Read reports it instead of reading it. -->
+<html lang="en"><head><meta charset="utf-8"><title>Sign In · Acme Corp Careers</title></head>
+<body>
+<h1>Sign In</h1>
+<form onsubmit="event.preventDefault(); fetch('/signin', { method: 'POST', body: 'x' })">
+  <label for="email">Email Address *</label><input id="email" type="email" required>
+  <label for="password">Password *</label><input id="password" type="password" required>
+  <button type="submit">Sign In</button>
+</form>
+<p><a href="/create-account">Create Account</a></p>
+</body></html>

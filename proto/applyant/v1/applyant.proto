@@ -1,0 +1,870 @@
+syntax = "proto3";
+
+package applyant.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// ApplyantService is the only contract between applyantd and its clients
+// (the `applyant` CLI now, the macOS app and Share extension later).
+// Every call carries `Authorization: Bearer <token>` from the endpoint file.
+service ApplyantService {
+  // AddPosting records a posting at stage FOUND and enqueues its verification.
+  // A URL that is already known returns the existing posting.
+  rpc AddPosting(AddPostingRequest) returns (AddPostingResponse);
+  rpc ListPostings(ListPostingsRequest) returns (ListPostingsResponse);
+  rpc GetPosting(GetPostingRequest) returns (GetPostingResponse);
+  // SkipPosting records the candidate's skip (with a reason) as feedback and re-scores.
+  rpc SkipPosting(SkipPostingRequest) returns (SkipPostingResponse);
+  // MarkInterested records interest (undoing a skip) as feedback and re-scores.
+  rpc MarkInterested(MarkInterestedRequest) returns (MarkInterestedResponse);
+  // ScorePostings enqueues score_posting; cached extractions and matches are reused.
+  rpc ScorePostings(ScorePostingsRequest) returns (ScorePostingsResponse);
+  // ReadForms enqueues read_form: the posting's application form is read (again), read-only.
+  rpc ReadForms(ReadFormsRequest) returns (ReadFormsResponse);
+
+  // Preferences drive the score; every change re-scores cached postings (no model calls).
+  rpc GetPreferences(GetPreferencesRequest) returns (GetPreferencesResponse);
+  rpc SetPreference(SetPreferenceRequest) returns (SetPreferenceResponse);
+
+  // ListEvents returns stored events, newest last.
+  rpc ListEvents(ListEventsRequest) returns (ListEventsResponse);
+  // WatchEvents streams events as they happen: task progress and posting stage changes.
+  rpc WatchEvents(WatchEventsRequest) returns (stream WatchEventsResponse);
+
+  // Secrets are write-only from clients: values are never returned.
+  rpc SetSecret(SetSecretRequest) returns (SetSecretResponse);
+  rpc DeleteSecret(DeleteSecretRequest) returns (DeleteSecretResponse);
+  rpc ListSecrets(ListSecretsRequest) returns (ListSecretsResponse);
+
+  // Candidate knowledge: profile, projects, sources and the facts extracted from them.
+  rpc GetCandidate(GetCandidateRequest) returns (GetCandidateResponse);
+  rpc SetProfileValue(SetProfileValueRequest) returns (SetProfileValueResponse);
+  rpc CreateProject(CreateProjectRequest) returns (CreateProjectResponse);
+  rpc ListProjects(ListProjectsRequest) returns (ListProjectsResponse);
+  rpc GetProject(GetProjectRequest) returns (GetProjectResponse);
+  // AddSource records a source and enqueues its first sync.
+  rpc AddSource(AddSourceRequest) returns (AddSourceResponse);
+  // SyncSources enqueues a sync of every matching source.
+  rpc SyncSources(SyncSourcesRequest) returns (SyncSourcesResponse);
+  rpc ListFacts(ListFactsRequest) returns (ListFactsResponse);
+  // ConfirmFact marks facts as true in the candidate's own judgement.
+  rpc ConfirmFact(ConfirmFactRequest) returns (ConfirmFactResponse);
+  // EditFact replaces a fact's text with the candidate's words, which confirms it.
+  rpc EditFact(EditFactRequest) returns (EditFactResponse);
+  // RejectFact marks a fact as untrue; a re-sync won't bring it back.
+  rpc RejectFact(RejectFactRequest) returns (RejectFactResponse);
+
+  // Applications: one per posting, prepared for its real form, reviewed, then approved.
+  rpc ListApplications(ListApplicationsRequest) returns (ListApplicationsResponse);
+  // GetApplication returns everything review shows: every field with its value and where it
+  // came from, every answer sentence with its facts and flags, and what still blocks approve.
+  rpc GetApplication(GetApplicationRequest) returns (GetApplicationResponse);
+  // PrepareApplication starts the posting's application, or prepares it again: standard fields
+  // from the current profile (per-application overrides stay), missing answers drafted.
+  rpc PrepareApplication(PrepareApplicationRequest) returns (PrepareApplicationResponse);
+  // SetFieldValue sets one field's value for this application only (the profile is untouched),
+  // or clears that override so the prepared value applies again.
+  rpc SetFieldValue(SetFieldValueRequest) returns (SetFieldValueResponse);
+  // EditAnswer rewrites a sentence or a whole answer in the candidate's words (saved as
+  // confirmed review_edit facts), or confirms a flagged sentence as true as written.
+  rpc EditAnswer(EditAnswerRequest) returns (EditAnswerResponse);
+  // ApproveApplication is refused (FailedPrecondition, listing why) while a required value is
+  // missing, a sentence is flagged or unchecked, or a relied-on fact is unconfirmed. Approval
+  // enqueues delivery through the application's channel; the candidate isn't asked again unless
+  // delivery gets stuck.
+  rpc ApproveApplication(ApproveApplicationRequest) returns (ApproveApplicationResponse);
+  // SubmitApplication approves the application if it isn't yet (same refusal rules), then
+  // (re-)enqueues delivery either way: also how to retry a delivery stuck on a hand-off.
+  rpc SubmitApplication(SubmitApplicationRequest) returns (SubmitApplicationResponse);
+  // GetHandOff returns the most recent delivery hand-off still waiting on the candidate, if any.
+  rpc GetHandOff(GetHandOffRequest) returns (GetHandOffResponse);
+}
+
+enum PostingStage {
+  POSTING_STAGE_UNSPECIFIED = 0;
+  POSTING_STAGE_FOUND = 1;
+  POSTING_STAGE_VERIFIED = 2;
+  POSTING_STAGE_FAILED_VERIFICATION = 3;
+  POSTING_STAGE_SCORED = 4;
+  POSTING_STAGE_SKIPPED = 5;
+}
+
+message Posting {
+  int64 id = 1;
+  PostingStage stage = 2;
+  string canonical_url = 3;
+  optional string title = 4;
+  optional string company = 5;
+  google.protobuf.Timestamp first_seen_at = 6;
+  optional google.protobuf.Timestamp verified_at = 7;
+  // Why verification decided what it did, e.g. "apply form on page" or "HTTP 404".
+  optional string verify_note = 8;
+  // Only filled by GetPosting.
+  repeated PostingSource sources = 9;
+
+  // 0–100, computed by the pure score() from the cached extraction and matches.
+  optional int32 score = 10;
+  // One component per key (must, nice, role, location, remote, salary, language, employment).
+  repeated ScoreComponent breakdown = 11;
+  // The candidate's own dealbreakers this posting hits. They never zero the score.
+  repeated string dealbreakers = 12;
+  optional google.protobuf.Timestamp scored_at = 13;
+  // Why the last scoring attempt failed.
+  optional string score_note = 14;
+  // interested | skipped
+  optional string decision = 15;
+  optional string decision_reason = 16;
+  // One sentence on the role, from the extractor.
+  optional string summary = 17;
+  // Only filled by GetPosting: each requirement with its verdict and supporting facts.
+  repeated RequirementMatch requirements = 18;
+  // The salary as the posting states it.
+  optional string salary_text = 19;
+  // must-haves × role fit, 0–1. Below 0.7 the logistics components count less.
+  optional double core_fit = 20;
+  // Fields the page's structured data (JSON-LD) decided over the extractor's reading.
+  repeated string structured_fields = 21;
+  // Where verification found the way to apply: the form page, an apply link's target, mailto:.
+  optional string apply_url = 22;
+  // verified | no_form | email | failed; unset until the form has been read.
+  optional string form_status = 23;
+  // What the read found ("1 step · 17 fields (9 required)") or why it failed.
+  optional string form_note = 24;
+  optional google.protobuf.Timestamp form_read_at = 25;
+  // Only filled by GetPosting: the application form as Read found it.
+  optional ApplicationForm form = 26;
+  // The posting's application, once there is one.
+  optional int64 application_id = 27;
+  ApplicationStage application_stage = 28;
+}
+
+// How to find a form control again: getByRole(role, {name, exact}).nth(nth) inside the
+// frames given by `frame` (iframe selectors, top page first), or `css` when set.
+message ElementRef {
+  repeated string frame = 1;
+  string role = 2;
+  string name = 3;
+  int32 nth = 4;
+  optional string css = 5;
+}
+
+message RevealedBy {
+  ElementRef ref = 1;
+  // The option (or "checked") that revealed the field; "*" = any answer; "add" = a field of an
+  // entry of the repeatable group `ref`.
+  string value = 2;
+}
+
+message FormField {
+  ElementRef ref = 1;
+  string label = 2;
+  // text | textarea | select | combobox | radio | checkbox | file | date | group | unknown
+  // (group: a repeatable section; ref adds an entry, whose fields have revealed_by value "add")
+  string kind = 3;
+  // Required whenever shown (for a conditional field: on its revealed_by branch only).
+  bool required = 4;
+  repeated string options = 5;
+  // False when the field has no fixed options (free text, or options that load as you type).
+  bool has_options = 6;
+  // What the field asks for (field_classify): email, work_authorization, question, …
+  optional string meaning = 7;
+  // Set for conditional fields.
+  optional RevealedBy revealed_by = 8;
+}
+
+message FormStep {
+  repeated FormField fields = 1;
+  // The control that moves on (or submits, when is_final).
+  optional ElementRef advance = 2;
+  // The advance control submits the application; Read never presses it.
+  bool is_final = 3;
+}
+
+message ApplicationForm {
+  // Where the form was read.
+  string url = 1;
+  repeated FormStep steps = 2;
+  // What Read couldn't do or noticed.
+  repeated string notes = 3;
+}
+
+message ScoreComponent {
+  // must | nice | role | location | remote | salary | language | employment
+  string key = 1;
+  // Effective weight; 0 when no preference applies.
+  double weight = 2;
+  // 0–1.
+  double value = 3;
+  optional string note = 4;
+  // The posting doesn't say enough: shown, not counted.
+  bool uncertain = 5;
+  // Share of weight·value that counts: below 1 for logistics when core fit is poor.
+  double scale = 6;
+}
+
+message MatchedFact {
+  int64 id = 1;
+  string text = 2;
+  FactStatus status = 3;
+  optional string project_slug = 4;
+}
+
+message RequirementMatch {
+  string text = 1;
+  bool must = 2;
+  // strong | partial | missing | unknown (a condition to ask the candidate about)
+  string verdict = 3;
+  repeated int64 fact_ids = 4;
+  optional string note = 5;
+  // The cited facts (GetPosting only).
+  repeated MatchedFact facts = 6;
+}
+
+message PostingSource {
+  // manual | share | board | ats | ...
+  string kind = 1;
+  string url = 2;
+  google.protobuf.Timestamp first_seen_at = 3;
+}
+
+message AddPostingRequest {
+  string url = 1;
+}
+
+message AddPostingResponse {
+  Posting posting = 1;
+  // False when the URL was already known.
+  bool created = 2;
+}
+
+message ListPostingsRequest {
+  // Unspecified lists every stage.
+  PostingStage stage = 1;
+  // Highest score first (unscored last) instead of newest first.
+  bool by_score = 2;
+}
+
+message ListPostingsResponse {
+  repeated Posting postings = 1;
+}
+
+message GetPostingRequest {
+  int64 id = 1;
+}
+
+message GetPostingResponse {
+  Posting posting = 1;
+}
+
+message SkipPostingRequest {
+  int64 id = 1;
+  // Free text, e.g. "salary too low"; it decides which weight the feedback nudges.
+  string reason = 2;
+}
+
+message SkipPostingResponse {
+  Posting posting = 1;
+  // Postings whose score changed with the nudged weights.
+  int32 rescored = 2;
+}
+
+message MarkInterestedRequest {
+  int64 id = 1;
+}
+
+message MarkInterestedResponse {
+  Posting posting = 1;
+  int32 rescored = 2;
+}
+
+message ScorePostingsRequest {
+  // Empty: every verified or scored posting.
+  repeated int64 ids = 1;
+  // Re-read the page and re-extract; matches are still reused where nothing changed.
+  bool refresh = 2;
+}
+
+message ScorePostingsResponse {
+  repeated int64 enqueued_ids = 1;
+}
+
+message ReadFormsRequest {
+  // Empty: every live posting whose form was never read.
+  repeated int64 ids = 1;
+}
+
+message ReadFormsResponse {
+  repeated int64 enqueued_ids = 1;
+}
+
+message Money {
+  double amount = 1;
+  // ISO 4217
+  string currency = 2;
+  // month | year
+  string period = 3;
+}
+
+message Preferences {
+  // Role families: ai_ml, backend, fullstack, frontend, data, platform, mobile, security,
+  // founding, management, research, other. Empty = any.
+  repeated string roles = 1;
+  repeated string seniority = 2;
+  optional string based_in = 3;
+  repeated string locations = 4;
+  // required | preferred | any
+  string remote = 5;
+  optional Money salary = 6;
+  optional Money salary_floor = 7;
+  // ISO 639-1 → A1…C2 | native
+  map<string, string> languages = 8;
+  repeated string employment = 9;
+  repeated string dealbreakers = 10;
+  // Base weights per component.
+  map<string, double> weights = 11;
+  // Bounded feedback nudges per component (1 = none).
+  map<string, double> feedback_multipliers = 12;
+  int32 threshold = 13;
+}
+
+message GetPreferencesRequest {}
+
+message GetPreferencesResponse {
+  Preferences preferences = 1;
+}
+
+message SetPreferenceRequest {
+  // roles | seniority | based_in | locations | remote | salary | salary_floor | languages |
+  // employment | dealbreakers | threshold | weight.<component> | weights
+  string key = 1;
+  // Lists are comma-separated; empty resets the key ("reset" for weights).
+  string value = 2;
+}
+
+message SetPreferenceResponse {
+  Preferences preferences = 1;
+  // Postings whose score changed.
+  int32 rescored = 2;
+}
+
+enum TaskEventType {
+  TASK_EVENT_TYPE_UNSPECIFIED = 0;
+  TASK_EVENT_TYPE_QUEUED = 1;
+  TASK_EVENT_TYPE_STARTED = 2;
+  TASK_EVENT_TYPE_PROGRESS = 3;
+  TASK_EVENT_TYPE_DONE = 4;
+  TASK_EVENT_TYPE_RETRY = 5;
+  TASK_EVENT_TYPE_FAILED = 6;
+  TASK_EVENT_TYPE_PROVIDER_PAUSED = 7;
+  TASK_EVENT_TYPE_NEEDS_CANDIDATE = 8;
+  TASK_EVENT_TYPE_LEASE_LOST = 9;
+  TASK_EVENT_TYPE_REQUEUED = 10;
+}
+
+message TaskEvent {
+  int64 task_id = 1;
+  // verify_posting, ...
+  string task_kind = 2;
+  int64 entity_id = 3;
+  TaskEventType type = 4;
+  int32 attempts = 5;
+}
+
+message PostingEvent {
+  int64 posting_id = 1;
+  PostingStage stage = 2;
+}
+
+message ApplicationEvent {
+  int64 application_id = 1;
+  int64 posting_id = 2;
+  ApplicationStage stage = 3;
+}
+
+// Delivery got stuck and left a browser window open for the candidate to finish.
+message HandOffEvent {
+  int64 application_id = 1;
+  int64 posting_id = 2;
+  string reason = 3;
+}
+
+message Event {
+  int64 id = 1;
+  google.protobuf.Timestamp at = 2;
+  optional int64 run_id = 3;
+  // Human-readable, e.g. "HTTP 404" or "retry at 15:45: navigation timeout".
+  string message = 4;
+  oneof payload {
+    TaskEvent task = 10;
+    PostingEvent posting = 11;
+    ApplicationEvent application = 12;
+    HandOffEvent handoff = 13;
+  }
+}
+
+message ListEventsRequest {
+  // Only events of this run.
+  optional int64 run_id = 1;
+  // Only events about this posting.
+  optional int64 posting_id = 2;
+  // At most this many of the newest events; 0 means 100.
+  int32 limit = 3;
+}
+
+message ListEventsResponse {
+  repeated Event events = 1;
+}
+
+message WatchEventsRequest {
+  optional int64 run_id = 1;
+  optional int64 posting_id = 2;
+  // Stored events with a greater id are sent first, then live ones.
+  // Unset: live events only.
+  optional int64 after_event_id = 3;
+}
+
+message WatchEventsResponse {
+  Event event = 1;
+}
+
+message SetSecretRequest {
+  string name = 1;
+  string value = 2;
+}
+
+message SetSecretResponse {}
+
+message DeleteSecretRequest {
+  string name = 1;
+}
+
+message DeleteSecretResponse {
+  bool deleted = 1;
+}
+
+message ListSecretsRequest {}
+
+message ListSecretsResponse {
+  repeated string names = 1;
+}
+
+// ---- Candidate knowledge ------------------------------------------------------------
+
+message ProfileEntry {
+  string key = 1;
+  // Lists (github_logins, commit_emails) have one value per entry.
+  repeated string values = 2;
+}
+
+message Project {
+  int64 id = 1;
+  // Short handle for the CLI, e.g. "solovei".
+  string slug = 2;
+  string name = 3;
+  optional string summary = 4;
+  optional string role = 5;
+  optional string period = 6;
+  repeated string stack = 7;
+  int32 source_count = 8;
+  // Facts that are unconfirmed or confirmed (rejected ones are not counted).
+  int32 fact_count = 9;
+  int32 unconfirmed_count = 10;
+  int32 confirmed_count = 11;
+}
+
+enum SourceKind {
+  SOURCE_KIND_UNSPECIFIED = 0;
+  SOURCE_KIND_FILE = 1;
+  SOURCE_KIND_URL = 2;
+  SOURCE_KIND_GITHUB = 3;
+  SOURCE_KIND_DRIVE = 4;
+  SOURCE_KIND_MANUAL = 5;
+}
+
+message Source {
+  int64 id = 1;
+  // Unset for profile-level sources (a CV covering many projects).
+  optional int64 project_id = 2;
+  SourceKind kind = 3;
+  // Absolute path, URL or https://github.com/<owner>/<repo>.
+  string locator = 4;
+  optional google.protobuf.Timestamp last_synced_at = 5;
+  // What the last sync did, or why it failed.
+  optional string sync_note = 6;
+}
+
+enum FactStatus {
+  FACT_STATUS_UNSPECIFIED = 0;
+  FACT_STATUS_UNCONFIRMED = 1;
+  FACT_STATUS_CONFIRMED = 2;
+  FACT_STATUS_REJECTED = 3;
+}
+
+message Evidence {
+  optional int64 source_id = 1;
+  SourceKind source_kind = 2;
+  string source_locator = 3;
+  // Where inside the source: "page 2", "commit:1a2b3c4d5e6f", "pr:#12", "path:README.md".
+  optional string locator = 4;
+  // A short verbatim excerpt of the source.
+  optional string excerpt = 5;
+}
+
+message Fact {
+  int64 id = 1;
+  optional int64 project_id = 2;
+  optional string project_slug = 3;
+  string text = 4;
+  // personal_contribution | team_context | role | skill | impact | education | other
+  string kind = 5;
+  FactStatus status = 6;
+  // extracted | interview | review_edit
+  string origin = 7;
+  repeated Evidence evidence = 8;
+  optional google.protobuf.Timestamp edited_at = 9;
+}
+
+message GetCandidateRequest {}
+
+message GetCandidateResponse {
+  repeated ProfileEntry profile = 1;
+  repeated Project projects = 2;
+  // Sources that belong to no single project.
+  repeated Source profile_sources = 3;
+  int32 profile_fact_count = 4;
+}
+
+message SetProfileValueRequest {
+  string key = 1;
+  // Lists are comma- or space-separated; an empty value clears the key.
+  string value = 2;
+}
+
+message SetProfileValueResponse {
+  ProfileEntry entry = 1;
+}
+
+message CreateProjectRequest {
+  string name = 1;
+  // Derived from the name when unset.
+  optional string slug = 2;
+  optional string summary = 3;
+  optional string role = 4;
+  optional string period = 5;
+  repeated string stack = 6;
+}
+
+message CreateProjectResponse {
+  Project project = 1;
+}
+
+message ListProjectsRequest {}
+
+message ListProjectsResponse {
+  repeated Project projects = 1;
+}
+
+message GetProjectRequest {
+  // Id, slug or name.
+  string ref = 1;
+}
+
+message GetProjectResponse {
+  Project project = 1;
+  repeated Source sources = 2;
+}
+
+message AddSourceRequest {
+  // Project id, slug or name; empty for a profile-level source.
+  string project = 1;
+  SourceKind kind = 2;
+  string locator = 3;
+}
+
+message AddSourceResponse {
+  Source source = 1;
+  // False when the same source was already there (no sync is enqueued then).
+  bool created = 2;
+}
+
+message SyncSourcesRequest {
+  // A project ref, a source kind ("file", "url", "github"), "profile", or empty for all.
+  string target = 1;
+  // Re-extract even when a source hasn't changed since its last sync.
+  bool force = 2;
+}
+
+message SyncSourcesResponse {
+  repeated Source sources = 1;
+  // Sources a sync was enqueued for (others already had one queued or running).
+  repeated int64 enqueued_source_ids = 2;
+}
+
+message ListFactsRequest {
+  // Project ref; "profile" for profile-level facts; empty for all.
+  string project = 1;
+  FactStatus status = 2;
+}
+
+message ListFactsResponse {
+  repeated Fact facts = 1;
+}
+
+message ConfirmFactRequest {
+  repeated int64 ids = 1;
+  // With an application: confirms the unconfirmed facts it relies on (all of them when `ids`
+  // is empty; otherwise only those, which must be ones it relies on).
+  optional int64 application_id = 2;
+}
+
+message ConfirmFactResponse {
+  repeated Fact facts = 1;
+}
+
+message EditFactRequest {
+  int64 id = 1;
+  string text = 2;
+}
+
+message EditFactResponse {
+  Fact fact = 1;
+}
+
+message RejectFactRequest {
+  repeated int64 ids = 1;
+}
+
+message RejectFactResponse {
+  repeated Fact facts = 1;
+}
+
+// ---- Applications -------------------------------------------------------------------------
+
+enum ApplicationStage {
+  APPLICATION_STAGE_UNSPECIFIED = 0;
+  APPLICATION_STAGE_PREPARING = 1;
+  APPLICATION_STAGE_READY_FOR_REVIEW = 2;
+  // Something only the candidate can give: a value the profile lacks, a fact the knowledge
+  // base lacks (see `note` and the missing fields).
+  APPLICATION_STAGE_NEEDS_CANDIDATE = 3;
+  APPLICATION_STAGE_APPROVED = 4;
+  // Delivered through its channel; see `receipt`. A delivery stuck mid-way stays APPROVED
+  // (the human gate already passed) with `note` and `hand_off` set.
+  APPLICATION_STAGE_APPLIED = 5;
+}
+
+message ApplicationField {
+  // 1-based position in the form (the CLI's #n).
+  int32 number = 1;
+  // Stable id of the field: "<step>:<control>".
+  string ref = 2;
+  int32 step = 3;
+  string label = 4;
+  // text | textarea | select | combobox | radio | checkbox | file | date | group | unknown
+  string kind = 5;
+  optional string meaning = 6;
+  bool required = 7;
+  repeated string options = 8;
+  bool has_options = 9;
+  // standard | question | group | entry | consent | eeo
+  string role = 10;
+  // What will be sent: text, an option, "checked"/"unchecked", a file path, or a JSON list
+  // (several options; a group's entries).
+  optional string value = 11;
+  // profile | override | answer | file | rule | none
+  string source = 12;
+  // What preparation computed; applies again when an override is cleared.
+  optional string default_value = 13;
+  string default_source = 14;
+  // Why there is no value, or how it was chosen.
+  optional string note = 15;
+  // The form will ask it: its branch (revealed_by) applies with the values as they are.
+  bool active = 16;
+  // Required, active and without a value.
+  bool missing = 17;
+  // For fields of a repeatable group's entry: the group's ref.
+  optional string entry_of = 18;
+  // "shown when "X" is "Yes"" for conditional fields.
+  optional string condition = 19;
+}
+
+message AnswerSentence {
+  int32 index = 1;
+  string text = 2;
+  repeated int64 fact_ids = 3;
+  // none | unchecked | unconfirmed | rejected_fact | absent_number | contradiction |
+  // verifier:<quantity|role|scope|timeframe|unsupported>
+  string flag = 4;
+  optional string note = 5;
+  repeated MatchedFact facts = 6;
+}
+
+message Answer {
+  // 1-based, in form order (the CLI's q1, q2, …).
+  int32 number = 1;
+  int64 id = 2;
+  // The question's field ref.
+  string field_ref = 3;
+  string question = 4;
+  // text (the sentences are sent) | choice (`choice` is sent; the sentences are its claim)
+  string kind = 5;
+  // answered | needs_candidate
+  string status = 6;
+  optional string choice = 7;
+  // For needs_candidate: what the candidate has to tell.
+  optional string missing = 8;
+  // "answer:<id>" of a prior answer whose facts it reuses.
+  optional string adapted_from = 9;
+  bool edited = 10;
+  bool active = 11;
+  // The candidate set the field directly; this draft isn't used.
+  bool overridden = 12;
+  repeated AnswerSentence sentences = 13;
+}
+
+message Application {
+  int64 id = 1;
+  int64 posting_id = 2;
+  ApplicationStage stage = 3;
+  // web_form | email
+  string channel = 4;
+  optional string note = 5;
+  optional string title = 6;
+  optional string company = 7;
+  optional int32 score = 8;
+  string posting_url = 9;
+  optional string form_url = 10;
+  google.protobuf.Timestamp created_at = 11;
+  optional google.protobuf.Timestamp prepared_at = 12;
+  optional google.protobuf.Timestamp approved_at = 13;
+  // Why approve is refused; empty when it can be approved.
+  repeated string blockers = 14;
+  // What only the candidate can give.
+  repeated string missing = 15;
+  repeated int64 unconfirmed_fact_ids = 16;
+  // Only filled by GetApplication (and the review RPCs).
+  repeated ApplicationField fields = 17;
+  repeated Answer answers = 18;
+  optional google.protobuf.Timestamp applied_at = 19;
+  // Set once delivery has submitted the application.
+  optional Receipt receipt = 20;
+  // The most recent delivery hand-off still waiting on the candidate, if any.
+  optional HandOff hand_off = 21;
+}
+
+message ReceiptFieldValue {
+  string ref = 1;
+  string label = 2;
+  optional string value = 3;
+  // profile | override | answer | file | rule | none
+  string source = 4;
+}
+
+// Exactly what was sent when delivery submitted the application.
+message Receipt {
+  string final_url = 1;
+  optional string confirmation_text = 2;
+  optional string cv_path = 3;
+  optional string cv_hash = 4;
+  optional string salary_value = 5;
+  google.protobuf.Timestamp submitted_at = 6;
+  repeated ReceiptFieldValue field_values = 7;
+}
+
+// Why delivery needs the candidate, and (for a browser hand-off) where it got stuck.
+message HandOff {
+  string reason = 1;
+  optional string detail = 2;
+  // field | step | captcha
+  optional string scope = 3;
+  optional int32 step = 4;
+  optional string field_label = 5;
+  optional string url = 6;
+  // A saved `ariaSnapshot` of the page at hand-off time.
+  optional string snapshot_path = 7;
+}
+
+message ListApplicationsRequest {
+  // Unspecified lists every stage.
+  ApplicationStage stage = 1;
+}
+
+message ListApplicationsResponse {
+  repeated Application applications = 1;
+}
+
+message GetApplicationRequest {
+  int64 id = 1;
+}
+
+message GetApplicationResponse {
+  Application application = 1;
+}
+
+message PrepareApplicationRequest {
+  // One of the two: a posting (its application is created if it has none) or an application.
+  optional int64 posting_id = 1;
+  optional int64 application_id = 2;
+  // Redraft every answer, not only missing ones (the candidate's edits are redrafted too).
+  bool rewrite = 3;
+}
+
+message PrepareApplicationResponse {
+  Application application = 1;
+  bool created = 2;
+}
+
+message SetFieldValueRequest {
+  int64 application_id = 1;
+  // The field's number (#3), meaning (salary), label or ref.
+  string field = 2;
+  string value = 3;
+  // Clears this application's value: the prepared one (from the profile) applies again.
+  bool clear = 4;
+}
+
+message SetFieldValueResponse {
+  Application application = 1;
+  ApplicationField field = 2;
+}
+
+message EditAnswerRequest {
+  int64 application_id = 1;
+  // q2, 2, or the question field's number / label.
+  string answer = 2;
+  // 0-based sentence; unset = the whole answer.
+  optional int32 sentence = 3;
+  // The candidate's words. Unset (with `sentence`) confirms that sentence as written.
+  optional string text = 4;
+}
+
+message EditAnswerResponse {
+  Application application = 1;
+  Answer answer = 2;
+  // Facts saved from the candidate's words (confirmed, origin review_edit).
+  repeated int64 fact_ids = 3;
+}
+
+message ApproveApplicationRequest {
+  int64 id = 1;
+}
+
+message ApproveApplicationResponse {
+  Application application = 1;
+}
+
+message SubmitApplicationRequest {
+  int64 id = 1;
+}
+
+message SubmitApplicationResponse {
+  Application application = 1;
+}
+
+message GetHandOffRequest {
+  int64 application_id = 1;
+}
+
+message GetHandOffResponse {
+  optional HandOff hand_off = 1;
+}

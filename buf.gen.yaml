@@ -1,0 +1,14 @@
+# Generates the TypeScript messages and service descriptors (protobuf-es v2 + Connect)
+# into daemon/src/gen. The plugin comes from daemon's node_modules, so run
+# `pnpm -C daemon install` first. connect-swift for app/ is added in phase 8b.
+version: v2
+inputs:
+  - directory: proto
+plugins:
+  - local: daemon/node_modules/.bin/protoc-gen-es
+    out: daemon/src/gen
+    include_imports: false
+    opt:
+      - target=js+dts
+      - import_extension=js
+clean: true

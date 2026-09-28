@@ -1,0 +1,47 @@
+name: daemon
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  daemon:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: daemon/package.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: daemon/pnpm-lock.yaml
+
+      - name: Install
+        run: pnpm -C daemon install --frozen-lockfile
+
+      - name: Install Chromium headless shell
+        run: pnpm -C daemon exec playwright install --only-shell --with-deps chromium
+
+      # buf is pinned as a daemon devDependency, so CI and local runs use the same version.
+      - name: buf lint
+        run: daemon/node_modules/.bin/buf lint
+
+      - name: Generated code is up to date
+        run: |
+          daemon/node_modules/.bin/buf generate
+          git diff --exit-code daemon/src/gen
+
+      - name: Typecheck
+        run: pnpm -C daemon typecheck
+
+      - name: Lint
+        run: pnpm -C daemon lint
+
+      - name: Test
+        run: pnpm -C daemon test
