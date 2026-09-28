@@ -7,6 +7,7 @@ import { type ApplyantClient, connect, describeError } from './client.ts';
 import { eventJson, eventLine } from './format.ts';
 import { registerHandoff } from './handoff.ts';
 import { positiveInt, registerJobs } from './jobs.ts';
+import { registerSearch } from './search.ts';
 import { registerStatus } from './status.ts';
 
 const out = (text: string): void => {
@@ -60,6 +61,7 @@ export function buildCli(client: () => ApplyantClient): Command {
     .showHelpAfterError();
 
   registerJobs(program, client);
+  registerSearch(program, client);
   registerCandidate(program, client);
   registerApplications(program, client);
   registerHandoff(program, client);

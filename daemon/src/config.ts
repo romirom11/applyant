@@ -40,6 +40,8 @@ export interface Config {
   host: '127.0.0.1';
   /** 0 picks a free port. */
   port: number;
+  /** How often the scheduler looks for due search strategies (and on every wake). */
+  schedulerMs: number;
   worker: {
     concurrency: number;
     leaseMs: number;
@@ -117,6 +119,7 @@ export function loadConfig(env: Env = process.env): Config {
     readWorkers: Math.max(1, int(env, 'APPLYANT_READ_WORKERS', 2)),
     host: '127.0.0.1',
     port: int(env, 'APPLYANT_PORT', 0),
+    schedulerMs: Math.max(1_000, int(env, 'APPLYANT_SCHEDULER_MS', 60_000)),
     worker: {
       concurrency: int(env, 'APPLYANT_WORKERS', 2),
       leaseMs: int(env, 'APPLYANT_LEASE_MS', 120_000),

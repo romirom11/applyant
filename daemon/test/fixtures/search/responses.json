@@ -1,0 +1,86 @@
+[
+  {
+    "url": "https://boards-api.greenhouse.io/v1/boards/gitlab/jobs?content=true",
+    "status": 200,
+    "contentType": "application/json",
+    "file": "greenhouse-gitlab.json"
+  },
+  {
+    "url": "https://api.ashbyhq.com/posting-api/job-board/ashby?includeCompensation=true",
+    "status": 200,
+    "contentType": "application/json",
+    "file": "ashby-ashby.json"
+  },
+  {
+    "url": "https://api.lever.co/v0/postings/leverdemo?mode=json",
+    "status": 200,
+    "contentType": "application/json",
+    "file": "lever-leverdemo.json"
+  },
+  {
+    "url": "https://api.lever.co/v0/postings/lever?mode=json",
+    "status": 200,
+    "contentType": "application/json",
+    "file": "lever-eu-on-global.json"
+  },
+  {
+    "url": "https://api.eu.lever.co/v0/postings/lever?mode=json",
+    "status": 200,
+    "contentType": "application/json",
+    "file": "lever-eu-lever.json"
+  },
+  {
+    "url": "https://apply.workable.com/api/v1/widget/accounts/huggingface?details=true",
+    "status": 200,
+    "contentType": "application/json",
+    "file": "workable-huggingface.json"
+  },
+  {
+    "url": "https://hn.algolia.com/api/v1/search_by_date?tags=story,author_whoishiring&hitsPerPage=10",
+    "status": 200,
+    "contentType": "application/json",
+    "file": "hn-stories.json"
+  },
+  {
+    "url": "https://hn.algolia.com/api/v1/items/49522897",
+    "status": 200,
+    "contentType": "application/json",
+    "file": "hn-thread.json"
+  },
+  {
+    "url": "https://remoteok.com/api",
+    "status": 200,
+    "contentType": "application/json",
+    "file": "remoteok.json"
+  },
+  {
+    "url": "https://weworkremotely.com/remote-jobs.rss",
+    "status": 200,
+    "contentType": "application/rss+xml",
+    "file": "wwr.rss"
+  },
+  {
+    "url": "https://remotive.com/api/remote-jobs?limit=100&search=engineer",
+    "status": 200,
+    "contentType": "application/json",
+    "file": "remotive-engineer.json"
+  },
+  {
+    "url": "https://himalayas.app/jobs/api/search?q=engineer",
+    "status": 200,
+    "contentType": "application/json",
+    "file": "himalayas-engineer.json"
+  },
+  {
+    "url": "https://www.arbeitnow.com/api/job-board-api",
+    "status": 200,
+    "contentType": "application/json",
+    "file": "arbeitnow.json"
+  },
+  {
+    "url": "https://jobicy.com/api/v2/remote-jobs?count=50&tag=engineer",
+    "status": 200,
+    "contentType": "application/json",
+    "file": "jobicy-engineer.json"
+  }
+]

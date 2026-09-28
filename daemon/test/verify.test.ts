@@ -204,6 +204,54 @@ describe('verify_posting through the queue', () => {
       t.cleanup();
     }
   });
+
+  it('re-verifying a live posting (a search source stopped listing it) keeps it, or closes it', async () => {
+    const t = tempDb();
+    const bus = new EventBus();
+    const now = new Date();
+    const worker = new Worker({
+      db: t.db,
+      read: t.read,
+      bus,
+      handlers: handlers({ verify_posting: verifyPosting }),
+      deps: testDeps({ dir: t.dir, reader }),
+      log,
+      concurrency: 2,
+      leaseMs: 60_000,
+      pollMs: 20,
+      maxAttempts: 5,
+    });
+    try {
+      const scored = (path: string) => {
+        const id = addPosting(t.db, bus, { url: site.url(path), sourceKind: 'manual', now }).posting
+          .id;
+        t.db
+          .update(postings)
+          .set({ stage: 'scored', score: 88, verifiedAt: new Date(0) })
+          .where(eq(postings.id, id))
+          .run();
+        return id;
+      };
+      const live = scored('/live.html');
+      const gone = scored('/gone.html');
+      worker.start();
+      await worker.idle();
+      const row = (id: number) => t.db.select().from(postings).where(eq(postings.id, id)).get();
+      expect(row(live)).toMatchObject({
+        stage: 'scored',
+        score: 88,
+        verifyNote: 'apply form on page',
+      });
+      expect(row(live)?.verifiedAt?.getTime()).toBeGreaterThan(0);
+      expect(row(gone)).toMatchObject({ stage: 'closed', verifyNote: 'HTTP 404' });
+      // Nothing downstream runs again for a posting that is still what it was.
+      expect(t.db.select().from(tasks).where(eq(tasks.kind, 'score_posting')).all()).toEqual([]);
+      expect(t.db.select().from(tasks).where(eq(tasks.kind, 'read_form')).all()).toEqual([]);
+    } finally {
+      await worker.stop();
+      t.cleanup();
+    }
+  });
 });
 
 describe('verification helpers', () => {

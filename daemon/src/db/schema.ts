@@ -13,6 +13,8 @@ export const POSTING_STAGES = [
   'failed_verification',
   'scored',
   'skipped',
+  /** Was live, and isn't any more: gone from a source's complete list, or re-verified dead. */
+  'closed',
 ] as const;
 export type PostingStage = (typeof POSTING_STAGES)[number];
 
@@ -23,46 +25,56 @@ export const FORM_STATUSES = ['verified', 'no_form', 'email', 'failed'] as const
 export type FormStatus = (typeof FORM_STATUSES)[number];
 export type PostingDecision = (typeof POSTING_DECISIONS)[number];
 
-export const postings = sqliteTable('postings', {
-  id: integer('id').primaryKey(),
-  stage: text('stage', { enum: POSTING_STAGES }).notNull(),
-  canonicalUrl: text('canonical_url').notNull().unique(),
-  title: text('title'),
-  company: text('company'),
-  firstSeenAt: integer('first_seen_at', { mode: 'timestamp_ms' }).notNull().default(now),
-  verifiedAt: integer('verified_at', { mode: 'timestamp_ms' }),
-  verifyNote: text('verify_note'),
-  /** Readable posting text, captured when the page was verified. The extractor reads this. */
-  text: text('text'),
-  /** The page's schema.org JobPosting JSON-LD, when it has one (structured fields win). */
-  jsonLd: text('json_ld', { mode: 'json' }).$type<Record<string, unknown>>(),
-  /** Extractor output, cached for `extractionKey` (posting text hash + prompt version). */
-  extraction: text('extraction', { mode: 'json' }).$type<StoredExtraction>(),
-  extractionKey: text('extraction_key'),
-  /** Requirement matches, each with the cache key it was made for. */
-  matches: text('matches', { mode: 'json' }).$type<StoredMatch[]>(),
-  /** 0–100, from the pure score() over the cached extraction and matches. */
-  score: integer('score'),
-  /** must-haves × role fit (0–1) behind the score; logistics count less below 0.7. */
-  coreFit: real('core_fit'),
-  breakdown: text('breakdown', { mode: 'json' }).$type<Component[]>(),
-  dealbreakers: text('dealbreakers', { mode: 'json' }).$type<string[]>(),
-  scoredAt: integer('scored_at', { mode: 'timestamp_ms' }),
-  /** Why the last scoring attempt failed; null once it succeeds. */
-  scoreNote: text('score_note'),
-  /** The candidate's call on this posting. */
-  decision: text('decision', { enum: POSTING_DECISIONS }),
-  decisionReason: text('decision_reason'),
-  decidedAt: integer('decided_at', { mode: 'timestamp_ms' }),
-  /** Where verification found the way to apply (form page, apply link target, mailto:). */
-  applyUrl: text('apply_url'),
-  /** The application form as Read found it (steps, fields, options, conditional fields). */
-  form: text('form', { mode: 'json' }).$type<FormRead>(),
-  formStatus: text('form_status', { enum: FORM_STATUSES }),
-  /** What the last read found or why it failed ("2 steps · 17 fields"). */
-  formNote: text('form_note'),
-  formReadAt: integer('form_read_at', { mode: 'timestamp_ms' }),
-});
+export const postings = sqliteTable(
+  'postings',
+  {
+    id: integer('id').primaryKey(),
+    stage: text('stage', { enum: POSTING_STAGES }).notNull(),
+    canonicalUrl: text('canonical_url').notNull().unique(),
+    title: text('title'),
+    company: text('company'),
+    firstSeenAt: integer('first_seen_at', { mode: 'timestamp_ms' }).notNull().default(now),
+    verifiedAt: integer('verified_at', { mode: 'timestamp_ms' }),
+    verifyNote: text('verify_note'),
+    /** Readable posting text, captured when the page was verified. The extractor reads this. */
+    text: text('text'),
+    /** The page's schema.org JobPosting JSON-LD, when it has one (structured fields win). */
+    jsonLd: text('json_ld', { mode: 'json' }).$type<Record<string, unknown>>(),
+    /** Extractor output, cached for `extractionKey` (posting text hash + prompt version). */
+    extraction: text('extraction', { mode: 'json' }).$type<StoredExtraction>(),
+    extractionKey: text('extraction_key'),
+    /** Requirement matches, each with the cache key it was made for. */
+    matches: text('matches', { mode: 'json' }).$type<StoredMatch[]>(),
+    /** 0–100, from the pure score() over the cached extraction and matches. */
+    score: integer('score'),
+    /** must-haves × role fit (0–1) behind the score; logistics count less below 0.7. */
+    coreFit: real('core_fit'),
+    breakdown: text('breakdown', { mode: 'json' }).$type<Component[]>(),
+    dealbreakers: text('dealbreakers', { mode: 'json' }).$type<string[]>(),
+    scoredAt: integer('scored_at', { mode: 'timestamp_ms' }),
+    /** Why the last scoring attempt failed; null once it succeeds. */
+    scoreNote: text('score_note'),
+    /** The candidate's call on this posting. */
+    decision: text('decision', { enum: POSTING_DECISIONS }),
+    decisionReason: text('decision_reason'),
+    decidedAt: integer('decided_at', { mode: 'timestamp_ms' }),
+    /** Where verification found the way to apply (form page, apply link target, mailto:). */
+    applyUrl: text('apply_url'),
+    /** The application form as Read found it (steps, fields, options, conditional fields). */
+    form: text('form', { mode: 'json' }).$type<FormRead>(),
+    formStatus: text('form_status', { enum: FORM_STATUSES }),
+    /** What the last read found or why it failed ("2 steps · 17 fields"). */
+    formNote: text('form_note'),
+    formReadAt: integer('form_read_at', { mode: 'timestamp_ms' }),
+    /** The job's id on its ATS ("greenhouse:4001234"), from any of its URLs: a dedupe key. */
+    atsKey: text('ats_key'),
+    /** MinHash signature of the description shingles (dedupe: reposts under another URL). */
+    minhash: text('minhash', { mode: 'json' }).$type<number[]>(),
+    /** The description a search source listed it with (before verification reads the page). */
+    listingText: text('listing_text'),
+  },
+  (t) => [index('postings_ats_key').on(t.atsKey)],
+);
 
 export const postingSources = sqliteTable(
   'posting_sources',
@@ -71,11 +83,177 @@ export const postingSources = sqliteTable(
     postingId: integer('posting_id')
       .notNull()
       .references(() => postings.id, { onDelete: 'cascade' }),
-    kind: text('kind').notNull(), // manual | share | board | ats | ...
+    // manual | share | greenhouse | ashby | lever | workable | page | board
+    kind: text('kind').notNull(),
     url: text('url').notNull(),
     firstSeenAt: integer('first_seen_at', { mode: 'timestamp_ms' }).notNull().default(now),
+    /** The search source that lists it (phase 10); null for manual and shared postings. */
+    searchSourceId: integer('search_source_id').references(() => searchSources.id, {
+      onDelete: 'set null',
+    }),
+    /** The source's own id for the job (ATS job id, board id): how absence is judged. */
+    externalId: text('external_id'),
+    lastSeenAt: integer('last_seen_at', { mode: 'timestamp_ms' }),
+    /** Set when a complete list from the source no longer had it; cleared if it comes back. */
+    closedAt: integer('closed_at', { mode: 'timestamp_ms' }),
   },
-  (t) => [uniqueIndex('posting_sources_posting_kind_url').on(t.postingId, t.kind, t.url)],
+  (t) => [
+    uniqueIndex('posting_sources_posting_kind_url').on(t.postingId, t.kind, t.url),
+    index('posting_sources_search_source').on(t.searchSourceId),
+  ],
+);
+
+// ---- Search (phase 10) ------------------------------------------------------------------
+
+/**
+ * greenhouse · ashby · lever · workable: a company's board, read through that ATS's public
+ * list API (complete lists). page: a career page or feed URL, read by the generic reader (a
+ * feed or JSON-LD first, then a known ATS embed). board: a job board (HN, RemoteOK, …).
+ */
+export const SEARCH_SOURCE_KINDS = [
+  'greenhouse',
+  'ashby',
+  'lever',
+  'workable',
+  'page',
+  'board',
+] as const;
+export type SearchSourceKind = (typeof SEARCH_SOURCE_KINDS)[number];
+
+/** How a page source was last read: cached so later runs go straight to it. */
+export type ResolvedSource =
+  | { via: 'feed'; url: string; format: string }
+  | { via: 'ats'; ats: 'greenhouse' | 'ashby' | 'lever' | 'workable'; token: string }
+  | { via: 'lever'; apiHost: string };
+
+/** One place postings can be listed. A disabled source (or kind) is never queried. */
+export const searchSources = sqliteTable('search_sources', {
+  id: integer('id').primaryKey(),
+  /** `<kind>:<locator>`: greenhouse:gitlab · board:hn · page:https://acme.com/careers */
+  key: text('key').notNull().unique(),
+  kind: text('kind', { enum: SEARCH_SOURCE_KINDS }).notNull(),
+  /** Board token / slug / site / account, a board id, or the page URL. */
+  locator: text('locator').notNull(),
+  label: text('label').notNull(),
+  enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+  /** builtin (the boards) · candidate · agent (phase 11). */
+  origin: text('origin', { enum: ['builtin', 'candidate', 'agent'] })
+    .notNull()
+    .default('candidate'),
+  resolved: text('resolved', { mode: 'json' }).$type<ResolvedSource>(),
+  lastRunAt: integer('last_run_at', { mode: 'timestamp_ms' }),
+  /** Listings the last read returned (before any strategy's queries). */
+  lastCount: integer('last_count'),
+  lastComplete: integer('last_complete', { mode: 'boolean' }),
+  /** What the last read did, or why it failed. */
+  lastNote: text('last_note'),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull().default(now),
+});
+
+/** A whole kind switched off ("Greenhouse"): its sources are never queried. On by default. */
+export const searchSourceKinds = sqliteTable('search_source_kinds', {
+  kind: text('kind', { enum: SEARCH_SOURCE_KINDS }).primaryKey(),
+  enabled: integer('enabled', { mode: 'boolean' }).notNull(),
+});
+
+export const STRATEGY_STATES = ['active', 'paused'] as const;
+export type StrategyState = (typeof STRATEGY_STATES)[number];
+
+/**
+ * A search strategy: which sources, which queries, how often. The scheduler starts a run when
+ * `next_run_at` has passed; after the Mac sleeps, a missed schedule runs once.
+ */
+export const searchStrategies = sqliteTable('search_strategies', {
+  id: integer('id').primaryKey(),
+  name: text('name').notNull().unique(),
+  /** Title phrases; a listing matches when every word of one query is in its title. Empty = all. */
+  queries: text('queries', { mode: 'json' }).$type<string[]>().notNull().default(sql`'[]'`),
+  /** Location words; a listing matches when its location has one ("remote" matches remote jobs). */
+  locations: text('locations', { mode: 'json' }).$type<string[]>().notNull().default(sql`'[]'`),
+  /** Source selectors: a kind (greenhouse, board, …), a source key (board:hn) or "all". */
+  sources: text('sources', { mode: 'json' }).$type<string[]>().notNull(),
+  everyMinutes: integer('every_minutes').notNull().default(360),
+  state: text('state', { enum: STRATEGY_STATES }).notNull().default('active'),
+  /** candidate · agent (phase 11's search_planner). */
+  origin: text('origin', { enum: ['candidate', 'agent'] })
+    .notNull()
+    .default('candidate'),
+  lastRunAt: integer('last_run_at', { mode: 'timestamp_ms' }),
+  nextRunAt: integer('next_run_at', { mode: 'timestamp_ms' }).notNull().default(now),
+  note: text('note'),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull().default(now),
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull().default(now),
+});
+
+/** One source's part of a search run. */
+export interface SearchRunSourceResult {
+  sourceKey: string;
+  label: string;
+  /** Listings the source returned. */
+  listed: number;
+  /** …of which the strategy's queries and locations matched. */
+  matched: number;
+  /** New postings created from them. */
+  added: number;
+  /** Matched listings that joined a posting already known (another source, a repost). */
+  attached: number;
+  /** The source gave its whole list and the read finished: absence closes postings. */
+  complete: boolean;
+  /** Postings closed / reopened by this list, and re-verifications it asked for. */
+  closed: number;
+  reopened: number;
+  reverify: number;
+  error: string | null;
+  note: string | null;
+}
+
+export const SEARCH_RUN_TRIGGERS = ['schedule', 'wake', 'manual'] as const;
+export type SearchRunTrigger = (typeof SEARCH_RUN_TRIGGERS)[number];
+
+/** A search run: `id` is the run_id every task it spawns (verify, score, …) carries. */
+export const searchRuns = sqliteTable(
+  'search_runs',
+  {
+    id: integer('id').primaryKey(),
+    strategyId: integer('strategy_id')
+      .notNull()
+      .references(() => searchStrategies.id, { onDelete: 'cascade' }),
+    trigger: text('trigger', { enum: SEARCH_RUN_TRIGGERS }).notNull(),
+    /** queued (waiting or running) · done · failed */
+    status: text('status', { enum: ['queued', 'done', 'failed'] })
+      .notNull()
+      .default('queued'),
+    startedAt: integer('started_at', { mode: 'timestamp_ms' }).notNull().default(now),
+    finishedAt: integer('finished_at', { mode: 'timestamp_ms' }),
+    listed: integer('listed').notNull().default(0),
+    added: integer('added').notNull().default(0),
+    results: text('results', { mode: 'json' })
+      .$type<SearchRunSourceResult[]>()
+      .notNull()
+      .default(sql`'[]'`),
+    note: text('note'),
+  },
+  (t) => [index('search_runs_strategy').on(t.strategyId)],
+);
+
+/** Which strategies found which postings (per-strategy found / verified / interested). */
+export const strategyPostings = sqliteTable(
+  'strategy_postings',
+  {
+    id: integer('id').primaryKey(),
+    strategyId: integer('strategy_id')
+      .notNull()
+      .references(() => searchStrategies.id, { onDelete: 'cascade' }),
+    postingId: integer('posting_id')
+      .notNull()
+      .references(() => postings.id, { onDelete: 'cascade' }),
+    runId: integer('run_id'),
+    firstSeenAt: integer('first_seen_at', { mode: 'timestamp_ms' }).notNull().default(now),
+  },
+  (t) => [
+    uniqueIndex('strategy_postings_strategy_posting').on(t.strategyId, t.postingId),
+    index('strategy_postings_posting').on(t.postingId),
+  ],
 );
 
 export const TASK_STATUSES = ['queued', 'running', 'done', 'failed', 'needs_candidate'] as const;
@@ -607,3 +785,6 @@ export type CvRow = typeof cvs.$inferSelect;
 export type NewReceiptRow = typeof receipts.$inferInsert;
 export type InterviewQuestionRow = typeof interviewQuestions.$inferSelect;
 export type InterviewTurnRow = typeof interviewTurns.$inferSelect;
+export type SearchSourceRow = typeof searchSources.$inferSelect;
+export type SearchStrategyRow = typeof searchStrategies.$inferSelect;
+export type SearchRunRow = typeof searchRuns.$inferSelect;

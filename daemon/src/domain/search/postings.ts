@@ -13,6 +13,7 @@ import {
   postingSources,
   postings,
   projects,
+  searchSources,
 } from '../../db/schema.ts';
 import type { EventBus } from '../../queue/events.ts';
 import { runInTx } from '../../queue/tx.ts';
@@ -91,18 +92,25 @@ export function citedFacts(db: Db, row: PostingRow): Map<number, CitedFact> {
   return new Map(found.map((f) => [f.id, f]));
 }
 
+/** A posting's source, with the key of the search source that lists it (if any). */
+export interface PostingSourceView extends PostingSourceRow {
+  searchSourceKey: string | null;
+}
+
 export function getPosting(
   db: Db,
   id: number,
-): { posting: PostingRow; sources: PostingSourceRow[] } | null {
+): { posting: PostingRow; sources: PostingSourceView[] } | null {
   const posting = db.select().from(postings).where(eq(postings.id, id)).get();
   if (!posting) return null;
   const sources = db
-    .select()
+    .select({ source: postingSources, key: searchSources.key })
     .from(postingSources)
+    .leftJoin(searchSources, eq(searchSources.id, postingSources.searchSourceId))
     .where(eq(postingSources.postingId, id))
     .orderBy(asc(postingSources.id))
-    .all();
+    .all()
+    .map((r) => ({ ...r.source, searchSourceKey: r.key }));
   return { posting, sources };
 }
 

@@ -25,8 +25,11 @@ export type EventKind =
   // The agent interview (entity_id = question id, stage = its status, or `done` when the
   // interviewer has nothing more to ask; message = the question or what the answer gave).
   | 'interview'
-  // The Mac woke from sleep (applyant-native); phase 10's scheduler catches up on it.
-  | 'system.wake';
+  // The Mac woke from sleep (applyant-native); the scheduler runs each missed search once.
+  | 'system.wake'
+  // A search run was queued, finished or failed (entity_id = strategy id, run_id = the run,
+  // stage = queued | done | failed; message = what it found).
+  | 'search.run';
 
 export interface EventInput {
   kind: EventKind;

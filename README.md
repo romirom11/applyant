@@ -90,6 +90,36 @@ pnpm -C daemon cli interview show <project | question id>
 pnpm -C daemon cli interview answer <id> "<text>"  ·  interview dismiss <id>
 ```
 
+Search: strategies find postings on their own. A strategy names its sources, title queries
+(every word of one query in the title; `-word` excludes), locations (`remote` matches remote
+jobs) and a schedule; the scheduler starts a run when it's due, and after the Mac wakes each
+missed strategy runs once. Sources are company boards read through their ATS's public list API
+(Greenhouse, Ashby, Lever incl. EU boards, Workable), career pages and feeds (a feed or JobPosting
+JSON-LD first, then an embedded ATS board), and the built-in boards (HN "Who is hiring",
+RemoteOK, We Work Remotely, Remotive, Himalayas, Arbeitnow, Jobicy). Listings of the same role
+become one posting with several sources (URL, ATS job id, company + title, then MinHash over the
+description, embeddings only as a tie-breaker). A posting missing from a source is closed only
+when that source gave its whole list (an ATS board, a feed); boards and failed reads ask for a
+re-verification instead. A run adds at most 50 new postings (the rest come with the next run).
+Any source, or a whole kind, can be switched off and is then never queried; Himalayas starts off
+(its job pages answer the headless reader with HTTP 403).
+
+```sh
+pnpm -C daemon cli search sources add greenhouse gitlab                # or: lever acme · ashby acme · workable acme
+pnpm -C daemon cli search sources add https://acme.com/careers --label Acme   # a career page or feed
+pnpm -C daemon cli search strategies add "AI Engineer · Remote EU" --query "ai engineer" --query "llm engineer" \
+  --location remote --location europe --sources greenhouse,ashby,lever,workable,page,board --every 6h
+pnpm -C daemon cli search strategies                                   # found · verified · interested per strategy
+pnpm -C daemon cli search strategies show|edit|pause|resume|run|delete <id | name>
+pnpm -C daemon cli search sources                                      # every source and kind, on or off, with its counts
+pnpm -C daemon cli search sources off board:hn                         # or a whole kind: `off board` · `on …`
+pnpm -C daemon cli search runs                                         # what every source gave, per run
+pnpm -C daemon cli runs show <run>                                     # the run's own events (verify, score, …)
+```
+
+`node daemon/scripts/search-fixtures.ts` re-records the trimmed public list responses the reader
+tests replay offline (`daemon/test/fixtures/search/`).
+
 Scoring: a verified posting keeps its text and gets an explained 0–100 score. The `extractor`
 reads its requirements, salary, location and so on once; the `matcher` judges each requirement
 against facts found by hybrid retrieval (FTS5 + EmbeddingGemma vectors); the number itself comes

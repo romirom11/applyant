@@ -191,6 +191,41 @@ public protocol Applyant_V1_ApplyantServiceClientInterface: Sendable {
     /// rendered again.
     @available(iOS 13, *)
     func `editCv`(request: Applyant_V1_EditCvRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_EditCvResponse>
+
+    /// Search: strategies (which sources, which queries, how often) find postings on their own.
+    /// Every source can be switched off, one by one or a whole kind; a source that's off is never
+    /// queried. ListSearch returns everything the Search screen shows: strategies with their
+    /// found / verified / interested counts, sources with theirs, and the kind switches.
+    @available(iOS 13, *)
+    func `listSearch`(request: Applyant_V1_ListSearchRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_ListSearchResponse>
+
+    /// AddStrategy adds a strategy; an active one runs right away, then on its schedule.
+    @available(iOS 13, *)
+    func `addStrategy`(request: Applyant_V1_AddStrategyRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_AddStrategyResponse>
+
+    /// UpdateStrategy changes what's set in the request: name, queries, locations, sources,
+    /// schedule, or state (pause / resume).
+    @available(iOS 13, *)
+    func `updateStrategy`(request: Applyant_V1_UpdateStrategyRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_UpdateStrategyResponse>
+
+    @available(iOS 13, *)
+    func `deleteStrategy`(request: Applyant_V1_DeleteStrategyRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_DeleteStrategyResponse>
+
+    /// RunStrategy starts a run now, outside the schedule (unless one is waiting or running).
+    @available(iOS 13, *)
+    func `runStrategy`(request: Applyant_V1_RunStrategyRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_RunStrategyResponse>
+
+    /// AddSearchSource adds a company's ATS board, or a career page / feed URL.
+    @available(iOS 13, *)
+    func `addSearchSource`(request: Applyant_V1_AddSearchSourceRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_AddSearchSourceResponse>
+
+    /// SetSearchSourceEnabled switches a source (by key) or a whole kind (greenhouse, board, …).
+    @available(iOS 13, *)
+    func `setSearchSourceEnabled`(request: Applyant_V1_SetSearchSourceEnabledRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_SetSearchSourceEnabledResponse>
+
+    /// ListSearchRuns returns recent runs, newest first, each with what every source gave.
+    @available(iOS 13, *)
+    func `listSearchRuns`(request: Applyant_V1_ListSearchRunsRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_ListSearchRunsResponse>
 }
 
 /// Concrete implementation of `Applyant_V1_ApplyantServiceClientInterface`.
@@ -411,6 +446,46 @@ public final class Applyant_V1_ApplyantServiceClient: Applyant_V1_ApplyantServic
         return await self.client.unary(path: "/applyant.v1.ApplyantService/EditCv", idempotencyLevel: .unknown, request: request, headers: headers)
     }
 
+    @available(iOS 13, *)
+    public func `listSearch`(request: Applyant_V1_ListSearchRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_ListSearchResponse> {
+        return await self.client.unary(path: "/applyant.v1.ApplyantService/ListSearch", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
+    public func `addStrategy`(request: Applyant_V1_AddStrategyRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_AddStrategyResponse> {
+        return await self.client.unary(path: "/applyant.v1.ApplyantService/AddStrategy", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
+    public func `updateStrategy`(request: Applyant_V1_UpdateStrategyRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_UpdateStrategyResponse> {
+        return await self.client.unary(path: "/applyant.v1.ApplyantService/UpdateStrategy", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
+    public func `deleteStrategy`(request: Applyant_V1_DeleteStrategyRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_DeleteStrategyResponse> {
+        return await self.client.unary(path: "/applyant.v1.ApplyantService/DeleteStrategy", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
+    public func `runStrategy`(request: Applyant_V1_RunStrategyRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_RunStrategyResponse> {
+        return await self.client.unary(path: "/applyant.v1.ApplyantService/RunStrategy", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
+    public func `addSearchSource`(request: Applyant_V1_AddSearchSourceRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_AddSearchSourceResponse> {
+        return await self.client.unary(path: "/applyant.v1.ApplyantService/AddSearchSource", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
+    public func `setSearchSourceEnabled`(request: Applyant_V1_SetSearchSourceEnabledRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_SetSearchSourceEnabledResponse> {
+        return await self.client.unary(path: "/applyant.v1.ApplyantService/SetSearchSourceEnabled", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
+    public func `listSearchRuns`(request: Applyant_V1_ListSearchRunsRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_ListSearchRunsResponse> {
+        return await self.client.unary(path: "/applyant.v1.ApplyantService/ListSearchRuns", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
     public enum Metadata {
         public enum Methods {
             public static let addPosting = Connect.MethodSpec(name: "AddPosting", service: "applyant.v1.ApplyantService", type: .unary)
@@ -455,6 +530,14 @@ public final class Applyant_V1_ApplyantServiceClient: Applyant_V1_ApplyantServic
             public static let getHandOff = Connect.MethodSpec(name: "GetHandOff", service: "applyant.v1.ApplyantService", type: .unary)
             public static let setCvMode = Connect.MethodSpec(name: "SetCvMode", service: "applyant.v1.ApplyantService", type: .unary)
             public static let editCv = Connect.MethodSpec(name: "EditCv", service: "applyant.v1.ApplyantService", type: .unary)
+            public static let listSearch = Connect.MethodSpec(name: "ListSearch", service: "applyant.v1.ApplyantService", type: .unary)
+            public static let addStrategy = Connect.MethodSpec(name: "AddStrategy", service: "applyant.v1.ApplyantService", type: .unary)
+            public static let updateStrategy = Connect.MethodSpec(name: "UpdateStrategy", service: "applyant.v1.ApplyantService", type: .unary)
+            public static let deleteStrategy = Connect.MethodSpec(name: "DeleteStrategy", service: "applyant.v1.ApplyantService", type: .unary)
+            public static let runStrategy = Connect.MethodSpec(name: "RunStrategy", service: "applyant.v1.ApplyantService", type: .unary)
+            public static let addSearchSource = Connect.MethodSpec(name: "AddSearchSource", service: "applyant.v1.ApplyantService", type: .unary)
+            public static let setSearchSourceEnabled = Connect.MethodSpec(name: "SetSearchSourceEnabled", service: "applyant.v1.ApplyantService", type: .unary)
+            public static let listSearchRuns = Connect.MethodSpec(name: "ListSearchRuns", service: "applyant.v1.ApplyantService", type: .unary)
         }
     }
 }

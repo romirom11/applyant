@@ -69,7 +69,7 @@ public enum Section: String, CaseIterable, Identifiable, Sendable {
     /// Sections with content so far; the rest show an empty state until their phase.
     public var isBuilt: Bool {
         switch self {
-        case .inbox, .readyToReview, .preparing, .interested, .skipped, .applied, .interview: true
+        case .inbox, .readyToReview, .preparing, .interested, .skipped, .applied, .interview, .search, .agentRuns: true
         default: false
         }
     }
@@ -80,8 +80,6 @@ public enum Section: String, CaseIterable, Identifiable, Sendable {
         case .overview: "the funnel view"
         case .interviews, .offers: "mail tracking (phase 13)"
         case .profile, .projects: "onboarding (phase 16); the CLI has them now"
-        case .search: "search strategies (phase 10)"
-        case .agentRuns: "a later phase; `applyant runs show` has them now"
         case .companies: "company research (phase 12)"
         case .settings: "onboarding (phase 16); `applyant secrets` and `candidate prefs` now"
         default: nil
@@ -96,6 +94,10 @@ public struct Navigation: Equatable, Sendable {
     public var reviewing: Int64?
     /// The interview thread open in the Interview section.
     public var interview: InterviewTarget?
+    /// The strategy or source open in the Search section.
+    public var search: SearchSelection?
+    /// The run open in the Agent runs section.
+    public var run: Int64?
     public init() {}
 
     public mutating func showInterview(_ target: InterviewTarget) {
@@ -116,6 +118,11 @@ public struct Chip: Equatable, Sendable {
     public enum Tone: Sendable { case accent, warning, neutral, good }
     public let text: String
     public let tone: Tone
+
+    public init(text: String, tone: Tone) {
+        self.text = text
+        self.tone = tone
+    }
 }
 
 public struct ListItem: Identifiable, Equatable, Sendable {

@@ -1,5 +1,6 @@
 // Serves test/fixtures/sites over HTTP on 127.0.0.1, plus a few dynamic routes.
 // `altOrigin` is the same server under "localhost", i.e. a different origin (cross-origin iframes).
+// Pages can name either origin: {{ORIGIN}} · {{ALT_ORIGIN}}.
 import { existsSync, readFileSync } from 'node:fs';
 import { createServer, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -55,10 +56,9 @@ export async function startSiteServer(): Promise<SiteServer> {
     return send(res, file);
   });
   const send = (res: ServerResponse, file: string) => {
-    const html = readFileSync(join(SITES, file), 'utf8').replaceAll(
-      '{{ALT_ORIGIN}}',
-      `http://localhost:${port}`,
-    );
+    const html = readFileSync(join(SITES, file), 'utf8')
+      .replaceAll('{{ALT_ORIGIN}}', `http://localhost:${port}`)
+      .replaceAll('{{ORIGIN}}', `http://127.0.0.1:${port}`);
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
     res.end(html);
   };

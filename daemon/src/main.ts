@@ -25,6 +25,8 @@ import { EcbFx } from './domain/scoring/fx.ts';
 import { scorePosting } from './domain/scoring/handlers.ts';
 import { getPreferences } from './domain/scoring/prefs.ts';
 import { requestScoring, unscoredPostings } from './domain/scoring/store.ts';
+import { searchHandler } from './domain/search/handlers.ts';
+import { ensureBuiltinSources } from './domain/search/sources.ts';
 import { verifyPosting } from './domain/search/verify.ts';
 import { isAlive, readEndpoint, removeEndpoint, writeEndpoint } from './endpoint.ts';
 import { McpHub } from './mcp/server.ts';
@@ -38,6 +40,7 @@ import { ClaudeProvider, claudeEnv } from './models/providers/claude.ts';
 import { JevClient } from './models/providers/jev.ts';
 import { openNative } from './native/client.ts';
 import { EventBus } from './queue/events.ts';
+import { Scheduler } from './queue/scheduler.ts';
 import { runInTx } from './queue/tx.ts';
 import type { Handlers } from './queue/types.ts';
 import { Worker } from './queue/worker.ts';
@@ -151,6 +154,7 @@ export async function runDaemon(config: Config = loadConfig()): Promise<() => Pr
     embed_facts: embedFacts,
     interview_open: interviewOpen,
     interview_turn: interviewTurn,
+    search: searchHandler,
   };
 
   // Catch up: vectors for facts that have none (or were made by another embedder), and a
@@ -167,14 +171,25 @@ export async function runDaemon(config: Config = loadConfig()): Promise<() => Pr
   // …and delivery for an approved application that never got one (a restart mid-delivery).
   runInTx(db, bus, { now: new Date() }, (tx) => catchUpDeliveries(tx));
 
-  // Sleep/wake (macOS): logged and put on the event stream. Catching up on missed schedules
-  // comes with the scheduler (phase 10).
+  // Search (phase 10): the built-in boards are sources from the start; the scheduler starts
+  // each strategy's runs when they're due.
+  ensureBuiltinSources(db, new Date());
+  const scheduler = new Scheduler({
+    db,
+    bus,
+    log: log.child({ part: 'scheduler' }),
+    intervalMs: config.schedulerMs,
+  });
+
+  // Sleep/wake (macOS): logged, put on the event stream, and every search strategy whose time
+  // came while the Mac slept runs now, once.
   native.onEvent((e) => {
     if (e.event !== 'wake') return;
     log.info('the Mac woke from sleep');
     runInTx(db, bus, { now: new Date() }, (tx) =>
       tx.emit({ kind: 'system.wake', message: 'the Mac woke from sleep' }),
     );
+    scheduler.tick('wake');
   });
 
   const worker = new Worker({
@@ -187,6 +202,7 @@ export async function runDaemon(config: Config = loadConfig()): Promise<() => Pr
     ...config.worker,
   });
   worker.start();
+  scheduler.start();
 
   const token = randomBytes(32).toString('base64url');
   const rpc = await startRpcServer({
@@ -215,6 +231,7 @@ export async function runDaemon(config: Config = loadConfig()): Promise<() => Pr
       log.info('applyantd stopping');
       removeEndpoint(config.endpointFile, process.pid);
       await rpc.close();
+      scheduler.stop();
       await worker.stop();
       await mcp.close();
       await submit.close();

@@ -20,6 +20,8 @@ export function stageName(stage: PostingStage): string {
       return 'scored';
     case PostingStage.SKIPPED:
       return 'skipped';
+    case PostingStage.CLOSED:
+      return 'closed';
     default:
       return 'unknown';
   }
@@ -32,10 +34,11 @@ export function parseStage(name: string): PostingStage {
     failed_verification: PostingStage.FAILED_VERIFICATION,
     scored: PostingStage.SCORED,
     skipped: PostingStage.SKIPPED,
+    closed: PostingStage.CLOSED,
   }[name];
   if (stage === undefined) {
     throw new Error(
-      `unknown stage "${name}" (found | verified | failed_verification | scored | skipped)`,
+      `unknown stage "${name}" (found | verified | failed_verification | scored | skipped | closed)`,
     );
   }
   return stage;
@@ -76,7 +79,14 @@ export function postingJson(p: Posting) {
     firstSeenAt: iso(p.firstSeenAt),
     verifiedAt: iso(p.verifiedAt),
     verifyNote: p.verifyNote ?? null,
-    sources: p.sources.map((s) => ({ kind: s.kind, url: s.url, firstSeenAt: iso(s.firstSeenAt) })),
+    sources: p.sources.map((s) => ({
+      kind: s.kind,
+      url: s.url,
+      firstSeenAt: iso(s.firstSeenAt),
+      searchSource: s.searchSource ?? null,
+      lastSeenAt: iso(s.lastSeenAt),
+      closedAt: iso(s.closedAt),
+    })),
     score: p.score ?? null,
     breakdown: p.breakdown.map((c) => ({
       key: c.key,
@@ -186,6 +196,16 @@ export function eventJson(e: Event) {
       reason: h.reason,
     };
   }
+  if (e.payload.case === 'search') {
+    const r = e.payload.value;
+    return {
+      ...base,
+      type: 'search',
+      strategyId: Number(r.strategyId),
+      searchRunId: r.runId === undefined ? null : Number(r.runId),
+      status: r.status,
+    };
+  }
   return { ...base, type: 'unknown' };
 }
 
@@ -211,6 +231,10 @@ export function eventLine(e: Event): string {
   if (e.payload.case === 'handoff') {
     const h = e.payload.value;
     return `${time(e)}${run}  application ${h.applicationId} needs you: ${h.reason}`;
+  }
+  if (e.payload.case === 'search') {
+    const r = e.payload.value;
+    return `${time(e)}${run}  search strategy ${r.strategyId} ${r.status}${msg}`;
   }
   return `${time(e)}${run}${msg}`;
 }

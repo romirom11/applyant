@@ -23,6 +23,9 @@ export const TASK_ENTITY = {
   interview_turn: 'interview_question',
   // The fact vector index as a whole: entity_id is always 0.
   embed_facts: 'index',
+  // One run of a search strategy (phase 10): its sources' lists → found postings. The task's
+  // run_id is the search run, and every task it spawns carries it.
+  search: 'strategy',
 } as const;
 export type TaskKind = keyof typeof TASK_ENTITY;
 export const TASK_KINDS = Object.keys(TASK_ENTITY) as TaskKind[];

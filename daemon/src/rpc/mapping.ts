@@ -7,13 +7,12 @@ import type {
   ApplicationStage,
   EventRow,
   PostingRow,
-  PostingSourceRow,
   PostingStage,
 } from '../db/schema.ts';
 import type { CvLineView, CvView } from '../domain/applications/cv/store.ts';
 import type { ApplicationView, CitedFactView, ReceiptView } from '../domain/applications/store.ts';
 import { effectiveExtraction } from '../domain/scoring/structured.ts';
-import type { CitedFact } from '../domain/search/postings.ts';
+import type { CitedFact, PostingSourceView } from '../domain/search/postings.ts';
 import {
   type Application,
   type ApplicationForm,
@@ -53,6 +52,7 @@ const STAGE_TO_PB: Record<PostingStage, PbStage> = {
   failed_verification: PbStage.FAILED_VERIFICATION,
   scored: PbStage.SCORED,
   skipped: PbStage.SKIPPED,
+  closed: PbStage.CLOSED,
 };
 
 const APP_STAGE_TO_PB: Record<ApplicationStage, PbAppStage> = {
@@ -278,7 +278,7 @@ export function formToPb(read: FormRead): ApplicationForm {
  */
 export function postingToPb(
   row: PostingRow,
-  sources: PostingSourceRow[] = [],
+  sources: PostingSourceView[] = [],
   facts: Map<number, CitedFact> | null = null,
   app: Pick<ApplicationRow, 'id' | 'stage'> | null = null,
 ): Posting {
@@ -298,6 +298,9 @@ export function postingToPb(
         kind: s.kind,
         url: s.url,
         firstSeenAt: timestampFromDate(s.firstSeenAt),
+        searchSource: s.searchSourceKey ?? undefined,
+        lastSeenAt: s.lastSeenAt ? timestampFromDate(s.lastSeenAt) : undefined,
+        closedAt: s.closedAt ? timestampFromDate(s.closedAt) : undefined,
       }),
     ),
     score: row.score ?? undefined,
@@ -417,6 +420,19 @@ export function eventToPb(row: EventRow): Event {
         case: 'interview',
         value: {
           questionId: row.entityId === null ? undefined : BigInt(row.entityId),
+          status: row.stage ?? '',
+        },
+      },
+    });
+  }
+  if (row.kind === 'search.run') {
+    return create(EventSchema, {
+      ...base,
+      payload: {
+        case: 'search',
+        value: {
+          runId: row.runId === null ? undefined : BigInt(row.runId),
+          strategyId: BigInt(row.entityId ?? 0),
           status: row.stage ?? '',
         },
       },

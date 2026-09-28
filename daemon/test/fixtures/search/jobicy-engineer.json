@@ -1,0 +1,99 @@
+{
+ "apiVersion": "2.2.16",
+ "documentationUrl": "https://jobi.cy/apidocs",
+ "friendlyNotice": "Thanks for using Jobicy API! Please ensure Jobicy is clearly credited with a direct link to the source, and all application buttons redirect to the original job URL provided in this feed. That’s all! You might be building something amazing, we wish you the best of luck!",
+ "jobCount": 50,
+ "lastUpdate": "2026-09-28T08:54:17+00:00",
+ "appliedFilters": {
+  "count": 50,
+  "tag": "engineer"
+ },
+ "jobs": [
+  {
+   "id": 154141,
+   "url": "https://jobicy.com/jobs/154141-senior-site-reliability-engineer-sre-remote-eu-cet",
+   "jobSlug": "154141-senior-site-reliability-engineer-sre-remote-eu-cet",
+   "jobTitle": "Senior Site Reliability Engineer | SRE (Remote, EU/CET)",
+   "companyName": "Maze",
+   "companyLogo": "https://jobicy.com/data/server-nyc0409/galaxy/mercury/2025/06/f53dfbf3-221.png",
+   "jobIndustry": [
+    "DevOps & Infrastructure"
+   ],
+   "jobType": [
+    "Full-Time"
+   ],
+   "jobGeo": "Europe",
+   "jobLevel": "Senior",
+   "jobExcerpt": "About Maze Maze is the user research platform that helps companies build the right products faster by making user insights available at the speed of product development. In most companies, research demand far exceeds supply. Time, cost, and lack of access to expertise hold teams back. In today’s AI-powered world, anyone can build a product&hellip;",
+   "jobDescription": "<h3>About <a href=\"https://jobicy.com/company/maze\" target=\"_blank\" rel=\"noopener\">Maze</a></h3>\r\n<p><strong>Maze is the user research platform that helps companies build the right products faster by making user insights available at the speed of product development.</strong></p>\r\n<p>In most companies, research demand far exceeds supply. Time, cost, and lack of access to expertise hold teams back. In today’s AI-powered world, anyone can build a product fast. The real challenge? Deeply understanding user needs and building the <em>right</em> product. That’s where Maze comes in.</p>\r\n<p>We believe companies shouldn’t have to choose between building fast and building right. Maze makes research accessible, intuitive, and fast so product teams can put user insights at the center of every decision.</p>\r\n<p>Our platform enables researchers, designers, and product managers to quickly recruit participants, run studies autonomously, and surface insights that actually drive product decisions. Our AI capabilities automate the busywork and add depth and direction to the insights themselves.</p>\r\n<p>That’s why Maze was recently named the <strong>#1 user research platform</strong> in <a href=\"https://www.uxtools.co/survey/user-research/user-testing-overview\" rel=\"nofollow ugc noopener\" target=\"_blank\">UX Tools’ Design Tools Survey</a>—and why we’re scaling fast across industries like B2B SaaS, e-Commerce, Financial Services, Retail, and Automotive, supporting world class customers such as U",
+   "pubDate": "2026-09-28T08:54:17+00:00",
+   "salaryMin": 109000,
+   "salaryMax": 128000,
+   "salaryCurrency": "EUR",
+   "salaryPeriod": "yearly"
+  },
+  {
+   "id": 154140,
+   "url": "https://jobicy.com/jobs/154140-principal-design-engineer",
+   "jobSlug": "154140-principal-design-engineer",
+   "jobTitle": "Principal Design Engineer",
+   "companyName": "AlphaSense",
+   "companyLogo": "https://jobicy.com/data/server-nyc0409/galaxy/mercury/2025/06/01960e94-221.jpg",
+   "jobIndustry": [
+    "Web, UI & UX Design"
+   ],
+   "jobType": [
+    "Full-Time"
+   ],
+   "jobGeo": "UK",
+   "jobLevel": "Senior",
+   "jobExcerpt": "About AlphaSense: The world’s most sophisticated companies rely on AlphaSense to remove uncertainty from decision-making. With market intelligence and search built on proven AI, AlphaSense delivers insights that matter from content you can trust. Our universe of public and private content includes equity research, company filings, event transcripts, expert calls, news, trade journals, and clients’&hellip;",
+   "jobDescription": "<h3><strong>About <a href=\"https://jobicy.com/company/alphasense\" target=\"_blank\" rel=\"noopener\">AlphaSense</a>: </strong></h3>\n<p>The world’s most sophisticated companies rely on AlphaSense to remove uncertainty from decision-making. With market intelligence and search built on proven AI, AlphaSense delivers insights that matter from content you can trust. Our universe of public and private content includes equity research, company filings, event transcripts, expert calls, news, trade journals, and clients’ own research content. </p>\n<p>The acquisition of Tegus by AlphaSense in 2024 advances our shared mission to empower professionals to make smarter decisions through AI-driven market intelligence. Together, AlphaSense and Tegus will accelerate growth, innovation, and content expansion, with complementary product and content capabilities that enable users to unearth even more comprehensive insights from thousands of content sets. Our platform is trusted by over 6,000 enterprise customers, including a majority of the S&amp;P 500. Founded in 2011, AlphaSense is headquartered in New York City with more than 2,000 employees across the globe and offices in the U.S., U.K., Finland, India, Singapore, Canada, and Ireland. Come join us!</p>\n<p><strong>The Team:</strong></p>\n<p>AlphaSense’s Design team is a strategic driver of product differentiation, shaping how the world’s leading companies make high-stakes decisions with confidence. We believe great UX is not just about usability, ",
+   "pubDate": "2026-09-28T08:54:13+00:00"
+  },
+  {
+   "id": 154125,
+   "url": "https://jobicy.com/jobs/154125-sr-security-engineer-detection",
+   "jobSlug": "154125-sr-security-engineer-detection",
+   "jobTitle": "Sr. Security Engineer (Detection)",
+   "companyName": "Solace",
+   "companyLogo": "https://jobicy.com/data/server-nyc0409/galaxy/mercury/2025/06/4e37a66b-221.png",
+   "jobIndustry": [
+    "Cybersecurity"
+   ],
+   "jobType": [
+    "Full-Time"
+   ],
+   "jobGeo": "USA",
+   "jobLevel": "Senior",
+   "jobExcerpt": "About Solace Healthcare in the U.S. is fundamentally broken. The system is so complex that 88% of U.S. adults do not have the health literacy necessary to navigate it without help. Solace cuts through the red tape of healthcare by pairing patients with expert advocates and giving them the tools to make better decisions—and get&hellip;",
+   "jobDescription": "<h3><strong>About <a href=\"https://jobicy.com/company/solace\" target=\"_blank\" rel=\"noopener\">Solace</a></strong></h3>\n<p>Healthcare in the U.S. is fundamentally broken. The system is so complex that 88% of U.S. adults do not have the health literacy necessary to navigate it without help. Solace cuts through the red tape of healthcare by pairing patients with expert advocates and giving them the tools to make better decisions—and get better outcomes.</p>\n<p>We're a Series C startup, founded in 2022 and backed by Inspired Capital, Craft Ventures, Torch Capital, Menlo Ventures, Signalfire, and IVP. Our U.S. based team is lean, mission-driven, and growing quickly.</p>\n<p>Solace isn't a place to coast. We're here to redefine healthcare—and that demands urgency, precision, and heart. If you're looking to stretch yourself, sharpen your edge, and do the best work of your life alongside a team that cares deeply, you're in the right place. We’re intense, and we like it that way.</p>\n<p><em><strong>Read more in our Bloomberg funding announcement </strong></em><a href=\"https://www.bloomberg.com/news/articles/2026-02-10/vcs-give-solace-health-1-billion-valuation-for-patient-advocacy-tech?accessToken=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzb3VyY2UiOiJTdWJzY3JpYmVyR2lmdGVkQXJ0aWNsZSIsImlhdCI6MTc3MDczMDg4MywiZXhwIjoxNzcxMzM1NjgzLCJhcnRpY2xlSWQiOiJUQThVUzhLR0NURzEwMCIsImJjb25uZWN0SWQiOiJBRDYxODI0MTc0ODM0MTk0QTRENUZFNzkwMzNGMDJGNSJ9.TE2pFUAOQAPMUXFlzoQ7zeJvctq7cSibbZqtIwhW-2U&amp;leadSource=u",
+   "pubDate": "2026-09-28T08:52:06+00:00"
+  },
+  {
+   "id": 151929,
+   "url": "https://jobicy.com/jobs/151929-staff-design-engineer-uk",
+   "jobSlug": "151929-staff-design-engineer-uk",
+   "jobTitle": "Staff Design Engineer - UK",
+   "companyName": "Ashby",
+   "companyLogo": "https://jobicy.com/data/server-nyc0409/galaxy/mercury/2025/08/63864ee6-221.png",
+   "jobIndustry": [
+    "Web, UI & UX Design"
+   ],
+   "jobType": [
+    "Full-Time"
+   ],
+   "jobGeo": "UK",
+   "jobLevel": "Director",
+   "jobExcerpt": "Hi  I’m Abhik, Ashby's Co-Founder and VP of Engineering. This role is close to my heart because, as someone who can both design and code, it’s where I’ve always done my best work, but also where I was seen as a rebel and an outsider. I want folks like me to feel at home&hellip;",
+   "jobDescription": "<p>Hi  I’m <a href=\"https://www.linkedin.com/in/abhikpramanik/\" rel=\"nofollow ugc noopener\" target=\"_blank\"><u>Abhik</u></a>, <a href=\"https://jobicy.com/company/ashby\" target=\"_blank\" rel=\"noopener\">Ashby</a>'s Co-Founder and VP of Engineering. This role is close to my heart because, as someone who can both design and code, it’s where I’ve always done my best work, but also where I was seen as a rebel and an outsider. I want folks like me to feel at home at Ashby, and so I made Design Engineering a formal role and department that works closely with me. Our first hire was over five years ago, and we’re doubling the team from five to over ten in the next year.</p>\n<p>This role truly expects you to design and code. Design Engineer at Ashby isn’t just a Frontend Engineer with new branding, nor is it a Designer vibe coding prototypes. Combining excellence in both is where magic happens. I found that when I put my best effort into both the design and technical implementation of a feature, I had a nimbleness and creativity that was hard to achieve when I did only one or the other. For instance, the UX and UI I envisioned often influenced the data model's design and flexibility, while the understanding of technology's capabilities often simplified or improved the design. This role embraces that.</p>\n<p>You’ll work on our most challenging design problems, help others improve their designs by expanding and enhancing our in-house design system, and consult on bespoke design work needed",
+   "pubDate": "2026-09-28T05:25:25+00:00",
+   "salaryMin": 151000,
+   "salaryMax": 184000,
+   "salaryCurrency": "GBP",
+   "salaryPeriod": "yearly"
+  }
+ ],
+ "statusCode": 200,
+ "success": true
+}

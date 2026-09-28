@@ -7,6 +7,7 @@ import type { ReadExec } from './db/read-pool.ts';
 import type { GithubApi } from './domain/knowledge/sources/github.ts';
 import type { TextExtractor } from './domain/knowledge/text/extract.ts';
 import type { FxSource } from './domain/scoring/fx.ts';
+import type { Fetch } from './domain/search/readers/types.ts';
 import type { McpAccess } from './mcp/server.ts';
 import type { AgentRunner } from './models/agent-runner.ts';
 import type { Embedder } from './models/embeddings.ts';
@@ -42,6 +43,8 @@ export interface Deps {
     /** The candidate's CV template, used instead of the bundled "Clean" when it exists. */
     cvTemplate?: string | null;
   };
+  /** HTTP for search readers (job boards, ATS list APIs, feeds); global fetch when unset. */
+  fetch?: Fetch;
   /** Overrides the `gh`-backed GitHub API client (tests only). */
   github?: GithubApi | null;
   log: Logger;

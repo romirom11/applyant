@@ -107,9 +107,13 @@ export function applicationRpcs(
             const postingId = id(req.postingId, 'posting_id');
             const posting = tx.db.select().from(postings).where(eq(postings.id, postingId)).get();
             if (!posting) throw new ApplicationError(`no posting ${postingId}`);
-            if (posting.stage === 'found' || posting.stage === 'failed_verification') {
+            if (
+              posting.stage === 'found' ||
+              posting.stage === 'failed_verification' ||
+              posting.stage === 'closed'
+            ) {
               throw new ConnectError(
-                `posting ${postingId} is ${posting.stage}: only a verified posting can be applied to`,
+                `posting ${postingId} is ${posting.stage}: only a verified, open posting can be applied to`,
                 Code.FailedPrecondition,
               );
             }

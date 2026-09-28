@@ -16,6 +16,10 @@ public typealias ProjectInterview = Applyant_V1_ProjectInterview
 public typealias InterviewThread = Applyant_V1_GetInterviewResponse
 public typealias InterviewList = Applyant_V1_ListInterviewResponse
 public typealias InterviewStart = Applyant_V1_StartInterviewResponse
+public typealias SearchList = Applyant_V1_ListSearchResponse
+public typealias SearchStrategy = Applyant_V1_SearchStrategy
+public typealias SearchSource = Applyant_V1_SearchSource
+public typealias SearchRun = Applyant_V1_SearchRun
 
 public struct APIError: Error, LocalizedError, Equatable {
     public let message: String
@@ -60,6 +64,18 @@ public protocol DaemonAPI: Sendable {
     func answerInterview(question id: Int64, text: String) async throws -> InterviewQuestion
     /// "Later": an application question is then the candidate's to answer in review.
     func dismissInterview(question id: Int64) async throws -> InterviewQuestion
+
+    /// Strategies, sources and kind switches, with what each found (the Search screen).
+    func listSearch() async throws -> SearchList
+    /// Recent search runs, newest first, each with what every source gave.
+    func listSearchRuns(limit: Int32) async throws -> [SearchRun]
+    func setStrategy(_ id: Int64, paused: Bool) async throws -> SearchStrategy
+    /// A run now, outside the schedule; nil when one is already waiting or running.
+    func runStrategy(_ id: Int64) async throws -> Int64?
+    /// A source by key (board:hn) or a whole kind (greenhouse, board, …).
+    func setSource(_ target: String, enabled: Bool) async throws
+    /// The events of one run (its tasks, the postings it found), oldest first.
+    func runEvents(_ runId: Int64) async throws -> [DaemonEvent]
 }
 
 /// Unary answers → value or APIError.
@@ -248,6 +264,43 @@ public final class ConnectDaemonAPI: DaemonAPI {
 
     public func dismissInterview(question id: Int64) async throws -> InterviewQuestion {
         try unwrap(await unary.dismissInterviewQuestion(request: .with { $0.id = id }, headers: headers)).question
+    }
+
+    public func listSearch() async throws -> SearchList {
+        try unwrap(await unary.listSearch(request: .init(), headers: headers))
+    }
+
+    public func listSearchRuns(limit: Int32) async throws -> [SearchRun] {
+        try unwrap(await unary.listSearchRuns(request: .with { $0.limit = limit }, headers: headers)).runs
+    }
+
+    public func setStrategy(_ id: Int64, paused: Bool) async throws -> SearchStrategy {
+        let request = Applyant_V1_UpdateStrategyRequest.with {
+            $0.strategy = String(id)
+            $0.state = paused ? "paused" : "active"
+        }
+        return try unwrap(await unary.updateStrategy(request: request, headers: headers)).strategy
+    }
+
+    public func runStrategy(_ id: Int64) async throws -> Int64? {
+        let response = try unwrap(await unary.runStrategy(request: .with { $0.strategy = String(id) }, headers: headers))
+        return response.hasRunID ? response.runID : nil
+    }
+
+    public func setSource(_ target: String, enabled: Bool) async throws {
+        let request = Applyant_V1_SetSearchSourceEnabledRequest.with {
+            $0.target = target
+            $0.enabled = enabled
+        }
+        _ = try unwrap(await unary.setSearchSourceEnabled(request: request, headers: headers))
+    }
+
+    public func runEvents(_ runId: Int64) async throws -> [DaemonEvent] {
+        let request = Applyant_V1_ListEventsRequest.with {
+            $0.runID = runId
+            $0.limit = 500
+        }
+        return try unwrap(await unary.listEvents(request: request, headers: headers)).events
     }
 }
 

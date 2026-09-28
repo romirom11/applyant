@@ -11,10 +11,11 @@ struct MainView: View {
                 .navigationSplitViewColumnWidth(min: 190, ideal: 210)
         } content: {
             Group {
-                if store.navigation.section == .interview {
-                    InterviewList(store: store)
-                } else {
-                    PostingList(store: store)
+                switch store.navigation.section {
+                case .interview: InterviewList(store: store)
+                case .search: SearchList(store: store)
+                case .agentRuns: RunsList(store: store)
+                default: PostingList(store: store)
                 }
             }
             .navigationSplitViewColumnWidth(min: 280, ideal: 330)
@@ -37,7 +38,11 @@ struct Detail: View {
     let store: AppStore
 
     var body: some View {
-        if store.navigation.section == .interview {
+        if store.navigation.section == .search {
+            SearchDetail(store: store)
+        } else if store.navigation.section == .agentRuns {
+            RunDetail(store: store)
+        } else if store.navigation.section == .interview {
             if let target = store.navigation.interview {
                 InterviewThreadView(store: store, target: target)
                     .id(target)

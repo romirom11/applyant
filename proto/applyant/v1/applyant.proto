@@ -109,6 +109,26 @@ service ApplyantService {
   // review_edit fact; a left-out line given words goes back in), or removes it. The PDF is
   // rendered again.
   rpc EditCv(EditCvRequest) returns (EditCvResponse);
+
+  // Search: strategies (which sources, which queries, how often) find postings on their own.
+  // Every source can be switched off, one by one or a whole kind; a source that's off is never
+  // queried. ListSearch returns everything the Search screen shows: strategies with their
+  // found / verified / interested counts, sources with theirs, and the kind switches.
+  rpc ListSearch(ListSearchRequest) returns (ListSearchResponse);
+  // AddStrategy adds a strategy; an active one runs right away, then on its schedule.
+  rpc AddStrategy(AddStrategyRequest) returns (AddStrategyResponse);
+  // UpdateStrategy changes what's set in the request: name, queries, locations, sources,
+  // schedule, or state (pause / resume).
+  rpc UpdateStrategy(UpdateStrategyRequest) returns (UpdateStrategyResponse);
+  rpc DeleteStrategy(DeleteStrategyRequest) returns (DeleteStrategyResponse);
+  // RunStrategy starts a run now, outside the schedule (unless one is waiting or running).
+  rpc RunStrategy(RunStrategyRequest) returns (RunStrategyResponse);
+  // AddSearchSource adds a company's ATS board, or a career page / feed URL.
+  rpc AddSearchSource(AddSearchSourceRequest) returns (AddSearchSourceResponse);
+  // SetSearchSourceEnabled switches a source (by key) or a whole kind (greenhouse, board, …).
+  rpc SetSearchSourceEnabled(SetSearchSourceEnabledRequest) returns (SetSearchSourceEnabledResponse);
+  // ListSearchRuns returns recent runs, newest first, each with what every source gave.
+  rpc ListSearchRuns(ListSearchRunsRequest) returns (ListSearchRunsResponse);
 }
 
 enum PostingStage {
@@ -118,6 +138,8 @@ enum PostingStage {
   POSTING_STAGE_FAILED_VERIFICATION = 3;
   POSTING_STAGE_SCORED = 4;
   POSTING_STAGE_SKIPPED = 5;
+  // Was live and isn't any more: gone from a source's complete list, or re-verified dead.
+  POSTING_STAGE_CLOSED = 6;
 }
 
 message Posting {
@@ -252,10 +274,15 @@ message RequirementMatch {
 }
 
 message PostingSource {
-  // manual | share | board | ats | ...
+  // manual | share | greenhouse | ashby | lever | workable | page | board
   string kind = 1;
   string url = 2;
   google.protobuf.Timestamp first_seen_at = 3;
+  // The search source that lists it (board:hn, greenhouse:gitlab); unset for manual ones.
+  optional string search_source = 4;
+  optional google.protobuf.Timestamp last_seen_at = 5;
+  // Its complete list no longer has it.
+  optional google.protobuf.Timestamp closed_at = 6;
 }
 
 message AddPostingRequest {
@@ -427,6 +454,15 @@ message InterviewEvent {
   string status = 2;
 }
 
+// A search run was queued, finished or failed, or a strategy changed.
+message SearchEvent {
+  // Unset when a strategy changed without a run.
+  optional int64 run_id = 1;
+  int64 strategy_id = 2;
+  // queued | done | failed | updated | deleted
+  string status = 3;
+}
+
 message Event {
   int64 id = 1;
   google.protobuf.Timestamp at = 2;
@@ -439,6 +475,7 @@ message Event {
     ApplicationEvent application = 12;
     HandOffEvent handoff = 13;
     InterviewEvent interview = 14;
+    SearchEvent search = 15;
   }
 }
 
@@ -1132,4 +1169,211 @@ message EditCvResponse {
   Application application = 1;
   // The fact saved from the candidate's words, when there were words.
   optional int64 fact_id = 2;
+}
+
+// ---- Search -------------------------------------------------------------------------------
+
+// What a strategy or source found, and how the candidate took it.
+message SearchStats {
+  // Postings it listed (each counted once).
+  int32 found = 1;
+  // …that passed verification at some point.
+  int32 verified = 2;
+  // …that the candidate marked interested / skipped.
+  int32 interested = 3;
+  int32 skipped = 4;
+}
+
+message SearchStrategy {
+  int64 id = 1;
+  string name = 2;
+  // Title phrases: a listing matches when every word of one is in its title ("-word" excludes).
+  // Empty: every listing.
+  repeated string queries = 3;
+  // Location words ("remote" matches remote jobs); empty: anywhere.
+  repeated string locations = 4;
+  // Source selectors: all, a kind (greenhouse, board, …) or a source key (board:hn).
+  repeated string sources = 5;
+  int32 every_minutes = 6;
+  // active | paused
+  string state = 7;
+  // candidate | agent
+  string origin = 8;
+  optional google.protobuf.Timestamp last_run_at = 9;
+  google.protobuf.Timestamp next_run_at = 10;
+  optional string note = 11;
+  SearchStats stats = 12;
+  optional SearchRun last_run = 13;
+  // The sources a run would query now: selected and switched on.
+  repeated string source_keys = 14;
+  // A run is waiting or running.
+  bool running = 15;
+}
+
+message SearchSource {
+  int64 id = 1;
+  // <kind>:<locator>, e.g. greenhouse:gitlab · board:hn · page:https://acme.com/careers
+  string key = 2;
+  // greenhouse | ashby | lever | workable | page | board
+  string kind = 3;
+  string locator = 4;
+  string label = 5;
+  bool enabled = 6;
+  // Its kind is switched on (a source is queried only when both are on).
+  bool kind_enabled = 7;
+  // Gives its whole list, so a posting missing from it is closed (boards don't).
+  bool complete_list = 8;
+  // builtin | candidate | agent
+  string origin = 9;
+  optional google.protobuf.Timestamp last_run_at = 10;
+  optional int32 last_count = 11;
+  optional bool last_complete = 12;
+  // What the last read did, or why it failed.
+  optional string last_note = 13;
+  // How a career page was read: "feed https://…" or "greenhouse board gitlab".
+  optional string resolved = 14;
+  SearchStats stats = 15;
+}
+
+message SearchSourceKind {
+  string kind = 1;
+  string label = 2;
+  bool enabled = 3;
+  int32 sources = 4;
+}
+
+// One source's part of a run.
+message SearchRunSource {
+  string source_key = 1;
+  string label = 2;
+  // Listings it returned, and how many the strategy matched.
+  int32 listed = 3;
+  int32 matched = 4;
+  // New postings, and matches that joined a posting already known.
+  int32 added = 5;
+  int32 attached = 6;
+  // Its whole list, read to the end.
+  bool complete = 7;
+  // Postings closed or reopened by its list, and re-verifications it asked for.
+  int32 closed = 8;
+  int32 reopened = 9;
+  int32 reverify = 10;
+  optional string error = 11;
+  optional string note = 12;
+}
+
+message SearchRun {
+  // Also the run_id of every task it spawned (`applyant runs show <id>`).
+  int64 id = 1;
+  int64 strategy_id = 2;
+  string strategy_name = 3;
+  // schedule | wake (missed while the Mac slept) | manual
+  string trigger = 4;
+  // queued (waiting or running) | done | failed
+  string status = 5;
+  google.protobuf.Timestamp started_at = 6;
+  optional google.protobuf.Timestamp finished_at = 7;
+  int32 listed = 8;
+  int32 added = 9;
+  repeated SearchRunSource sources = 10;
+  optional string note = 11;
+}
+
+message ListSearchRequest {}
+
+message ListSearchResponse {
+  repeated SearchStrategy strategies = 1;
+  repeated SearchSource sources = 2;
+  repeated SearchSourceKind kinds = 3;
+}
+
+message AddStrategyRequest {
+  string name = 1;
+  repeated string queries = 2;
+  repeated string locations = 3;
+  repeated string sources = 4;
+  // 0: every 6 hours. At least 60.
+  int32 every_minutes = 5;
+  // Added paused: it doesn't run until resumed.
+  bool paused = 6;
+}
+
+message AddStrategyResponse {
+  SearchStrategy strategy = 1;
+  // The run it started, unless paused.
+  optional int64 run_id = 2;
+}
+
+message StringList {
+  repeated string values = 1;
+}
+
+message UpdateStrategyRequest {
+  // Id or name.
+  string strategy = 1;
+  optional string name = 2;
+  // Set to replace (an empty list clears queries / locations).
+  optional StringList queries = 3;
+  optional StringList locations = 4;
+  optional StringList sources = 5;
+  optional int32 every_minutes = 6;
+  // active | paused
+  optional string state = 7;
+}
+
+message UpdateStrategyResponse {
+  SearchStrategy strategy = 1;
+}
+
+message DeleteStrategyRequest {
+  string strategy = 1;
+}
+
+message DeleteStrategyResponse {}
+
+message RunStrategyRequest {
+  string strategy = 1;
+}
+
+message RunStrategyResponse {
+  SearchStrategy strategy = 1;
+  // Unset when a run was already waiting or running.
+  optional int64 run_id = 2;
+}
+
+message AddSearchSourceRequest {
+  // greenhouse | ashby | lever | workable | board | page; empty: `locator` is a URL (a board's
+  // own page becomes that board, anything else a career page / feed).
+  string kind = 1;
+  // Board token / slug / site / account, a board id (hn, remoteok, …) or a URL.
+  string locator = 2;
+  optional string label = 3;
+}
+
+message AddSearchSourceResponse {
+  SearchSource source = 1;
+  bool created = 2;
+}
+
+message SetSearchSourceEnabledRequest {
+  // A source key (board:hn), id or unique locator, or a kind (greenhouse, board, …).
+  string target = 1;
+  bool enabled = 2;
+}
+
+message SetSearchSourceEnabledResponse {
+  // The kind that was switched, when the target was a kind.
+  optional SearchSourceKind kind = 1;
+  repeated SearchSource sources = 2;
+}
+
+message ListSearchRunsRequest {
+  // Only this strategy's runs (id or name).
+  optional string strategy = 1;
+  // 0 means 20.
+  int32 limit = 2;
+}
+
+message ListSearchRunsResponse {
+  repeated SearchRun runs = 1;
 }

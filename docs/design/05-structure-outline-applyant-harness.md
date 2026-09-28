@@ -714,6 +714,8 @@ Progress notes (2026-09-28, on the owner's Mac):
 
 ## Phase 10: Search strategies find postings on their own
 
+> Built and checked by the agent on 2026-09-28 (progress notes below). The owner's day of real scheduled searches is still open.
+
 Postings now arrive without `jobs add`. Strategies are rows with their sources, queries, schedule and state. The scheduler enqueues `search` tasks per active strategy, each tagged with a `run_id`. The generic reader tries a feed first (JSON, RSS, JSON-LD), then the known-ATS-embed detector and that ATS's public list API. Results pass through dedupe: exact keys first, then MinHash over description shingles, with embeddings as the tie-breaker. New postings enter at `found`. The Search screen and `search strategies …` show per-strategy and per-source found/verified/interested counts, with toggles for each.
 
 ### Change Outline
@@ -754,12 +756,38 @@ on absence of posting P from source S's run:
 
 #### Automated Verification
 
-- [ ] `pnpm -C daemon typecheck && pnpm -C daemon lint && pnpm -C daemon test`
-- [ ] `xcodebuild … test` (Mac)
+- [x] `pnpm -C daemon typecheck && pnpm -C daemon lint && pnpm -C daemon test` (44 files, 323 tests; `buf lint && buf generate` clean and idempotent)
+- [x] `xcodebuild … test` (Mac): 25 tests in 8 suites, including the store against a real daemon
+
+Progress notes (2026-09-28, on the owner's Mac):
+
+- **Built as outlined**, with these shapes:
+  - Tables (`0011_search`): `search_sources` (key `<kind>:<locator>`, enabled, the cached `resolved` reading of a page or Lever's EU host, last read and note), `search_source_kinds` (a whole kind switched off), `search_strategies` (queries, locations, source selectors, `every_minutes`, `state`, `origin`, `next_run_at`), `search_runs` (the run id every spawned task carries; per-source results as JSON) and `strategy_postings` (per-strategy counts). `posting_sources` gained `search_source_id`, `external_id`, `last_seen_at`, `closed_at`; `postings` gained `ats_key`, `minhash`, `listing_text`, and the stage `closed`. The `ON DELETE set null` drizzle drops from an added column was put back by hand.
+  - Source kinds: `greenhouse · ashby · lever · workable` (a company's board, read through its public list API), `page` (a career page or feed URL, read by the generic reader) and `board` (the seven built-ins, seeded at start). A strategy selects sources by kind, key or `all`.
+  - Task `search` (entity: strategy, no model role). Reads its sources four at a time, keeps the listings its queries and locations match, plans dedupe on the read connection, and commits postings, links, absence, the run row and a `search.run` event. `queue/scheduler.ts` ticks every minute (`APPLYANT_SCHEDULER_MS`) and on applyant-native's wake event; a due strategy runs once however many slots it missed, and the next run counts from then.
+  - RPCs `ListSearch · AddStrategy · UpdateStrategy · DeleteStrategy · RunStrategy · AddSearchSource · SetSearchSourceEnabled · ListSearchRuns`, and `SearchEvent` on the stream. CLI `search strategies [list] | show | add | edit | pause | resume | run | delete`, `search sources [list] | add | off | on`, `search runs`; `runs show <run>` prints a run's events.
+  - App: the Search section (strategies with found · verified · interested and the share of verified, Pause/Resume, Run now, recent runs with what each source gave; sources grouped by kind with a switch per kind and per source) and Agent runs (search runs and each run's events). `Applyant --script` gained `searchStrategy · searchSource · agentRun` and `pauseStrategy · resumeStrategy · runStrategy · sourceOff · sourceOn`, until `run:<strategy>`.
+- **Additions and deviations**, and why:
+  - `readers/page.ts` holds the generic reader: the URL as a feed, JobPosting JSON-LD on the page, an advertised feed link, then the ATS detector over the HTML; failing that, the page is rendered in the headless reader and its frames and network requests are searched too (career pages that fetch their jobs from the ATS in the browser). What worked is cached on the source. A page with none of these says a recipe is needed (phase 11).
+  - Boards never give complete lists (they show the latest jobs or a search), so they never close postings. Remotive, Himalayas and Jobicy get the strategy's queries server-side; the others are read once and filtered.
+  - Absence, beyond the outline's rule: a posting a complete list dropped but another source still lists is re-verified rather than closed; an empty "complete" list from a source with open postings isn't trusted to close anything; a partial or failed read re-verifies only what that strategy found there, at most every 3 days; a closed posting that is listed again reopens (`found`, verified from scratch).
+  - `verify_posting` on a posting that was already live (verified, scored, skipped) only checks it still is: live keeps its stage and nothing downstream reruns; dead makes it `closed`. It also records the posting's ATS job id from its apply URL.
+  - Dedupe guards: two different ATS ids are two postings, and so are two ids from the same source with the same title (Arbeitnow's two Databricks "Lakebase Sales Specialist" postings). MinHash (64 hashes, word 4-shingles) compares only within the same company and a similar title (≥ 0.8 same; 0.5–0.8 asks the embeddings, cosine ≥ 0.9).
+  - A run adds at most 50 new postings; the rest are still new next run. Company boards and pages are read before job boards, so they get the slots first and their job page becomes the posting's URL.
+  - HN posts that link no job page are left out: the comment page would pass verification through HN's "Apply to YC" footer link (found live). Himalayas starts switched off, with the reason as its note: its job pages answer the headless reader with HTTP 403 (found live: 25 of 25 failed verification).
+  - Deps gained an injectable `fetch`; tests default to one that refuses the network.
+- **Tests**: `readers.test.ts` (recorded, trimmed responses from the real public APIs, recorded by `scripts/search-fixtures.ts`: Greenhouse incl. a partial list, Ashby, Lever incl. the EU host, Workable, HN, RemoteOK, WWR, Remotive, Himalayas, Arbeitnow, Jobicy; feeds; the ATS detector; career pages), `dedupe.test.ts` (keys, MinHash, the embedding tie-break, the guards, and one role via board + ATS + career page → one posting, three sources, through the real queue), `absence.test.ts` (complete → closed → reopened, failed, partial, still listed elsewhere, empty list, another strategy's queries), `search.test.ts` (matching, schedules, missed slots after wake → one run, pause/resume, sources and kinds off never queried, counts), a re-verification case in `verify.test.ts`, `e2e/search.test.ts` (the CLI against a spawned daemon and a local career page), and the app's `SearchTests` (rows, run lines, store actions, events keeping an open run current).
+- **Checked on the Mac by the agent, not by hand**, on a throwaway daemon (`APPLYANT_HOME=/tmp/applyant-p10-smoke`, the fake `claude` in error mode, no native helper, hash embedder): one strategy ("ai engineer · llm · machine learning engineer · ml engineer", remote/europe) over GitLab (Greenhouse), Ashby, Lever demo, Hugging Face (Workable), two career pages and the seven boards, with read-only GETs of the public lists and posting pages; nothing was sent anywhere.
+  - Run 1: 1,941 listed, 191 matched, 50 new. Anthropic's jobs page resolved to its embedded Greenhouse board (628 jobs, complete); ElevenLabs' page carries its own job links and no ATS, so it reports that it needs a recipe.
+  - Found and fixed there: boards were read first and used up the 50 slots (now company boards first; run 2 added GitLab 15, Hugging Face 5, Anthropic 9 and attached the boards' known listings); HN posts without a job link and prose-only HN headers; the Himalayas 403 wall; entity-escaped HTML in board descriptions.
+  - Verification of what was found: GitLab and Anthropic postings verified with their forms; HN posts linking a company homepage fail ("no apply link or form found"), as they should. Two board-page findings stay open: RemoteOK job pages read as job lists (they fail verification, so they never reach the Inbox), and Remotive job pages can verify through a "job copilot" link instead of the real apply link (they can reach the Inbox with no form).
+  - The built app in `--script` mode against that daemon rendered Search, a strategy, pause → resume, Run now, a source's detail, a source and a whole kind off and on, and Agent runs with a run's events (screenshots in `/tmp/applyant-p10-check/out/`). With one worker, a new run waited behind ~90 verifications from the first runs: runs share the one queue.
+- The installed `/Applications/Applyant.app` and its launchd daemon are untouched and still the 8b build; `scripts/bundle.sh` brings phases 9 and 10 to them.
 
 #### Manual Verification
 
 - [ ] Run a day of scheduled searches against the candidate's real preferences. Check that the shortlist has no dead postings (metric #1) and at least half are ones you'd mark interested (metric #2).
+  - Left for the owner (it needs their real preferences, their judgement and a day). Rebuild the bundle first (`scripts/bundle.sh`), add the company boards and career pages worth watching (`applyant search sources add …`) and one or two strategies (`applyant search strategies add …`, see the README), then judge the Inbox after a day. Worth deciding along the way: whether RemoteOK and Remotive stay on (see the board-page findings above), and whether 50 new postings per run suits the subscription (each new posting is verified, extracted and matched).
 
 ---
 

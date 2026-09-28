@@ -1,0 +1,203 @@
+{
+ "comments": "21/08/2026: Cursor pagination is now available and is the preferred way to page through the feed. Pass the nextCursor value from each response back as ?cursor=. It is faster than offset and will never return the same job twice. The offset parameter is deprecated and will be removed in a future release. 13/03/2026: The API has been updated to include the companySlug field in the response.",
+ "updatedAt": 1790559403,
+ "offset": 0,
+ "limit": 20,
+ "totalCount": 5000,
+ "jobs": [
+  {
+   "title": "Senior Project Engineer - Civil Engineering Design",
+   "excerpt": "About Roberts Civil Engineering Your success is our mission at Roberts Civil Engineering and that starts with our employees.",
+   "companyName": "Roberts Civil Engineering, LLC",
+   "companySlug": "roberts-civil-engineering-llc",
+   "companyLogo": "https://cdn-images.himalayas.app/s69faqst3nh9rkoa6wf9yumf0v9t",
+   "employmentType": "Full Time",
+   "minSalary": null,
+   "maxSalary": null,
+   "salaryPeriod": "annual",
+   "seniority": [
+    "Senior"
+   ],
+   "currency": null,
+   "locationRestrictions": [
+    "United States"
+   ],
+   "timezoneRestrictions": [
+    -10,
+    -9,
+    -8,
+    -7,
+    -6,
+    -5,
+    14
+   ],
+   "categories": [
+    "Civil-Designs",
+    "Civil-Engineering",
+    "Project-Engineering",
+    "Land-Development",
+    "Site-Development",
+    "Senior-Civil-Designer",
+    "Senior-Civil-Engineering-Project-Manager",
+    "Senior-Civil-Engineer",
+    "Senior-Project-Engineer",
+    "Senior-Civil-Engineering",
+    "Senior-Project-Engineering",
+    "Senior-Civil-Engineering-Consultant",
+    "Project-Engineer",
+    "Design"
+   ],
+   "parentCategories": [
+    "Developer"
+   ],
+   "description": "<p><b><strong>About Roberts Civil Engineering</strong></b></p><p>Your success is our mission at Roberts Civil Engineering and that starts with our employees. We are made up of talented, responsive people that work with the utmost precision.</p><p>Our core values include integrity, efficiency, kindness, and excellence. We take pride in doing our very best at every task regardless of the size and exhibit a “can do” mentality during a challenge. The team treats others with the highest respect. We build others with positive conversation, frequent affirmation, and encouragement.</p><p>Our work atmosphere promotes a work/life balance and our employees frequently say this is the best environment in which they have worked. </p><p><b><strong>Job Summary</strong></b></p><p>Roberts Civil Engineering is seeking a remote <b><strong>Senior Project Engineer</strong></b> for the <b><strong>Civil Design</strong></b> division of the company. </p><p>The ideal candidate will have experience in land development, water and sewer projects, stormwater management, erosion control, parking lots, and road design. This position will be responsible for designing and producing plans for a wide range of land development projects including commercial sites, subdivisions, apartment buildings, roads, and more. The position will be the main contact for a group of clients and will ensure that the company’s high standards are met, and clients are satisfied with our service.</p><p>This position is eligible for <b",
+   "pubDate": 1789840360,
+   "expiryDate": 1795024359,
+   "applicationLink": "https://himalayas.app/companies/roberts-civil-engineering-llc/jobs/senior-project-engineer-civil-engineering-design",
+   "guid": "https://himalayas.app/companies/roberts-civil-engineering-llc/jobs/senior-project-engineer-civil-engineering-design"
+  },
+  {
+   "title": "Part-Time HVAC, Plumbing, and Electrical Engineers",
+   "excerpt": "Flexible, part-time opportunity for experienced engineering professionals.",
+   "companyName": "WB Engineers+Consultants",
+   "companySlug": "wb-engineers-consultants",
+   "companyLogo": "",
+   "employmentType": "Part Time",
+   "minSalary": null,
+   "maxSalary": null,
+   "salaryPeriod": "annual",
+   "seniority": [
+    "Senior"
+   ],
+   "currency": null,
+   "locationRestrictions": [
+    "United States"
+   ],
+   "timezoneRestrictions": [
+    -10,
+    -9,
+    -8,
+    -7,
+    -6,
+    -5,
+    14
+   ],
+   "categories": [
+    "MEP-Engineering",
+    "HVAC-Engineering",
+    "Plumbing-Engineering",
+    "Electrical-Engineering",
+    "Specification-Development",
+    "HVAC-Engineer",
+    "HVAC-and-Mechanical-Engineering",
+    "Mechanical-Electrical-Plumbing-Engineering",
+    "MEP-Engineer",
+    "Hvac-Design-Engineer"
+   ],
+   "parentCategories": [],
+   "description": "<b>Flexible, part-time opportunity for experienced engineering professionals.</b> We are seeking qualified HVAC, Plumbing, and Electrical Engineers to support our development of company master specifications. This role is ideal for experienced engineers, semi-retired professionals, or consultants looking for meaningful part-time work approximately 2–3 days per week.<br><br><b>Key Responsibilities</b><ul>\n<li class=\"Standardtext\">Assist with drafting, updating, and maintaining company master specifications. (Specpoint Software).</li>\n<li class=\"Standardtext\">Collaborate with engineers, designers, and project managers to improve document quality and consistency.</li>\n</ul><b>Qualifications</b><ul>\n<li class=\"Standardtext\">Professional experience in MEP engineering design including specific experience with large, technical, &amp; complex projects in mission critical and laboratory design.</li>\n<li class=\"Standardtext\">Strong knowledge of engineering drawings, specifications, codes, coordination practices, and QA/QC review processes.</li>\n<li class=\"Standardtext\">Ability to work independently while communicating clearly with internal project teams.</li>\n<li class=\"Standardtext\">Prior experience developing or reviewing master specifications is preferred.</li>\n<li class=\"Standardtext\">Professional Engineer (PE) license is preferred but not required.</li>\n</ul><b>Schedule and Work Arrangement</b><br>This is a part-time role requiring approximately 2–3 days per week, with flexibility",
+   "pubDate": 1788606972,
+   "expiryDate": 1793790972,
+   "applicationLink": "https://himalayas.app/companies/wb-engineers-consultants/jobs/part-time-hvac-plumbing-and-electrical-engineers",
+   "guid": "https://himalayas.app/companies/wb-engineers-consultants/jobs/part-time-hvac-plumbing-and-electrical-engineers"
+  },
+  {
+   "title": "Principal Software Systems Engineer",
+   "excerpt": "Do you want to help a small company make a BIG difference in space?",
+   "companyName": "Red Canyon Engineering & Software",
+   "companySlug": "red-canyon-engineering-software",
+   "companyLogo": "",
+   "employmentType": "Contractor",
+   "minSalary": null,
+   "maxSalary": null,
+   "salaryPeriod": "hourly",
+   "seniority": [
+    "Senior"
+   ],
+   "currency": "USD",
+   "locationRestrictions": [
+    "United States"
+   ],
+   "timezoneRestrictions": [
+    -10,
+    -9,
+    -8,
+    -7,
+    -6,
+    -5,
+    14
+   ],
+   "categories": [
+    "Systems-Engineering",
+    "Aerospace-Engineering",
+    "Software-Systems-Engineering",
+    "Spacecraft-Engineering",
+    "Flight-Software-Engineering",
+    "Principal-Software-Engineer",
+    "Principal-Systems-Engineer",
+    "Principal-Software-Development-Engineer",
+    "Principal-Software-Engineering",
+    "Senior-Systems-Software-Engineer",
+    "Software-Systems-Engineer",
+    "Principal-Systems-Developer",
+    "Systems-Software-Engineer",
+    "Principal-Software-Developer"
+   ],
+   "parentCategories": [
+    "Developer"
+   ],
+   "description": "<div>Do you want to help a small company make a BIG difference in space? Do you take ownership of your job and responsibility for your actions? Then come work for Red Canyon and help us continue our mission of helping humankind reach the stars!</div><div>\n<p>Red Canyon Software is looking for an enthusiastic and creative Principal Software Systems Engineer (Contract) to design and analyze new satellite and aerospace systems. We're looking for candidates who can bring exceptional engineering skills and strong experience in aerospace programs to the team.</p>\n<h3>Position Responsibilities:</h3>\n<p>The Principal Software Systems Engineer's primary responsibility will be driving the development of customer satellite systems with a focus on flight software delivery. This engineer will be involved in the full lifecycle of development, from requirements definition, validation, verification and operations. Being at the cutting edge of space technology, we need someone who is eager to learn, grow, and take on new and potentially unfamiliar challenges. There is no shortage of fascinating problems to solve.</p>\n<p>The Principal Software Systems Engineer will provide autonomous solutions of complex problems, through direct work or delegation, under the leadership of the Systems Engineering Manager. The Principal Systems Engineer will have project and subject matter responsibility and authority.</p>\n<h3>Systems Engineering 75%</h3>\n<ul>\n<li>Perform systems engineering tasks for satellite ",
+   "pubDate": 1789341689,
+   "expiryDate": 1794525688,
+   "applicationLink": "https://himalayas.app/companies/red-canyon-engineering-software/jobs/principal-software-systems-engineer",
+   "guid": "https://himalayas.app/companies/red-canyon-engineering-software/jobs/principal-software-systems-engineer"
+  },
+  {
+   "title": "Senior Manager of Electrical Engineering",
+   "excerpt": "Job Title:Senior Manager of Electrical EngineeringLocation:Remote (U.",
+   "companyName": "Orbital Engineering",
+   "companySlug": "orbital-engineering",
+   "companyLogo": "https://cdn-images.himalayas.app/0rl1dfof71ytcckkz7cjtdieaan1",
+   "employmentType": "Full Time",
+   "minSalary": 150000,
+   "maxSalary": 230000,
+   "salaryPeriod": "annual",
+   "seniority": [
+    "Manager",
+    "Senior"
+   ],
+   "currency": "USD",
+   "locationRestrictions": [
+    "United States"
+   ],
+   "timezoneRestrictions": [
+    -10,
+    -9,
+    -8,
+    -7,
+    -6,
+    -5,
+    14
+   ],
+   "categories": [
+    "Electrical-Engineering-Manager",
+    "Engineering-Manager",
+    "Electrical-Engineering",
+    "Design-Engineering",
+    "Project-Engineering",
+    "Senior-Electrical-Engineer",
+    "Chief-Electrical-Engineer",
+    "Lead-Electrical-Engineer",
+    "Principal-Electrical-Engineer"
+   ],
+   "parentCategories": [
+    "Developer"
+   ],
+   "description": "<h3>Job Title:</h3><h3>Senior Manager of Electrical Engineering</h3><h3>Location:</h3><h3>Remote (U.S. based)</h3><h3>FLSA Classification </h3><h3>Exempt</h3><h3>Job Description:</h3><p><a href=\"https://himalayas.app/companies/orbital-engineering\">Orbital Engineering</a>, Inc. is seeking a <strong>Senior Manager of Electrical Engineering </strong>to support our <strong>Heavy Industrial Services</strong> division. <strong>This is a remote position</strong> that will interface with teams and resources across the United States and international locations.</p><h3>Essential Functions</h3><ul>\n<li>Responsible for the execution of all activities of the electrical departments within the division. Schedule, organize, direct and review all electrical resources and activities.</li>\n<li>Provide enhanced customer support as a technical liaison, and support organizational business development initiatives as a technical resource</li>\n<li>Identify resource and staffing needs, lead and/or participate in recruiting and interviews, onboard new team members, establish individual goals and expectations, and conduct performance reviews</li>\n<li>Direct, develop, supervise and provide technical guidance to the electrical departments</li>\n<li>Establish and execute operational plans for the department with respect to routine, tools and resources to ensure consistent operations and growth of skill sets.</li>\n<li>Identify training and career development opportunities and create plans for the departments",
+   "pubDate": 1790552783,
+   "expiryDate": 1795736783,
+   "applicationLink": "https://himalayas.app/companies/orbital-engineering/jobs/senior-manager-of-electrical-engineering",
+   "guid": "https://himalayas.app/companies/orbital-engineering/jobs/senior-manager-of-electrical-engineering"
+  }
+ ]
+}

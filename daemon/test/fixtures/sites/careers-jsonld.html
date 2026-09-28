@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Careers · Acme AI</title>
+  <!-- A career page that lists its jobs as schema.org JobPosting data (a search source). -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "ItemList",
+    "itemListElement": [
+      { "@type": "ListItem", "position": 1, "item": {
+        "@type": "JobPosting", "title": "Senior AI Engineer", "url": "{{ORIGIN}}/live.html",
+        "identifier": { "@type": "PropertyValue", "value": "acme-ai-1" },
+        "hiringOrganization": { "@type": "Organization", "name": "Acme AI" },
+        "jobLocationType": "TELECOMMUTE",
+        "description": "Build production LLM systems with Python and TypeScript." } },
+      { "@type": "ListItem", "position": 2, "item": {
+        "@type": "JobPosting", "title": "Office Manager", "url": "{{ORIGIN}}/apply-link.html",
+        "identifier": { "@type": "PropertyValue", "value": "acme-ops-2" },
+        "hiringOrganization": { "@type": "Organization", "name": "Acme AI" },
+        "jobLocation": { "@type": "Place", "address": { "addressLocality": "Athens", "addressCountry": "GR" } } } }
+    ]
+  }
+  </script>
+</head>
+<body>
+  <h1>Work at Acme AI</h1>
+  <ul>
+    <li><a href="/live.html">Senior AI Engineer</a></li>
+    <li><a href="/apply-link.html">Office Manager</a></li>
+  </ul>
+</body>
+</html>

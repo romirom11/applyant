@@ -12,6 +12,8 @@ import type { Deps } from '../../src/deps.ts';
 import type { GithubApi } from '../../src/domain/knowledge/sources/github.ts';
 import { NodeTextExtractor } from '../../src/domain/knowledge/text/extract.ts';
 import type { FxRates, FxSource } from '../../src/domain/scoring/fx.ts';
+import { noNetwork } from '../../src/domain/search/readers/http.ts';
+import type { Fetch } from '../../src/domain/search/readers/types.ts';
 import type { McpAccess } from '../../src/mcp/server.ts';
 import {
   AgentRunner,
@@ -52,6 +54,8 @@ export interface TestDepsOptions {
   submit?: SubmitProfile;
   taskPages?: TaskPages;
   channels?: Record<string, Channel>;
+  /** HTTP for search readers; tests pass recorded responses (the default refuses everything). */
+  fetch?: Fetch;
 }
 
 /** Fixed reference rates (no network). */
@@ -108,6 +112,7 @@ export function testDeps(o: TestDepsOptions): Deps {
     text: new NodeTextExtractor(),
     dirs: { repos: join(o.dir, 'repos'), files: join(o.dir, 'files') },
     log: quietLog,
+    fetch: o.fetch ?? noNetwork,
     ...(o.github !== undefined ? { github: o.github } : {}),
   };
 }
@@ -128,6 +133,7 @@ export function handlers(partial: Partial<Handlers>): Handlers {
     deliver_application: never as Handler<'deliver_application'>,
     interview_open: never as Handler<'interview_open'>,
     interview_turn: never as Handler<'interview_turn'>,
+    search: never as Handler<'search'>,
     ...partial,
   };
 }

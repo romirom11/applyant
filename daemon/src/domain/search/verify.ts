@@ -13,14 +13,17 @@
 //                        deterministic verdict stands.
 //
 // A live posting keeps its readable text and where to apply, and moves on to score_posting and
-// read_form (the application form itself, read in phase 4's form engine).
+// read_form (the application form itself, read in phase 4's form engine). Verifying a posting
+// that was live before (a search source stopped listing it) only checks it still is: live keeps
+// its stage and everything built on it, dead closes it.
 import { eq } from 'drizzle-orm';
 import type { Frame, Page } from 'playwright';
 import type { ReaderPool } from '../../browser/reader-pool.ts';
-import { postings } from '../../db/schema.ts';
+import { type PostingStage, postings } from '../../db/schema.ts';
 import type { Decide } from '../../models/decide.ts';
 import type { Handler, Outcome } from '../../queue/types.ts';
 import { jobPostingNode, readPostingText } from './posting-text.ts';
+import { atsJobKey } from './readers/ats-embed.ts';
 
 export type Verdict =
   | {
@@ -90,12 +93,36 @@ export const verifyPosting: Handler<'verify_posting'> = async (task, ctx) => {
   }
 
   const result = verdict;
-  const stage = result.kind === 'live' ? 'verified' : 'failed_verification';
   const applyUrl = result.kind === 'live' ? result.applyUrl : null;
   const byEmail = applyUrl?.startsWith('mailto:') ?? false;
   const outcome: Outcome = {
     kind: 'done',
     commit: (tx) => {
+      // A search asked again about a posting that was live (a source stopped listing it): a
+      // live one keeps its stage and everything built on it; a dead one is now closed.
+      const current = tx.db
+        .select({ stage: postings.stage })
+        .from(postings)
+        .where(eq(postings.id, posting.id))
+        .get();
+      if (!current) return;
+      const recheck = RECHECKED_STAGES.includes(current.stage);
+      if (recheck) {
+        const stage = result.kind === 'live' ? current.stage : 'closed';
+        tx.db
+          .update(postings)
+          .set({ stage, verifiedAt: tx.now, verifyNote: result.note })
+          .where(eq(postings.id, posting.id))
+          .run();
+        tx.emit({
+          kind: 'posting.stage',
+          postingId: posting.id,
+          stage,
+          message: result.kind === 'live' ? `still open: ${result.note}` : result.note,
+        });
+        return;
+      }
+      const stage = result.kind === 'live' ? 'verified' : 'failed_verification';
       tx.db
         .update(postings)
         .set({
@@ -108,6 +135,10 @@ export const verifyPosting: Handler<'verify_posting'> = async (task, ctx) => {
             ? { text: result.text, jsonLd: result.jsonLd }
             : {}),
           applyUrl,
+          // The ATS id behind the page's apply form, for deduplicating later listings.
+          ...(posting.atsKey
+            ? {}
+            : { atsKey: atsJobKey(applyUrl) ?? atsJobKey(posting.canonicalUrl) }),
           ...(byEmail
             ? {
                 formStatus: 'email' as const,
@@ -127,6 +158,9 @@ export const verifyPosting: Handler<'verify_posting'> = async (task, ctx) => {
   };
   return outcome;
 };
+
+/** Stages whose postings were verified live before: verifying again only checks they still are. */
+const RECHECKED_STAGES: PostingStage[] = ['verified', 'scored', 'skipped'];
 
 export interface CheckOptions {
   signal?: AbortSignal;

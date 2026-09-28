@@ -513,7 +513,7 @@ export declare const RequirementMatchSchema: GenMessage<RequirementMatch>;
  */
 export declare type PostingSource = Message<"applyant.v1.PostingSource"> & {
   /**
-   * manual | share | board | ats | ...
+   * manual | share | greenhouse | ashby | lever | workable | page | board
    *
    * @generated from field: string kind = 1;
    */
@@ -528,6 +528,25 @@ export declare type PostingSource = Message<"applyant.v1.PostingSource"> & {
    * @generated from field: google.protobuf.Timestamp first_seen_at = 3;
    */
   firstSeenAt?: Timestamp | undefined;
+
+  /**
+   * The search source that lists it (board:hn, greenhouse:gitlab); unset for manual ones.
+   *
+   * @generated from field: optional string search_source = 4;
+   */
+  searchSource?: string | undefined;
+
+  /**
+   * @generated from field: optional google.protobuf.Timestamp last_seen_at = 5;
+   */
+  lastSeenAt?: Timestamp | undefined;
+
+  /**
+   * Its complete list no longer has it.
+   *
+   * @generated from field: optional google.protobuf.Timestamp closed_at = 6;
+   */
+  closedAt?: Timestamp | undefined;
 };
 
 /**
@@ -1141,6 +1160,38 @@ export declare type InterviewEvent = Message<"applyant.v1.InterviewEvent"> & {
 export declare const InterviewEventSchema: GenMessage<InterviewEvent>;
 
 /**
+ * A search run was queued, finished or failed, or a strategy changed.
+ *
+ * @generated from message applyant.v1.SearchEvent
+ */
+export declare type SearchEvent = Message<"applyant.v1.SearchEvent"> & {
+  /**
+   * Unset when a strategy changed without a run.
+   *
+   * @generated from field: optional int64 run_id = 1;
+   */
+  runId?: bigint | undefined;
+
+  /**
+   * @generated from field: int64 strategy_id = 2;
+   */
+  strategyId: bigint;
+
+  /**
+   * queued | done | failed | updated | deleted
+   *
+   * @generated from field: string status = 3;
+   */
+  status: string;
+};
+
+/**
+ * Describes the message applyant.v1.SearchEvent.
+ * Use `create(SearchEventSchema)` to create a new message.
+ */
+export declare const SearchEventSchema: GenMessage<SearchEvent>;
+
+/**
  * @generated from message applyant.v1.Event
  */
 export declare type Event = Message<"applyant.v1.Event"> & {
@@ -1199,6 +1250,12 @@ export declare type Event = Message<"applyant.v1.Event"> & {
      */
     value: InterviewEvent;
     case: "interview";
+  } | {
+    /**
+     * @generated from field: applyant.v1.SearchEvent search = 15;
+     */
+    value: SearchEvent;
+    case: "search";
   } | { case: undefined; value?: undefined };
 };
 
@@ -3800,6 +3857,826 @@ export declare type EditCvResponse = Message<"applyant.v1.EditCvResponse"> & {
 export declare const EditCvResponseSchema: GenMessage<EditCvResponse>;
 
 /**
+ * What a strategy or source found, and how the candidate took it.
+ *
+ * @generated from message applyant.v1.SearchStats
+ */
+export declare type SearchStats = Message<"applyant.v1.SearchStats"> & {
+  /**
+   * Postings it listed (each counted once).
+   *
+   * @generated from field: int32 found = 1;
+   */
+  found: number;
+
+  /**
+   * …that passed verification at some point.
+   *
+   * @generated from field: int32 verified = 2;
+   */
+  verified: number;
+
+  /**
+   * …that the candidate marked interested / skipped.
+   *
+   * @generated from field: int32 interested = 3;
+   */
+  interested: number;
+
+  /**
+   * @generated from field: int32 skipped = 4;
+   */
+  skipped: number;
+};
+
+/**
+ * Describes the message applyant.v1.SearchStats.
+ * Use `create(SearchStatsSchema)` to create a new message.
+ */
+export declare const SearchStatsSchema: GenMessage<SearchStats>;
+
+/**
+ * @generated from message applyant.v1.SearchStrategy
+ */
+export declare type SearchStrategy = Message<"applyant.v1.SearchStrategy"> & {
+  /**
+   * @generated from field: int64 id = 1;
+   */
+  id: bigint;
+
+  /**
+   * @generated from field: string name = 2;
+   */
+  name: string;
+
+  /**
+   * Title phrases: a listing matches when every word of one is in its title ("-word" excludes).
+   * Empty: every listing.
+   *
+   * @generated from field: repeated string queries = 3;
+   */
+  queries: string[];
+
+  /**
+   * Location words ("remote" matches remote jobs); empty: anywhere.
+   *
+   * @generated from field: repeated string locations = 4;
+   */
+  locations: string[];
+
+  /**
+   * Source selectors: all, a kind (greenhouse, board, …) or a source key (board:hn).
+   *
+   * @generated from field: repeated string sources = 5;
+   */
+  sources: string[];
+
+  /**
+   * @generated from field: int32 every_minutes = 6;
+   */
+  everyMinutes: number;
+
+  /**
+   * active | paused
+   *
+   * @generated from field: string state = 7;
+   */
+  state: string;
+
+  /**
+   * candidate | agent
+   *
+   * @generated from field: string origin = 8;
+   */
+  origin: string;
+
+  /**
+   * @generated from field: optional google.protobuf.Timestamp last_run_at = 9;
+   */
+  lastRunAt?: Timestamp | undefined;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp next_run_at = 10;
+   */
+  nextRunAt?: Timestamp | undefined;
+
+  /**
+   * @generated from field: optional string note = 11;
+   */
+  note?: string | undefined;
+
+  /**
+   * @generated from field: applyant.v1.SearchStats stats = 12;
+   */
+  stats?: SearchStats | undefined;
+
+  /**
+   * @generated from field: optional applyant.v1.SearchRun last_run = 13;
+   */
+  lastRun?: SearchRun | undefined;
+
+  /**
+   * The sources a run would query now: selected and switched on.
+   *
+   * @generated from field: repeated string source_keys = 14;
+   */
+  sourceKeys: string[];
+
+  /**
+   * A run is waiting or running.
+   *
+   * @generated from field: bool running = 15;
+   */
+  running: boolean;
+};
+
+/**
+ * Describes the message applyant.v1.SearchStrategy.
+ * Use `create(SearchStrategySchema)` to create a new message.
+ */
+export declare const SearchStrategySchema: GenMessage<SearchStrategy>;
+
+/**
+ * @generated from message applyant.v1.SearchSource
+ */
+export declare type SearchSource = Message<"applyant.v1.SearchSource"> & {
+  /**
+   * @generated from field: int64 id = 1;
+   */
+  id: bigint;
+
+  /**
+   * <kind>:<locator>, e.g. greenhouse:gitlab · board:hn · page:https://acme.com/careers
+   *
+   * @generated from field: string key = 2;
+   */
+  key: string;
+
+  /**
+   * greenhouse | ashby | lever | workable | page | board
+   *
+   * @generated from field: string kind = 3;
+   */
+  kind: string;
+
+  /**
+   * @generated from field: string locator = 4;
+   */
+  locator: string;
+
+  /**
+   * @generated from field: string label = 5;
+   */
+  label: string;
+
+  /**
+   * @generated from field: bool enabled = 6;
+   */
+  enabled: boolean;
+
+  /**
+   * Its kind is switched on (a source is queried only when both are on).
+   *
+   * @generated from field: bool kind_enabled = 7;
+   */
+  kindEnabled: boolean;
+
+  /**
+   * Gives its whole list, so a posting missing from it is closed (boards don't).
+   *
+   * @generated from field: bool complete_list = 8;
+   */
+  completeList: boolean;
+
+  /**
+   * builtin | candidate | agent
+   *
+   * @generated from field: string origin = 9;
+   */
+  origin: string;
+
+  /**
+   * @generated from field: optional google.protobuf.Timestamp last_run_at = 10;
+   */
+  lastRunAt?: Timestamp | undefined;
+
+  /**
+   * @generated from field: optional int32 last_count = 11;
+   */
+  lastCount?: number | undefined;
+
+  /**
+   * @generated from field: optional bool last_complete = 12;
+   */
+  lastComplete?: boolean | undefined;
+
+  /**
+   * What the last read did, or why it failed.
+   *
+   * @generated from field: optional string last_note = 13;
+   */
+  lastNote?: string | undefined;
+
+  /**
+   * How a career page was read: "feed https://…" or "greenhouse board gitlab".
+   *
+   * @generated from field: optional string resolved = 14;
+   */
+  resolved?: string | undefined;
+
+  /**
+   * @generated from field: applyant.v1.SearchStats stats = 15;
+   */
+  stats?: SearchStats | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.SearchSource.
+ * Use `create(SearchSourceSchema)` to create a new message.
+ */
+export declare const SearchSourceSchema: GenMessage<SearchSource>;
+
+/**
+ * @generated from message applyant.v1.SearchSourceKind
+ */
+export declare type SearchSourceKind = Message<"applyant.v1.SearchSourceKind"> & {
+  /**
+   * @generated from field: string kind = 1;
+   */
+  kind: string;
+
+  /**
+   * @generated from field: string label = 2;
+   */
+  label: string;
+
+  /**
+   * @generated from field: bool enabled = 3;
+   */
+  enabled: boolean;
+
+  /**
+   * @generated from field: int32 sources = 4;
+   */
+  sources: number;
+};
+
+/**
+ * Describes the message applyant.v1.SearchSourceKind.
+ * Use `create(SearchSourceKindSchema)` to create a new message.
+ */
+export declare const SearchSourceKindSchema: GenMessage<SearchSourceKind>;
+
+/**
+ * One source's part of a run.
+ *
+ * @generated from message applyant.v1.SearchRunSource
+ */
+export declare type SearchRunSource = Message<"applyant.v1.SearchRunSource"> & {
+  /**
+   * @generated from field: string source_key = 1;
+   */
+  sourceKey: string;
+
+  /**
+   * @generated from field: string label = 2;
+   */
+  label: string;
+
+  /**
+   * Listings it returned, and how many the strategy matched.
+   *
+   * @generated from field: int32 listed = 3;
+   */
+  listed: number;
+
+  /**
+   * @generated from field: int32 matched = 4;
+   */
+  matched: number;
+
+  /**
+   * New postings, and matches that joined a posting already known.
+   *
+   * @generated from field: int32 added = 5;
+   */
+  added: number;
+
+  /**
+   * @generated from field: int32 attached = 6;
+   */
+  attached: number;
+
+  /**
+   * Its whole list, read to the end.
+   *
+   * @generated from field: bool complete = 7;
+   */
+  complete: boolean;
+
+  /**
+   * Postings closed or reopened by its list, and re-verifications it asked for.
+   *
+   * @generated from field: int32 closed = 8;
+   */
+  closed: number;
+
+  /**
+   * @generated from field: int32 reopened = 9;
+   */
+  reopened: number;
+
+  /**
+   * @generated from field: int32 reverify = 10;
+   */
+  reverify: number;
+
+  /**
+   * @generated from field: optional string error = 11;
+   */
+  error?: string | undefined;
+
+  /**
+   * @generated from field: optional string note = 12;
+   */
+  note?: string | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.SearchRunSource.
+ * Use `create(SearchRunSourceSchema)` to create a new message.
+ */
+export declare const SearchRunSourceSchema: GenMessage<SearchRunSource>;
+
+/**
+ * @generated from message applyant.v1.SearchRun
+ */
+export declare type SearchRun = Message<"applyant.v1.SearchRun"> & {
+  /**
+   * Also the run_id of every task it spawned (`applyant runs show <id>`).
+   *
+   * @generated from field: int64 id = 1;
+   */
+  id: bigint;
+
+  /**
+   * @generated from field: int64 strategy_id = 2;
+   */
+  strategyId: bigint;
+
+  /**
+   * @generated from field: string strategy_name = 3;
+   */
+  strategyName: string;
+
+  /**
+   * schedule | wake (missed while the Mac slept) | manual
+   *
+   * @generated from field: string trigger = 4;
+   */
+  trigger: string;
+
+  /**
+   * queued (waiting or running) | done | failed
+   *
+   * @generated from field: string status = 5;
+   */
+  status: string;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp started_at = 6;
+   */
+  startedAt?: Timestamp | undefined;
+
+  /**
+   * @generated from field: optional google.protobuf.Timestamp finished_at = 7;
+   */
+  finishedAt?: Timestamp | undefined;
+
+  /**
+   * @generated from field: int32 listed = 8;
+   */
+  listed: number;
+
+  /**
+   * @generated from field: int32 added = 9;
+   */
+  added: number;
+
+  /**
+   * @generated from field: repeated applyant.v1.SearchRunSource sources = 10;
+   */
+  sources: SearchRunSource[];
+
+  /**
+   * @generated from field: optional string note = 11;
+   */
+  note?: string | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.SearchRun.
+ * Use `create(SearchRunSchema)` to create a new message.
+ */
+export declare const SearchRunSchema: GenMessage<SearchRun>;
+
+/**
+ * @generated from message applyant.v1.ListSearchRequest
+ */
+export declare type ListSearchRequest = Message<"applyant.v1.ListSearchRequest"> & {
+};
+
+/**
+ * Describes the message applyant.v1.ListSearchRequest.
+ * Use `create(ListSearchRequestSchema)` to create a new message.
+ */
+export declare const ListSearchRequestSchema: GenMessage<ListSearchRequest>;
+
+/**
+ * @generated from message applyant.v1.ListSearchResponse
+ */
+export declare type ListSearchResponse = Message<"applyant.v1.ListSearchResponse"> & {
+  /**
+   * @generated from field: repeated applyant.v1.SearchStrategy strategies = 1;
+   */
+  strategies: SearchStrategy[];
+
+  /**
+   * @generated from field: repeated applyant.v1.SearchSource sources = 2;
+   */
+  sources: SearchSource[];
+
+  /**
+   * @generated from field: repeated applyant.v1.SearchSourceKind kinds = 3;
+   */
+  kinds: SearchSourceKind[];
+};
+
+/**
+ * Describes the message applyant.v1.ListSearchResponse.
+ * Use `create(ListSearchResponseSchema)` to create a new message.
+ */
+export declare const ListSearchResponseSchema: GenMessage<ListSearchResponse>;
+
+/**
+ * @generated from message applyant.v1.AddStrategyRequest
+ */
+export declare type AddStrategyRequest = Message<"applyant.v1.AddStrategyRequest"> & {
+  /**
+   * @generated from field: string name = 1;
+   */
+  name: string;
+
+  /**
+   * @generated from field: repeated string queries = 2;
+   */
+  queries: string[];
+
+  /**
+   * @generated from field: repeated string locations = 3;
+   */
+  locations: string[];
+
+  /**
+   * @generated from field: repeated string sources = 4;
+   */
+  sources: string[];
+
+  /**
+   * 0: every 6 hours. At least 60.
+   *
+   * @generated from field: int32 every_minutes = 5;
+   */
+  everyMinutes: number;
+
+  /**
+   * Added paused: it doesn't run until resumed.
+   *
+   * @generated from field: bool paused = 6;
+   */
+  paused: boolean;
+};
+
+/**
+ * Describes the message applyant.v1.AddStrategyRequest.
+ * Use `create(AddStrategyRequestSchema)` to create a new message.
+ */
+export declare const AddStrategyRequestSchema: GenMessage<AddStrategyRequest>;
+
+/**
+ * @generated from message applyant.v1.AddStrategyResponse
+ */
+export declare type AddStrategyResponse = Message<"applyant.v1.AddStrategyResponse"> & {
+  /**
+   * @generated from field: applyant.v1.SearchStrategy strategy = 1;
+   */
+  strategy?: SearchStrategy | undefined;
+
+  /**
+   * The run it started, unless paused.
+   *
+   * @generated from field: optional int64 run_id = 2;
+   */
+  runId?: bigint | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.AddStrategyResponse.
+ * Use `create(AddStrategyResponseSchema)` to create a new message.
+ */
+export declare const AddStrategyResponseSchema: GenMessage<AddStrategyResponse>;
+
+/**
+ * @generated from message applyant.v1.StringList
+ */
+export declare type StringList = Message<"applyant.v1.StringList"> & {
+  /**
+   * @generated from field: repeated string values = 1;
+   */
+  values: string[];
+};
+
+/**
+ * Describes the message applyant.v1.StringList.
+ * Use `create(StringListSchema)` to create a new message.
+ */
+export declare const StringListSchema: GenMessage<StringList>;
+
+/**
+ * @generated from message applyant.v1.UpdateStrategyRequest
+ */
+export declare type UpdateStrategyRequest = Message<"applyant.v1.UpdateStrategyRequest"> & {
+  /**
+   * Id or name.
+   *
+   * @generated from field: string strategy = 1;
+   */
+  strategy: string;
+
+  /**
+   * @generated from field: optional string name = 2;
+   */
+  name?: string | undefined;
+
+  /**
+   * Set to replace (an empty list clears queries / locations).
+   *
+   * @generated from field: optional applyant.v1.StringList queries = 3;
+   */
+  queries?: StringList | undefined;
+
+  /**
+   * @generated from field: optional applyant.v1.StringList locations = 4;
+   */
+  locations?: StringList | undefined;
+
+  /**
+   * @generated from field: optional applyant.v1.StringList sources = 5;
+   */
+  sources?: StringList | undefined;
+
+  /**
+   * @generated from field: optional int32 every_minutes = 6;
+   */
+  everyMinutes?: number | undefined;
+
+  /**
+   * active | paused
+   *
+   * @generated from field: optional string state = 7;
+   */
+  state?: string | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.UpdateStrategyRequest.
+ * Use `create(UpdateStrategyRequestSchema)` to create a new message.
+ */
+export declare const UpdateStrategyRequestSchema: GenMessage<UpdateStrategyRequest>;
+
+/**
+ * @generated from message applyant.v1.UpdateStrategyResponse
+ */
+export declare type UpdateStrategyResponse = Message<"applyant.v1.UpdateStrategyResponse"> & {
+  /**
+   * @generated from field: applyant.v1.SearchStrategy strategy = 1;
+   */
+  strategy?: SearchStrategy | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.UpdateStrategyResponse.
+ * Use `create(UpdateStrategyResponseSchema)` to create a new message.
+ */
+export declare const UpdateStrategyResponseSchema: GenMessage<UpdateStrategyResponse>;
+
+/**
+ * @generated from message applyant.v1.DeleteStrategyRequest
+ */
+export declare type DeleteStrategyRequest = Message<"applyant.v1.DeleteStrategyRequest"> & {
+  /**
+   * @generated from field: string strategy = 1;
+   */
+  strategy: string;
+};
+
+/**
+ * Describes the message applyant.v1.DeleteStrategyRequest.
+ * Use `create(DeleteStrategyRequestSchema)` to create a new message.
+ */
+export declare const DeleteStrategyRequestSchema: GenMessage<DeleteStrategyRequest>;
+
+/**
+ * @generated from message applyant.v1.DeleteStrategyResponse
+ */
+export declare type DeleteStrategyResponse = Message<"applyant.v1.DeleteStrategyResponse"> & {
+};
+
+/**
+ * Describes the message applyant.v1.DeleteStrategyResponse.
+ * Use `create(DeleteStrategyResponseSchema)` to create a new message.
+ */
+export declare const DeleteStrategyResponseSchema: GenMessage<DeleteStrategyResponse>;
+
+/**
+ * @generated from message applyant.v1.RunStrategyRequest
+ */
+export declare type RunStrategyRequest = Message<"applyant.v1.RunStrategyRequest"> & {
+  /**
+   * @generated from field: string strategy = 1;
+   */
+  strategy: string;
+};
+
+/**
+ * Describes the message applyant.v1.RunStrategyRequest.
+ * Use `create(RunStrategyRequestSchema)` to create a new message.
+ */
+export declare const RunStrategyRequestSchema: GenMessage<RunStrategyRequest>;
+
+/**
+ * @generated from message applyant.v1.RunStrategyResponse
+ */
+export declare type RunStrategyResponse = Message<"applyant.v1.RunStrategyResponse"> & {
+  /**
+   * @generated from field: applyant.v1.SearchStrategy strategy = 1;
+   */
+  strategy?: SearchStrategy | undefined;
+
+  /**
+   * Unset when a run was already waiting or running.
+   *
+   * @generated from field: optional int64 run_id = 2;
+   */
+  runId?: bigint | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.RunStrategyResponse.
+ * Use `create(RunStrategyResponseSchema)` to create a new message.
+ */
+export declare const RunStrategyResponseSchema: GenMessage<RunStrategyResponse>;
+
+/**
+ * @generated from message applyant.v1.AddSearchSourceRequest
+ */
+export declare type AddSearchSourceRequest = Message<"applyant.v1.AddSearchSourceRequest"> & {
+  /**
+   * greenhouse | ashby | lever | workable | board | page; empty: `locator` is a URL (a board's
+   * own page becomes that board, anything else a career page / feed).
+   *
+   * @generated from field: string kind = 1;
+   */
+  kind: string;
+
+  /**
+   * Board token / slug / site / account, a board id (hn, remoteok, …) or a URL.
+   *
+   * @generated from field: string locator = 2;
+   */
+  locator: string;
+
+  /**
+   * @generated from field: optional string label = 3;
+   */
+  label?: string | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.AddSearchSourceRequest.
+ * Use `create(AddSearchSourceRequestSchema)` to create a new message.
+ */
+export declare const AddSearchSourceRequestSchema: GenMessage<AddSearchSourceRequest>;
+
+/**
+ * @generated from message applyant.v1.AddSearchSourceResponse
+ */
+export declare type AddSearchSourceResponse = Message<"applyant.v1.AddSearchSourceResponse"> & {
+  /**
+   * @generated from field: applyant.v1.SearchSource source = 1;
+   */
+  source?: SearchSource | undefined;
+
+  /**
+   * @generated from field: bool created = 2;
+   */
+  created: boolean;
+};
+
+/**
+ * Describes the message applyant.v1.AddSearchSourceResponse.
+ * Use `create(AddSearchSourceResponseSchema)` to create a new message.
+ */
+export declare const AddSearchSourceResponseSchema: GenMessage<AddSearchSourceResponse>;
+
+/**
+ * @generated from message applyant.v1.SetSearchSourceEnabledRequest
+ */
+export declare type SetSearchSourceEnabledRequest = Message<"applyant.v1.SetSearchSourceEnabledRequest"> & {
+  /**
+   * A source key (board:hn), id or unique locator, or a kind (greenhouse, board, …).
+   *
+   * @generated from field: string target = 1;
+   */
+  target: string;
+
+  /**
+   * @generated from field: bool enabled = 2;
+   */
+  enabled: boolean;
+};
+
+/**
+ * Describes the message applyant.v1.SetSearchSourceEnabledRequest.
+ * Use `create(SetSearchSourceEnabledRequestSchema)` to create a new message.
+ */
+export declare const SetSearchSourceEnabledRequestSchema: GenMessage<SetSearchSourceEnabledRequest>;
+
+/**
+ * @generated from message applyant.v1.SetSearchSourceEnabledResponse
+ */
+export declare type SetSearchSourceEnabledResponse = Message<"applyant.v1.SetSearchSourceEnabledResponse"> & {
+  /**
+   * The kind that was switched, when the target was a kind.
+   *
+   * @generated from field: optional applyant.v1.SearchSourceKind kind = 1;
+   */
+  kind?: SearchSourceKind | undefined;
+
+  /**
+   * @generated from field: repeated applyant.v1.SearchSource sources = 2;
+   */
+  sources: SearchSource[];
+};
+
+/**
+ * Describes the message applyant.v1.SetSearchSourceEnabledResponse.
+ * Use `create(SetSearchSourceEnabledResponseSchema)` to create a new message.
+ */
+export declare const SetSearchSourceEnabledResponseSchema: GenMessage<SetSearchSourceEnabledResponse>;
+
+/**
+ * @generated from message applyant.v1.ListSearchRunsRequest
+ */
+export declare type ListSearchRunsRequest = Message<"applyant.v1.ListSearchRunsRequest"> & {
+  /**
+   * Only this strategy's runs (id or name).
+   *
+   * @generated from field: optional string strategy = 1;
+   */
+  strategy?: string | undefined;
+
+  /**
+   * 0 means 20.
+   *
+   * @generated from field: int32 limit = 2;
+   */
+  limit: number;
+};
+
+/**
+ * Describes the message applyant.v1.ListSearchRunsRequest.
+ * Use `create(ListSearchRunsRequestSchema)` to create a new message.
+ */
+export declare const ListSearchRunsRequestSchema: GenMessage<ListSearchRunsRequest>;
+
+/**
+ * @generated from message applyant.v1.ListSearchRunsResponse
+ */
+export declare type ListSearchRunsResponse = Message<"applyant.v1.ListSearchRunsResponse"> & {
+  /**
+   * @generated from field: repeated applyant.v1.SearchRun runs = 1;
+   */
+  runs: SearchRun[];
+};
+
+/**
+ * Describes the message applyant.v1.ListSearchRunsResponse.
+ * Use `create(ListSearchRunsResponseSchema)` to create a new message.
+ */
+export declare const ListSearchRunsResponseSchema: GenMessage<ListSearchRunsResponse>;
+
+/**
  * @generated from enum applyant.v1.PostingStage
  */
 export enum PostingStage {
@@ -3832,6 +4709,13 @@ export enum PostingStage {
    * @generated from enum value: POSTING_STAGE_SKIPPED = 5;
    */
   SKIPPED = 5,
+
+  /**
+   * Was live and isn't any more: gone from a source's complete list, or re-verified dead.
+   *
+   * @generated from enum value: POSTING_STAGE_CLOSED = 6;
+   */
+  CLOSED = 6,
 }
 
 /**
@@ -4447,6 +5331,88 @@ export declare const ApplyantService: GenService<{
     methodKind: "unary";
     input: typeof EditCvRequestSchema;
     output: typeof EditCvResponseSchema;
+  },
+  /**
+   * Search: strategies (which sources, which queries, how often) find postings on their own.
+   * Every source can be switched off, one by one or a whole kind; a source that's off is never
+   * queried. ListSearch returns everything the Search screen shows: strategies with their
+   * found / verified / interested counts, sources with theirs, and the kind switches.
+   *
+   * @generated from rpc applyant.v1.ApplyantService.ListSearch
+   */
+  listSearch: {
+    methodKind: "unary";
+    input: typeof ListSearchRequestSchema;
+    output: typeof ListSearchResponseSchema;
+  },
+  /**
+   * AddStrategy adds a strategy; an active one runs right away, then on its schedule.
+   *
+   * @generated from rpc applyant.v1.ApplyantService.AddStrategy
+   */
+  addStrategy: {
+    methodKind: "unary";
+    input: typeof AddStrategyRequestSchema;
+    output: typeof AddStrategyResponseSchema;
+  },
+  /**
+   * UpdateStrategy changes what's set in the request: name, queries, locations, sources,
+   * schedule, or state (pause / resume).
+   *
+   * @generated from rpc applyant.v1.ApplyantService.UpdateStrategy
+   */
+  updateStrategy: {
+    methodKind: "unary";
+    input: typeof UpdateStrategyRequestSchema;
+    output: typeof UpdateStrategyResponseSchema;
+  },
+  /**
+   * @generated from rpc applyant.v1.ApplyantService.DeleteStrategy
+   */
+  deleteStrategy: {
+    methodKind: "unary";
+    input: typeof DeleteStrategyRequestSchema;
+    output: typeof DeleteStrategyResponseSchema;
+  },
+  /**
+   * RunStrategy starts a run now, outside the schedule (unless one is waiting or running).
+   *
+   * @generated from rpc applyant.v1.ApplyantService.RunStrategy
+   */
+  runStrategy: {
+    methodKind: "unary";
+    input: typeof RunStrategyRequestSchema;
+    output: typeof RunStrategyResponseSchema;
+  },
+  /**
+   * AddSearchSource adds a company's ATS board, or a career page / feed URL.
+   *
+   * @generated from rpc applyant.v1.ApplyantService.AddSearchSource
+   */
+  addSearchSource: {
+    methodKind: "unary";
+    input: typeof AddSearchSourceRequestSchema;
+    output: typeof AddSearchSourceResponseSchema;
+  },
+  /**
+   * SetSearchSourceEnabled switches a source (by key) or a whole kind (greenhouse, board, …).
+   *
+   * @generated from rpc applyant.v1.ApplyantService.SetSearchSourceEnabled
+   */
+  setSearchSourceEnabled: {
+    methodKind: "unary";
+    input: typeof SetSearchSourceEnabledRequestSchema;
+    output: typeof SetSearchSourceEnabledResponseSchema;
+  },
+  /**
+   * ListSearchRuns returns recent runs, newest first, each with what every source gave.
+   *
+   * @generated from rpc applyant.v1.ApplyantService.ListSearchRuns
+   */
+  listSearchRuns: {
+    methodKind: "unary";
+    input: typeof ListSearchRunsRequestSchema;
+    output: typeof ListSearchRunsResponseSchema;
   },
 }>;
 

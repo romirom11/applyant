@@ -168,7 +168,7 @@ export function registerJobs(program: Command, client: () => ApplyantClient): vo
     .description('list postings, newest first (or by score)')
     .option(
       '--stage <stage>',
-      'only this stage (found | verified | failed_verification | scored | skipped)',
+      'only this stage (found | verified | failed_verification | scored | skipped | closed)',
     )
     .option('--by-score', 'highest score first')
     .option('--json', 'print JSON')
@@ -257,7 +257,12 @@ export function registerJobs(program: Command, client: () => ApplyantClient): vo
       }
       out('');
       out('Sources');
-      for (const s of j.sources) out(`  ${s.kind.padEnd(8)} ${s.url}`);
+      for (const s of j.sources) {
+        const via =
+          s.searchSource && s.searchSource !== `${s.kind}:${s.url}` ? ` (${s.searchSource})` : '';
+        const gone = s.closedAt ? `  · no longer listed since ${s.closedAt}` : '';
+        out(`  ${s.kind.padEnd(10)} ${s.url}${via}${gone}`);
+      }
       if (opts.form) {
         out('');
         out('Application form');

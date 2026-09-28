@@ -117,6 +117,43 @@ final class FakeDaemon: DaemonAPI, @unchecked Sendable {
         return try setQuestion(id) { $0.status = "dismissed" }
     }
 
+    // Search: what ListSearch returns, the runs, and each run's events.
+    var searchList = SearchList()
+    var searchRuns: [SearchRun] = []
+    var eventsByRun: [Int64: [DaemonEvent]] = [:]
+    var nextRun: Int64 = 100
+
+    func listSearch() async throws -> SearchList { log("listSearch"); return searchList }
+    func listSearchRuns(limit: Int32) async throws -> [SearchRun] { log("listSearchRuns"); return searchRuns }
+    func setStrategy(_ id: Int64, paused: Bool) async throws -> SearchStrategy {
+        log("setStrategy \(id) \(paused ? "paused" : "active")")
+        guard let i = searchList.strategies.firstIndex(where: { $0.id == id }) else { throw APIError("no strategy \(id)") }
+        searchList.strategies[i].state = paused ? "paused" : "active"
+        return searchList.strategies[i]
+    }
+    func runStrategy(_ id: Int64) async throws -> Int64? {
+        log("runStrategy \(id)")
+        guard let i = searchList.strategies.firstIndex(where: { $0.id == id }) else { throw APIError("no strategy \(id)") }
+        if searchList.strategies[i].running { return nil }
+        searchList.strategies[i].running = true
+        nextRun += 1
+        searchRuns.insert(.with { $0.id = nextRun; $0.strategyID = id; $0.status = "queued"; $0.trigger = "manual" }, at: 0)
+        return nextRun
+    }
+    func setSource(_ target: String, enabled: Bool) async throws {
+        log("setSource \(target) \(enabled)")
+        for i in searchList.sources.indices where searchList.sources[i].key == target {
+            searchList.sources[i].enabled = enabled
+        }
+        for i in searchList.kinds.indices where searchList.kinds[i].kind == target {
+            searchList.kinds[i].enabled = enabled
+            for j in searchList.sources.indices where searchList.sources[j].kind == target {
+                searchList.sources[j].kindEnabled = enabled
+            }
+        }
+    }
+    func runEvents(_ runId: Int64) async throws -> [DaemonEvent] { log("runEvents \(runId)"); return eventsByRun[runId] ?? [] }
+
     /// Changes a question everywhere it's listed.
     func setQuestion(_ id: Int64, _ change: (inout InterviewQuestion) -> Void) throws -> InterviewQuestion {
         guard let i = questions.firstIndex(where: { $0.id == id }) else { throw APIError("no question \(id)") }

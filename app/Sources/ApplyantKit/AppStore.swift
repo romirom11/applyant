@@ -52,6 +52,12 @@ public final class AppStore {
     public private(set) var projectInterviews: [ProjectInterview] = []
     /// GetInterview results for the threads open on screen.
     public private(set) var interviewThreads: [InterviewTarget: InterviewThread] = [:]
+    /// Search strategies, sources and kind switches, with what each found.
+    public private(set) var search = SearchList()
+    /// Recent search runs, newest first.
+    public private(set) var searchRuns: [SearchRun] = []
+    /// The events of the runs open on screen (Agent runs).
+    public private(set) var runEvents: [Int64: [DaemonEvent]] = [:]
     /// The last failed action, for an alert.
     public var lastError: String?
     /// Where the main window is (notifications and the menu bar move it).
@@ -114,17 +120,22 @@ public final class AppStore {
         async let postingList = api.listPostings()
         async let applicationList = api.listApplications()
         async let interviewList = api.listInterview()
-        let (p, a, i) = try await (postingList, applicationList, interviewList)
+        async let searchList = api.listSearch()
+        async let runList = api.listSearchRuns(limit: 50)
+        let (p, a, i, s, r) = try await (postingList, applicationList, interviewList, searchList, runList)
         postings = Dictionary(p.map { ($0.id, $0) }, uniquingKeysWith: { _, last in last })
         applications = Dictionary(a.map { ($0.id, $0) }, uniquingKeysWith: { _, last in last })
         interviewQuestions = i.questions
         projectInterviews = i.projects
+        search = s
+        searchRuns = r
         activity = Activity()
         reloads += 1
         // What's open on screen may have changed while we were away.
         for id in postingDetails.keys { await refreshPosting(id, api) }
         for id in applicationDetails.keys { await refreshApplication(id, api) }
         for target in interviewThreads.keys { await refreshThread(target, api) }
+        for run in runEvents.keys { await refreshRunEvents(run, api) }
     }
 
     // MARK: Events
@@ -157,9 +168,13 @@ public final class AppStore {
             }
         case .interview?:
             await refreshInterview(api)
+        case .search?:
+            await refreshSearch(api)
         case nil:
             break
         }
+        // A run open on screen follows its own events.
+        if event.hasRunID, runEvents[event.runID] != nil { await refreshRunEvents(event.runID, api) }
     }
 
     private func applyTask(_ t: Applyant_V1_TaskEvent, message: String) {
@@ -223,6 +238,16 @@ public final class AppStore {
     private func refreshThread(_ target: InterviewTarget, _ api: DaemonAPI) async {
         guard let thread = try? await api.interview(target) else { return }
         interviewThreads[target] = thread
+    }
+
+    private func refreshSearch(_ api: DaemonAPI) async {
+        if let list = try? await api.listSearch() { search = list }
+        if let runs = try? await api.listSearchRuns(limit: 50) { searchRuns = runs }
+    }
+
+    private func refreshRunEvents(_ run: Int64, _ api: DaemonAPI) async {
+        guard let events = try? await api.runEvents(run) else { return }
+        runEvents[run] = events
     }
 
     /// Loads the full posting for its detail pane (and keeps it current from then on).
@@ -323,6 +348,47 @@ public final class AppStore {
         record(app)
     }
 
+    // MARK: Search
+
+    /// Fresh counts for the Search and Agent runs screens (postings move on between events).
+    public func openSearch() async {
+        guard let api else { return }
+        await refreshSearch(api)
+    }
+
+    public func setStrategy(_ id: Int64, paused: Bool) async {
+        guard let api, await attempt({ try await api.setStrategy(id, paused: paused) }) != nil else { return }
+        await refreshSearch(api)
+    }
+
+    /// Runs a strategy now; returns the run, or nil when one was already waiting or running.
+    @discardableResult
+    public func runStrategy(_ id: Int64) async -> Int64? {
+        guard let api, let run = await attempt({ try await api.runStrategy(id) }) else { return nil }
+        await refreshSearch(api)
+        return run
+    }
+
+    /// Switches a source (by key) or a whole kind on or off.
+    public func setSource(_ target: String, enabled: Bool) async {
+        guard let api, await attempt({ try await api.setSource(target, enabled: enabled) }) != nil else { return }
+        await refreshSearch(api)
+    }
+
+    /// Loads a run's events for its detail pane (and keeps them current from then on).
+    public func openRun(_ id: Int64) async {
+        guard let api, let events = await attempt({ try await api.runEvents(id) }) else { return }
+        runEvents[id] = events
+    }
+
+    public var strategyRows: [SearchRow] { SearchText.strategyRows(search) }
+
+    public func strategy(_ id: Int64) -> SearchStrategy? { search.strategies.first { $0.id == id } }
+
+    public func source(_ key: String) -> SearchSource? { search.sources.first { $0.key == key } }
+
+    public func runs(of strategy: Int64) -> [SearchRun] { searchRuns.filter { $0.strategyID == strategy } }
+
     // MARK: The interview
 
     /// Loads a thread for its chat view (and keeps it current from then on).
@@ -397,6 +463,9 @@ public final class AppStore {
 
     public func count(_ section: Section) -> Int {
         if section == .interview { return openInterviewCount }
+        // A badge on Search only while a run is going.
+        if section == .search { return search.strategies.filter(\.running).count }
+        if section == .agentRuns { return 0 }
         return section.isBuilt ? items(section).count : 0
     }
 

@@ -18,7 +18,8 @@ struct ScriptStep: Decodable {
     var posting: Int64?
     var review: Int64?
     /// skip · interested · prepare · confirmAll · confirmFacts · editAnswer · setField · approve · submit · setCvMode ·
-    /// startInterview · answerInterview · dismissInterview · wait
+    /// startInterview · answerInterview · dismissInterview · pauseStrategy · resumeStrategy · runStrategy ·
+    /// sourceOff · sourceOn (value: a source key or kind) · wait
     var action: String?
     var application: Int64?
     var facts: [Int64]?
@@ -31,8 +32,13 @@ struct ScriptStep: Decodable {
     /// Seconds to wait before rendering (for events to arrive).
     var wait: Double?
     /// Keep waiting (up to `wait`) until this is true: "stage:<app>:<stage>", "posting:<id>",
-    /// "handoff:<app>", "question" (the thread on screen has an open question), "settled".
+    /// "handoff:<app>", "question" (the thread on screen has an open question), "settled",
+    /// "run:<strategy>" (its latest run finished).
     var until: String?
+    /// The Search section: a strategy or a source; the Agent runs section: a run.
+    var searchStrategy: Int64?
+    var searchSource: String?
+    var agentRun: Int64?
     /// The Interview section: open a project's thread or a question's.
     var interviewProject: Int64?
     var interviewQuestion: Int64?
@@ -101,6 +107,18 @@ final class ScriptRunner {
             store.navigation.reviewing = review
             if let app = store.applications[review] { store.navigation.postingId = app.postingID }
         }
+        if let id = s.searchStrategy {
+            store.navigation.section = .search
+            store.navigation.search = .strategy(id)
+        }
+        if let key = s.searchSource {
+            store.navigation.section = .search
+            store.navigation.search = .source(key)
+        }
+        if let run = s.agentRun {
+            store.navigation.section = .agentRuns
+            store.navigation.run = run
+        }
         if let p = s.interviewProject { store.navigation.showInterview(.project(p)) }
         if let q = s.interviewQuestion { store.navigation.showInterview(.question(q)) }
         let app = s.application ?? store.navigation.reviewing ?? 0
@@ -160,6 +178,13 @@ final class ScriptRunner {
             } else {
                 await store.dismissInterview(target, question: open.id)
             }
+        case "pauseStrategy", "resumeStrategy":
+            await store.setStrategy(s.searchStrategy ?? 0, paused: s.action == "pauseStrategy")
+        case "runStrategy":
+            let run = await store.runStrategy(s.searchStrategy ?? 0)
+            note("runStrategy: run \(run.map(String.init) ?? "none (one is already going)")")
+        case "sourceOff", "sourceOn":
+            await store.setSource(s.value ?? "", enabled: s.action == "sourceOn")
         case "showBrowser": note("showBrowser: Applyant's Chrome brought forward = \(ChromeWindow.bringForward())")
         default: break
         }
@@ -182,6 +207,10 @@ final class ScriptRunner {
             // "question": the thread on screen has an open question to answer.
             guard let target = store.navigation.interview, let thread = store.interviewThreads[target] else { return false }
             return InterviewText.openQuestion(thread) != nil
+        case "run":
+            // "run:<strategy>": its latest run is no longer waiting or running.
+            guard parts.count == 2, let id = Int64(parts[1]), let latest = store.runs(of: id).first else { return false }
+            return latest.status != "queued" && store.strategy(id)?.running == false
         case "settled":
             // "settled": the thread on screen isn't waiting on the interviewer.
             guard let target = store.navigation.interview, let thread = store.interviewThreads[target] else { return false }
@@ -233,6 +262,12 @@ final class ScriptRunner {
         }
         if let target = nav.interview, nav.section == .interview, let thread = store.interviewThreads[target] {
             parts.append("interview=\(target) questions=\(thread.questions.map { "\($0.id):\($0.status)" }) pending=\(thread.pending)")
+        }
+        if nav.section == .search {
+            parts.append("strategies=\(store.search.strategies.map { "\($0.id):\($0.state):\($0.stats.found)" }) sources on=\(store.search.sources.filter { $0.enabled && $0.kindEnabled }.count)/\(store.search.sources.count)")
+        }
+        if nav.section == .agentRuns, let run = nav.run {
+            parts.append("run=\(run) events=\(store.runEvents[run]?.count ?? 0)")
         }
         parts.append("inbox=\(store.count(.inbox)) ready=\(store.count(.readyToReview)) applied=\(store.count(.applied)) interview=\(store.count(.interview))")
         return parts.joined(separator: " ")
