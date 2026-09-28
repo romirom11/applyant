@@ -189,3 +189,25 @@ describe('NativeTextExtractor', () => {
     expect((await stub.extract(CV_PDF)).pages).toEqual([`node:${CV_PDF}`]);
   });
 });
+
+// The real Swift helper, on a Mac where `swift build` has run (native/.build). Read-only ops
+// only: the Keychain is covered by `swift test` under a test-only service.
+const realHelper = process.platform === 'darwin' ? nativeHelperPath({}) : null;
+describe.skipIf(!realHelper)('the real applyant-native', () => {
+  it('answers a ping and reads the fixture CV with PDFKit', async () => {
+    const c = new NativeClient({ path: realHelper as string, log: quietLog });
+    clients.push(c);
+    c.start();
+    expect(await c.ping()).toBe(true);
+    const x = new NativeTextExtractor(c, fallbackNever, quietLog);
+    const text = await x.extract(CV_PDF);
+    expect(text.format).toBe('pdf');
+    expect(text.pages.join('\n')).toContain('Led a team of 4 engineers');
+  });
+});
+
+const fallbackNever: TextExtractor = {
+  extract: async () => {
+    throw new Error('the Node reader was used');
+  },
+};

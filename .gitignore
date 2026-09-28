@@ -4,3 +4,8 @@
 node_modules/
 *.tsbuildinfo
 .DS_Store
+
+# Swift builds and the assembled app bundle
+native/.build/
+app/.build/
+build/
