@@ -18,7 +18,7 @@ import { readFormHandler, requestFormRead } from './domain/applications/read-for
 import { catchUpApplications } from './domain/applications/store.ts';
 import { embedFacts, ensureFactIndex } from './domain/knowledge/embed-index.ts';
 import { syncSource } from './domain/knowledge/sync.ts';
-import { NodeTextExtractor } from './domain/knowledge/text/extract.ts';
+import { NativeTextExtractor, NodeTextExtractor } from './domain/knowledge/text/extract.ts';
 import { EcbFx } from './domain/scoring/fx.ts';
 import { scorePosting } from './domain/scoring/handlers.ts';
 import { getPreferences } from './domain/scoring/prefs.ts';
@@ -29,15 +29,18 @@ import { McpHub } from './mcp/server.ts';
 import { browserTools } from './mcp/tools/browser.ts';
 import { knowledgeTools } from './mcp/tools/knowledge.ts';
 import { AgentRunner } from './models/agent-runner.ts';
+import { defaultCliPaths } from './models/cli-paths.ts';
+import { CliStatus } from './models/cli-status.ts';
 import { type Embedder, GemmaEmbedder, HashEmbedder } from './models/embeddings.ts';
-import { ClaudeProvider } from './models/providers/claude.ts';
+import { ClaudeProvider, claudeEnv } from './models/providers/claude.ts';
 import { JevClient } from './models/providers/jev.ts';
+import { openNative } from './native/client.ts';
 import { EventBus } from './queue/events.ts';
 import { runInTx } from './queue/tx.ts';
 import type { Handlers } from './queue/types.ts';
 import { Worker } from './queue/worker.ts';
 import { startRpcServer } from './rpc/server.ts';
-import { FileSecrets } from './secrets/file-backend.ts';
+import { openSecrets } from './secrets/keychain-backend.ts';
 import { ensurePrivateDir } from './util/fs.ts';
 import { createLogger } from './util/log.ts';
 
@@ -53,13 +56,26 @@ export async function runDaemon(config: Config = loadConfig()): Promise<() => Pr
     throw new Error(`applyantd is already running (pid ${running.pid}) for ${config.home}`);
   }
 
+  const startedAt = new Date();
   const db = openDb(config.dbPath);
   const read = openReadDb(config.dbPath);
   const bus = new EventBus();
-  const secrets = new FileSecrets(config.secretsFile);
+  // applyant-native (macOS): Keychain, PDFKit text, wake events. A stub elsewhere.
+  const native = openNative({ path: config.nativeHelperPath, log: log.child({ part: 'native' }) });
+  const secrets = await openSecrets({ native, secretsFile: config.secretsFile, log });
+  // A launchd agent has no shell PATH: start looking for the agent CLIs now (the login-shell
+  // probe, if one is needed, runs once here), so tasks rarely wait for it.
+  const cliPaths = defaultCliPaths();
+  void cliPaths.start();
+  const cli = new CliStatus({ paths: cliPaths });
   const reader = new ReaderPool({ ...config.reader, log: log.child({ part: 'reader' }) });
   const models = new AgentRunner({
-    providers: [new ClaudeProvider()],
+    providers: [
+      new ClaudeProvider({
+        resolvePath: () => cliPaths.require('claude'),
+        env: (path) => claudeEnv({ ...process.env, PATH: cliPaths.childPath(path) }),
+      }),
+    ],
     // Decision roles ask Jev when its key is stored (`applyant secrets set jev`).
     jev: new JevClient({ secrets, ...(config.jevUrl ? { url: config.jevUrl } : {}) }),
     runsDir: config.runsDir,
@@ -113,7 +129,7 @@ export async function runDaemon(config: Config = loadConfig()): Promise<() => Pr
     readPool,
     mcp,
     fx: new EcbFx(),
-    text: new NodeTextExtractor(),
+    text: new NativeTextExtractor(native, new NodeTextExtractor(), log.child({ part: 'text' })),
     dirs: { repos: config.reposDir, files: config.filesDir, cvTemplate: config.cvTemplateDir },
     log,
   };
@@ -141,6 +157,16 @@ export async function runDaemon(config: Config = loadConfig()): Promise<() => Pr
   // …and delivery for an approved application that never got one (a restart mid-delivery).
   runInTx(db, bus, { now: new Date() }, (tx) => catchUpDeliveries(tx));
 
+  // Sleep/wake (macOS): logged and put on the event stream. Catching up on missed schedules
+  // comes with the scheduler (phase 10).
+  native.onEvent((e) => {
+    if (e.event !== 'wake') return;
+    log.info('the Mac woke from sleep');
+    runInTx(db, bus, { now: new Date() }, (tx) =>
+      tx.emit({ kind: 'system.wake', message: 'the Mac woke from sleep' }),
+    );
+  });
+
   const worker = new Worker({
     db,
     read,
@@ -157,6 +183,7 @@ export async function runDaemon(config: Config = loadConfig()): Promise<() => Pr
     db,
     bus,
     secrets,
+    setup: { cli, native, secrets, home: config.home, startedAt },
     now: () => new Date(),
     token,
     host: config.host,
@@ -183,6 +210,7 @@ export async function runDaemon(config: Config = loadConfig()): Promise<() => Pr
       await submit.close();
       await reader.close();
       await readPool.close();
+      await native.close();
       await embedder.close?.();
       closeDb(read);
       closeDb(db);

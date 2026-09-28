@@ -7,6 +7,7 @@ import { type ApplyantClient, connect, describeError } from './client.ts';
 import { eventJson, eventLine } from './format.ts';
 import { registerHandoff } from './handoff.ts';
 import { positiveInt, registerJobs } from './jobs.ts';
+import { registerStatus } from './status.ts';
 
 const out = (text: string): void => {
   process.stdout.write(`${text}\n`);
@@ -62,6 +63,7 @@ export function buildCli(client: () => ApplyantClient): Command {
   registerCandidate(program, client);
   registerApplications(program, client);
   registerHandoff(program, client);
+  registerStatus(program, client);
 
   const runs = program.command('runs').description('task activity');
   runs

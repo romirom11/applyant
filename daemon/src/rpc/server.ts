@@ -12,9 +12,11 @@ import { candidateRpcs } from './candidate.ts';
 import { postingRpcs, type RpcContext } from './postings.ts';
 import { prefsRpcs } from './prefs.ts';
 import { secretRpcs } from './secrets.ts';
+import { type SetupContext, setupRpcs } from './setup.ts';
 
 export interface RpcServerOptions extends RpcContext {
   secrets: Secrets;
+  setup: SetupContext;
   token: string;
   host: string;
   port: number;
@@ -47,6 +49,7 @@ export async function startRpcServer(o: RpcServerOptions): Promise<RpcServer> {
         ...applicationRpcs(o),
         ...prefsRpcs(o),
         ...secretRpcs(o.secrets),
+        ...setupRpcs(o.setup),
       }),
   });
   const server: Server = createServer(handler);

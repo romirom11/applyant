@@ -36,6 +36,11 @@ service ApplyantService {
   rpc DeleteSecret(DeleteSecretRequest) returns (DeleteSecretResponse);
   rpc ListSecrets(ListSecretsRequest) returns (ListSecretsResponse);
 
+  // GetSetupStatus says whether the daemon can do its work on this machine: where the agent
+  // CLIs were found (a launchd agent has no shell PATH), whether they're signed in, and which
+  // Apple-only parts are reachable. The menu bar, `applyant status` and onboarding read it.
+  rpc GetSetupStatus(GetSetupStatusRequest) returns (GetSetupStatusResponse);
+
   // Candidate knowledge: profile, projects, sources and the facts extracted from them.
   rpc GetCandidate(GetCandidateRequest) returns (GetCandidateResponse);
   rpc SetProfileValue(SetProfileValueRequest) returns (SetProfileValueResponse);
@@ -452,6 +457,46 @@ message ListSecretsRequest {}
 
 message ListSecretsResponse {
   repeated string names = 1;
+}
+
+// ---- Setup ----------------------------------------------------------------------------
+
+message ToolStatus {
+  bool found = 1;
+  // Absolute path of the executable the daemon runs; empty when not found.
+  string path = 2;
+  // Which lookup step found it: "env" ($APPLYANT_<TOOL>_PATH), "dir" (a fixed directory) or
+  // "shell" (the login shell's PATH); empty when not found.
+  string found_via = 3;
+  // `<tool> --version`; empty when it couldn't be run.
+  string version = 4;
+  bool signed_in = 5;
+  // Why it's missing, can't run or isn't signed in; empty when all is well.
+  string error = 6;
+}
+
+message SetupStatus {
+  ToolStatus claude = 1;
+  ToolStatus codex = 2;
+  // applyant-native (macOS only) answers.
+  bool native_helper = 3;
+  // "keychain" | "file".
+  string secrets_backend = 4;
+  // The daemon itself: its process, data directory and start time.
+  int64 pid = 5;
+  string home = 6;
+  google.protobuf.Timestamp started_at = 7;
+  // When the tool checks above ran (they're cached for a minute).
+  google.protobuf.Timestamp checked_at = 8;
+}
+
+message GetSetupStatusRequest {
+  // Re-run the tool checks instead of using the cached ones.
+  bool refresh = 1;
+}
+
+message GetSetupStatusResponse {
+  SetupStatus status = 1;
 }
 
 // ---- Candidate knowledge ------------------------------------------------------------

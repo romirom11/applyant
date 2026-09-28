@@ -76,6 +76,9 @@ const env = () => ({
   APPLYANT_NAV_TIMEOUT_MS: '15000',
   // Never the real claude or a model download from tests.
   APPLYANT_CLAUDE_PATH: FAKE_CLAUDE,
+  // No codex, and no applyant-native: the tests never touch the real Keychain or login shell.
+  APPLYANT_CODEX_PATH: '/nonexistent/codex',
+  APPLYANT_NATIVE_PATH: 'off',
   FAKE_CLAUDE_OUTPUT: join(home, 'fake-claude-output.json'),
   APPLYANT_EMBEDDER: 'hash',
   // The secrets test stores a dummy Jev key: it must never reach the real API.
@@ -503,6 +506,41 @@ describe('applyant CLI against a live daemon', () => {
     } finally {
       follow.kill('SIGINT');
     }
+  });
+
+  it('status reports where the agent CLIs were found, or why not', async () => {
+    const status = await cliJson<{
+      daemon: { pid: number; home: string };
+      claude: {
+        found: boolean;
+        path: string;
+        foundVia: string;
+        version: string;
+        signedIn: boolean;
+      };
+      codex: { found: boolean; error: string };
+      nativeHelper: boolean;
+      secretsBackend: string;
+    }>(['status', '--refresh']);
+    expect(status.daemon).toMatchObject({ pid: daemon.pid, home });
+    expect(status.claude).toMatchObject({
+      found: true,
+      path: FAKE_CLAUDE,
+      foundVia: 'env',
+      version: '9.9.9 (Fake Claude)',
+      signedIn: true,
+    });
+    expect(status.codex.found).toBe(false);
+    expect(status.codex.error).toMatch(
+      /APPLYANT_CODEX_PATH=\/nonexistent\/codex is not an executable/,
+    );
+    expect(status).toMatchObject({ nativeHelper: false, secretsBackend: 'file' });
+
+    const text = await cli(['status']);
+    expect(text.code).toBe(0);
+    expect(text.stdout).toMatch(/^applyantd ✓ running/);
+    expect(text.stdout).toContain(`claude    ✓ ${FAKE_CLAUDE}`);
+    expect(text.stdout).toMatch(/codex {5}✗ APPLYANT_CODEX_PATH/);
   });
 
   it('stores secrets write-only and never leaks values into logs or other files', async () => {

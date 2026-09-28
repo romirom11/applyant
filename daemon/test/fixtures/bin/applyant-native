@@ -1,0 +1,51 @@
+#!/usr/bin/env node
+// A stand-in for applyant-native (the Swift helper) that speaks the same JSON-lines protocol,
+// so the daemon's client runs on Linux CI. The keychain is an in-memory map.
+//
+//   FAKE_NATIVE_LOG   file to append each request line to
+//   extract_text      answers with the file's bytes as one page ("" for *.blank.pdf)
+//   test_wake         writes {"event":"wake"}, like NSWorkspace.didWakeNotification
+//   test_crash        exits with status 3 before answering
+//   test_hang         never answers
+(async () => {
+  const fs = await import('node:fs');
+  const readline = await import('node:readline');
+  const keychain = new Map();
+  const send = (m) => process.stdout.write(`${JSON.stringify(m)}\n`);
+  process.stdout.write('not json: a stray line the client must ignore\n');
+  const rl = readline.createInterface({ input: process.stdin });
+  rl.on('line', (line) => {
+    if (process.env.FAKE_NATIVE_LOG) fs.appendFileSync(process.env.FAKE_NATIVE_LOG, `${line}\n`);
+    const req = JSON.parse(line);
+    const ok = (result) => send({ id: req.id, ok: true, result });
+    const fail = (error) => send({ id: req.id, ok: false, error });
+    switch (req.op) {
+      case 'ping':
+        return ok({ version: 'fake', pid: process.pid });
+      case 'keychain_get':
+        return ok({ value: keychain.has(req.name) ? keychain.get(req.name) : null });
+      case 'keychain_set':
+        keychain.set(req.name, req.value);
+        return ok({});
+      case 'keychain_delete':
+        return ok({ deleted: keychain.delete(req.name) });
+      case 'keychain_list':
+        return ok({ names: [...keychain.keys()] });
+      case 'extract_text': {
+        if (req.path.endsWith('.broken.pdf')) return fail('PDFKit could not open the file');
+        const text = req.path.endsWith('.blank.pdf') ? '' : `native:${req.format}`;
+        return ok({ pages: [text], title: null });
+      }
+      case 'test_wake':
+        send({ event: 'wake' });
+        return ok({});
+      case 'test_crash':
+        process.exit(3);
+        return;
+      case 'test_hang':
+        return;
+      default:
+        return fail(`unknown op ${req.op}`);
+    }
+  });
+})();

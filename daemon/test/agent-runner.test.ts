@@ -16,12 +16,7 @@ import { z } from 'zod';
 import { agentRuns, providerPauses, tasks } from '../src/db/schema.ts';
 import { type ProviderRequest, toStrictJsonSchema } from '../src/models/agent-runner.ts';
 import { parseLimitMessage, UNKNOWN_RESET_MS } from '../src/models/limits.ts';
-import {
-  ClaudeNotFoundError,
-  ClaudeProvider,
-  claudeEnv,
-  resolveClaudePath,
-} from '../src/models/providers/claude.ts';
+import { ClaudeProvider, claudeEnv } from '../src/models/providers/claude.ts';
 import { FakeProvider } from '../src/models/providers/fake.ts';
 import { EventBus } from '../src/queue/events.ts';
 import { runInTx } from '../src/queue/tx.ts';
@@ -414,14 +409,5 @@ describe('ClaudeProvider (fake `claude` executable)', () => {
     const res = await p.run(req(dir));
     expect(res.kind).toBe('error');
     expect(res.kind === 'error' && res.message).toMatch(/error_during_execution: boom/);
-  });
-
-  it('resolves claude from APPLYANT_CLAUDE_PATH, then PATH', () => {
-    expect(resolveClaudePath({ APPLYANT_CLAUDE_PATH: FAKE_CLAUDE, PATH: '' })).toBe(FAKE_CLAUDE);
-    expect(resolveClaudePath({ PATH: join(FAKE_CLAUDE, '..'), HOME: dir })).toBe(FAKE_CLAUDE);
-    expect(() => resolveClaudePath({ PATH: dir, HOME: dir })).toThrow(ClaudeNotFoundError);
-    expect(() => resolveClaudePath({ APPLYANT_CLAUDE_PATH: join(dir, 'nope') })).toThrow(
-      /not an executable/,
-    );
   });
 });

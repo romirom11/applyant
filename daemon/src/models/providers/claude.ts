@@ -2,46 +2,14 @@
 // `claude` CLI signed in on this machine (the candidate's subscription).
 //
 // It always passes `pathToClaudeCodeExecutable`, so the SDK never falls back to the binary
-// bundled in its npm package (agent-runner.test.ts checks the spawned path). The path is a
-// PATH lookup for now; phase 8a replaces it with the resolver launchd needs.
-import { accessSync, constants } from 'node:fs';
-import { homedir } from 'node:os';
-import { delimiter, join } from 'node:path';
+// bundled in its npm package (agent-runner.test.ts checks the spawned path). The path comes
+// from the daemon's resolver (cli-paths.ts), because a launchd agent has no shell PATH.
 import { type Options, query, type SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { ModelProvider, ProviderRequest, ProviderResult, Usage } from '../agent-runner.ts';
+import { defaultCliPaths } from '../cli-paths.ts';
 import { parseLimitMessage, resetFromEpoch } from '../limits.ts';
 
 type Env = Record<string, string | undefined>;
-
-export class ClaudeNotFoundError extends Error {}
-
-function isExecutable(path: string): boolean {
-  try {
-    accessSync(path, constants.X_OK);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/** `$APPLYANT_CLAUDE_PATH`, then `claude` on PATH, then `~/.local/bin/claude`. */
-export function resolveClaudePath(env: Env = process.env): string {
-  const explicit = env.APPLYANT_CLAUDE_PATH;
-  if (explicit) {
-    if (isExecutable(explicit)) return explicit;
-    throw new ClaudeNotFoundError(`APPLYANT_CLAUDE_PATH=${explicit} is not an executable file`);
-  }
-  for (const dir of (env.PATH ?? '').split(delimiter)) {
-    if (!dir) continue;
-    const candidate = join(dir, 'claude');
-    if (isExecutable(candidate)) return candidate;
-  }
-  const local = join(env.HOME || homedir(), '.local', 'bin', 'claude');
-  if (isExecutable(local)) return local;
-  throw new ClaudeNotFoundError(
-    'the `claude` CLI was not found (set APPLYANT_CLAUDE_PATH or put it on PATH)',
-  );
-}
 
 /**
  * The environment for the CLI: ours, minus the variables a parent Claude Code session sets
@@ -74,8 +42,9 @@ export function claudeEnv(env: Env = process.env): Env {
 
 export interface ClaudeProviderOptions {
   /** Resolved on every run, so installing `claude` doesn't need a daemon restart. */
-  resolvePath?: () => string;
-  env?: () => Env;
+  resolvePath?: () => Promise<string> | string;
+  /** The CLI's environment; given the resolved path, so PATH can start at its directory. */
+  env?: (path: string) => Env;
   now?: () => Date;
 }
 
@@ -91,7 +60,7 @@ export class ClaudeProvider implements ModelProvider {
     const now = this.o.now ?? (() => new Date());
     let path: string;
     try {
-      path = (this.o.resolvePath ?? resolveClaudePath)();
+      path = await (this.o.resolvePath ?? (() => defaultCliPaths().require('claude')))();
     } catch (err) {
       return { kind: 'error', message: (err as Error).message, usage: null };
     }
@@ -120,7 +89,9 @@ export class ClaudeProvider implements ModelProvider {
       settingSources: [],
       persistSession: false,
       cwd: req.cwd,
-      env: (this.o.env ?? claudeEnv)(),
+      env: (
+        this.o.env ?? ((p) => claudeEnv({ ...process.env, PATH: defaultCliPaths().childPath(p) }))
+      )(path),
       abortController: ac,
       stderr: (data) => {
         stderr = (stderr + data).slice(-4000);

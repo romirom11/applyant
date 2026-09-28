@@ -1,7 +1,9 @@
-// Documents → text. One interface, so phase 8a can put applyant-native (PDFKit, AppKit) in
-// front on macOS and keep these readers as the fallback.
-import { readFile } from 'node:fs/promises';
+// Documents → text. One interface: on macOS applyant-native (PDFKit, AppKit) reads PDF and
+// DOCX, and these Node readers are the fallback and the Linux path.
+import { open, readFile } from 'node:fs/promises';
 import { extname } from 'node:path';
+import type { NativeHelper } from '../../../native/client.ts';
+import type { Logger } from '../../../util/log.ts';
 import { htmlToText } from './html.ts';
 import { pdfToText } from './pdf.ts';
 
@@ -50,6 +52,53 @@ export class NodeTextExtractor implements TextExtractor {
   async extract(path: string): Promise<ExtractedText> {
     const data = await readFile(path);
     return extractFromBuffer(path, data);
+  }
+}
+
+/** PDF and DOCX through applyant-native first; anything it can't read goes to `fallback`. */
+export class NativeTextExtractor implements TextExtractor {
+  private readonly native: NativeHelper;
+  private readonly fallback: TextExtractor;
+  private readonly log: Logger;
+
+  constructor(native: NativeHelper, fallback: TextExtractor, log: Logger) {
+    this.native = native;
+    this.fallback = fallback;
+    this.log = log;
+  }
+
+  async extract(path: string): Promise<ExtractedText> {
+    const format = await sniff(path);
+    if (this.native.available && (format === 'pdf' || format === 'docx')) {
+      try {
+        const got = await this.native.request<{ pages: string[]; title: string | null }>(
+          'extract_text',
+          { path, format },
+        );
+        // A PDF without a text layer reads as blank here; pdfjs gets the same chance.
+        if (got.pages.some((p) => p.trim() !== '')) {
+          return { format, pages: got.pages.map((p) => p.trim()), title: got.title ?? null };
+        }
+        this.log.info('applyant-native found no text; trying the Node reader', { path });
+      } catch (err) {
+        this.log.warn('applyant-native could not read the document; trying the Node reader', {
+          path,
+          err,
+        });
+      }
+    }
+    return this.fallback.extract(path);
+  }
+}
+
+async function sniff(path: string): Promise<ExtractedText['format'] | null> {
+  const fh = await open(path, 'r');
+  try {
+    const head = new Uint8Array(4096);
+    const { bytesRead } = await fh.read(head, 0, head.length, 0);
+    return detectFormat(path, head.subarray(0, bytesRead));
+  } finally {
+    await fh.close();
   }
 }
 

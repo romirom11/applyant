@@ -1362,6 +1362,149 @@ export declare type ListSecretsResponse = Message<"applyant.v1.ListSecretsRespon
 export declare const ListSecretsResponseSchema: GenMessage<ListSecretsResponse>;
 
 /**
+ * @generated from message applyant.v1.ToolStatus
+ */
+export declare type ToolStatus = Message<"applyant.v1.ToolStatus"> & {
+  /**
+   * @generated from field: bool found = 1;
+   */
+  found: boolean;
+
+  /**
+   * Absolute path of the executable the daemon runs; empty when not found.
+   *
+   * @generated from field: string path = 2;
+   */
+  path: string;
+
+  /**
+   * Which lookup step found it: "env" ($APPLYANT_<TOOL>_PATH), "dir" (a fixed directory) or
+   * "shell" (the login shell's PATH); empty when not found.
+   *
+   * @generated from field: string found_via = 3;
+   */
+  foundVia: string;
+
+  /**
+   * `<tool> --version`; empty when it couldn't be run.
+   *
+   * @generated from field: string version = 4;
+   */
+  version: string;
+
+  /**
+   * @generated from field: bool signed_in = 5;
+   */
+  signedIn: boolean;
+
+  /**
+   * Why it's missing, can't run or isn't signed in; empty when all is well.
+   *
+   * @generated from field: string error = 6;
+   */
+  error: string;
+};
+
+/**
+ * Describes the message applyant.v1.ToolStatus.
+ * Use `create(ToolStatusSchema)` to create a new message.
+ */
+export declare const ToolStatusSchema: GenMessage<ToolStatus>;
+
+/**
+ * @generated from message applyant.v1.SetupStatus
+ */
+export declare type SetupStatus = Message<"applyant.v1.SetupStatus"> & {
+  /**
+   * @generated from field: applyant.v1.ToolStatus claude = 1;
+   */
+  claude?: ToolStatus | undefined;
+
+  /**
+   * @generated from field: applyant.v1.ToolStatus codex = 2;
+   */
+  codex?: ToolStatus | undefined;
+
+  /**
+   * applyant-native (macOS only) answers.
+   *
+   * @generated from field: bool native_helper = 3;
+   */
+  nativeHelper: boolean;
+
+  /**
+   * "keychain" | "file".
+   *
+   * @generated from field: string secrets_backend = 4;
+   */
+  secretsBackend: string;
+
+  /**
+   * The daemon itself: its process, data directory and start time.
+   *
+   * @generated from field: int64 pid = 5;
+   */
+  pid: bigint;
+
+  /**
+   * @generated from field: string home = 6;
+   */
+  home: string;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp started_at = 7;
+   */
+  startedAt?: Timestamp | undefined;
+
+  /**
+   * When the tool checks above ran (they're cached for a minute).
+   *
+   * @generated from field: google.protobuf.Timestamp checked_at = 8;
+   */
+  checkedAt?: Timestamp | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.SetupStatus.
+ * Use `create(SetupStatusSchema)` to create a new message.
+ */
+export declare const SetupStatusSchema: GenMessage<SetupStatus>;
+
+/**
+ * @generated from message applyant.v1.GetSetupStatusRequest
+ */
+export declare type GetSetupStatusRequest = Message<"applyant.v1.GetSetupStatusRequest"> & {
+  /**
+   * Re-run the tool checks instead of using the cached ones.
+   *
+   * @generated from field: bool refresh = 1;
+   */
+  refresh: boolean;
+};
+
+/**
+ * Describes the message applyant.v1.GetSetupStatusRequest.
+ * Use `create(GetSetupStatusRequestSchema)` to create a new message.
+ */
+export declare const GetSetupStatusRequestSchema: GenMessage<GetSetupStatusRequest>;
+
+/**
+ * @generated from message applyant.v1.GetSetupStatusResponse
+ */
+export declare type GetSetupStatusResponse = Message<"applyant.v1.GetSetupStatusResponse"> & {
+  /**
+   * @generated from field: applyant.v1.SetupStatus status = 1;
+   */
+  status?: SetupStatus | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.GetSetupStatusResponse.
+ * Use `create(GetSetupStatusResponseSchema)` to create a new message.
+ */
+export declare const GetSetupStatusResponseSchema: GenMessage<GetSetupStatusResponse>;
+
+/**
  * @generated from message applyant.v1.ProfileEntry
  */
 export declare type ProfileEntry = Message<"applyant.v1.ProfileEntry"> & {
@@ -3555,6 +3698,18 @@ export declare const ApplyantService: GenService<{
     methodKind: "unary";
     input: typeof ListSecretsRequestSchema;
     output: typeof ListSecretsResponseSchema;
+  },
+  /**
+   * GetSetupStatus says whether the daemon can do its work on this machine: where the agent
+   * CLIs were found (a launchd agent has no shell PATH), whether they're signed in, and which
+   * Apple-only parts are reachable. The menu bar, `applyant status` and onboarding read it.
+   *
+   * @generated from rpc applyant.v1.ApplyantService.GetSetupStatus
+   */
+  getSetupStatus: {
+    methodKind: "unary";
+    input: typeof GetSetupStatusRequestSchema;
+    output: typeof GetSetupStatusResponseSchema;
   },
   /**
    * Candidate knowledge: profile, projects, sources and the facts extracted from them.

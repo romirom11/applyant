@@ -20,6 +20,9 @@ const env = () => ({
   APPLYANT_HOME: home,
   APPLYANT_POLL_MS: '50',
   APPLYANT_CLAUDE_PATH: FAKE_CLAUDE,
+  // No codex, and no applyant-native: the tests never touch the real Keychain or login shell.
+  APPLYANT_CODEX_PATH: '/nonexistent/codex',
+  APPLYANT_NATIVE_PATH: 'off',
   // Offline lexical embeddings: no model download in tests.
   APPLYANT_EMBEDDER: 'hash',
   FAKE_CLAUDE_ARGV: join(home, 'fake-claude-argv.jsonl'),

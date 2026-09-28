@@ -21,7 +21,9 @@ export type EventKind =
   // Delivery got stuck and left a browser window open for the candidate to finish (entity_id =
   // application id, posting_id set; message = the hand-off reason).
   | 'handoff'
-  | 'source.synced';
+  | 'source.synced'
+  // The Mac woke from sleep (applyant-native); phase 10's scheduler catches up on it.
+  | 'system.wake';
 
 export interface EventInput {
   kind: EventKind;

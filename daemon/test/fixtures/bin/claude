@@ -21,6 +21,17 @@
       })}\n`,
     );
   }
+  // The setup status checks (cli-status.ts).
+  const [first, second] = process.argv.slice(2);
+  if (first === '--version') {
+    process.stdout.write('9.9.9 (Fake Claude)\n');
+    return;
+  }
+  if (first === 'auth' && second === 'status') {
+    process.stdout.write(`${JSON.stringify({ loggedIn: env.FAKE_CLAUDE_SIGNED_OUT !== '1' })}\n`);
+    process.exitCode = env.FAKE_CLAUDE_SIGNED_OUT === '1' ? 1 : 0;
+    return;
+  }
   const mode = env.FAKE_CLAUDE_MODE || 'ok';
   if (mode === 'exit') {
     process.stderr.write("You've hit your weekly limit · resets Oct 3, 9am\n");
