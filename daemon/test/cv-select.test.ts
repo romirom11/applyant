@@ -14,6 +14,7 @@ import {
   planFromOutput,
   planIsEmpty,
   validateCvPlan,
+  words,
 } from '../src/domain/applications/cv/select.ts';
 import { createProject } from '../src/domain/knowledge/projects.ts';
 import type { CvPlanOutput } from '../src/models/schemas/cv.ts';
@@ -157,14 +158,22 @@ describe('tailored CV content', () => {
           },
         ],
         education: [],
-        skills: ['Python', 'Kubernetes', 'python'],
+        // Punctuation around a skill doesn't matter; whole words do.
+        skills: ['Python', 'Kubernetes', 'python', '(open-source Python library)', 'Pyth'],
       },
       ctx,
     );
-    expect(plan.skills).toEqual(['Python']);
+    expect(plan.skills).toEqual(['Python', '(open-source Python library)']);
     expect(plan.dropped).toEqual([
       { section: 'skills', text: 'Kubernetes', factIds: [], reason: 'no confirmed fact names it' },
+      { section: 'skills', text: 'Pyth', factIds: [], reason: 'no confirmed fact names it' },
     ]);
+    expect(words('Docker, CI/CD (GitHub Actions), AWS; Node.js.')).toBe(
+      ' docker ci cd github actions aws node.js ',
+    );
+    expect(words('Docker, CI/CD (GitHub Actions)').includes(words('CI/CD (GitHub Actions)'))).toBe(
+      true,
+    );
 
     const items = linesToCheck(plan, ctx);
     expect(items.map((i) => i.key)).toEqual([
@@ -188,7 +197,7 @@ describe('tailored CV content', () => {
       'Built the Python call-analysis pipeline',
       'Maintains an open-source audio chunking library',
     ]);
-    expect(plan.dropped[1]).toMatchObject({
+    expect(plan.dropped[2]).toMatchObject({
       section: 'harbor',
       text: 'Built a pipeline processing 10 million calls a day',
       reason: 'the verifier: overstates a quantity: no fact gives 10 million',

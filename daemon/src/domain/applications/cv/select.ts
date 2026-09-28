@@ -204,7 +204,18 @@ const clean = (l: CvLine): CvLine => ({
   factIds: [...new Set(l.factIds.map((n) => Math.trunc(n)))],
 });
 
-const words = (s: string) => ` ${s.toLowerCase().replace(/[^\p{L}\p{N}+#.]+/gu, ' ')} `;
+/**
+ * Text as ` word word `: lowercase, punctuation as single spaces, a sentence's final dot
+ * dropped (so "Node.js." still names Node.js), padded so a skill matches whole words only.
+ */
+export const words = (s: string) =>
+  ` ${s
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}+#.]+/gu, ' ')
+    .split(' ')
+    .map((w) => w.replace(/\.+$/, ''))
+    .filter(Boolean)
+    .join(' ')} `;
 
 /**
  * The writer's output as a plan. A skill stays only if a given fact names it; the rest are
