@@ -1,4 +1,12 @@
-import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import {
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -368,7 +376,8 @@ describe('ClaudeProvider (fake `claude` executable)', () => {
     expect(args.some((a) => a.startsWith('--setting-sources'))).toBe(true);
     // Only Applyant's MCP servers: the account's claude.ai connectors cost ~550k tokens a run.
     expect(args).toContain('--strict-mcp-config');
-    expect(start?.cwd).toBe(dir);
+    // realpath: on macOS the temp dir is a /var → /private/var symlink, and the child reports the real one.
+    expect(start?.cwd).toBe(realpathSync(dir));
     // The parent session's variables were not passed on; an explicit OAuth token was.
     expect(start?.env).not.toContain('CLAUDECODE');
     expect(start?.env).not.toContain('CLAUDE_CODE_SESSION_ID');
