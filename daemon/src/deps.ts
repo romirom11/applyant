@@ -8,6 +8,7 @@ import type { GithubApi } from './domain/knowledge/sources/github.ts';
 import type { TextExtractor } from './domain/knowledge/text/extract.ts';
 import type { FxSource } from './domain/scoring/fx.ts';
 import type { Fetch } from './domain/search/readers/types.ts';
+import type { MailAccess } from './integrations/mail-service.ts';
 import type { McpAccess } from './mcp/server.ts';
 import type { AgentRunner } from './models/agent-runner.ts';
 import type { Embedder } from './models/embeddings.ts';
@@ -23,6 +24,8 @@ export interface Deps {
   /** channel key ("web_form") → its Channel implementation. */
   channels: Record<string, Channel>;
   secrets: Secrets;
+  /** The connected mailbox (phase 13): replies, emailed security codes, email applications. */
+  mail?: MailAccess | null;
   /** Every model call goes through a role here; handlers never name a provider. */
   models: AgentRunner;
   /** Fact and query embeddings (in-process). */

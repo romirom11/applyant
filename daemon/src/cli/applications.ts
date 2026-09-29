@@ -24,6 +24,9 @@ const STAGES: Record<string, ApplicationStage> = {
   needs_candidate: ApplicationStage.NEEDS_CANDIDATE,
   approved: ApplicationStage.APPROVED,
   applied: ApplicationStage.APPLIED,
+  interview: ApplicationStage.INTERVIEW,
+  rejected: ApplicationStage.REJECTED,
+  offer: ApplicationStage.OFFER,
 };
 
 export function appStageName(stage: ApplicationStage): string {

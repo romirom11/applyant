@@ -185,6 +185,10 @@ public final class AppStore {
             // A posting or review open on screen shows the company's research too.
             for id in postingDetails.keys { await refreshPosting(id, api) }
             for id in applicationDetails.keys { await refreshApplication(id, api) }
+        case .mail?:
+            // Mailbox events (phase 13): status moves also arrive as application events; the
+            // mailbox and "Which application is this?" views come with 13b.
+            break
         case nil:
             break
         }

@@ -16,8 +16,10 @@ import {
   receipts,
   tasks,
 } from '../../db/schema.ts';
-import type { Handler, HandOff, Outcome, Tx } from '../../queue/types.ts';
+import type { MailAccess } from '../../integrations/mail-service.ts';
+import type { Handler, HandlerContext, HandOff, Outcome, Tx } from '../../queue/types.ts';
 import { getStandardProfile } from '../knowledge/profile.ts';
+import { waitForSecurityCode } from './security-code.ts';
 import { ApplicationError, applicationView, emitStage } from './store.ts';
 
 /** Failed delivery attempts (a thrown error, not a hand-off) are retried this many times. */
@@ -31,11 +33,14 @@ export const deliverApplication: Handler<'deliver_application'> = async (task, c
   const posting = ctx.read.select().from(postings).where(eq(postings.id, app.postingId)).get();
   if (!posting) return noop;
 
-  const channel = ctx.deps.channels[app.channel];
-  if (!channel) return needsCandidate(app, `no "${app.channel}" delivery channel yet`);
+  // An email target (phase 13) goes through the email channel whatever the row was created with.
+  const channelKey = posting.formStatus === 'email' ? 'email' : app.channel;
+  const channel = ctx.deps.channels[channelKey];
+  if (!channel) return needsCandidate(app, `no "${channelKey}" delivery channel yet`);
 
   const view = applicationView(ctx.read, app.id);
   const profile = getStandardProfile(ctx.read);
+  const mail = ctx.deps.mail ?? null;
   const cvProblem = tailoredCvChanged(view);
   if (cvProblem) return needsCandidate(app, cvProblem);
 
@@ -46,6 +51,7 @@ export const deliverApplication: Handler<'deliver_application'> = async (task, c
       signal: ctx.signal,
       progress: (message) => ctx.progress({ message }),
       profile,
+      ...(mail ? { securityCode: securityCodeReader(mail, ctx) } : {}),
     });
   } catch (err) {
     ctx.signal.throwIfAborted();
@@ -68,6 +74,7 @@ export const deliverApplication: Handler<'deliver_application'> = async (task, c
         const current = tx.db.select().from(applications).where(eq(applications.id, app.id)).get();
         if (current?.stage !== 'approved') return;
         const values = {
+          messageId: receipt.messageId ?? null,
           finalUrl: receipt.finalUrl,
           confirmationText: receipt.confirmationText,
           confirmationSnapshotPath: receipt.confirmationSnapshotPath,
@@ -145,6 +152,27 @@ export const deliverApplication: Handler<'deliver_application'> = async (task, c
 
   return needsCandidate(app, outcome.handOff.reason, outcome.handOff);
 };
+
+/**
+ * The security-code step's mailbox read: the connected mailbox, polled for a code sent after
+ * the submission (DeliverContext.securityCode).
+ */
+function securityCodeReader(
+  mail: MailAccess,
+  ctx: HandlerContext,
+): (since: Date) => Promise<string | null> {
+  return async (since) => {
+    const box = await mail.open();
+    if (!box) return null;
+    return waitForSecurityCode(box, {
+      since,
+      timeoutMs: mail.codeTimeoutMs,
+      pollMs: mail.codePollMs,
+      signal: ctx.signal,
+      progress: (message) => ctx.progress({ message }),
+    });
+  };
+}
 
 /** The tailored PDF about to be uploaded is byte for byte the one rendered for review. */
 function tailoredCvChanged(view: ReturnType<typeof applicationView>): string | null {

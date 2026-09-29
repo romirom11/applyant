@@ -42,6 +42,24 @@ export interface Config {
   port: number;
   /** How often the scheduler looks for due search strategies (and on every wake). */
   schedulerMs: number;
+  mail: {
+    /** How often the connected mailbox is read for replies. */
+    syncMs: number;
+    /** How far back the first sync reads. */
+    sinceDays: number;
+  };
+  /**
+   * The owner's Google Cloud "Desktop app" OAuth client (Gmail, Calendar, Drive):
+   * APPLYANT_GOOGLE_CLIENT_ID / _SECRET, or `applyant mail connect gmail --client-id`. The
+   * endpoints can be pointed elsewhere (tests use a local fake).
+   */
+  google: {
+    clientId: string | null;
+    clientSecret: string | null;
+    authUrl: string | null;
+    tokenUrl: string | null;
+    gmailApi: string | null;
+  };
   worker: {
     concurrency: number;
     leaseMs: number;
@@ -120,6 +138,17 @@ export function loadConfig(env: Env = process.env): Config {
     host: '127.0.0.1',
     port: int(env, 'APPLYANT_PORT', 0),
     schedulerMs: Math.max(1_000, int(env, 'APPLYANT_SCHEDULER_MS', 60_000)),
+    mail: {
+      syncMs: Math.max(10_000, int(env, 'APPLYANT_MAIL_SYNC_MS', 5 * 60_000)),
+      sinceDays: Math.max(1, int(env, 'APPLYANT_MAIL_SINCE_DAYS', 7)),
+    },
+    google: {
+      clientId: env.APPLYANT_GOOGLE_CLIENT_ID || null,
+      clientSecret: env.APPLYANT_GOOGLE_CLIENT_SECRET || null,
+      authUrl: env.APPLYANT_GOOGLE_AUTH_URL || null,
+      tokenUrl: env.APPLYANT_GOOGLE_TOKEN_URL || null,
+      gmailApi: env.APPLYANT_GMAIL_API || null,
+    },
     worker: {
       concurrency: int(env, 'APPLYANT_WORKERS', 2),
       leaseMs: int(env, 'APPLYANT_LEASE_MS', 120_000),

@@ -9,6 +9,7 @@ import { registerConfig } from './config.ts';
 import { eventJson, eventLine } from './format.ts';
 import { registerHandoff } from './handoff.ts';
 import { positiveInt, registerJobs } from './jobs.ts';
+import { registerMail } from './mail.ts';
 import { registerSearch } from './search.ts';
 import { registerStatus } from './status.ts';
 
@@ -70,6 +71,7 @@ export function buildCli(client: () => ApplyantClient): Command {
   registerHandoff(program, client);
   registerStatus(program, client);
   registerConfig(program, client);
+  registerMail(program, client, readSecretValue);
 
   const runs = program.command('runs').description('task activity');
   runs

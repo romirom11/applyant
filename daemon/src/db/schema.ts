@@ -566,6 +566,10 @@ export const APPLICATION_STAGES = [
   /** Delivered through its channel; see `receipts`. A delivery stuck mid-way stays `approved`
    * (the human gate already passed) with a note; `handoff show` explains it. */
   'applied',
+  /** Replies read from the mailbox move an applied application on (phase 13). */
+  'interview',
+  'rejected',
+  'offer',
 ] as const;
 export type ApplicationStage = (typeof APPLICATION_STAGES)[number];
 
@@ -708,6 +712,8 @@ export const receipts = sqliteTable('receipts', {
   salaryValue: text('salary_value'),
   fieldValues: text('field_values', { mode: 'json' }).$type<ReceiptFieldValue[]>().notNull(),
   submittedAt: integer('submitted_at', { mode: 'timestamp_ms' }).notNull(),
+  /** Email applications (phase 13): the sent message's Message-ID, so replies thread to it. */
+  messageId: text('message_id'),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull().default(now),
 });
 
@@ -871,6 +877,104 @@ export const companies = sqliteTable('companies', {
   updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull().default(now),
 });
 
+// ---- The mailbox (phase 13) --------------------------------------------------------------
+
+export const MAILBOX_KINDS = ['gmail', 'imap'] as const;
+export type MailboxKind = (typeof MAILBOX_KINDS)[number];
+
+/** Where an IMAP/SMTP mailbox lives; its password (or app password) is in `Secrets`. */
+export interface MailboxSettings {
+  imap?: { host: string; port: number; secure: boolean };
+  smtp?: { host: string; port: number; secure: boolean };
+  /** The login name, when it isn't the address. */
+  user?: string;
+  /** Gmail: the owner's "Desktop app" OAuth client id (not secret); tokens are in `Secrets`. */
+  clientId?: string;
+}
+
+/**
+ * The candidate's one connected mailbox. `cursor` is where the last sync stopped: a Gmail
+ * historyId, or `<uidvalidity>:<uid>` on IMAP; null until the first sync.
+ */
+export const mailboxes = sqliteTable('mailboxes', {
+  id: integer('id').primaryKey(),
+  kind: text('kind', { enum: MAILBOX_KINDS }).notNull(),
+  address: text('address').notNull(),
+  settings: text('settings', { mode: 'json' }).$type<MailboxSettings>().notNull(),
+  /** connecting (Google consent still open) · connected · failed (see note) */
+  status: text('status', { enum: ['connecting', 'connected', 'failed'] })
+    .notNull()
+    .default('connected'),
+  cursor: text('cursor'),
+  syncedAt: integer('synced_at', { mode: 'timestamp_ms' }),
+  note: text('note'),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull().default(now),
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull().default(now),
+});
+
+/** What email_classify says a reply is. `unknown`: it couldn't tell (or wasn't asked). */
+export const EMAIL_LABELS = [
+  'rejection',
+  'interview',
+  'offer',
+  'acknowledgement',
+  'security_code',
+  'other',
+  'unknown',
+] as const;
+export type EmailLabel = (typeof EMAIL_LABELS)[number];
+
+/**
+ * matched    linked to an application on its own (its status may have moved)
+ * ask        in the "Which application is this?" queue
+ * assigned   the candidate linked it (or said it belongs to none: application_id null)
+ */
+export const EMAIL_STATUSES = ['matched', 'ask', 'assigned'] as const;
+export type EmailStatus = (typeof EMAIL_STATUSES)[number];
+
+/**
+ * Replies that look like they're about an application (a company or ATS sender, a reply to
+ * an application email). Other mail is never stored.
+ */
+export const emails = sqliteTable(
+  'emails',
+  {
+    id: integer('id').primaryKey(),
+    mailboxId: integer('mailbox_id')
+      .notNull()
+      .references(() => mailboxes.id, { onDelete: 'cascade' }),
+    /** The provider's id (Gmail message id, IMAP `<uidvalidity>:<uid>`): one row per message. */
+    messageKey: text('message_key').notNull(),
+    messageId: text('message_id'),
+    inReplyTo: text('in_reply_to'),
+    fromAddress: text('from_address').notNull(),
+    fromName: text('from_name'),
+    subject: text('subject').notNull(),
+    /** Plain text, trimmed. */
+    text: text('text').notNull(),
+    receivedAt: integer('received_at', { mode: 'timestamp_ms' }).notNull(),
+    label: text('label', { enum: EMAIL_LABELS }).notNull(),
+    confidence: real('confidence'),
+    /** The route that classified it ("apple", "claude:haiku"), or null when nothing could. */
+    classifiedBy: text('classified_by'),
+    language: text('language'),
+    applicationId: integer('application_id').references(() => applications.id, {
+      onDelete: 'set null',
+    }),
+    status: text('status', { enum: EMAIL_STATUSES }).notNull(),
+    /** Applications it might belong to, best first (the ask queue offers these). */
+    candidates: text('candidates', { mode: 'json' }).$type<number[]>().notNull(),
+    /** Why it was matched, or why it's asked about. */
+    note: text('note'),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull().default(now),
+  },
+  (t) => [
+    uniqueIndex('emails_mailbox_message_unique').on(t.mailboxId, t.messageKey),
+    index('emails_status_idx').on(t.status),
+    index('emails_application_idx').on(t.applicationId),
+  ],
+);
+
 /** Small daemon-internal state, key → JSON (e.g. which embedder made the fact vectors). */
 export const appState = sqliteTable('app_state', {
   key: text('key').primaryKey(),
@@ -905,3 +1009,5 @@ export type ListingRecipeRow = typeof listingRecipes.$inferSelect;
 export type SearchPlanRow = typeof searchPlans.$inferSelect;
 export type RoleRouteRow = typeof roleRoutes.$inferSelect;
 export type CompanyRow = typeof companies.$inferSelect;
+export type MailboxRow = typeof mailboxes.$inferSelect;
+export type EmailRow = typeof emails.$inferSelect;

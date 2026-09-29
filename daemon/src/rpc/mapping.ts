@@ -62,6 +62,9 @@ const APP_STAGE_TO_PB: Record<ApplicationStage, PbAppStage> = {
   needs_candidate: PbAppStage.NEEDS_CANDIDATE,
   approved: PbAppStage.APPROVED,
   applied: PbAppStage.APPLIED,
+  interview: PbAppStage.INTERVIEW,
+  rejected: PbAppStage.REJECTED,
+  offer: PbAppStage.OFFER,
 };
 
 export function receiptToPb(r: ReceiptView): PbReceipt {
@@ -462,6 +465,15 @@ export function eventToPb(row: EventRow): Event {
       payload: {
         case: 'company',
         value: { companyId: BigInt(row.entityId ?? 0), status: row.stage ?? '' },
+      },
+    });
+  }
+  if (row.kind === 'mail') {
+    return create(EventSchema, {
+      ...base,
+      payload: {
+        case: 'mail',
+        value: { entityId: BigInt(row.entityId ?? 0), status: row.stage ?? '' },
       },
     });
   }

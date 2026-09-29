@@ -252,6 +252,11 @@ public nonisolated enum Applyant_V1_ApplicationStage: SwiftProtobuf.Enum, Swift.
   /// Delivered through its channel; see `receipt`. A delivery stuck mid-way stays APPROVED
   /// (the human gate already passed) with `note` and `hand_off` set.
   case applied // = 5
+
+  /// Moved on by replies read from the mailbox (or by the candidate's answer in the ask queue).
+  case interview // = 6
+  case rejected // = 7
+  case offer // = 8
   case UNRECOGNIZED(Int)
 
   public init() {
@@ -266,6 +271,9 @@ public nonisolated enum Applyant_V1_ApplicationStage: SwiftProtobuf.Enum, Swift.
     case 3: self = .needsCandidate
     case 4: self = .approved
     case 5: self = .applied
+    case 6: self = .interview
+    case 7: self = .rejected
+    case 8: self = .offer
     default: self = .UNRECOGNIZED(rawValue)
     }
   }
@@ -278,6 +286,9 @@ public nonisolated enum Applyant_V1_ApplicationStage: SwiftProtobuf.Enum, Swift.
     case .needsCandidate: return 3
     case .approved: return 4
     case .applied: return 5
+    case .interview: return 6
+    case .rejected: return 7
+    case .offer: return 8
     case .UNRECOGNIZED(let i): return i
     }
   }
@@ -290,6 +301,9 @@ public nonisolated enum Applyant_V1_ApplicationStage: SwiftProtobuf.Enum, Swift.
     .needsCandidate,
     .approved,
     .applied,
+    .interview,
+    .rejected,
+    .offer,
   ]
 
 }
@@ -1445,6 +1459,21 @@ public nonisolated struct Applyant_V1_CompanyEvent: Sendable {
   public init() {}
 }
 
+public nonisolated struct Applyant_V1_MailEvent: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// synced (entity = mailbox) · ask · assigned (entity = email)
+  public var status: String = String()
+
+  public var entityID: Int64 = 0
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
 public nonisolated struct Applyant_V1_Event: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
@@ -1531,6 +1560,14 @@ public nonisolated struct Applyant_V1_Event: Sendable {
     set {payload = .company(newValue)}
   }
 
+  public var mail: Applyant_V1_MailEvent {
+    get {
+      if case .mail(let v)? = payload {return v}
+      return Applyant_V1_MailEvent()
+    }
+    set {payload = .mail(newValue)}
+  }
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public nonisolated enum OneOf_Payload: Equatable, Sendable {
@@ -1541,6 +1578,7 @@ public nonisolated struct Applyant_V1_Event: Sendable {
     case interview(Applyant_V1_InterviewEvent)
     case search(Applyant_V1_SearchEvent)
     case company(Applyant_V1_CompanyEvent)
+    case mail(Applyant_V1_MailEvent)
 
   }
 
@@ -5675,6 +5713,448 @@ public nonisolated struct Applyant_V1_ResearchCompanyResponse: Sendable {
   fileprivate var _company: Applyant_V1_Company? = nil
 }
 
+public nonisolated struct Applyant_V1_Mailbox: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// gmail | imap
+  public var kind: String = String()
+
+  /// Empty while Google's consent is still open.
+  public var address: String = String()
+
+  /// connecting | connected | failed
+  public var status: String = String()
+
+  public var syncedAt: SwiftProtobuf.Google_Protobuf_Timestamp {
+    get {_syncedAt ?? SwiftProtobuf.Google_Protobuf_Timestamp()}
+    set {_syncedAt = newValue}
+  }
+  /// Returns true if `syncedAt` has been explicitly set.
+  public var hasSyncedAt: Bool {self._syncedAt != nil}
+  /// Clears the value of `syncedAt`. Subsequent reads from it will return its default value.
+  public mutating func clearSyncedAt() {self._syncedAt = nil}
+
+  /// Why connecting or the last sync failed.
+  public var note: String {
+    get {_note ?? String()}
+    set {_note = newValue}
+  }
+  /// Returns true if `note` has been explicitly set.
+  public var hasNote: Bool {self._note != nil}
+  /// Clears the value of `note`. Subsequent reads from it will return its default value.
+  public mutating func clearNote() {self._note = nil}
+
+  /// Emails waiting in the ask queue.
+  public var asking: Int32 = 0
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _syncedAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
+  fileprivate var _note: String? = nil
+}
+
+public nonisolated struct Applyant_V1_ImapSettings: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var imapHost: String = String()
+
+  /// 0 means 993.
+  public var imapPort: Int32 = 0
+
+  public var smtpHost: String = String()
+
+  /// 0 means 465.
+  public var smtpPort: Int32 = 0
+
+  /// TLS from the start (993 / 465); false uses STARTTLS where offered.
+  public var secure: Bool = false
+
+  /// When the login isn't the address.
+  public var username: String {
+    get {_username ?? String()}
+    set {_username = newValue}
+  }
+  /// Returns true if `username` has been explicitly set.
+  public var hasUsername: Bool {self._username != nil}
+  /// Clears the value of `username`. Subsequent reads from it will return its default value.
+  public mutating func clearUsername() {self._username = nil}
+
+  /// An app password; stored in Secrets, never returned.
+  public var password: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _username: String? = nil
+}
+
+public nonisolated struct Applyant_V1_GmailSettings: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// The owner's "Desktop app" OAuth client; config / APPLYANT_GOOGLE_CLIENT_ID when unset.
+  public var clientID: String {
+    get {_clientID ?? String()}
+    set {_clientID = newValue}
+  }
+  /// Returns true if `clientID` has been explicitly set.
+  public var hasClientID: Bool {self._clientID != nil}
+  /// Clears the value of `clientID`. Subsequent reads from it will return its default value.
+  public mutating func clearClientID() {self._clientID = nil}
+
+  /// Stored in Secrets.
+  public var clientSecret: String {
+    get {_clientSecret ?? String()}
+    set {_clientSecret = newValue}
+  }
+  /// Returns true if `clientSecret` has been explicitly set.
+  public var hasClientSecret: Bool {self._clientSecret != nil}
+  /// Clears the value of `clientSecret`. Subsequent reads from it will return its default value.
+  public mutating func clearClientSecret() {self._clientSecret = nil}
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _clientID: String? = nil
+  fileprivate var _clientSecret: String? = nil
+}
+
+public nonisolated struct Applyant_V1_ConnectMailboxRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var address: String = String()
+
+  public var kind: Applyant_V1_ConnectMailboxRequest.OneOf_Kind? = nil
+
+  public var gmail: Applyant_V1_GmailSettings {
+    get {
+      if case .gmail(let v)? = kind {return v}
+      return Applyant_V1_GmailSettings()
+    }
+    set {kind = .gmail(newValue)}
+  }
+
+  public var imap: Applyant_V1_ImapSettings {
+    get {
+      if case .imap(let v)? = kind {return v}
+      return Applyant_V1_ImapSettings()
+    }
+    set {kind = .imap(newValue)}
+  }
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public nonisolated enum OneOf_Kind: Equatable, Sendable {
+    case gmail(Applyant_V1_GmailSettings)
+    case imap(Applyant_V1_ImapSettings)
+
+  }
+
+  public init() {}
+}
+
+public nonisolated struct Applyant_V1_ConnectMailboxResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var mailbox: Applyant_V1_Mailbox {
+    get {_mailbox ?? Applyant_V1_Mailbox()}
+    set {_mailbox = newValue}
+  }
+  /// Returns true if `mailbox` has been explicitly set.
+  public var hasMailbox: Bool {self._mailbox != nil}
+  /// Clears the value of `mailbox`. Subsequent reads from it will return its default value.
+  public mutating func clearMailbox() {self._mailbox = nil}
+
+  /// Gmail: open this in the browser to give consent.
+  public var authURL: String {
+    get {_authURL ?? String()}
+    set {_authURL = newValue}
+  }
+  /// Returns true if `authURL` has been explicitly set.
+  public var hasAuthURL: Bool {self._authURL != nil}
+  /// Clears the value of `authURL`. Subsequent reads from it will return its default value.
+  public mutating func clearAuthURL() {self._authURL = nil}
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _mailbox: Applyant_V1_Mailbox? = nil
+  fileprivate var _authURL: String? = nil
+}
+
+public nonisolated struct Applyant_V1_GetMailboxRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Applyant_V1_GetMailboxResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// Unset when no mailbox is connected.
+  public var mailbox: Applyant_V1_Mailbox {
+    get {_mailbox ?? Applyant_V1_Mailbox()}
+    set {_mailbox = newValue}
+  }
+  /// Returns true if `mailbox` has been explicitly set.
+  public var hasMailbox: Bool {self._mailbox != nil}
+  /// Clears the value of `mailbox`. Subsequent reads from it will return its default value.
+  public mutating func clearMailbox() {self._mailbox = nil}
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _mailbox: Applyant_V1_Mailbox? = nil
+}
+
+public nonisolated struct Applyant_V1_SyncMailboxRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Applyant_V1_SyncMailboxResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// False when a sync was already waiting or running.
+  public var queued: Bool = false
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Applyant_V1_MailCandidate: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var applicationID: Int64 = 0
+
+  public var title: String {
+    get {_title ?? String()}
+    set {_title = newValue}
+  }
+  /// Returns true if `title` has been explicitly set.
+  public var hasTitle: Bool {self._title != nil}
+  /// Clears the value of `title`. Subsequent reads from it will return its default value.
+  public mutating func clearTitle() {self._title = nil}
+
+  public var company: String {
+    get {_company ?? String()}
+    set {_company = newValue}
+  }
+  /// Returns true if `company` has been explicitly set.
+  public var hasCompany: Bool {self._company != nil}
+  /// Clears the value of `company`. Subsequent reads from it will return its default value.
+  public mutating func clearCompany() {self._company = nil}
+
+  public var stage: Applyant_V1_ApplicationStage = .unspecified
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _title: String? = nil
+  fileprivate var _company: String? = nil
+}
+
+public nonisolated struct Applyant_V1_Email: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var id: Int64 = 0
+
+  public var fromAddress: String = String()
+
+  public var fromName: String {
+    get {_fromName ?? String()}
+    set {_fromName = newValue}
+  }
+  /// Returns true if `fromName` has been explicitly set.
+  public var hasFromName: Bool {self._fromName != nil}
+  /// Clears the value of `fromName`. Subsequent reads from it will return its default value.
+  public mutating func clearFromName() {self._fromName = nil}
+
+  public var subject: String = String()
+
+  /// The start of the text.
+  public var snippet: String = String()
+
+  public var receivedAt: SwiftProtobuf.Google_Protobuf_Timestamp {
+    get {_receivedAt ?? SwiftProtobuf.Google_Protobuf_Timestamp()}
+    set {_receivedAt = newValue}
+  }
+  /// Returns true if `receivedAt` has been explicitly set.
+  public var hasReceivedAt: Bool {self._receivedAt != nil}
+  /// Clears the value of `receivedAt`. Subsequent reads from it will return its default value.
+  public mutating func clearReceivedAt() {self._receivedAt = nil}
+
+  /// rejection | interview | offer | acknowledgement | security_code | other | unknown
+  public var label: String = String()
+
+  public var confidence: Double {
+    get {_confidence ?? 0}
+    set {_confidence = newValue}
+  }
+  /// Returns true if `confidence` has been explicitly set.
+  public var hasConfidence: Bool {self._confidence != nil}
+  /// Clears the value of `confidence`. Subsequent reads from it will return its default value.
+  public mutating func clearConfidence() {self._confidence = nil}
+
+  /// The route that classified it ("apple", "claude:haiku"); unset when nothing could.
+  public var classifiedBy: String {
+    get {_classifiedBy ?? String()}
+    set {_classifiedBy = newValue}
+  }
+  /// Returns true if `classifiedBy` has been explicitly set.
+  public var hasClassifiedBy: Bool {self._classifiedBy != nil}
+  /// Clears the value of `classifiedBy`. Subsequent reads from it will return its default value.
+  public mutating func clearClassifiedBy() {self._classifiedBy = nil}
+
+  public var applicationID: Int64 {
+    get {_applicationID ?? 0}
+    set {_applicationID = newValue}
+  }
+  /// Returns true if `applicationID` has been explicitly set.
+  public var hasApplicationID: Bool {self._applicationID != nil}
+  /// Clears the value of `applicationID`. Subsequent reads from it will return its default value.
+  public mutating func clearApplicationID() {self._applicationID = nil}
+
+  /// matched | ask | assigned
+  public var status: String = String()
+
+  /// Why it was matched, or why it's asked about.
+  public var note: String {
+    get {_note ?? String()}
+    set {_note = newValue}
+  }
+  /// Returns true if `note` has been explicitly set.
+  public var hasNote: Bool {self._note != nil}
+  /// Clears the value of `note`. Subsequent reads from it will return its default value.
+  public mutating func clearNote() {self._note = nil}
+
+  /// Applications it may belong to, best first.
+  public var candidates: [Applyant_V1_MailCandidate] = []
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _fromName: String? = nil
+  fileprivate var _receivedAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
+  fileprivate var _confidence: Double? = nil
+  fileprivate var _classifiedBy: String? = nil
+  fileprivate var _applicationID: Int64? = nil
+  fileprivate var _note: String? = nil
+}
+
+public nonisolated struct Applyant_V1_ListMailQueueRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Applyant_V1_ListMailQueueResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var emails: [Applyant_V1_Email] = []
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Applyant_V1_AssignEmailRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var emailID: Int64 = 0
+
+  /// Unset: the email isn't about any application.
+  public var applicationID: Int64 {
+    get {_applicationID ?? 0}
+    set {_applicationID = newValue}
+  }
+  /// Returns true if `applicationID` has been explicitly set.
+  public var hasApplicationID: Bool {self._applicationID != nil}
+  /// Clears the value of `applicationID`. Subsequent reads from it will return its default value.
+  public mutating func clearApplicationID() {self._applicationID = nil}
+
+  /// What the email is, when the classifier couldn't tell (rejection | interview | offer | ...).
+  public var label: String {
+    get {_label ?? String()}
+    set {_label = newValue}
+  }
+  /// Returns true if `label` has been explicitly set.
+  public var hasLabel: Bool {self._label != nil}
+  /// Clears the value of `label`. Subsequent reads from it will return its default value.
+  public mutating func clearLabel() {self._label = nil}
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _applicationID: Int64? = nil
+  fileprivate var _label: String? = nil
+}
+
+public nonisolated struct Applyant_V1_AssignEmailResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var email: Applyant_V1_Email {
+    get {_email ?? Applyant_V1_Email()}
+    set {_email = newValue}
+  }
+  /// Returns true if `email` has been explicitly set.
+  public var hasEmail: Bool {self._email != nil}
+  /// Clears the value of `email`. Subsequent reads from it will return its default value.
+  public mutating func clearEmail() {self._email = nil}
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _email: Applyant_V1_Email? = nil
+}
+
 // MARK: - Code below here is support for the SwiftProtobuf runtime.
 
 fileprivate nonisolated let _protobuf_package = "applyant.v1"
@@ -5696,7 +6176,7 @@ nonisolated extension Applyant_V1_FactStatus: SwiftProtobuf._ProtoNameProviding 
 }
 
 nonisolated extension Applyant_V1_ApplicationStage: SwiftProtobuf._ProtoNameProviding {
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0APPLICATION_STAGE_UNSPECIFIED\0\u{1}APPLICATION_STAGE_PREPARING\0\u{1}APPLICATION_STAGE_READY_FOR_REVIEW\0\u{1}APPLICATION_STAGE_NEEDS_CANDIDATE\0\u{1}APPLICATION_STAGE_APPROVED\0\u{1}APPLICATION_STAGE_APPLIED\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0APPLICATION_STAGE_UNSPECIFIED\0\u{1}APPLICATION_STAGE_PREPARING\0\u{1}APPLICATION_STAGE_READY_FOR_REVIEW\0\u{1}APPLICATION_STAGE_NEEDS_CANDIDATE\0\u{1}APPLICATION_STAGE_APPROVED\0\u{1}APPLICATION_STAGE_APPLIED\0\u{1}APPLICATION_STAGE_INTERVIEW\0\u{1}APPLICATION_STAGE_REJECTED\0\u{1}APPLICATION_STAGE_OFFER\0")
 }
 
 nonisolated extension Applyant_V1_Posting: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
@@ -7567,9 +8047,44 @@ nonisolated extension Applyant_V1_CompanyEvent: SwiftProtobuf.Message, SwiftProt
   }
 }
 
+nonisolated extension Applyant_V1_MailEvent: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".MailEvent"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}status\0\u{3}entity_id\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.status) }()
+      case 2: try { try decoder.decodeSingularInt64Field(value: &self.entityID) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.status.isEmpty {
+      try visitor.visitSingularStringField(value: self.status, fieldNumber: 1)
+    }
+    if self.entityID != 0 {
+      try visitor.visitSingularInt64Field(value: self.entityID, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Applyant_V1_MailEvent, rhs: Applyant_V1_MailEvent) -> Bool {
+    if lhs.status != rhs.status {return false}
+    if lhs.entityID != rhs.entityID {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
 nonisolated extension Applyant_V1_Event: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Event"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}at\0\u{3}run_id\0\u{1}message\0\u{2}\u{6}task\0\u{1}posting\0\u{1}application\0\u{1}handoff\0\u{1}interview\0\u{1}search\0\u{1}company\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}at\0\u{3}run_id\0\u{1}message\0\u{2}\u{6}task\0\u{1}posting\0\u{1}application\0\u{1}handoff\0\u{1}interview\0\u{1}search\0\u{1}company\0\u{1}mail\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -7672,6 +8187,19 @@ nonisolated extension Applyant_V1_Event: SwiftProtobuf.Message, SwiftProtobuf._M
           self.payload = .company(v)
         }
       }()
+      case 17: try {
+        var v: Applyant_V1_MailEvent?
+        var hadOneofValue = false
+        if let current = self.payload {
+          hadOneofValue = true
+          if case .mail(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.payload = .mail(v)
+        }
+      }()
       default: break
       }
     }
@@ -7722,6 +8250,10 @@ nonisolated extension Applyant_V1_Event: SwiftProtobuf.Message, SwiftProtobuf._M
     case .company?: try {
       guard case .company(let v)? = self.payload else { preconditionFailure() }
       try visitor.visitSingularMessageField(value: v, fieldNumber: 16)
+    }()
+    case .mail?: try {
+      guard case .mail(let v)? = self.payload else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 17)
     }()
     case nil: break
     }
@@ -14243,6 +14775,651 @@ nonisolated extension Applyant_V1_ResearchCompanyResponse: SwiftProtobuf.Message
   public static func ==(lhs: Applyant_V1_ResearchCompanyResponse, rhs: Applyant_V1_ResearchCompanyResponse) -> Bool {
     if lhs._company != rhs._company {return false}
     if lhs.queued != rhs.queued {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Applyant_V1_Mailbox: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".Mailbox"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}kind\0\u{1}address\0\u{1}status\0\u{3}synced_at\0\u{1}note\0\u{1}asking\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.kind) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.address) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.status) }()
+      case 4: try { try decoder.decodeSingularMessageField(value: &self._syncedAt) }()
+      case 5: try { try decoder.decodeSingularStringField(value: &self._note) }()
+      case 6: try { try decoder.decodeSingularInt32Field(value: &self.asking) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    if !self.kind.isEmpty {
+      try visitor.visitSingularStringField(value: self.kind, fieldNumber: 1)
+    }
+    if !self.address.isEmpty {
+      try visitor.visitSingularStringField(value: self.address, fieldNumber: 2)
+    }
+    if !self.status.isEmpty {
+      try visitor.visitSingularStringField(value: self.status, fieldNumber: 3)
+    }
+    try { if let v = self._syncedAt {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 4)
+    } }()
+    try { if let v = self._note {
+      try visitor.visitSingularStringField(value: v, fieldNumber: 5)
+    } }()
+    if self.asking != 0 {
+      try visitor.visitSingularInt32Field(value: self.asking, fieldNumber: 6)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Applyant_V1_Mailbox, rhs: Applyant_V1_Mailbox) -> Bool {
+    if lhs.kind != rhs.kind {return false}
+    if lhs.address != rhs.address {return false}
+    if lhs.status != rhs.status {return false}
+    if lhs._syncedAt != rhs._syncedAt {return false}
+    if lhs._note != rhs._note {return false}
+    if lhs.asking != rhs.asking {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Applyant_V1_ImapSettings: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ImapSettings"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}imap_host\0\u{3}imap_port\0\u{3}smtp_host\0\u{3}smtp_port\0\u{1}secure\0\u{1}username\0\u{1}password\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.imapHost) }()
+      case 2: try { try decoder.decodeSingularInt32Field(value: &self.imapPort) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.smtpHost) }()
+      case 4: try { try decoder.decodeSingularInt32Field(value: &self.smtpPort) }()
+      case 5: try { try decoder.decodeSingularBoolField(value: &self.secure) }()
+      case 6: try { try decoder.decodeSingularStringField(value: &self._username) }()
+      case 7: try { try decoder.decodeSingularStringField(value: &self.password) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    if !self.imapHost.isEmpty {
+      try visitor.visitSingularStringField(value: self.imapHost, fieldNumber: 1)
+    }
+    if self.imapPort != 0 {
+      try visitor.visitSingularInt32Field(value: self.imapPort, fieldNumber: 2)
+    }
+    if !self.smtpHost.isEmpty {
+      try visitor.visitSingularStringField(value: self.smtpHost, fieldNumber: 3)
+    }
+    if self.smtpPort != 0 {
+      try visitor.visitSingularInt32Field(value: self.smtpPort, fieldNumber: 4)
+    }
+    if self.secure != false {
+      try visitor.visitSingularBoolField(value: self.secure, fieldNumber: 5)
+    }
+    try { if let v = self._username {
+      try visitor.visitSingularStringField(value: v, fieldNumber: 6)
+    } }()
+    if !self.password.isEmpty {
+      try visitor.visitSingularStringField(value: self.password, fieldNumber: 7)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Applyant_V1_ImapSettings, rhs: Applyant_V1_ImapSettings) -> Bool {
+    if lhs.imapHost != rhs.imapHost {return false}
+    if lhs.imapPort != rhs.imapPort {return false}
+    if lhs.smtpHost != rhs.smtpHost {return false}
+    if lhs.smtpPort != rhs.smtpPort {return false}
+    if lhs.secure != rhs.secure {return false}
+    if lhs._username != rhs._username {return false}
+    if lhs.password != rhs.password {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Applyant_V1_GmailSettings: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".GmailSettings"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}client_id\0\u{3}client_secret\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self._clientID) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self._clientSecret) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if let v = self._clientID {
+      try visitor.visitSingularStringField(value: v, fieldNumber: 1)
+    } }()
+    try { if let v = self._clientSecret {
+      try visitor.visitSingularStringField(value: v, fieldNumber: 2)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Applyant_V1_GmailSettings, rhs: Applyant_V1_GmailSettings) -> Bool {
+    if lhs._clientID != rhs._clientID {return false}
+    if lhs._clientSecret != rhs._clientSecret {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Applyant_V1_ConnectMailboxRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ConnectMailboxRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}address\0\u{1}gmail\0\u{1}imap\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.address) }()
+      case 2: try {
+        var v: Applyant_V1_GmailSettings?
+        var hadOneofValue = false
+        if let current = self.kind {
+          hadOneofValue = true
+          if case .gmail(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.kind = .gmail(v)
+        }
+      }()
+      case 3: try {
+        var v: Applyant_V1_ImapSettings?
+        var hadOneofValue = false
+        if let current = self.kind {
+          hadOneofValue = true
+          if case .imap(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.kind = .imap(v)
+        }
+      }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    if !self.address.isEmpty {
+      try visitor.visitSingularStringField(value: self.address, fieldNumber: 1)
+    }
+    switch self.kind {
+    case .gmail?: try {
+      guard case .gmail(let v)? = self.kind else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 2)
+    }()
+    case .imap?: try {
+      guard case .imap(let v)? = self.kind else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 3)
+    }()
+    case nil: break
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Applyant_V1_ConnectMailboxRequest, rhs: Applyant_V1_ConnectMailboxRequest) -> Bool {
+    if lhs.address != rhs.address {return false}
+    if lhs.kind != rhs.kind {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Applyant_V1_ConnectMailboxResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ConnectMailboxResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}mailbox\0\u{3}auth_url\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularMessageField(value: &self._mailbox) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self._authURL) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if let v = self._mailbox {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
+    } }()
+    try { if let v = self._authURL {
+      try visitor.visitSingularStringField(value: v, fieldNumber: 2)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Applyant_V1_ConnectMailboxResponse, rhs: Applyant_V1_ConnectMailboxResponse) -> Bool {
+    if lhs._mailbox != rhs._mailbox {return false}
+    if lhs._authURL != rhs._authURL {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Applyant_V1_GetMailboxRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".GetMailboxRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Applyant_V1_GetMailboxRequest, rhs: Applyant_V1_GetMailboxRequest) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Applyant_V1_GetMailboxResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".GetMailboxResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}mailbox\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularMessageField(value: &self._mailbox) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if let v = self._mailbox {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Applyant_V1_GetMailboxResponse, rhs: Applyant_V1_GetMailboxResponse) -> Bool {
+    if lhs._mailbox != rhs._mailbox {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Applyant_V1_SyncMailboxRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".SyncMailboxRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Applyant_V1_SyncMailboxRequest, rhs: Applyant_V1_SyncMailboxRequest) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Applyant_V1_SyncMailboxResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".SyncMailboxResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}queued\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularBoolField(value: &self.queued) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.queued != false {
+      try visitor.visitSingularBoolField(value: self.queued, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Applyant_V1_SyncMailboxResponse, rhs: Applyant_V1_SyncMailboxResponse) -> Bool {
+    if lhs.queued != rhs.queued {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Applyant_V1_MailCandidate: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".MailCandidate"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}application_id\0\u{1}title\0\u{1}company\0\u{1}stage\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularInt64Field(value: &self.applicationID) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self._title) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self._company) }()
+      case 4: try { try decoder.decodeSingularEnumField(value: &self.stage) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    if self.applicationID != 0 {
+      try visitor.visitSingularInt64Field(value: self.applicationID, fieldNumber: 1)
+    }
+    try { if let v = self._title {
+      try visitor.visitSingularStringField(value: v, fieldNumber: 2)
+    } }()
+    try { if let v = self._company {
+      try visitor.visitSingularStringField(value: v, fieldNumber: 3)
+    } }()
+    if self.stage != .unspecified {
+      try visitor.visitSingularEnumField(value: self.stage, fieldNumber: 4)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Applyant_V1_MailCandidate, rhs: Applyant_V1_MailCandidate) -> Bool {
+    if lhs.applicationID != rhs.applicationID {return false}
+    if lhs._title != rhs._title {return false}
+    if lhs._company != rhs._company {return false}
+    if lhs.stage != rhs.stage {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Applyant_V1_Email: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".Email"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}from_address\0\u{3}from_name\0\u{1}subject\0\u{1}snippet\0\u{3}received_at\0\u{1}label\0\u{1}confidence\0\u{3}classified_by\0\u{3}application_id\0\u{1}status\0\u{1}note\0\u{1}candidates\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularInt64Field(value: &self.id) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.fromAddress) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self._fromName) }()
+      case 4: try { try decoder.decodeSingularStringField(value: &self.subject) }()
+      case 5: try { try decoder.decodeSingularStringField(value: &self.snippet) }()
+      case 6: try { try decoder.decodeSingularMessageField(value: &self._receivedAt) }()
+      case 7: try { try decoder.decodeSingularStringField(value: &self.label) }()
+      case 8: try { try decoder.decodeSingularDoubleField(value: &self._confidence) }()
+      case 9: try { try decoder.decodeSingularStringField(value: &self._classifiedBy) }()
+      case 10: try { try decoder.decodeSingularInt64Field(value: &self._applicationID) }()
+      case 11: try { try decoder.decodeSingularStringField(value: &self.status) }()
+      case 12: try { try decoder.decodeSingularStringField(value: &self._note) }()
+      case 13: try { try decoder.decodeRepeatedMessageField(value: &self.candidates) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    if self.id != 0 {
+      try visitor.visitSingularInt64Field(value: self.id, fieldNumber: 1)
+    }
+    if !self.fromAddress.isEmpty {
+      try visitor.visitSingularStringField(value: self.fromAddress, fieldNumber: 2)
+    }
+    try { if let v = self._fromName {
+      try visitor.visitSingularStringField(value: v, fieldNumber: 3)
+    } }()
+    if !self.subject.isEmpty {
+      try visitor.visitSingularStringField(value: self.subject, fieldNumber: 4)
+    }
+    if !self.snippet.isEmpty {
+      try visitor.visitSingularStringField(value: self.snippet, fieldNumber: 5)
+    }
+    try { if let v = self._receivedAt {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 6)
+    } }()
+    if !self.label.isEmpty {
+      try visitor.visitSingularStringField(value: self.label, fieldNumber: 7)
+    }
+    try { if let v = self._confidence {
+      try visitor.visitSingularDoubleField(value: v, fieldNumber: 8)
+    } }()
+    try { if let v = self._classifiedBy {
+      try visitor.visitSingularStringField(value: v, fieldNumber: 9)
+    } }()
+    try { if let v = self._applicationID {
+      try visitor.visitSingularInt64Field(value: v, fieldNumber: 10)
+    } }()
+    if !self.status.isEmpty {
+      try visitor.visitSingularStringField(value: self.status, fieldNumber: 11)
+    }
+    try { if let v = self._note {
+      try visitor.visitSingularStringField(value: v, fieldNumber: 12)
+    } }()
+    if !self.candidates.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.candidates, fieldNumber: 13)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Applyant_V1_Email, rhs: Applyant_V1_Email) -> Bool {
+    if lhs.id != rhs.id {return false}
+    if lhs.fromAddress != rhs.fromAddress {return false}
+    if lhs._fromName != rhs._fromName {return false}
+    if lhs.subject != rhs.subject {return false}
+    if lhs.snippet != rhs.snippet {return false}
+    if lhs._receivedAt != rhs._receivedAt {return false}
+    if lhs.label != rhs.label {return false}
+    if lhs._confidence != rhs._confidence {return false}
+    if lhs._classifiedBy != rhs._classifiedBy {return false}
+    if lhs._applicationID != rhs._applicationID {return false}
+    if lhs.status != rhs.status {return false}
+    if lhs._note != rhs._note {return false}
+    if lhs.candidates != rhs.candidates {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Applyant_V1_ListMailQueueRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ListMailQueueRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Applyant_V1_ListMailQueueRequest, rhs: Applyant_V1_ListMailQueueRequest) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Applyant_V1_ListMailQueueResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ListMailQueueResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}emails\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeRepeatedMessageField(value: &self.emails) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.emails.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.emails, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Applyant_V1_ListMailQueueResponse, rhs: Applyant_V1_ListMailQueueResponse) -> Bool {
+    if lhs.emails != rhs.emails {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Applyant_V1_AssignEmailRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".AssignEmailRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}email_id\0\u{3}application_id\0\u{1}label\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularInt64Field(value: &self.emailID) }()
+      case 2: try { try decoder.decodeSingularInt64Field(value: &self._applicationID) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self._label) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    if self.emailID != 0 {
+      try visitor.visitSingularInt64Field(value: self.emailID, fieldNumber: 1)
+    }
+    try { if let v = self._applicationID {
+      try visitor.visitSingularInt64Field(value: v, fieldNumber: 2)
+    } }()
+    try { if let v = self._label {
+      try visitor.visitSingularStringField(value: v, fieldNumber: 3)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Applyant_V1_AssignEmailRequest, rhs: Applyant_V1_AssignEmailRequest) -> Bool {
+    if lhs.emailID != rhs.emailID {return false}
+    if lhs._applicationID != rhs._applicationID {return false}
+    if lhs._label != rhs._label {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Applyant_V1_AssignEmailResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".AssignEmailResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}email\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularMessageField(value: &self._email) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if let v = self._email {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Applyant_V1_AssignEmailResponse, rhs: Applyant_V1_AssignEmailResponse) -> Bool {
+    if lhs._email != rhs._email {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

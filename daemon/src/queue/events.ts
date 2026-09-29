@@ -38,7 +38,11 @@ export type EventKind =
   | 'search.plan'
   // Company research was queued, finished or failed (entity_id = company id, stage = queued |
   // done | failed; message = what it found).
-  | 'company';
+  | 'company'
+  // The mailbox (phase 13): a sync stored replies (entity_id = mailbox id, stage = synced), an
+  // email waits in the ask queue (entity_id = email id, stage = ask), or the candidate linked
+  // one (stage = assigned).
+  | 'mail';
 
 export interface EventInput {
   kind: EventKind;

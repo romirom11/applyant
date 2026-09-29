@@ -7,6 +7,7 @@ import { installReaderBrowser } from './browser/install.ts';
 import { ReaderPool } from './browser/reader-pool.ts';
 import { SubmitProfile } from './browser/submit-profile.ts';
 import { TaskPages } from './browser/task-pages.ts';
+import { EmailChannel } from './channels/email.ts';
 import { WebFormChannel } from './channels/web-form.ts';
 import { type Config, loadConfig } from './config.ts';
 import { closeDb, openDb, openReadDb } from './db/client.ts';
@@ -14,6 +15,7 @@ import { ReadPool } from './db/read-pool.ts';
 import { agentRuns } from './db/schema.ts';
 import type { Deps } from './deps.ts';
 import { catchUpDeliveries, deliverApplication } from './domain/applications/deliver.ts';
+import { requestMailSync, syncMail } from './domain/applications/mail-status.ts';
 import { prepareApplication } from './domain/applications/prepare.ts';
 import { readFormHandler, requestFormRead } from './domain/applications/read-form.ts';
 import { catchUpApplications } from './domain/applications/store.ts';
@@ -32,6 +34,7 @@ import { buildRecipe } from './domain/search/recipes/build.ts';
 import { ensureBuiltinSources } from './domain/search/sources.ts';
 import { verifyPosting } from './domain/search/verify.ts';
 import { isAlive, readEndpoint, removeEndpoint, writeEndpoint } from './endpoint.ts';
+import { MailService } from './integrations/mail-service.ts';
 import { McpHub } from './mcp/server.ts';
 import { browserTools } from './mcp/tools/browser.ts';
 import { knowledgeTools } from './mcp/tools/knowledge.ts';
@@ -39,6 +42,7 @@ import { AgentRunner } from './models/agent-runner.ts';
 import { defaultCliPaths } from './models/cli-paths.ts';
 import { CliStatus } from './models/cli-status.ts';
 import { type Embedder, GemmaEmbedder, HashEmbedder } from './models/embeddings.ts';
+import { AppleProvider } from './models/providers/apple.ts';
 import { ClaudeProvider, claudeEnv } from './models/providers/claude.ts';
 import { CodexProvider, codexEnv } from './models/providers/codex.ts';
 import { JevClient } from './models/providers/jev.ts';
@@ -95,6 +99,9 @@ export async function runDaemon(config: Config = loadConfig()): Promise<() => Pr
         resolvePath: () => cliPaths.require('codex'),
         env: (path) => codexEnv({ ...process.env, PATH: cliPaths.childPath(path) }),
       }),
+      // On-device email_classify (Foundation Models), only where the helper runs. Without it
+      // `apple` has no fallback, so mail is asked about rather than sent to a cloud model.
+      ...(native.available ? [new AppleProvider(native)] : []),
     ],
     // The candidate's routing (`applyant config roles`), read for every run.
     routing: () => loadRouting(read),
@@ -131,6 +138,20 @@ export async function runDaemon(config: Config = loadConfig()): Promise<() => Pr
     log: log.child({ part: 'mcp' }),
   });
   await mcp.start();
+  // The mailbox (phase 13): Gmail (Google consent) or IMAP/SMTP, credentials in Secrets.
+  const g = config.google;
+  const mail = new MailService({
+    read,
+    secrets,
+    google: {
+      clientId: g.clientId,
+      clientSecret: g.clientSecret,
+      ...(g.authUrl ? { authUrl: g.authUrl } : {}),
+      ...(g.tokenUrl ? { tokenUrl: g.tokenUrl } : {}),
+      ...(g.gmailApi ? { gmailApi: g.gmailApi } : {}),
+    },
+    sinceDays: config.mail.sinceDays,
+  });
   const deps: Deps = {
     reader,
     submit,
@@ -144,8 +165,10 @@ export async function runDaemon(config: Config = loadConfig()): Promise<() => Pr
         mcp,
         snapshotsDir: join(config.filesDir, 'handoffs'),
       }),
+      email: new EmailChannel({ mail, sentDir: join(config.filesDir, 'sent') }),
     },
     secrets,
+    mail,
     models,
     embedder,
     readPool,
@@ -169,6 +192,7 @@ export async function runDaemon(config: Config = loadConfig()): Promise<() => Pr
     build_recipe: buildRecipe,
     plan_search: planSearch,
     research_company: researchCompany,
+    sync_mail: syncMail,
   };
 
   // Catch up: vectors for facts that have none (or were made by another embedder), and a
@@ -217,6 +241,17 @@ export async function runDaemon(config: Config = loadConfig()): Promise<() => Pr
   });
   worker.start();
   scheduler.start();
+  // Replies: the connected mailbox is read every few minutes (and once now).
+  const syncMailNow = () => {
+    try {
+      requestMailSync(db, bus, new Date());
+    } catch (err) {
+      log.warn('mail sync not queued', { err });
+    }
+  };
+  syncMailNow();
+  const mailTimer = setInterval(syncMailNow, config.mail.syncMs);
+  mailTimer.unref();
 
   const token = randomBytes(32).toString('base64url');
   const rpc = await startRpcServer({
@@ -224,6 +259,7 @@ export async function runDaemon(config: Config = loadConfig()): Promise<() => Pr
     bus,
     secrets,
     setup: { cli, native, secrets, home: config.home, startedAt },
+    mail,
     now: () => new Date(),
     token,
     host: config.host,
@@ -245,6 +281,7 @@ export async function runDaemon(config: Config = loadConfig()): Promise<() => Pr
       log.info('applyantd stopping');
       removeEndpoint(config.endpointFile, process.pid);
       await rpc.close();
+      clearInterval(mailTimer);
       scheduler.stop();
       await worker.stop();
       await mcp.close();

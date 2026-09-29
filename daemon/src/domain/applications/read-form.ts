@@ -2,9 +2,11 @@
 // application form asks for (postings.form). Read-only: nothing is submitted or uploaded to
 // the employer (see browser/form-read.ts). The candidate's standard profile values steer the
 // dry-fill, so conditional fields are recorded under the branch their answer takes.
+
 import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { guardReadOnly, readForm } from '../../browser/form-read.ts';
 import { type FormRead, fieldCount } from '../../browser/form-types.ts';
+import { emailForm } from '../../channels/email.ts';
 import type { Db } from '../../db/client.ts';
 import {
   type FormStatus,
@@ -39,7 +41,9 @@ export const readFormHandler: Handler<'read_form'> = async (task, ctx) => {
   if (url.startsWith('mailto:')) {
     return {
       kind: 'done',
-      commit: (tx) => save(tx, posting, 'email', `applies by email to ${url.slice(7)}`, null),
+      // The email channel's "form": the message and the CV (phase 13).
+      commit: (tx) =>
+        save(tx, posting, 'email', `applies by email to ${url.slice(7)}`, emailForm(url)),
     };
   }
 

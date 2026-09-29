@@ -33,6 +33,9 @@ export const TASK_ENTITY = {
   plan_search: 'search_plan',
   // Company research (phase 12): researcher's sourced profile of one company, with red flags.
   research_company: 'company',
+  // One mailbox sync (phase 13): new replies → email_classify → matched to an application
+  // (status moves) or asked about ("Which application is this?").
+  sync_mail: 'mailbox',
 } as const;
 export type TaskKind = keyof typeof TASK_ENTITY;
 export const TASK_KINDS = Object.keys(TASK_ENTITY) as TaskKind[];

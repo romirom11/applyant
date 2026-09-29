@@ -140,6 +140,7 @@ export function handlers(partial: Partial<Handlers>): Handlers {
     build_recipe: never as Handler<'build_recipe'>,
     plan_search: never as Handler<'plan_search'>,
     research_company: never as Handler<'research_company'>,
+    sync_mail: never as Handler<'sync_mail'>,
     ...partial,
   };
 }

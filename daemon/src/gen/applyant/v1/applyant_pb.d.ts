@@ -1239,6 +1239,29 @@ export declare type CompanyEvent = Message<"applyant.v1.CompanyEvent"> & {
 export declare const CompanyEventSchema: GenMessage<CompanyEvent>;
 
 /**
+ * @generated from message applyant.v1.MailEvent
+ */
+export declare type MailEvent = Message<"applyant.v1.MailEvent"> & {
+  /**
+   * synced (entity = mailbox) · ask · assigned (entity = email)
+   *
+   * @generated from field: string status = 1;
+   */
+  status: string;
+
+  /**
+   * @generated from field: int64 entity_id = 2;
+   */
+  entityId: bigint;
+};
+
+/**
+ * Describes the message applyant.v1.MailEvent.
+ * Use `create(MailEventSchema)` to create a new message.
+ */
+export declare const MailEventSchema: GenMessage<MailEvent>;
+
+/**
  * @generated from message applyant.v1.Event
  */
 export declare type Event = Message<"applyant.v1.Event"> & {
@@ -1309,6 +1332,12 @@ export declare type Event = Message<"applyant.v1.Event"> & {
      */
     value: CompanyEvent;
     case: "company";
+  } | {
+    /**
+     * @generated from field: applyant.v1.MailEvent mail = 17;
+     */
+    value: MailEvent;
+    case: "mail";
   } | { case: undefined; value?: undefined };
 };
 
@@ -5557,6 +5586,447 @@ export declare type ResearchCompanyResponse = Message<"applyant.v1.ResearchCompa
 export declare const ResearchCompanyResponseSchema: GenMessage<ResearchCompanyResponse>;
 
 /**
+ * @generated from message applyant.v1.Mailbox
+ */
+export declare type Mailbox = Message<"applyant.v1.Mailbox"> & {
+  /**
+   * gmail | imap
+   *
+   * @generated from field: string kind = 1;
+   */
+  kind: string;
+
+  /**
+   * Empty while Google's consent is still open.
+   *
+   * @generated from field: string address = 2;
+   */
+  address: string;
+
+  /**
+   * connecting | connected | failed
+   *
+   * @generated from field: string status = 3;
+   */
+  status: string;
+
+  /**
+   * @generated from field: optional google.protobuf.Timestamp synced_at = 4;
+   */
+  syncedAt?: Timestamp | undefined;
+
+  /**
+   * Why connecting or the last sync failed.
+   *
+   * @generated from field: optional string note = 5;
+   */
+  note?: string | undefined;
+
+  /**
+   * Emails waiting in the ask queue.
+   *
+   * @generated from field: int32 asking = 6;
+   */
+  asking: number;
+};
+
+/**
+ * Describes the message applyant.v1.Mailbox.
+ * Use `create(MailboxSchema)` to create a new message.
+ */
+export declare const MailboxSchema: GenMessage<Mailbox>;
+
+/**
+ * @generated from message applyant.v1.ImapSettings
+ */
+export declare type ImapSettings = Message<"applyant.v1.ImapSettings"> & {
+  /**
+   * @generated from field: string imap_host = 1;
+   */
+  imapHost: string;
+
+  /**
+   * 0 means 993.
+   *
+   * @generated from field: int32 imap_port = 2;
+   */
+  imapPort: number;
+
+  /**
+   * @generated from field: string smtp_host = 3;
+   */
+  smtpHost: string;
+
+  /**
+   * 0 means 465.
+   *
+   * @generated from field: int32 smtp_port = 4;
+   */
+  smtpPort: number;
+
+  /**
+   * TLS from the start (993 / 465); false uses STARTTLS where offered.
+   *
+   * @generated from field: bool secure = 5;
+   */
+  secure: boolean;
+
+  /**
+   * When the login isn't the address.
+   *
+   * @generated from field: optional string username = 6;
+   */
+  username?: string | undefined;
+
+  /**
+   * An app password; stored in Secrets, never returned.
+   *
+   * @generated from field: string password = 7;
+   */
+  password: string;
+};
+
+/**
+ * Describes the message applyant.v1.ImapSettings.
+ * Use `create(ImapSettingsSchema)` to create a new message.
+ */
+export declare const ImapSettingsSchema: GenMessage<ImapSettings>;
+
+/**
+ * @generated from message applyant.v1.GmailSettings
+ */
+export declare type GmailSettings = Message<"applyant.v1.GmailSettings"> & {
+  /**
+   * The owner's "Desktop app" OAuth client; config / APPLYANT_GOOGLE_CLIENT_ID when unset.
+   *
+   * @generated from field: optional string client_id = 1;
+   */
+  clientId?: string | undefined;
+
+  /**
+   * Stored in Secrets.
+   *
+   * @generated from field: optional string client_secret = 2;
+   */
+  clientSecret?: string | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.GmailSettings.
+ * Use `create(GmailSettingsSchema)` to create a new message.
+ */
+export declare const GmailSettingsSchema: GenMessage<GmailSettings>;
+
+/**
+ * @generated from message applyant.v1.ConnectMailboxRequest
+ */
+export declare type ConnectMailboxRequest = Message<"applyant.v1.ConnectMailboxRequest"> & {
+  /**
+   * @generated from field: string address = 1;
+   */
+  address: string;
+
+  /**
+   * @generated from oneof applyant.v1.ConnectMailboxRequest.kind
+   */
+  kind: {
+    /**
+     * @generated from field: applyant.v1.GmailSettings gmail = 2;
+     */
+    value: GmailSettings;
+    case: "gmail";
+  } | {
+    /**
+     * @generated from field: applyant.v1.ImapSettings imap = 3;
+     */
+    value: ImapSettings;
+    case: "imap";
+  } | { case: undefined; value?: undefined };
+};
+
+/**
+ * Describes the message applyant.v1.ConnectMailboxRequest.
+ * Use `create(ConnectMailboxRequestSchema)` to create a new message.
+ */
+export declare const ConnectMailboxRequestSchema: GenMessage<ConnectMailboxRequest>;
+
+/**
+ * @generated from message applyant.v1.ConnectMailboxResponse
+ */
+export declare type ConnectMailboxResponse = Message<"applyant.v1.ConnectMailboxResponse"> & {
+  /**
+   * @generated from field: applyant.v1.Mailbox mailbox = 1;
+   */
+  mailbox?: Mailbox | undefined;
+
+  /**
+   * Gmail: open this in the browser to give consent.
+   *
+   * @generated from field: optional string auth_url = 2;
+   */
+  authUrl?: string | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.ConnectMailboxResponse.
+ * Use `create(ConnectMailboxResponseSchema)` to create a new message.
+ */
+export declare const ConnectMailboxResponseSchema: GenMessage<ConnectMailboxResponse>;
+
+/**
+ * @generated from message applyant.v1.GetMailboxRequest
+ */
+export declare type GetMailboxRequest = Message<"applyant.v1.GetMailboxRequest"> & {
+};
+
+/**
+ * Describes the message applyant.v1.GetMailboxRequest.
+ * Use `create(GetMailboxRequestSchema)` to create a new message.
+ */
+export declare const GetMailboxRequestSchema: GenMessage<GetMailboxRequest>;
+
+/**
+ * @generated from message applyant.v1.GetMailboxResponse
+ */
+export declare type GetMailboxResponse = Message<"applyant.v1.GetMailboxResponse"> & {
+  /**
+   * Unset when no mailbox is connected.
+   *
+   * @generated from field: optional applyant.v1.Mailbox mailbox = 1;
+   */
+  mailbox?: Mailbox | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.GetMailboxResponse.
+ * Use `create(GetMailboxResponseSchema)` to create a new message.
+ */
+export declare const GetMailboxResponseSchema: GenMessage<GetMailboxResponse>;
+
+/**
+ * @generated from message applyant.v1.SyncMailboxRequest
+ */
+export declare type SyncMailboxRequest = Message<"applyant.v1.SyncMailboxRequest"> & {
+};
+
+/**
+ * Describes the message applyant.v1.SyncMailboxRequest.
+ * Use `create(SyncMailboxRequestSchema)` to create a new message.
+ */
+export declare const SyncMailboxRequestSchema: GenMessage<SyncMailboxRequest>;
+
+/**
+ * @generated from message applyant.v1.SyncMailboxResponse
+ */
+export declare type SyncMailboxResponse = Message<"applyant.v1.SyncMailboxResponse"> & {
+  /**
+   * False when a sync was already waiting or running.
+   *
+   * @generated from field: bool queued = 1;
+   */
+  queued: boolean;
+};
+
+/**
+ * Describes the message applyant.v1.SyncMailboxResponse.
+ * Use `create(SyncMailboxResponseSchema)` to create a new message.
+ */
+export declare const SyncMailboxResponseSchema: GenMessage<SyncMailboxResponse>;
+
+/**
+ * @generated from message applyant.v1.MailCandidate
+ */
+export declare type MailCandidate = Message<"applyant.v1.MailCandidate"> & {
+  /**
+   * @generated from field: int64 application_id = 1;
+   */
+  applicationId: bigint;
+
+  /**
+   * @generated from field: optional string title = 2;
+   */
+  title?: string | undefined;
+
+  /**
+   * @generated from field: optional string company = 3;
+   */
+  company?: string | undefined;
+
+  /**
+   * @generated from field: applyant.v1.ApplicationStage stage = 4;
+   */
+  stage: ApplicationStage;
+};
+
+/**
+ * Describes the message applyant.v1.MailCandidate.
+ * Use `create(MailCandidateSchema)` to create a new message.
+ */
+export declare const MailCandidateSchema: GenMessage<MailCandidate>;
+
+/**
+ * @generated from message applyant.v1.Email
+ */
+export declare type Email = Message<"applyant.v1.Email"> & {
+  /**
+   * @generated from field: int64 id = 1;
+   */
+  id: bigint;
+
+  /**
+   * @generated from field: string from_address = 2;
+   */
+  fromAddress: string;
+
+  /**
+   * @generated from field: optional string from_name = 3;
+   */
+  fromName?: string | undefined;
+
+  /**
+   * @generated from field: string subject = 4;
+   */
+  subject: string;
+
+  /**
+   * The start of the text.
+   *
+   * @generated from field: string snippet = 5;
+   */
+  snippet: string;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp received_at = 6;
+   */
+  receivedAt?: Timestamp | undefined;
+
+  /**
+   * rejection | interview | offer | acknowledgement | security_code | other | unknown
+   *
+   * @generated from field: string label = 7;
+   */
+  label: string;
+
+  /**
+   * @generated from field: optional double confidence = 8;
+   */
+  confidence?: number | undefined;
+
+  /**
+   * The route that classified it ("apple", "claude:haiku"); unset when nothing could.
+   *
+   * @generated from field: optional string classified_by = 9;
+   */
+  classifiedBy?: string | undefined;
+
+  /**
+   * @generated from field: optional int64 application_id = 10;
+   */
+  applicationId?: bigint | undefined;
+
+  /**
+   * matched | ask | assigned
+   *
+   * @generated from field: string status = 11;
+   */
+  status: string;
+
+  /**
+   * Why it was matched, or why it's asked about.
+   *
+   * @generated from field: optional string note = 12;
+   */
+  note?: string | undefined;
+
+  /**
+   * Applications it may belong to, best first.
+   *
+   * @generated from field: repeated applyant.v1.MailCandidate candidates = 13;
+   */
+  candidates: MailCandidate[];
+};
+
+/**
+ * Describes the message applyant.v1.Email.
+ * Use `create(EmailSchema)` to create a new message.
+ */
+export declare const EmailSchema: GenMessage<Email>;
+
+/**
+ * @generated from message applyant.v1.ListMailQueueRequest
+ */
+export declare type ListMailQueueRequest = Message<"applyant.v1.ListMailQueueRequest"> & {
+};
+
+/**
+ * Describes the message applyant.v1.ListMailQueueRequest.
+ * Use `create(ListMailQueueRequestSchema)` to create a new message.
+ */
+export declare const ListMailQueueRequestSchema: GenMessage<ListMailQueueRequest>;
+
+/**
+ * @generated from message applyant.v1.ListMailQueueResponse
+ */
+export declare type ListMailQueueResponse = Message<"applyant.v1.ListMailQueueResponse"> & {
+  /**
+   * @generated from field: repeated applyant.v1.Email emails = 1;
+   */
+  emails: Email[];
+};
+
+/**
+ * Describes the message applyant.v1.ListMailQueueResponse.
+ * Use `create(ListMailQueueResponseSchema)` to create a new message.
+ */
+export declare const ListMailQueueResponseSchema: GenMessage<ListMailQueueResponse>;
+
+/**
+ * @generated from message applyant.v1.AssignEmailRequest
+ */
+export declare type AssignEmailRequest = Message<"applyant.v1.AssignEmailRequest"> & {
+  /**
+   * @generated from field: int64 email_id = 1;
+   */
+  emailId: bigint;
+
+  /**
+   * Unset: the email isn't about any application.
+   *
+   * @generated from field: optional int64 application_id = 2;
+   */
+  applicationId?: bigint | undefined;
+
+  /**
+   * What the email is, when the classifier couldn't tell (rejection | interview | offer | ...).
+   *
+   * @generated from field: optional string label = 3;
+   */
+  label?: string | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.AssignEmailRequest.
+ * Use `create(AssignEmailRequestSchema)` to create a new message.
+ */
+export declare const AssignEmailRequestSchema: GenMessage<AssignEmailRequest>;
+
+/**
+ * @generated from message applyant.v1.AssignEmailResponse
+ */
+export declare type AssignEmailResponse = Message<"applyant.v1.AssignEmailResponse"> & {
+  /**
+   * @generated from field: applyant.v1.Email email = 1;
+   */
+  email?: Email | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.AssignEmailResponse.
+ * Use `create(AssignEmailResponseSchema)` to create a new message.
+ */
+export declare const AssignEmailResponseSchema: GenMessage<AssignEmailResponse>;
+
+/**
  * @generated from enum applyant.v1.PostingStage
  */
 export enum PostingStage {
@@ -5777,6 +6247,23 @@ export enum ApplicationStage {
    * @generated from enum value: APPLICATION_STAGE_APPLIED = 5;
    */
   APPLIED = 5,
+
+  /**
+   * Moved on by replies read from the mailbox (or by the candidate's answer in the ask queue).
+   *
+   * @generated from enum value: APPLICATION_STAGE_INTERVIEW = 6;
+   */
+  INTERVIEW = 6,
+
+  /**
+   * @generated from enum value: APPLICATION_STAGE_REJECTED = 7;
+   */
+  REJECTED = 7,
+
+  /**
+   * @generated from enum value: APPLICATION_STAGE_OFFER = 8;
+   */
+  OFFER = 8,
 }
 
 /**
@@ -6388,6 +6875,57 @@ export declare const ApplyantService: GenService<{
     methodKind: "unary";
     input: typeof ResearchCompanyRequestSchema;
     output: typeof ResearchCompanyResponseSchema;
+  },
+  /**
+   * Mailbox: one connected mailbox (Gmail through Google's consent, or IMAP + SMTP) tracks
+   * replies, reads emailed security codes during delivery and sends email applications.
+   * ConnectMailbox for Gmail returns the consent URL to open; the mailbox is `connecting`
+   * until the browser comes back.
+   *
+   * @generated from rpc applyant.v1.ApplyantService.ConnectMailbox
+   */
+  connectMailbox: {
+    methodKind: "unary";
+    input: typeof ConnectMailboxRequestSchema;
+    output: typeof ConnectMailboxResponseSchema;
+  },
+  /**
+   * @generated from rpc applyant.v1.ApplyantService.GetMailbox
+   */
+  getMailbox: {
+    methodKind: "unary";
+    input: typeof GetMailboxRequestSchema;
+    output: typeof GetMailboxResponseSchema;
+  },
+  /**
+   * SyncMailbox reads new mail now instead of at the next interval.
+   *
+   * @generated from rpc applyant.v1.ApplyantService.SyncMailbox
+   */
+  syncMailbox: {
+    methodKind: "unary";
+    input: typeof SyncMailboxRequestSchema;
+    output: typeof SyncMailboxResponseSchema;
+  },
+  /**
+   * ListMailQueue is the "Which application is this?" queue.
+   *
+   * @generated from rpc applyant.v1.ApplyantService.ListMailQueue
+   */
+  listMailQueue: {
+    methodKind: "unary";
+    input: typeof ListMailQueueRequestSchema;
+    output: typeof ListMailQueueResponseSchema;
+  },
+  /**
+   * AssignEmail answers it: an application (and optionally what the email is), or none.
+   *
+   * @generated from rpc applyant.v1.ApplyantService.AssignEmail
+   */
+  assignEmail: {
+    methodKind: "unary";
+    input: typeof AssignEmailRequestSchema;
+    output: typeof AssignEmailResponseSchema;
   },
 }>;
 

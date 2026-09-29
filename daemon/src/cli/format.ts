@@ -50,6 +50,9 @@ const APP_STAGE: Record<number, string> = {
   [ApplicationStage.NEEDS_CANDIDATE]: 'needs_candidate',
   [ApplicationStage.APPROVED]: 'approved',
   [ApplicationStage.APPLIED]: 'applied',
+  [ApplicationStage.INTERVIEW]: 'interview',
+  [ApplicationStage.REJECTED]: 'rejected',
+  [ApplicationStage.OFFER]: 'offer',
 };
 
 const TASK_TYPE: Record<number, string> = {

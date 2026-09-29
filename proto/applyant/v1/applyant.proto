@@ -154,6 +154,19 @@ service ApplyantService {
   rpc GetCompany(GetCompanyRequest) returns (GetCompanyResponse);
   // ResearchCompany starts research now (Company research): kept when fresh unless refresh.
   rpc ResearchCompany(ResearchCompanyRequest) returns (ResearchCompanyResponse);
+
+  // Mailbox: one connected mailbox (Gmail through Google's consent, or IMAP + SMTP) tracks
+  // replies, reads emailed security codes during delivery and sends email applications.
+  // ConnectMailbox for Gmail returns the consent URL to open; the mailbox is `connecting`
+  // until the browser comes back.
+  rpc ConnectMailbox(ConnectMailboxRequest) returns (ConnectMailboxResponse);
+  rpc GetMailbox(GetMailboxRequest) returns (GetMailboxResponse);
+  // SyncMailbox reads new mail now instead of at the next interval.
+  rpc SyncMailbox(SyncMailboxRequest) returns (SyncMailboxResponse);
+  // ListMailQueue is the "Which application is this?" queue.
+  rpc ListMailQueue(ListMailQueueRequest) returns (ListMailQueueResponse);
+  // AssignEmail answers it: an application (and optionally what the email is), or none.
+  rpc AssignEmail(AssignEmailRequest) returns (AssignEmailResponse);
 }
 
 enum PostingStage {
@@ -503,6 +516,12 @@ message CompanyEvent {
   string status = 2;
 }
 
+message MailEvent {
+  // synced (entity = mailbox) · ask · assigned (entity = email)
+  string status = 1;
+  int64 entity_id = 2;
+}
+
 message Event {
   int64 id = 1;
   google.protobuf.Timestamp at = 2;
@@ -517,6 +536,7 @@ message Event {
     InterviewEvent interview = 14;
     SearchEvent search = 15;
     CompanyEvent company = 16;
+    MailEvent mail = 17;
   }
 }
 
@@ -914,6 +934,10 @@ enum ApplicationStage {
   // Delivered through its channel; see `receipt`. A delivery stuck mid-way stays APPROVED
   // (the human gate already passed) with `note` and `hand_off` set.
   APPLICATION_STAGE_APPLIED = 5;
+  // Moved on by replies read from the mailbox (or by the candidate's answer in the ask queue).
+  APPLICATION_STAGE_INTERVIEW = 6;
+  APPLICATION_STAGE_REJECTED = 7;
+  APPLICATION_STAGE_OFFER = 8;
 }
 
 message ApplicationField {
@@ -1636,4 +1660,115 @@ message ResearchCompanyResponse {
   Company company = 1;
   // False when research was already waiting or running, or the profile is fresh.
   bool queued = 2;
+}
+
+message Mailbox {
+  // gmail | imap
+  string kind = 1;
+  // Empty while Google's consent is still open.
+  string address = 2;
+  // connecting | connected | failed
+  string status = 3;
+  optional google.protobuf.Timestamp synced_at = 4;
+  // Why connecting or the last sync failed.
+  optional string note = 5;
+  // Emails waiting in the ask queue.
+  int32 asking = 6;
+}
+
+message ImapSettings {
+  string imap_host = 1;
+  // 0 means 993.
+  int32 imap_port = 2;
+  string smtp_host = 3;
+  // 0 means 465.
+  int32 smtp_port = 4;
+  // TLS from the start (993 / 465); false uses STARTTLS where offered.
+  bool secure = 5;
+  // When the login isn't the address.
+  optional string username = 6;
+  // An app password; stored in Secrets, never returned.
+  string password = 7;
+}
+
+message GmailSettings {
+  // The owner's "Desktop app" OAuth client; config / APPLYANT_GOOGLE_CLIENT_ID when unset.
+  optional string client_id = 1;
+  // Stored in Secrets.
+  optional string client_secret = 2;
+}
+
+message ConnectMailboxRequest {
+  string address = 1;
+  oneof kind {
+    GmailSettings gmail = 2;
+    ImapSettings imap = 3;
+  }
+}
+
+message ConnectMailboxResponse {
+  Mailbox mailbox = 1;
+  // Gmail: open this in the browser to give consent.
+  optional string auth_url = 2;
+}
+
+message GetMailboxRequest {}
+
+message GetMailboxResponse {
+  // Unset when no mailbox is connected.
+  optional Mailbox mailbox = 1;
+}
+
+message SyncMailboxRequest {}
+
+message SyncMailboxResponse {
+  // False when a sync was already waiting or running.
+  bool queued = 1;
+}
+
+message MailCandidate {
+  int64 application_id = 1;
+  optional string title = 2;
+  optional string company = 3;
+  ApplicationStage stage = 4;
+}
+
+message Email {
+  int64 id = 1;
+  string from_address = 2;
+  optional string from_name = 3;
+  string subject = 4;
+  // The start of the text.
+  string snippet = 5;
+  google.protobuf.Timestamp received_at = 6;
+  // rejection | interview | offer | acknowledgement | security_code | other | unknown
+  string label = 7;
+  optional double confidence = 8;
+  // The route that classified it ("apple", "claude:haiku"); unset when nothing could.
+  optional string classified_by = 9;
+  optional int64 application_id = 10;
+  // matched | ask | assigned
+  string status = 11;
+  // Why it was matched, or why it's asked about.
+  optional string note = 12;
+  // Applications it may belong to, best first.
+  repeated MailCandidate candidates = 13;
+}
+
+message ListMailQueueRequest {}
+
+message ListMailQueueResponse {
+  repeated Email emails = 1;
+}
+
+message AssignEmailRequest {
+  int64 email_id = 1;
+  // Unset: the email isn't about any application.
+  optional int64 application_id = 2;
+  // What the email is, when the classifier couldn't tell (rejection | interview | offer | ...).
+  optional string label = 3;
+}
+
+message AssignEmailResponse {
+  Email email = 1;
 }

@@ -78,7 +78,8 @@ export const ROLE_INFO: Record<Role, string> = {
   claim_verifier: 'checks each written sentence against its facts',
   interviewer: 'the agent interview',
   listing_check: "spot-checks a listing recipe's output every few days",
-  email_classify: 'reads replies to applications (phase 13; on-device)',
+  email_classify:
+    'reads replies to applications (on-device; a cloud model only if you route it there)',
 };
 
 /** Roles that are Choice decisions (AgentRunner.decide): the only ones Jev can answer. */
@@ -148,6 +149,8 @@ export const TASK_ROLE: Partial<Record<string, Role>> = {
   plan_search: 'search_planner',
   // Company research (phase 12): one sourced profile per company, with web search.
   research_company: 'researcher',
+  // The mailbox (phase 13): each new reply is classified on-device (apple by default).
+  sync_mail: 'email_classify',
 };
 
 /**

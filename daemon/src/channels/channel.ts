@@ -26,6 +26,8 @@ export interface DeliveryReceipt {
   salaryValue: string | null;
   fieldValues: ReceiptFieldSent[];
   submittedAt: Date;
+  /** Email applications: the sent message's Message-ID (replies thread to it). */
+  messageId?: string | null;
 }
 
 /** A control Prepare never saw, resolved from the profile: nothing was sent yet. */
@@ -47,6 +49,11 @@ export interface DeliverContext {
   progress(message: string): void;
   /** The candidate's standard-field profile, for a value a control found only at delivery needs. */
   profile: StandardProfile;
+  /**
+   * An emailed security code for a submission made at `since`, read from the connected
+   * mailbox (phase 13); absent when no mailbox is connected.
+   */
+  securityCode?(since: Date): Promise<string | null>;
 }
 
 /** What a channel needs to deliver: the application as review left it, and its posting. */

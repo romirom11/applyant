@@ -79,6 +79,7 @@ describe('CodexProvider (fake `codex` executable)', () => {
     cwd,
     tools: null,
     webSearch: false,
+    input: null,
     signal: new AbortController().signal,
     onEvent: () => {},
     onProgress: () => {},

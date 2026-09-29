@@ -201,6 +201,41 @@ export class NativeClient implements NativeHelper {
   }
 }
 
+// ---- classify_email (phase 13) --------------------------------------------------------------
+//
+//   → {"id": 7, "op": "classify_email", "subject": "…", "body": "…"}
+//   ← {"id": 7, "ok": true, "result": {"label": "interview", "confidence": 0.86, "language": "en"}}
+//
+// Foundation Models on the Mac (native/ClassifyEmail.swift). The helper answers "unknown" with
+// confidence 0 when Apple Intelligence is off, the language isn't supported or it can't tell;
+// it never sends mail anywhere. Labels are EMAIL_LABELS (db/schema.ts).
+
+export interface EmailClassification {
+  label: string;
+  confidence: number;
+  language: string | null;
+}
+
+/** The body is cut to what the on-device model's context holds comfortably. */
+export const CLASSIFY_BODY_CHARS = 6000;
+
+export async function classifyEmail(
+  native: NativeHelper,
+  email: { subject: string; body: string; from: string },
+  timeoutMs = 60_000,
+): Promise<EmailClassification> {
+  const res = await native.request<Partial<EmailClassification>>(
+    'classify_email',
+    { subject: email.subject, body: email.body.slice(0, CLASSIFY_BODY_CHARS), from: email.from },
+    timeoutMs,
+  );
+  return {
+    label: typeof res?.label === 'string' ? res.label : 'unknown',
+    confidence: typeof res?.confidence === 'number' ? res.confidence : 0,
+    language: typeof res?.language === 'string' ? res.language : null,
+  };
+}
+
 /**
  * The helper for this platform: the real one on macOS when its binary exists, the stub
  * otherwise (Linux, or a dev checkout where `swift build` hasn't run).

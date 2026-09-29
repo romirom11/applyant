@@ -62,6 +62,11 @@ export interface ProviderRequest {
   tools: RunTools | null;
   /** The provider's own web search (search_planner, researcher); off otherwise. */
   webSearch: boolean;
+  /**
+   * The request as data, for providers that take structured input instead of a prompt (the
+   * on-device `apple` provider reads an email's subject and body from here). Null otherwise.
+   */
+  input: Record<string, unknown> | null;
   signal: AbortSignal;
   /** Every raw provider event, in order; the runner writes them to the run log. */
   onEvent(event: unknown): void;
@@ -92,6 +97,8 @@ export interface RunRequest<T> {
   tools?: RunTools | null;
   /** Lets the model search the web with its provider's built-in search. */
   webSearch?: boolean;
+  /** The same request as data (see ProviderRequest.input). */
+  input?: Record<string, unknown>;
 }
 
 export type RunResult<T> =
@@ -201,6 +208,7 @@ export class AgentRunner {
         cwd,
         tools: req.tools ?? null,
         webSearch: req.webSearch ?? false,
+        input: req.input ?? null,
         signal,
         onEvent: (event) => log.write(event),
         onProgress: (message) => req.progress?.(`${role} · ${message}`),

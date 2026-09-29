@@ -5,6 +5,7 @@ import type { AddressInfo } from 'node:net';
 import { Code, ConnectError, type Interceptor } from '@connectrpc/connect';
 import { connectNodeAdapter } from '@connectrpc/connect-node';
 import { ApplyantService } from '../gen/applyant/v1/applyant_pb.js';
+import type { MailService } from '../integrations/mail-service.ts';
 import type { Secrets } from '../secrets/secrets.ts';
 import type { Logger } from '../util/log.ts';
 import { applicationRpcs } from './applications.ts';
@@ -12,6 +13,7 @@ import { candidateRpcs } from './candidate.ts';
 import { companyRpcs } from './companies.ts';
 import { configRpcs } from './config.ts';
 import { interviewRpcs } from './interview.ts';
+import { mailRpcs } from './mail.ts';
 import { postingRpcs, type RpcContext } from './postings.ts';
 import { prefsRpcs } from './prefs.ts';
 import { searchRpcs } from './search.ts';
@@ -21,6 +23,8 @@ import { type SetupContext, setupRpcs } from './setup.ts';
 export interface RpcServerOptions extends RpcContext {
   secrets: Secrets;
   setup: SetupContext;
+  /** The mailbox (phase 13); null in tests that don't need it. */
+  mail?: MailService | null;
   token: string;
   host: string;
   port: number;
@@ -55,6 +59,7 @@ export async function startRpcServer(o: RpcServerOptions): Promise<RpcServer> {
         ...prefsRpcs(o),
         ...searchRpcs(o),
         ...companyRpcs(o),
+        ...mailRpcs({ ...o, mail: o.mail ?? null }),
         ...configRpcs(o),
         ...secretRpcs(o.secrets),
         ...setupRpcs(o.setup),

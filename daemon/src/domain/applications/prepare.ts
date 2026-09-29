@@ -108,7 +108,9 @@ export const prepareApplication: Handler<'prepare_application'> = async (task, c
   if (!posting) return noop;
 
   if (posting.formStatus === null) return waitForForm(app, posting);
-  if (posting.formStatus !== 'verified' || !posting.form) return noForm(app, posting);
+  // An email target (phase 13) has a form too: the message and the CV (channels/email.ts).
+  const readable = posting.formStatus === 'verified' || posting.formStatus === 'email';
+  if (!readable || !posting.form) return noForm(app, posting);
 
   const read: FormRead = posting.form;
   const fields = formFields(read);
@@ -211,7 +213,7 @@ export const prepareApplication: Handler<'prepare_application'> = async (task, c
             refreshFields: current.refreshFields && !app.refreshFields,
             rewriteAnswers: current.rewriteAnswers && !app.rewriteAnswers,
             fieldsFormAt: posting.formReadAt,
-            channel: 'web_form',
+            channel: posting.formStatus === 'email' ? 'email' : 'web_form',
             note: written.length
               ? `drafted ${written.length} answer(s); checking them`
               : 'fields prepared',
@@ -871,7 +873,7 @@ function waitForForm(app: ApplicationRow, posting: PostingRow): Outcome {
 function noForm(app: ApplicationRow, posting: PostingRow): Outcome {
   const why =
     posting.formStatus === 'email'
-      ? `${posting.formNote ?? 'applies by email'}: email applications arrive in a later phase`
+      ? `${posting.formNote ?? 'applies by email'}: read the address again (\`applyant jobs read-form\`)`
       : posting.formStatus === 'no_form'
         ? `no application form: ${posting.formNote ?? 'none found'}`
         : `the application form couldn't be read: ${posting.formNote ?? ''}`;

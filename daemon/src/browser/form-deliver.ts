@@ -1,7 +1,7 @@
 // Deliver mode: fill the real, live application form with the prepared values and submit it.
 // Shares `fillStep` with Read; the difference is what a missing or unfillable control means:
 // Read just notes it, Deliver either escalates to the field/step agent or hands off.
-import type { Page } from 'playwright';
+import type { Locator, Page } from 'playwright';
 import {
   type Advance,
   advanceDeterministic,
@@ -39,6 +39,11 @@ export interface DeliverFormOptions {
     errors: string[],
     advance: Advance,
   ): Promise<boolean>;
+  /**
+   * An emailed security code for a submission made at `since` (read from the connected
+   * mailbox), or null when it didn't come. Unset: no mailbox, so a code step hands off.
+   */
+  securityCode?(since: Date): Promise<string | null>;
   signal?: AbortSignal;
   progress?(message: string): void;
   maxSteps?: number;
@@ -69,6 +74,43 @@ export function detectCaptcha(page: Page): string | null {
       }
     } catch {
       // about:blank frames etc.
+    }
+  }
+  return null;
+}
+
+const CODE_FIELD =
+  /(security|verification|confirmation|one[- ]?time|access)[\s_-]*(code|pin)|\botp\b|security_code|verification_code/i;
+
+/**
+ * A visible field asking for an emailed code (Greenhouse's "Security code" step), or null.
+ * Matched on the field's label, name, id, placeholder and autocomplete.
+ */
+export async function findSecurityCodeField(page: Page): Promise<Locator | null> {
+  for (const frame of page.frames()) {
+    const inputs = frame
+      .locator('input:not([type=hidden]):not([type=checkbox]):not([type=radio]):not([type=file])')
+      .filter({ visible: true });
+    const n = Math.min(await inputs.count().catch(() => 0), 30);
+    for (let i = 0; i < n; i++) {
+      const input = inputs.nth(i);
+      const desc = await input
+        .evaluate((e) => {
+          const el = e as HTMLInputElement;
+          const label = el.labels?.[0]?.textContent ?? '';
+          return [
+            label,
+            el.name,
+            el.id,
+            el.placeholder,
+            el.autocomplete,
+            el.getAttribute('aria-label'),
+          ]
+            .filter(Boolean)
+            .join(' ');
+        })
+        .catch(() => '');
+      if (CODE_FIELD.test(desc) || /one-time-code/.test(desc)) return input;
     }
   }
   return null;
@@ -178,6 +220,7 @@ export async function deliverForm(page: Page, o: DeliverFormOptions): Promise<De
           reason: 'no submit control found',
         };
       }
+      const submittedAt = new Date();
       let outcome = await submitFinal(page, latest, o.signal ? { signal: o.signal } : {});
       if (outcome.kind === 'stuck') {
         o.progress?.(`step ${step}: submission not accepted, escalating`);
@@ -187,12 +230,57 @@ export async function deliverForm(page: Page, o: DeliverFormOptions): Promise<De
           ? await waitForOutcome(page, before.url, before.sig, o.signal ? { signal: o.signal } : {})
           : outcome;
       }
+      // An emailed security code (Greenhouse): read it from the mailbox, enter it, submit again.
+      const codeField = await findSecurityCodeField(page);
+      if (codeField) {
+        if (!o.securityCode) {
+          return {
+            kind: 'handoff',
+            scope: 'step',
+            step,
+            fieldLabel: 'Security code',
+            reason:
+              'the site emailed a security code and no mailbox is connected (`applyant mail connect`): enter the code yourself',
+          };
+        }
+        o.progress?.(`step ${step}: the site emailed a security code, reading it from the mailbox`);
+        const code = await o.securityCode(submittedAt);
+        if (!code) {
+          return {
+            kind: 'handoff',
+            scope: 'step',
+            step,
+            fieldLabel: 'Security code',
+            reason:
+              "the site emailed a security code and it didn't arrive in the connected mailbox",
+          };
+        }
+        await codeField.fill(code);
+        const snap2 = await snapshotForm(page);
+        const again = snap2 ? pickAdvance(snap2.buttons) : null;
+        if (!again?.ref) {
+          return {
+            kind: 'handoff',
+            scope: 'step',
+            step,
+            fieldLabel: 'Security code',
+            reason: 'the security code is filled in, but there is no button to send it',
+          };
+        }
+        outcome = await submitFinal(page, again, o.signal ? { signal: o.signal } : {});
+        if (outcome.kind === 'confirmed' && (await findSecurityCodeField(page))) {
+          outcome = {
+            kind: 'stuck',
+            errors: ['the site did not accept the emailed security code'],
+          };
+        }
+      }
       if (outcome.kind === 'stuck') {
         return {
           kind: 'handoff',
           scope: 'step',
           step,
-          fieldLabel: null,
+          fieldLabel: codeField ? 'Security code' : null,
           reason: outcome.errors[0] ?? 'the final submission was not accepted',
         };
       }

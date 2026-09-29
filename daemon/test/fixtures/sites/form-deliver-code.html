@@ -1,0 +1,33 @@
+<!doctype html>
+<!-- Synthetic, for phase 13's security-code step. Greenhouse-style: the first submit doesn't go
+     through; the page asks for the 8-character code it "emailed", and only the right code
+     (X7K2M9QA) submits the application. -->
+<html lang="en"><head><meta charset="utf-8"><title>Apply · Code Co</title></head><body>
+<h1>Apply to Code Co</h1>
+<form id="apply" novalidate onsubmit="return false">
+  <div><label for="name">Full Name *</label><input id="name" required></div>
+  <div><label for="email">Email *</label><input id="email" type="email" required></div>
+  <div id="code-step" hidden>
+    <p role="alert">We sent a security code to your email. Enter it below to submit your application.</p>
+    <label for="security_code">Security code</label><input id="security_code" name="security_code">
+  </div>
+  <button id="submit">Submit application</button>
+</form>
+<div id="confirmation" hidden>Thank you for applying to Code Co.</div>
+<script>
+  window.__submitted = 0;
+  let asked = false;
+  document.getElementById('submit').addEventListener('click', () => {
+    for (const el of document.querySelectorAll('#apply input[required]')) if (!el.value) return;
+    if (!asked) {
+      asked = true;
+      document.getElementById('code-step').hidden = false;
+      return;
+    }
+    if (document.getElementById('security_code').value !== 'X7K2M9QA') return;
+    window.__submitted++;
+    document.getElementById('apply').hidden = true;
+    document.getElementById('confirmation').hidden = false;
+  });
+</script>
+</body></html>

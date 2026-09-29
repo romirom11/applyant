@@ -196,6 +196,7 @@ export class WebFormChannel implements Channel {
         agentField: agentFillField(deps, agentCtx),
         agentStep: (fields, errors, advance) =>
           agentFixAndAdvance(deps, agentCtx, fields, errors, advance),
+        ...(ctx.securityCode ? { securityCode: ctx.securityCode } : {}),
         signal: ctx.signal,
         progress: ctx.progress,
       });

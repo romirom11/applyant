@@ -267,6 +267,28 @@ public protocol Applyant_V1_ApplyantServiceClientInterface: Sendable {
     /// ResearchCompany starts research now (Company research): kept when fresh unless refresh.
     @available(iOS 13, *)
     func `researchCompany`(request: Applyant_V1_ResearchCompanyRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_ResearchCompanyResponse>
+
+    /// Mailbox: one connected mailbox (Gmail through Google's consent, or IMAP + SMTP) tracks
+    /// replies, reads emailed security codes during delivery and sends email applications.
+    /// ConnectMailbox for Gmail returns the consent URL to open; the mailbox is `connecting`
+    /// until the browser comes back.
+    @available(iOS 13, *)
+    func `connectMailbox`(request: Applyant_V1_ConnectMailboxRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_ConnectMailboxResponse>
+
+    @available(iOS 13, *)
+    func `getMailbox`(request: Applyant_V1_GetMailboxRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_GetMailboxResponse>
+
+    /// SyncMailbox reads new mail now instead of at the next interval.
+    @available(iOS 13, *)
+    func `syncMailbox`(request: Applyant_V1_SyncMailboxRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_SyncMailboxResponse>
+
+    /// ListMailQueue is the "Which application is this?" queue.
+    @available(iOS 13, *)
+    func `listMailQueue`(request: Applyant_V1_ListMailQueueRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_ListMailQueueResponse>
+
+    /// AssignEmail answers it: an application (and optionally what the email is), or none.
+    @available(iOS 13, *)
+    func `assignEmail`(request: Applyant_V1_AssignEmailRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_AssignEmailResponse>
 }
 
 /// Concrete implementation of `Applyant_V1_ApplyantServiceClientInterface`.
@@ -572,6 +594,31 @@ public final class Applyant_V1_ApplyantServiceClient: Applyant_V1_ApplyantServic
         return await self.client.unary(path: "/applyant.v1.ApplyantService/ResearchCompany", idempotencyLevel: .unknown, request: request, headers: headers)
     }
 
+    @available(iOS 13, *)
+    public func `connectMailbox`(request: Applyant_V1_ConnectMailboxRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_ConnectMailboxResponse> {
+        return await self.client.unary(path: "/applyant.v1.ApplyantService/ConnectMailbox", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
+    public func `getMailbox`(request: Applyant_V1_GetMailboxRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_GetMailboxResponse> {
+        return await self.client.unary(path: "/applyant.v1.ApplyantService/GetMailbox", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
+    public func `syncMailbox`(request: Applyant_V1_SyncMailboxRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_SyncMailboxResponse> {
+        return await self.client.unary(path: "/applyant.v1.ApplyantService/SyncMailbox", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
+    public func `listMailQueue`(request: Applyant_V1_ListMailQueueRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_ListMailQueueResponse> {
+        return await self.client.unary(path: "/applyant.v1.ApplyantService/ListMailQueue", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
+    public func `assignEmail`(request: Applyant_V1_AssignEmailRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_AssignEmailResponse> {
+        return await self.client.unary(path: "/applyant.v1.ApplyantService/AssignEmail", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
     public enum Metadata {
         public enum Methods {
             public static let addPosting = Connect.MethodSpec(name: "AddPosting", service: "applyant.v1.ApplyantService", type: .unary)
@@ -633,6 +680,11 @@ public final class Applyant_V1_ApplyantServiceClient: Applyant_V1_ApplyantServic
             public static let listCompanies = Connect.MethodSpec(name: "ListCompanies", service: "applyant.v1.ApplyantService", type: .unary)
             public static let getCompany = Connect.MethodSpec(name: "GetCompany", service: "applyant.v1.ApplyantService", type: .unary)
             public static let researchCompany = Connect.MethodSpec(name: "ResearchCompany", service: "applyant.v1.ApplyantService", type: .unary)
+            public static let connectMailbox = Connect.MethodSpec(name: "ConnectMailbox", service: "applyant.v1.ApplyantService", type: .unary)
+            public static let getMailbox = Connect.MethodSpec(name: "GetMailbox", service: "applyant.v1.ApplyantService", type: .unary)
+            public static let syncMailbox = Connect.MethodSpec(name: "SyncMailbox", service: "applyant.v1.ApplyantService", type: .unary)
+            public static let listMailQueue = Connect.MethodSpec(name: "ListMailQueue", service: "applyant.v1.ApplyantService", type: .unary)
+            public static let assignEmail = Connect.MethodSpec(name: "AssignEmail", service: "applyant.v1.ApplyantService", type: .unary)
         }
     }
 }

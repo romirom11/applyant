@@ -347,6 +347,7 @@ describe('ClaudeProvider (fake `claude` executable)', () => {
     cwd,
     tools: null,
     webSearch: false,
+    input: null,
     signal: new AbortController().signal,
     onEvent: () => {},
     onProgress: () => {},
