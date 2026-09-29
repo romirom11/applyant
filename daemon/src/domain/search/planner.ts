@@ -183,10 +183,12 @@ export const PLANNER_SYSTEM = `You plan job searches for one candidate in Applya
 Strategies are what Applyant runs every few hours:
 - queries: short title phrases; a job matches when every word of one phrase is in its title ("ai engineer", "llm", "founding engineer", "backend python"); "-word" excludes ("-intern"). Several phrases in one strategy are alternatives. Empty = every job of its sources.
 - locations: words the job's location must contain ("remote" matches remote jobs; "greece", "cyprus", "europe", "berlin"); empty = anywhere.
-- sources: which sources it reads: "all", a kind (greenhouse, ashby, lever, workable = company boards on those ATSs; page = company career pages and feeds; board = the job boards), a source key from the list, or the URL of a board you return below.
+- sources: which sources it reads: "all", a kind (greenhouse, ashby, lever, workable = company boards on those ATSs; page = company career pages and feeds; board = the job boards; telegram = Telegram job channels), a source key from the list, or the URL of a board you return below.
 - Propose at most ${MAX_STRATEGIES_PER_PLAN} new strategies, only ones that add something the existing strategies don't cover (another role family the candidate fits, another location, a narrower query for a weak strategy). None is fine.
 
 Boards: use web search to find companies whose job boards are worth watching for this candidate: companies hiring for the candidate's roles, stack and locations. Search the ATS hosts with site: queries (site:jobs.ashbyhq.com "AI Engineer" remote Europe · site:job-boards.greenhouse.io … · site:jobs.lever.co … · site:apply.workable.com …) and look for companies' own careers pages. For each board return the URL of the company's job list (https://jobs.ashbyhq.com/acme, https://job-boards.greenhouse.io/acme, https://jobs.lever.co/acme, https://apply.workable.com/acme, or https://acme.com/careers), not a single posting, not a search page and not an aggregator (LinkedIn, Indeed, Glassdoor…). Skip boards already in the source list. At most 25, the best fits first, each with one sentence on why it fits and the search that found it.
+
+Telegram channels: also suggest public Telegram job channels worth following for this candidate (active channels that post single vacancies for the candidate's roles, stack, languages and locations; not chats, not channels of courses or ads). Return each as a board with the URL https://t.me/s/<channel>, why it fits and the search that found it (e.g. site:t.me/s "remote" "python" vacancy). At most 5, and only channels whose recent posts you saw.
 
 List every web search you ran in searches.`;
 

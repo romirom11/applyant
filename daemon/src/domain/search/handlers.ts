@@ -25,7 +25,9 @@ import {
   searchSources,
   searchStrategies,
   strategyPostings,
+  type TelegramPostVerdict,
 } from '../../db/schema.ts';
+import { telegramPostsSchema } from '../../models/schemas/telegram.ts';
 import type { Handler, Tx } from '../../queue/types.ts';
 import { applyAbsence, reopenPosting } from './absence.ts';
 import { type Cluster, DedupeIndex } from './dedupe.ts';
@@ -34,6 +36,14 @@ import { isBoardId, readBoard } from './readers/boards.ts';
 import { LINKEDIN } from './readers/linkedin.ts';
 import { NeedsRecipeError, readPage } from './readers/page.ts';
 import { type PlatformAccess, readPlatform } from './readers/platform.ts';
+import {
+  applyUrlOf,
+  type JudgePosts,
+  readTelegram,
+  TELEGRAM_POSTS_SYSTEM,
+  type TelegramReading,
+  telegramPostsPrompt,
+} from './readers/telegram.ts';
 import type { Listing, ReaderContext, ReaderRun } from './readers/types.ts';
 import { XING } from './readers/xing.ts';
 import {
@@ -97,6 +107,11 @@ export async function readSource(
     } else if (source.kind === 'board') {
       if (!isBoardId(source.locator)) throw new Error(`unknown board "${source.locator}"`);
       read.run = await readBoard(source.locator, ctx);
+    } else if (source.kind === 'telegram') {
+      const known = source.resolved?.via === 'telegram' ? source.resolved.posts : {};
+      const run = await readTelegram(source.locator, ctx, known);
+      read.run = run;
+      read.resolved = { via: 'telegram', posts: run.posts };
     } else if (isPlatformKind(source.kind)) {
       // LinkedIn/Xing: a stored recipe for the source (when one is ok) over the built-in one.
       const stored = recipe?.status === 'ok' ? recipe.recipe : null;
@@ -208,6 +223,53 @@ function platformAccess(
   return { guardrails, browse: (fn) => submit.deliver(fn), taskId };
 }
 
+/** Telegram reads: the extractor over a channel's new posts, and the candidate's account. */
+function telegramReading(
+  ctx: Parameters<typeof searchHandler>[1],
+  taskId: number,
+): TelegramReading {
+  const judge: JudgePosts = async (channel, posts) => {
+    const res = await ctx.deps.models.run('extractor', {
+      schema: telegramPostsSchema,
+      system: TELEGRAM_POSTS_SYSTEM,
+      prompt: telegramPostsPrompt(channel, posts),
+      taskId,
+      signal: ctx.signal,
+      progress: (message) => ctx.progress({ message }),
+    });
+    // The channel's posts are judged at a later run; the others' reads go on.
+    if (res.kind === 'limit') {
+      throw new Error(
+        `the extractor is at its ${res.provider} limit until ${res.until.toISOString()}`,
+      );
+    }
+    if (res.kind === 'failed')
+      throw new Error(`the extractor failed on @${channel}: ${res.reason}`);
+    const ids = new Set(posts.map((p) => p.id));
+    const out = new Map<string, TelegramPostVerdict | null>();
+    for (const p of res.output.posts) {
+      if (!ids.has(p.post)) continue;
+      const role = p.role?.trim();
+      out.set(
+        p.post,
+        p.job && role
+          ? {
+              role,
+              company: p.company?.trim() || null,
+              salary: p.salary?.trim() || null,
+              location: p.location?.trim() || null,
+              remote: p.remote,
+              contact: p.contact?.trim() || null,
+              applyUrl: applyUrlOf(p),
+            }
+          : null,
+      );
+    }
+    return out;
+  };
+  return { judge, account: ctx.deps.telegram ?? null };
+}
+
 export const searchHandler: Handler<'search'> = async (task, ctx) => {
   const strategy = ctx.read
     .select()
@@ -242,6 +304,7 @@ export const searchHandler: Handler<'search'> = async (task, ctx) => {
     now: ctx.now(),
     locations: strategy.locations,
     platform: platformAccess(ctx, task.id),
+    telegram: telegramReading(ctx, task.id),
   };
   const reads = await mapLimit(sources, PARALLEL_SOURCES, async (s) => {
     const recipe = recipes.get(s.id) ?? null;
@@ -402,6 +465,11 @@ export function commitSearch(tx: Tx, input: CommitInput): void {
           minhash: cluster.minhash,
           listingText: l.description,
           locations: cluster.locations.length ? cluster.locations : null,
+          // A Telegram post names where to apply (a contact, an address, a job page): verify
+          // starts from it (the post itself has no form).
+          ...(bySource.get(first.sourceId)?.source.kind === 'telegram' && l.applyUrl
+            ? { applyUrl: l.applyUrl }
+            : {}),
           ...(cluster.roleTitle ? { title: cluster.roleTitle } : {}),
         })
         .returning()

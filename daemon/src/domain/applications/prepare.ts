@@ -101,6 +101,11 @@ type StoredAnswer = AnswerRow & { sentences: Array<{ text: string; factIds: numb
 
 const noop: Outcome = { kind: 'done', commit: () => {} };
 
+/** The delivery channel a posting's form status means. */
+export function channelOf(formStatus: PostingRow['formStatus']): 'email' | 'telegram' | 'web_form' {
+  return formStatus === 'email' || formStatus === 'telegram' ? formStatus : 'web_form';
+}
+
 export const prepareApplication: Handler<'prepare_application'> = async (task, ctx) => {
   const app = ctx.read.select().from(applications).where(eq(applications.id, task.entityId)).get();
   if (!app || app.stage === 'approved') return noop;
@@ -108,8 +113,11 @@ export const prepareApplication: Handler<'prepare_application'> = async (task, c
   if (!posting) return noop;
 
   if (posting.formStatus === null) return waitForForm(app, posting);
-  // An email target (phase 13) has a form too: the message and the CV (channels/email.ts).
-  const readable = posting.formStatus === 'verified' || posting.formStatus === 'email';
+  // An email or Telegram target (phases 13, 15) has a form too: the message and the CV.
+  const readable =
+    posting.formStatus === 'verified' ||
+    posting.formStatus === 'email' ||
+    posting.formStatus === 'telegram';
   if (!readable || !posting.form) return noForm(app, posting);
 
   const read: FormRead = posting.form;
@@ -213,7 +221,7 @@ export const prepareApplication: Handler<'prepare_application'> = async (task, c
             refreshFields: current.refreshFields && !app.refreshFields,
             rewriteAnswers: current.rewriteAnswers && !app.rewriteAnswers,
             fieldsFormAt: posting.formReadAt,
-            channel: posting.formStatus === 'email' ? 'email' : 'web_form',
+            channel: channelOf(posting.formStatus),
             note: written.length
               ? `drafted ${written.length} answer(s); checking them`
               : 'fields prepared',
@@ -882,7 +890,7 @@ function noForm(app: ApplicationRow, posting: PostingRow): Outcome {
       .update(applications)
       .set({
         stage: 'needs_candidate',
-        channel: posting.formStatus === 'email' ? 'email' : 'web_form',
+        channel: channelOf(posting.formStatus),
         note: why,
         updatedAt: tx.now,
       })

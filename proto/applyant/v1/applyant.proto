@@ -183,6 +183,14 @@ service ApplyantService {
   // SignIn opens Applyant's profile in plain Chrome (no automation) at a platform's sign-in
   // page or any URL; returns once the window is open. Deliveries wait until it's closed.
   rpc SignIn(SignInRequest) returns (SignInResponse);
+
+  // Telegram: the candidate's own account (GramJS, the session kept in Secrets) reads private
+  // job channels and sends Telegram applications. Public channels need no account (their t.me/s
+  // preview). Signing in is phone → code → the 2FA password when the account has one; each
+  // call returns the state it leads to. Disconnect only forgets Applyant's session.
+  rpc GetTelegram(GetTelegramRequest) returns (GetTelegramResponse);
+  rpc ConnectTelegram(ConnectTelegramRequest) returns (ConnectTelegramResponse);
+  rpc DisconnectTelegram(DisconnectTelegramRequest) returns (DisconnectTelegramResponse);
 }
 
 enum PostingStage {
@@ -1882,4 +1890,57 @@ message SignInResponse {
   string url = 1;
   // The guarded platform the URL belongs to, if any.
   optional string platform = 2;
+}
+
+enum TelegramState {
+  TELEGRAM_STATE_UNSPECIFIED = 0;
+  TELEGRAM_STATE_DISCONNECTED = 1;
+  // A code was sent to the account's Telegram apps (or by SMS).
+  TELEGRAM_STATE_WAITING_CODE = 2;
+  // The account has two-step verification: its password is next.
+  TELEGRAM_STATE_WAITING_PASSWORD = 3;
+  TELEGRAM_STATE_CONNECTED = 4;
+}
+
+message Telegram {
+  TelegramState state = 1;
+  // "@handle · Name" once connected.
+  optional string account = 2;
+  // The app credentials from my.telegram.org are stored (api id + hash).
+  bool api_configured = 3;
+  // Why the last sign-in failed, or the 2FA password's hint.
+  optional string note = 4;
+}
+
+message GetTelegramRequest {}
+
+message GetTelegramResponse {
+  Telegram telegram = 1;
+}
+
+message ConnectTelegramRequest {
+  oneof step {
+    // Starts signing in (stores api_id / api_hash first when given).
+    ConnectTelegramStart start = 1;
+    string code = 2;
+    string password = 3;
+    // Stops a sign-in that is waiting.
+    bool cancel = 4;
+  }
+}
+
+message ConnectTelegramStart {
+  string phone = 1;
+  optional string api_id = 2;
+  optional string api_hash = 3;
+}
+
+message ConnectTelegramResponse {
+  Telegram telegram = 1;
+}
+
+message DisconnectTelegramRequest {}
+
+message DisconnectTelegramResponse {
+  Telegram telegram = 1;
 }

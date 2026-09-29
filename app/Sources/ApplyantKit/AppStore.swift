@@ -69,6 +69,8 @@ public final class AppStore {
     public private(set) var mailQueue: [Email] = []
     /// LinkedIn/Xing (caps, pauses, sign-in) and the captcha solver's key status: Settings.
     public private(set) var platforms: PlatformList?
+    /// The candidate's Telegram account (Settings → Telegram).
+    public private(set) var telegram: TelegramAccount?
     /// The last failed action, for an alert.
     public var lastError: String?
     /// Where the main window is (notifications and the menu bar move it).
@@ -533,6 +535,7 @@ public final class AppStore {
     public func openSettings() async {
         guard let api else { return }
         await refreshPlatforms(api)
+        if let t = try? await api.telegram() { telegram = t }
     }
 
     public func platform(_ key: String) -> Platform? { platforms?.platforms.first { $0.platform == key } }
@@ -564,6 +567,33 @@ public final class AppStore {
             return
         }
         await refreshPlatforms(api)
+    }
+
+    // MARK: Settings and Search: Telegram
+
+    /// One sign-in step; the account's state after it (the reason is shown when it fails).
+    public func connectTelegram(_ step: Applyant_V1_ConnectTelegramRequest.OneOf_Step) async {
+        guard let api else { return }
+        if let t = await attempt({ try await api.connectTelegram(step) }) {
+            telegram = t
+        } else if let t = try? await api.telegram() {
+            telegram = t
+        }
+    }
+
+    public func disconnectTelegram() async {
+        guard let api, let t = await attempt({ try await api.disconnectTelegram() }) else { return }
+        telegram = t
+    }
+
+    /// Follows a Telegram channel (`@name`, `t.me/name`, `https://t.me/s/name`).
+    @discardableResult
+    public func followChannel(_ input: String) async -> Bool {
+        guard let api, let locator = TelegramText.channelLocator(input),
+              await attempt({ try await api.addSearchSource(kind: "telegram", locator: locator) }) != nil
+        else { return false }
+        await refreshSearch(api)
+        return true
     }
 
     // MARK: The interview

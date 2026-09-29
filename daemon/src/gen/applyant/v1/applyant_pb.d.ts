@@ -6371,6 +6371,185 @@ export declare type SignInResponse = Message<"applyant.v1.SignInResponse"> & {
 export declare const SignInResponseSchema: GenMessage<SignInResponse>;
 
 /**
+ * @generated from message applyant.v1.Telegram
+ */
+export declare type Telegram = Message<"applyant.v1.Telegram"> & {
+  /**
+   * @generated from field: applyant.v1.TelegramState state = 1;
+   */
+  state: TelegramState;
+
+  /**
+   * "@handle · Name" once connected.
+   *
+   * @generated from field: optional string account = 2;
+   */
+  account?: string | undefined;
+
+  /**
+   * The app credentials from my.telegram.org are stored (api id + hash).
+   *
+   * @generated from field: bool api_configured = 3;
+   */
+  apiConfigured: boolean;
+
+  /**
+   * Why the last sign-in failed, or the 2FA password's hint.
+   *
+   * @generated from field: optional string note = 4;
+   */
+  note?: string | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.Telegram.
+ * Use `create(TelegramSchema)` to create a new message.
+ */
+export declare const TelegramSchema: GenMessage<Telegram>;
+
+/**
+ * @generated from message applyant.v1.GetTelegramRequest
+ */
+export declare type GetTelegramRequest = Message<"applyant.v1.GetTelegramRequest"> & {
+};
+
+/**
+ * Describes the message applyant.v1.GetTelegramRequest.
+ * Use `create(GetTelegramRequestSchema)` to create a new message.
+ */
+export declare const GetTelegramRequestSchema: GenMessage<GetTelegramRequest>;
+
+/**
+ * @generated from message applyant.v1.GetTelegramResponse
+ */
+export declare type GetTelegramResponse = Message<"applyant.v1.GetTelegramResponse"> & {
+  /**
+   * @generated from field: applyant.v1.Telegram telegram = 1;
+   */
+  telegram?: Telegram | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.GetTelegramResponse.
+ * Use `create(GetTelegramResponseSchema)` to create a new message.
+ */
+export declare const GetTelegramResponseSchema: GenMessage<GetTelegramResponse>;
+
+/**
+ * @generated from message applyant.v1.ConnectTelegramRequest
+ */
+export declare type ConnectTelegramRequest = Message<"applyant.v1.ConnectTelegramRequest"> & {
+  /**
+   * @generated from oneof applyant.v1.ConnectTelegramRequest.step
+   */
+  step: {
+    /**
+     * Starts signing in (stores api_id / api_hash first when given).
+     *
+     * @generated from field: applyant.v1.ConnectTelegramStart start = 1;
+     */
+    value: ConnectTelegramStart;
+    case: "start";
+  } | {
+    /**
+     * @generated from field: string code = 2;
+     */
+    value: string;
+    case: "code";
+  } | {
+    /**
+     * @generated from field: string password = 3;
+     */
+    value: string;
+    case: "password";
+  } | {
+    /**
+     * Stops a sign-in that is waiting.
+     *
+     * @generated from field: bool cancel = 4;
+     */
+    value: boolean;
+    case: "cancel";
+  } | { case: undefined; value?: undefined };
+};
+
+/**
+ * Describes the message applyant.v1.ConnectTelegramRequest.
+ * Use `create(ConnectTelegramRequestSchema)` to create a new message.
+ */
+export declare const ConnectTelegramRequestSchema: GenMessage<ConnectTelegramRequest>;
+
+/**
+ * @generated from message applyant.v1.ConnectTelegramStart
+ */
+export declare type ConnectTelegramStart = Message<"applyant.v1.ConnectTelegramStart"> & {
+  /**
+   * @generated from field: string phone = 1;
+   */
+  phone: string;
+
+  /**
+   * @generated from field: optional string api_id = 2;
+   */
+  apiId?: string | undefined;
+
+  /**
+   * @generated from field: optional string api_hash = 3;
+   */
+  apiHash?: string | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.ConnectTelegramStart.
+ * Use `create(ConnectTelegramStartSchema)` to create a new message.
+ */
+export declare const ConnectTelegramStartSchema: GenMessage<ConnectTelegramStart>;
+
+/**
+ * @generated from message applyant.v1.ConnectTelegramResponse
+ */
+export declare type ConnectTelegramResponse = Message<"applyant.v1.ConnectTelegramResponse"> & {
+  /**
+   * @generated from field: applyant.v1.Telegram telegram = 1;
+   */
+  telegram?: Telegram | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.ConnectTelegramResponse.
+ * Use `create(ConnectTelegramResponseSchema)` to create a new message.
+ */
+export declare const ConnectTelegramResponseSchema: GenMessage<ConnectTelegramResponse>;
+
+/**
+ * @generated from message applyant.v1.DisconnectTelegramRequest
+ */
+export declare type DisconnectTelegramRequest = Message<"applyant.v1.DisconnectTelegramRequest"> & {
+};
+
+/**
+ * Describes the message applyant.v1.DisconnectTelegramRequest.
+ * Use `create(DisconnectTelegramRequestSchema)` to create a new message.
+ */
+export declare const DisconnectTelegramRequestSchema: GenMessage<DisconnectTelegramRequest>;
+
+/**
+ * @generated from message applyant.v1.DisconnectTelegramResponse
+ */
+export declare type DisconnectTelegramResponse = Message<"applyant.v1.DisconnectTelegramResponse"> & {
+  /**
+   * @generated from field: applyant.v1.Telegram telegram = 1;
+   */
+  telegram?: Telegram | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.DisconnectTelegramResponse.
+ * Use `create(DisconnectTelegramResponseSchema)` to create a new message.
+ */
+export declare const DisconnectTelegramResponseSchema: GenMessage<DisconnectTelegramResponse>;
+
+/**
  * @generated from enum applyant.v1.PostingStage
  */
 export enum PostingStage {
@@ -6639,6 +6818,45 @@ export enum ApplyForm {
  * Describes the enum applyant.v1.ApplyForm.
  */
 export declare const ApplyFormSchema: GenEnum<ApplyForm>;
+
+/**
+ * @generated from enum applyant.v1.TelegramState
+ */
+export enum TelegramState {
+  /**
+   * @generated from enum value: TELEGRAM_STATE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: TELEGRAM_STATE_DISCONNECTED = 1;
+   */
+  DISCONNECTED = 1,
+
+  /**
+   * A code was sent to the account's Telegram apps (or by SMS).
+   *
+   * @generated from enum value: TELEGRAM_STATE_WAITING_CODE = 2;
+   */
+  WAITING_CODE = 2,
+
+  /**
+   * The account has two-step verification: its password is next.
+   *
+   * @generated from enum value: TELEGRAM_STATE_WAITING_PASSWORD = 3;
+   */
+  WAITING_PASSWORD = 3,
+
+  /**
+   * @generated from enum value: TELEGRAM_STATE_CONNECTED = 4;
+   */
+  CONNECTED = 4,
+}
+
+/**
+ * Describes the enum applyant.v1.TelegramState.
+ */
+export declare const TelegramStateSchema: GenEnum<TelegramState>;
 
 /**
  * ApplyantService is the only contract between applyantd and its clients
@@ -7350,6 +7568,35 @@ export declare const ApplyantService: GenService<{
     methodKind: "unary";
     input: typeof SignInRequestSchema;
     output: typeof SignInResponseSchema;
+  },
+  /**
+   * Telegram: the candidate's own account (GramJS, the session kept in Secrets) reads private
+   * job channels and sends Telegram applications. Public channels need no account (their t.me/s
+   * preview). Signing in is phone → code → the 2FA password when the account has one; each
+   * call returns the state it leads to. Disconnect only forgets Applyant's session.
+   *
+   * @generated from rpc applyant.v1.ApplyantService.GetTelegram
+   */
+  getTelegram: {
+    methodKind: "unary";
+    input: typeof GetTelegramRequestSchema;
+    output: typeof GetTelegramResponseSchema;
+  },
+  /**
+   * @generated from rpc applyant.v1.ApplyantService.ConnectTelegram
+   */
+  connectTelegram: {
+    methodKind: "unary";
+    input: typeof ConnectTelegramRequestSchema;
+    output: typeof ConnectTelegramResponseSchema;
+  },
+  /**
+   * @generated from rpc applyant.v1.ApplyantService.DisconnectTelegram
+   */
+  disconnectTelegram: {
+    methodKind: "unary";
+    input: typeof DisconnectTelegramRequestSchema;
+    output: typeof DisconnectTelegramResponseSchema;
   },
 }>;
 

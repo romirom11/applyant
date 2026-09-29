@@ -122,6 +122,7 @@ describe('search from the CLI', () => {
       'board',
       'linkedin',
       'xing',
+      'telegram',
     ]);
 
     const careers = site.url('/careers-jsonld.html');

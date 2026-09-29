@@ -121,6 +121,16 @@ public protocol DaemonAPI: Sendable {
     func signIn(_ target: String, force: Bool) async throws -> String
     /// Stores a secret (write-only: values never come back).
     func setSecret(_ name: String, value: String) async throws
+
+    // Telegram (phase 15): Settings → Telegram, Search → Telegram channels.
+    /// The candidate's Telegram account: connected or not, or waiting in a sign-in.
+    func telegram() async throws -> TelegramAccount
+    /// One sign-in step: start (phone, app credentials once), the code, the 2FA password, cancel.
+    func connectTelegram(_ step: Applyant_V1_ConnectTelegramRequest.OneOf_Step) async throws -> TelegramAccount
+    /// Forgets Applyant's Telegram session.
+    func disconnectTelegram() async throws -> TelegramAccount
+    /// Follows a source: a Telegram channel (@name, t.me link), a board URL or a career page.
+    func addSearchSource(kind: String, locator: String) async throws -> SearchSource
 }
 
 /// Unary answers → value or APIError.
@@ -451,6 +461,27 @@ extension ConnectDaemonAPI {
             $0.value = value
         }
         _ = try unwrap(await unary.setSecret(request: request, headers: headers))
+    }
+
+    public func telegram() async throws -> TelegramAccount {
+        try unwrap(await unary.getTelegram(request: .init(), headers: headers)).telegram
+    }
+
+    public func connectTelegram(_ step: Applyant_V1_ConnectTelegramRequest.OneOf_Step) async throws -> TelegramAccount {
+        let request = Applyant_V1_ConnectTelegramRequest.with { $0.step = step }
+        return try unwrap(await unary.connectTelegram(request: request, headers: headers)).telegram
+    }
+
+    public func disconnectTelegram() async throws -> TelegramAccount {
+        try unwrap(await unary.disconnectTelegram(request: .init(), headers: headers)).telegram
+    }
+
+    public func addSearchSource(kind: String, locator: String) async throws -> SearchSource {
+        let request = Applyant_V1_AddSearchSourceRequest.with {
+            $0.kind = kind
+            $0.locator = locator
+        }
+        return try unwrap(await unary.addSearchSource(request: request, headers: headers)).source
     }
 }
 

@@ -1,8 +1,13 @@
 allowBuilds:
   '@bufbuild/buf': true
   better-sqlite3: true
+  # GramJS's optional websocket speed-ups: not needed (MTProto over TCP).
+  bufferutil: false
+  # Only a postinstall message.
+  es5-ext: false
   esbuild: true
   # CPU binaries ship inside the package; the script only downloads optional CUDA providers.
   onnxruntime-node: false
   # Only prints a version-scheme warning.
   protobufjs: false
+  utf-8-validate: false

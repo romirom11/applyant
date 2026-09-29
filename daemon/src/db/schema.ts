@@ -26,8 +26,11 @@ export type PostingStage = (typeof POSTING_STAGES)[number];
 
 export const POSTING_DECISIONS = ['interested', 'skipped'] as const;
 
-/** verified: the form was read · no_form: none found · email: applies by email · failed: gave up. */
-export const FORM_STATUSES = ['verified', 'no_form', 'email', 'failed'] as const;
+/**
+ * verified: the form was read · no_form: none found · email: applies by email · telegram: by a
+ * Telegram message to a contact (phase 15) · failed: gave up.
+ */
+export const FORM_STATUSES = ['verified', 'no_form', 'email', 'telegram', 'failed'] as const;
 export type FormStatus = (typeof FORM_STATUSES)[number];
 export type PostingDecision = (typeof POSTING_DECISIONS)[number];
 
@@ -122,6 +125,8 @@ export const postingSources = sqliteTable(
  * feed or JSON-LD first, then a known ATS embed). board: a job board (HN, RemoteOK, …).
  * linkedin · xing: the platform's job search, read under the candidate's session in Applyant's
  * browser with the platform guardrails (phase 14); never a complete list.
+ * telegram: a job channel (phase 15), its public t.me/s preview or, for a private channel, the
+ * candidate's own account over MTProto; never a complete list.
  */
 export const SEARCH_SOURCE_KINDS = [
   'greenhouse',
@@ -132,6 +137,7 @@ export const SEARCH_SOURCE_KINDS = [
   'board',
   'linkedin',
   'xing',
+  'telegram',
 ] as const;
 export type SearchSourceKind = (typeof SEARCH_SOURCE_KINDS)[number];
 
@@ -141,7 +147,23 @@ export type ResolvedSource =
   | { via: 'ats'; ats: 'greenhouse' | 'ashby' | 'lever' | 'workable'; token: string }
   | { via: 'lever'; apiHost: string }
   // Its listing recipe (phase 11): a partial list, never complete.
-  | { via: 'recipe' };
+  | { via: 'recipe' }
+  // A Telegram channel (phase 15): what the extractor made of its recent posts, by post id, so
+  // each post is judged once (a job's posting fields, or null for a post that isn't a job).
+  | { via: 'telegram'; posts: Record<string, TelegramPostVerdict | null> };
+
+/** A Telegram post the extractor judged to be a job posting. */
+export interface TelegramPostVerdict {
+  role: string;
+  company: string | null;
+  salary: string | null;
+  location: string | null;
+  remote: boolean | null;
+  /** `https://t.me/<user>`, `mailto:<address>` or the job's own page: where to apply. */
+  applyUrl: string | null;
+  /** The contact as the post wrote it (@user, an address). */
+  contact: string | null;
+}
 
 /** One place postings can be listed. A disabled source (or kind) is never queried. */
 export const searchSources = sqliteTable('search_sources', {
@@ -588,7 +610,7 @@ export const applications = sqliteTable('applications', {
     .unique()
     .references(() => postings.id, { onDelete: 'cascade' }),
   stage: text('stage', { enum: APPLICATION_STAGES }).notNull(),
-  /** web_form · email (the form's status decides; email is delivered from phase 13). */
+  /** web_form · email · telegram (the form's status decides; email from phase 13, telegram 15). */
   channel: text('channel').notNull().default('web_form'),
   /** What the candidate needs to do, or why preparation stopped. */
   note: text('note'),

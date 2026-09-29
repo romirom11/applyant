@@ -1,5 +1,7 @@
 // Settings (phase 14): the captcha solver's key (set or not, never shown), and LinkedIn/Xing:
-// sign-in, a pause and Resume, the daily caps against today's use.
+// sign-in, a pause and Resume, the daily caps against today's use. Phase 15: Telegram connect
+// (phone → code → the 2FA password), for private channels and Telegram applications.
+import ApplyantAPI
 import ApplyantKit
 import SwiftUI
 
@@ -29,6 +31,7 @@ struct SettingsView: View {
             ForEach(store.platforms?.platforms ?? [], id: \.platform) { platform in
                 PlatformSection(store: store, platform: platform)
             }
+            TelegramSection(store: store)
         }
         .formStyle(.grouped)
         .navigationTitle("Settings")
@@ -79,5 +82,73 @@ struct PlatformSection: View {
     private func reset() {
         searches = Int(platform.searchesPerDay)
         applications = Int(platform.applicationsPerDay)
+    }
+}
+
+struct TelegramSection: View {
+    let store: AppStore
+    @State private var phone = ""
+    @State private var apiId = ""
+    @State private var apiHash = ""
+    @State private var code = ""
+    @State private var password = ""
+
+    var body: some View {
+        let t = store.telegram
+        SwiftUI.Section {
+            HStack(alignment: .firstTextBaseline) {
+                Text(TelegramText.status(t)).font(.callout)
+                Spacer()
+                ChipView(chip: TelegramText.chip(t))
+            }
+            switch t?.state {
+            case .connected?:
+                Button("Disconnect") { Task { await store.disconnectTelegram() } }
+            case .waitingCode?:
+                HStack {
+                    TextField("Code", text: $code)
+                    Button("Send code") {
+                        let value = code
+                        code = ""
+                        Task { await store.connectTelegram(.code(value)) }
+                    }
+                    .disabled(code.trimmingCharacters(in: .whitespaces).isEmpty)
+                    Button("Cancel") { Task { await store.connectTelegram(.cancel(true)) } }
+                }
+            case .waitingPassword?:
+                HStack {
+                    SecureField("Two-step verification password", text: $password)
+                    Button("Sign in") {
+                        let value = password
+                        password = ""
+                        Task { await store.connectTelegram(.password(value)) }
+                    }
+                    .disabled(password.isEmpty)
+                    Button("Cancel") { Task { await store.connectTelegram(.cancel(true)) } }
+                }
+            default:
+                if t?.apiConfigured != true {
+                    TextField("api_id (my.telegram.org → API development tools)", text: $apiId)
+                    SecureField("api_hash", text: $apiHash)
+                }
+                HStack {
+                    TextField("Phone (+30…)", text: $phone)
+                    Button("Connect") {
+                        let start = Applyant_V1_ConnectTelegramStart.with {
+                            $0.phone = phone
+                            if !apiId.isEmpty { $0.apiID = apiId }
+                            if !apiHash.isEmpty { $0.apiHash = apiHash }
+                        }
+                        apiHash = ""
+                        Task { await store.connectTelegram(.start(start)) }
+                    }
+                    .disabled(phone.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+            }
+            Text("Only the session is kept, in Applyant's secrets (the Keychain). Telegram applications are sent from this account after you approve them.")
+                .font(.caption).foregroundStyle(.secondary)
+        } header: {
+            Text("Telegram")
+        }
     }
 }

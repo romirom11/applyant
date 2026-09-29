@@ -45,6 +45,7 @@
     "pdfjs-dist": "^6.3.289",
     "playwright": "^1.63.0",
     "sqlite-vec": "0.1.9",
+    "telegram": "^2.26.22",
     "zod": "^4.6.5"
   },
   "devDependencies": {

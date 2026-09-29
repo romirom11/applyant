@@ -144,6 +144,11 @@ export function describeResolved(r: ResolvedSource | null): string | undefined {
   if (r.via === 'feed') return `${r.format} feed ${r.url}`;
   if (r.via === 'ats') return `${r.ats} board ${r.token}`;
   if (r.via === 'recipe') return 'listing recipe';
+  if (r.via === 'telegram') {
+    const judged = Object.values(r.posts);
+    const jobs = judged.filter(Boolean).length;
+    return `Telegram channel: ${judged.length} posts judged, ${jobs} job${jobs === 1 ? '' : 's'}`;
+  }
   return `Lever API ${r.apiHost}`;
 }
 

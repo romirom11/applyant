@@ -65,4 +65,32 @@ import Testing
         try await eventually("the pause shows") { store.platform("xing")?.hasPausedAt == true }
         #expect(store.lastError == nil)
     }
+
+    @Test func telegramReadsAsTextSignsInAndFollowsAChannel() async throws {
+        #expect(TelegramText.status(nil).contains("unknown"))
+        #expect(TelegramText.status(.with { $0.state = .disconnected }).hasPrefix("Not connected: public channels"))
+        #expect(TelegramText.chip(.with { $0.state = .waitingCode }) == Chip(text: "Signing in", tone: .warning))
+        #expect(TelegramText.channelLocator("  https://t.me/s/remotejobss ") == "https://t.me/s/remotejobss")
+        #expect(TelegramText.channelLocator("two words") == nil)
+
+        let daemon = FakeDaemon(postings: [], applications: [], lastId: 5)
+        let store = AppStore(connector: FakeConnector([daemon]), backoff: { _ in })
+        let run = Task { await store.run() }
+        defer { run.cancel() }
+        try await eventually("connected") { store.connection == .connected }
+        await store.openSettings()
+        #expect(store.telegram?.state == .disconnected)
+        await store.connectTelegram(.start(.with { $0.phone = "+306900000000" }))
+        #expect(store.telegram?.state == .waitingCode)
+        await store.connectTelegram(.code("00000"))
+        #expect(store.telegram?.state == .waitingCode)
+        await store.connectTelegram(.code("11111"))
+        #expect(TelegramText.status(store.telegram) == "Connected as @roman · Roman")
+        await store.disconnectTelegram()
+        #expect(store.telegram?.state == .disconnected)
+
+        #expect(await store.followChannel("@remotejobss"))
+        #expect(daemon.addedSources == ["@remotejobss"])
+        #expect(await store.followChannel("") == false)
+    }
 }

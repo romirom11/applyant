@@ -283,6 +283,36 @@ final class FakeDaemon: DaemonAPI, @unchecked Sendable {
         secrets[name] = value
         if name == "capmonster" { platformList.captchaSolver = true }
     }
+    var telegramAccount = TelegramAccount.with { $0.state = .disconnected }
+    var addedSources: [String] = []
+    func telegram() async throws -> TelegramAccount { log("telegram"); return telegramAccount }
+    func connectTelegram(_ step: Applyant_V1_ConnectTelegramRequest.OneOf_Step) async throws -> TelegramAccount {
+        switch step {
+        case let .start(start):
+            log("connectTelegram start \(start.phone)")
+            telegramAccount.state = .waitingCode
+        case let .code(code):
+            log("connectTelegram code")
+            guard code == "11111" else { throw APIError("PHONE_CODE_INVALID") }
+            telegramAccount.state = .connected
+            telegramAccount.account = "@roman · Roman"
+        case .password:
+            log("connectTelegram password")
+        case .cancel:
+            telegramAccount.state = .disconnected
+        }
+        return telegramAccount
+    }
+    func disconnectTelegram() async throws -> TelegramAccount {
+        log("disconnectTelegram")
+        telegramAccount = .with { $0.state = .disconnected }
+        return telegramAccount
+    }
+    func addSearchSource(kind: String, locator: String) async throws -> SearchSource {
+        log("addSearchSource \(kind) \(locator)")
+        addedSources.append(locator)
+        return .with { $0.key = "\(kind):\(locator)"; $0.kind = kind; $0.locator = locator }
+    }
 
     /// Changes a question everywhere it's listed.
     func setQuestion(_ id: Int64, _ change: (inout InterviewQuestion) -> Void) throws -> InterviewQuestion {

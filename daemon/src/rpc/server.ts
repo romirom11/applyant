@@ -5,6 +5,7 @@ import type { AddressInfo } from 'node:net';
 import { Code, ConnectError, type Interceptor } from '@connectrpc/connect';
 import { connectNodeAdapter } from '@connectrpc/connect-node';
 import { ApplyantService } from '../gen/applyant/v1/applyant_pb.js';
+import type { TelegramService } from '../integrations/gramjs.ts';
 import type { MailService } from '../integrations/mail-service.ts';
 import type { Secrets } from '../secrets/secrets.ts';
 import type { Logger } from '../util/log.ts';
@@ -20,6 +21,7 @@ import { prefsRpcs } from './prefs.ts';
 import { searchRpcs } from './search.ts';
 import { secretRpcs } from './secrets.ts';
 import { type SetupContext, setupRpcs } from './setup.ts';
+import { telegramRpcs } from './telegram.ts';
 
 export interface RpcServerOptions extends RpcContext {
   secrets: Secrets;
@@ -28,6 +30,8 @@ export interface RpcServerOptions extends RpcContext {
   mail?: MailService | null;
   /** LinkedIn/Xing guardrails, the sign-in window, the captcha key (phase 14). */
   platforms?: PlatformServices | null;
+  /** The candidate's Telegram account (phase 15). */
+  telegram?: TelegramService | null;
   token: string;
   host: string;
   port: number;
@@ -64,6 +68,7 @@ export async function startRpcServer(o: RpcServerOptions): Promise<RpcServer> {
         ...companyRpcs(o),
         ...mailRpcs({ ...o, mail: o.mail ?? null }),
         ...platformRpcs(o.platforms ?? null),
+        ...telegramRpcs(o.telegram ?? null),
         ...configRpcs(o),
         ...secretRpcs(o.secrets),
         ...setupRpcs(o.setup),

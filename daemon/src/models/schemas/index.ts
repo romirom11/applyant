@@ -11,6 +11,7 @@ import { sourceExtractionSchema } from './extractor.ts';
 import { interviewSchema } from './interview.ts';
 import { matcherSchema, postingExtractionSchema } from './posting.ts';
 import { plannerSchema, recipeOutputSchema } from './search.ts';
+import { telegramPostsSchema } from './telegram.ts';
 
 export const ROLE_SCHEMAS: Record<string, z.ZodType> = {
   source_extraction: sourceExtractionSchema,
@@ -25,6 +26,7 @@ export const ROLE_SCHEMAS: Record<string, z.ZodType> = {
   search_planner: plannerSchema,
   researcher: companyResearchSchema,
   email_classify: emailClassSchema,
+  telegram_posts: telegramPostsSchema,
   // Fallback for the Jev decision roles (field_classify, option_match, posting_liveness).
   decision: decisionSchema,
 };
@@ -38,3 +40,4 @@ export { type SourceExtraction, sourceExtractionSchema } from './extractor.ts';
 export * from './interview.ts';
 export * from './posting.ts';
 export * from './search.ts';
+export * from './telegram.ts';

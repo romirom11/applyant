@@ -45,3 +45,38 @@ public enum PlatformText {
         return "Sign-in window open at \(list.signInOpen): searches and deliveries wait until you close it"
     }
 }
+
+// Telegram (phase 15): the candidate's own account, for private channels and Telegram
+// applications. Public channels need none (their t.me/s preview).
+public typealias TelegramAccount = Applyant_V1_Telegram
+
+public enum TelegramText {
+    /// "Connected as @roman · Roman" · "Waiting for the code Telegram sent" · "Not connected".
+    public static func status(_ t: TelegramAccount?) -> String {
+        guard let t else { return "Telegram: unknown (daemon not reachable)" }
+        var line: String
+        switch t.state {
+        case .connected: line = "Connected" + (t.hasAccount ? " as \(t.account)" : "")
+        case .waitingCode: line = "Waiting for the code Telegram sent to your other sessions"
+        case .waitingPassword: line = "Your account has two-step verification: enter its password"
+        default: line = "Not connected: public channels are still read (t.me/s); private channels and Telegram applications need your account"
+        }
+        if t.hasNote { line += " · \(t.note)" }
+        return line
+    }
+
+    public static func chip(_ t: TelegramAccount?) -> Chip {
+        switch t?.state {
+        case .connected?: return Chip(text: "Connected", tone: .good)
+        case .waitingCode?, .waitingPassword?: return Chip(text: "Signing in", tone: .warning)
+        default: return Chip(text: "Not connected", tone: .neutral)
+        }
+    }
+
+    /// A channel as typed ("@name", "t.me/name", "https://t.me/s/name") → what AddSearchSource takes.
+    public static func channelLocator(_ input: String) -> String? {
+        let s = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !s.isEmpty, !s.contains(" ") else { return nil }
+        return s
+    }
+}

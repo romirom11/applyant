@@ -13,6 +13,7 @@ import { registerMail } from './mail.ts';
 import { registerPlatforms } from './platforms.ts';
 import { registerSearch } from './search.ts';
 import { registerStatus } from './status.ts';
+import { registerTelegram } from './telegram.ts';
 
 const out = (text: string): void => {
   process.stdout.write(`${text}\n`);
@@ -74,6 +75,7 @@ export function buildCli(client: () => ApplyantClient): Command {
   registerConfig(program, client);
   registerMail(program, client, readSecretValue);
   registerPlatforms(program, client, readSecretValue);
+  registerTelegram(program, client, readSecretValue);
 
   const runs = program.command('runs').description('task activity');
   runs

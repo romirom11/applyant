@@ -56,8 +56,12 @@ export const deliverApplication: Handler<'deliver_application'> = async (task, c
   const posting = ctx.read.select().from(postings).where(eq(postings.id, app.postingId)).get();
   if (!posting) return noop;
 
-  // An email target (phase 13) goes through the email channel whatever the row was created with.
-  const channelKey = posting.formStatus === 'email' ? 'email' : app.channel;
+  // An email or Telegram target (phases 13, 15) goes through its channel whatever the row was
+  // created with.
+  const channelKey =
+    posting.formStatus === 'email' || posting.formStatus === 'telegram'
+      ? posting.formStatus
+      : app.channel;
   const channel = ctx.deps.channels[channelKey];
   if (!channel) return needsCandidate(app, `no "${channelKey}" delivery channel yet`);
 

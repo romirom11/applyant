@@ -314,6 +314,19 @@ public protocol Applyant_V1_ApplyantServiceClientInterface: Sendable {
     /// page or any URL; returns once the window is open. Deliveries wait until it's closed.
     @available(iOS 13, *)
     func `signIn`(request: Applyant_V1_SignInRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_SignInResponse>
+
+    /// Telegram: the candidate's own account (GramJS, the session kept in Secrets) reads private
+    /// job channels and sends Telegram applications. Public channels need no account (their t.me/s
+    /// preview). Signing in is phone → code → the 2FA password when the account has one; each
+    /// call returns the state it leads to. Disconnect only forgets Applyant's session.
+    @available(iOS 13, *)
+    func `getTelegram`(request: Applyant_V1_GetTelegramRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_GetTelegramResponse>
+
+    @available(iOS 13, *)
+    func `connectTelegram`(request: Applyant_V1_ConnectTelegramRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_ConnectTelegramResponse>
+
+    @available(iOS 13, *)
+    func `disconnectTelegram`(request: Applyant_V1_DisconnectTelegramRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_DisconnectTelegramResponse>
 }
 
 /// Concrete implementation of `Applyant_V1_ApplyantServiceClientInterface`.
@@ -669,6 +682,21 @@ public final class Applyant_V1_ApplyantServiceClient: Applyant_V1_ApplyantServic
         return await self.client.unary(path: "/applyant.v1.ApplyantService/SignIn", idempotencyLevel: .unknown, request: request, headers: headers)
     }
 
+    @available(iOS 13, *)
+    public func `getTelegram`(request: Applyant_V1_GetTelegramRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_GetTelegramResponse> {
+        return await self.client.unary(path: "/applyant.v1.ApplyantService/GetTelegram", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
+    public func `connectTelegram`(request: Applyant_V1_ConnectTelegramRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_ConnectTelegramResponse> {
+        return await self.client.unary(path: "/applyant.v1.ApplyantService/ConnectTelegram", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
+    public func `disconnectTelegram`(request: Applyant_V1_DisconnectTelegramRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_DisconnectTelegramResponse> {
+        return await self.client.unary(path: "/applyant.v1.ApplyantService/DisconnectTelegram", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
     public enum Metadata {
         public enum Methods {
             public static let addPosting = Connect.MethodSpec(name: "AddPosting", service: "applyant.v1.ApplyantService", type: .unary)
@@ -740,6 +768,9 @@ public final class Applyant_V1_ApplyantServiceClient: Applyant_V1_ApplyantServic
             public static let setPlatformCaps = Connect.MethodSpec(name: "SetPlatformCaps", service: "applyant.v1.ApplyantService", type: .unary)
             public static let resumePlatform = Connect.MethodSpec(name: "ResumePlatform", service: "applyant.v1.ApplyantService", type: .unary)
             public static let signIn = Connect.MethodSpec(name: "SignIn", service: "applyant.v1.ApplyantService", type: .unary)
+            public static let getTelegram = Connect.MethodSpec(name: "GetTelegram", service: "applyant.v1.ApplyantService", type: .unary)
+            public static let connectTelegram = Connect.MethodSpec(name: "ConnectTelegram", service: "applyant.v1.ApplyantService", type: .unary)
+            public static let disconnectTelegram = Connect.MethodSpec(name: "DisconnectTelegram", service: "applyant.v1.ApplyantService", type: .unary)
         }
     }
 }

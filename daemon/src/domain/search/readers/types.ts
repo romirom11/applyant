@@ -3,6 +3,7 @@
 // dedupe.ts). Posting text is read at verification, not here.
 import type { ReaderPool } from '../../../browser/reader-pool.ts';
 import type { PlatformAccess } from './platform.ts';
+import type { TelegramReading } from './telegram.ts';
 
 /** One job as a source lists it. */
 export interface Listing {
@@ -52,6 +53,8 @@ export interface ReaderContext {
   locations?: string[];
   /** LinkedIn/Xing: Applyant's signed-in browser and the platform guardrails (phase 14). */
   platform?: PlatformAccess | null;
+  /** Telegram channels (phase 15): the extractor over posts, and the candidate's account. */
+  telegram?: TelegramReading | null;
 }
 
 /** The longest description kept per listing (dedupe needs a sample, not the whole page). */

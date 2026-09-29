@@ -8,6 +8,7 @@ import { guardReadOnly, readForm, readScope } from '../../browser/form-read.ts';
 import { type FormRead, fieldCount } from '../../browser/form-types.ts';
 import { isPlatformHold, readerFor } from '../../browser/platform-reader.ts';
 import { emailForm } from '../../channels/email.ts';
+import { parseTelegramContact, telegramForm } from '../../channels/telegram.ts';
 import type { Db } from '../../db/client.ts';
 import {
   type FormStatus,
@@ -46,6 +47,15 @@ export const readFormHandler: Handler<'read_form'> = async (task, ctx) => {
       // The email channel's "form": the message and the CV (phase 13).
       commit: (tx) =>
         save(tx, posting, 'email', `applies by email to ${url.slice(7)}`, emailForm(url)),
+    };
+  }
+  const contact = parseTelegramContact(url);
+  if (contact) {
+    return {
+      kind: 'done',
+      // The Telegram channel's "form": the message and the CV (phase 15).
+      commit: (tx) =>
+        save(tx, posting, 'telegram', `applies by Telegram to @${contact}`, telegramForm(url)),
     };
   }
 

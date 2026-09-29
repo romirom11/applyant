@@ -46,6 +46,7 @@ struct SearchList: View {
                     ForEach(group.rows) { row in
                         SearchRowView(row: row).tag(row.selection)
                     }
+                    if group.kind.kind == "telegram" { FollowChannel(store: store) }
                 } header: {
                     HStack {
                         Text(group.kind.label)
@@ -64,6 +65,29 @@ struct SearchList: View {
         }
         .navigationTitle("Search")
         .task { await store.openSearch() }
+    }
+}
+
+/// Telegram channels (phase 15): follow one by its @name or t.me link; its public preview is read.
+struct FollowChannel: View {
+    let store: AppStore
+    @State private var channel = ""
+
+    var body: some View {
+        HStack {
+            TextField("Follow a channel: @name or t.me/name", text: $channel)
+                .textFieldStyle(.roundedBorder)
+                .controlSize(.small)
+                .onSubmit(follow)
+            Button("Follow", action: follow)
+                .controlSize(.small)
+                .disabled(TelegramText.channelLocator(channel) == nil)
+        }
+    }
+
+    private func follow() {
+        let value = channel
+        Task { if await store.followChannel(value) { channel = "" } }
     }
 }
 

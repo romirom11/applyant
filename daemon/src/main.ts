@@ -10,6 +10,7 @@ import { ReaderPool } from './browser/reader-pool.ts';
 import { SubmitProfile } from './browser/submit-profile.ts';
 import { TaskPages } from './browser/task-pages.ts';
 import { EmailChannel } from './channels/email.ts';
+import { TelegramChannel } from './channels/telegram.ts';
 import { WebFormChannel } from './channels/web-form.ts';
 import { type Config, loadConfig } from './config.ts';
 import { closeDb, openDb, openReadDb } from './db/client.ts';
@@ -38,6 +39,7 @@ import { ensureBuiltinSources } from './domain/search/sources.ts';
 import { verifyPosting } from './domain/search/verify.ts';
 import { isAlive, readEndpoint, removeEndpoint, writeEndpoint } from './endpoint.ts';
 import { CapMonster } from './integrations/capmonster.ts';
+import { TelegramService } from './integrations/gramjs.ts';
 import { MailService } from './integrations/mail-service.ts';
 import { McpHub } from './mcp/server.ts';
 import { browserTools } from './mcp/tools/browser.ts';
@@ -171,6 +173,7 @@ export async function runDaemon(config: Config = loadConfig()): Promise<() => Pr
     },
     sinceDays: config.mail.sinceDays,
   });
+  const telegram = new TelegramService({ secrets, log: log.child({ part: 'telegram' }) });
   const deps: Deps = {
     reader,
     submit,
@@ -185,9 +188,11 @@ export async function runDaemon(config: Config = loadConfig()): Promise<() => Pr
         snapshotsDir: join(config.filesDir, 'handoffs'),
       }),
       email: new EmailChannel({ mail, sentDir: join(config.filesDir, 'sent') }),
+      telegram: new TelegramChannel({ telegram, sentDir: join(config.filesDir, 'sent') }),
     },
     secrets,
     mail,
+    telegram,
     captcha,
     guardrails,
     models,
@@ -283,6 +288,7 @@ export async function runDaemon(config: Config = loadConfig()): Promise<() => Pr
     setup: { cli, native, secrets, home: config.home, startedAt },
     mail,
     platforms: { guardrails, login, captchaConfigured: () => captcha.configured() },
+    telegram,
     now: () => new Date(),
     token,
     host: config.host,

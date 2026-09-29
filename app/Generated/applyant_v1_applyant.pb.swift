@@ -346,6 +346,56 @@ public nonisolated enum Applyant_V1_ApplyForm: SwiftProtobuf.Enum, Swift.CaseIte
 
 }
 
+public nonisolated enum Applyant_V1_TelegramState: SwiftProtobuf.Enum, Swift.CaseIterable {
+  public typealias RawValue = Int
+  case unspecified // = 0
+  case disconnected // = 1
+
+  /// A code was sent to the account's Telegram apps (or by SMS).
+  case waitingCode // = 2
+
+  /// The account has two-step verification: its password is next.
+  case waitingPassword // = 3
+  case connected // = 4
+  case UNRECOGNIZED(Int)
+
+  public init() {
+    self = .unspecified
+  }
+
+  public init?(rawValue: Int) {
+    switch rawValue {
+    case 0: self = .unspecified
+    case 1: self = .disconnected
+    case 2: self = .waitingCode
+    case 3: self = .waitingPassword
+    case 4: self = .connected
+    default: self = .UNRECOGNIZED(rawValue)
+    }
+  }
+
+  public var rawValue: Int {
+    switch self {
+    case .unspecified: return 0
+    case .disconnected: return 1
+    case .waitingCode: return 2
+    case .waitingPassword: return 3
+    case .connected: return 4
+    case .UNRECOGNIZED(let i): return i
+    }
+  }
+
+  // The compiler won't synthesize support with the UNRECOGNIZED case.
+  public static let allCases: [Applyant_V1_TelegramState] = [
+    .unspecified,
+    .disconnected,
+    .waitingCode,
+    .waitingPassword,
+    .connected,
+  ]
+
+}
+
 public nonisolated struct Applyant_V1_Posting: @unchecked Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
@@ -6555,6 +6605,216 @@ public nonisolated struct Applyant_V1_SignInResponse: Sendable {
   fileprivate var _platform: String? = nil
 }
 
+public nonisolated struct Applyant_V1_Telegram: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var state: Applyant_V1_TelegramState = .unspecified
+
+  /// "@handle · Name" once connected.
+  public var account: String {
+    get {_account ?? String()}
+    set {_account = newValue}
+  }
+  /// Returns true if `account` has been explicitly set.
+  public var hasAccount: Bool {self._account != nil}
+  /// Clears the value of `account`. Subsequent reads from it will return its default value.
+  public mutating func clearAccount() {self._account = nil}
+
+  /// The app credentials from my.telegram.org are stored (api id + hash).
+  public var apiConfigured: Bool = false
+
+  /// Why the last sign-in failed, or the 2FA password's hint.
+  public var note: String {
+    get {_note ?? String()}
+    set {_note = newValue}
+  }
+  /// Returns true if `note` has been explicitly set.
+  public var hasNote: Bool {self._note != nil}
+  /// Clears the value of `note`. Subsequent reads from it will return its default value.
+  public mutating func clearNote() {self._note = nil}
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _account: String? = nil
+  fileprivate var _note: String? = nil
+}
+
+public nonisolated struct Applyant_V1_GetTelegramRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Applyant_V1_GetTelegramResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var telegram: Applyant_V1_Telegram {
+    get {_telegram ?? Applyant_V1_Telegram()}
+    set {_telegram = newValue}
+  }
+  /// Returns true if `telegram` has been explicitly set.
+  public var hasTelegram: Bool {self._telegram != nil}
+  /// Clears the value of `telegram`. Subsequent reads from it will return its default value.
+  public mutating func clearTelegram() {self._telegram = nil}
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _telegram: Applyant_V1_Telegram? = nil
+}
+
+public nonisolated struct Applyant_V1_ConnectTelegramRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var step: Applyant_V1_ConnectTelegramRequest.OneOf_Step? = nil
+
+  /// Starts signing in (stores api_id / api_hash first when given).
+  public var start: Applyant_V1_ConnectTelegramStart {
+    get {
+      if case .start(let v)? = step {return v}
+      return Applyant_V1_ConnectTelegramStart()
+    }
+    set {step = .start(newValue)}
+  }
+
+  public var code: String {
+    get {
+      if case .code(let v)? = step {return v}
+      return String()
+    }
+    set {step = .code(newValue)}
+  }
+
+  public var password: String {
+    get {
+      if case .password(let v)? = step {return v}
+      return String()
+    }
+    set {step = .password(newValue)}
+  }
+
+  /// Stops a sign-in that is waiting.
+  public var cancel: Bool {
+    get {
+      if case .cancel(let v)? = step {return v}
+      return false
+    }
+    set {step = .cancel(newValue)}
+  }
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public nonisolated enum OneOf_Step: Equatable, Sendable {
+    /// Starts signing in (stores api_id / api_hash first when given).
+    case start(Applyant_V1_ConnectTelegramStart)
+    case code(String)
+    case password(String)
+    /// Stops a sign-in that is waiting.
+    case cancel(Bool)
+
+  }
+
+  public init() {}
+}
+
+public nonisolated struct Applyant_V1_ConnectTelegramStart: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var phone: String = String()
+
+  public var apiID: String {
+    get {_apiID ?? String()}
+    set {_apiID = newValue}
+  }
+  /// Returns true if `apiID` has been explicitly set.
+  public var hasApiID: Bool {self._apiID != nil}
+  /// Clears the value of `apiID`. Subsequent reads from it will return its default value.
+  public mutating func clearApiID() {self._apiID = nil}
+
+  public var apiHash: String {
+    get {_apiHash ?? String()}
+    set {_apiHash = newValue}
+  }
+  /// Returns true if `apiHash` has been explicitly set.
+  public var hasApiHash: Bool {self._apiHash != nil}
+  /// Clears the value of `apiHash`. Subsequent reads from it will return its default value.
+  public mutating func clearApiHash() {self._apiHash = nil}
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _apiID: String? = nil
+  fileprivate var _apiHash: String? = nil
+}
+
+public nonisolated struct Applyant_V1_ConnectTelegramResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var telegram: Applyant_V1_Telegram {
+    get {_telegram ?? Applyant_V1_Telegram()}
+    set {_telegram = newValue}
+  }
+  /// Returns true if `telegram` has been explicitly set.
+  public var hasTelegram: Bool {self._telegram != nil}
+  /// Clears the value of `telegram`. Subsequent reads from it will return its default value.
+  public mutating func clearTelegram() {self._telegram = nil}
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _telegram: Applyant_V1_Telegram? = nil
+}
+
+public nonisolated struct Applyant_V1_DisconnectTelegramRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Applyant_V1_DisconnectTelegramResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var telegram: Applyant_V1_Telegram {
+    get {_telegram ?? Applyant_V1_Telegram()}
+    set {_telegram = newValue}
+  }
+  /// Returns true if `telegram` has been explicitly set.
+  public var hasTelegram: Bool {self._telegram != nil}
+  /// Clears the value of `telegram`. Subsequent reads from it will return its default value.
+  public mutating func clearTelegram() {self._telegram = nil}
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _telegram: Applyant_V1_Telegram? = nil
+}
+
 // MARK: - Code below here is support for the SwiftProtobuf runtime.
 
 fileprivate nonisolated let _protobuf_package = "applyant.v1"
@@ -6581,6 +6841,10 @@ nonisolated extension Applyant_V1_ApplicationStage: SwiftProtobuf._ProtoNameProv
 
 nonisolated extension Applyant_V1_ApplyForm: SwiftProtobuf._ProtoNameProviding {
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0APPLY_FORM_UNSPECIFIED\0\u{1}APPLY_FORM_COMPANY\0\u{1}APPLY_FORM_PLATFORM\0")
+}
+
+nonisolated extension Applyant_V1_TelegramState: SwiftProtobuf._ProtoNameProviding {
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0TELEGRAM_STATE_UNSPECIFIED\0\u{1}TELEGRAM_STATE_DISCONNECTED\0\u{1}TELEGRAM_STATE_WAITING_CODE\0\u{1}TELEGRAM_STATE_WAITING_PASSWORD\0\u{1}TELEGRAM_STATE_CONNECTED\0")
 }
 
 nonisolated extension Applyant_V1_Posting: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
@@ -16414,6 +16678,325 @@ nonisolated extension Applyant_V1_SignInResponse: SwiftProtobuf.Message, SwiftPr
   public static func ==(lhs: Applyant_V1_SignInResponse, rhs: Applyant_V1_SignInResponse) -> Bool {
     if lhs.url != rhs.url {return false}
     if lhs._platform != rhs._platform {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Applyant_V1_Telegram: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".Telegram"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}state\0\u{1}account\0\u{3}api_configured\0\u{1}note\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularEnumField(value: &self.state) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self._account) }()
+      case 3: try { try decoder.decodeSingularBoolField(value: &self.apiConfigured) }()
+      case 4: try { try decoder.decodeSingularStringField(value: &self._note) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    if self.state != .unspecified {
+      try visitor.visitSingularEnumField(value: self.state, fieldNumber: 1)
+    }
+    try { if let v = self._account {
+      try visitor.visitSingularStringField(value: v, fieldNumber: 2)
+    } }()
+    if self.apiConfigured != false {
+      try visitor.visitSingularBoolField(value: self.apiConfigured, fieldNumber: 3)
+    }
+    try { if let v = self._note {
+      try visitor.visitSingularStringField(value: v, fieldNumber: 4)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Applyant_V1_Telegram, rhs: Applyant_V1_Telegram) -> Bool {
+    if lhs.state != rhs.state {return false}
+    if lhs._account != rhs._account {return false}
+    if lhs.apiConfigured != rhs.apiConfigured {return false}
+    if lhs._note != rhs._note {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Applyant_V1_GetTelegramRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".GetTelegramRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Applyant_V1_GetTelegramRequest, rhs: Applyant_V1_GetTelegramRequest) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Applyant_V1_GetTelegramResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".GetTelegramResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}telegram\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularMessageField(value: &self._telegram) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if let v = self._telegram {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Applyant_V1_GetTelegramResponse, rhs: Applyant_V1_GetTelegramResponse) -> Bool {
+    if lhs._telegram != rhs._telegram {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Applyant_V1_ConnectTelegramRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ConnectTelegramRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}start\0\u{1}code\0\u{1}password\0\u{1}cancel\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try {
+        var v: Applyant_V1_ConnectTelegramStart?
+        var hadOneofValue = false
+        if let current = self.step {
+          hadOneofValue = true
+          if case .start(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.step = .start(v)
+        }
+      }()
+      case 2: try {
+        var v: String?
+        try decoder.decodeSingularStringField(value: &v)
+        if let v = v {
+          if self.step != nil {try decoder.handleConflictingOneOf()}
+          self.step = .code(v)
+        }
+      }()
+      case 3: try {
+        var v: String?
+        try decoder.decodeSingularStringField(value: &v)
+        if let v = v {
+          if self.step != nil {try decoder.handleConflictingOneOf()}
+          self.step = .password(v)
+        }
+      }()
+      case 4: try {
+        var v: Bool?
+        try decoder.decodeSingularBoolField(value: &v)
+        if let v = v {
+          if self.step != nil {try decoder.handleConflictingOneOf()}
+          self.step = .cancel(v)
+        }
+      }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    switch self.step {
+    case .start?: try {
+      guard case .start(let v)? = self.step else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
+    }()
+    case .code?: try {
+      guard case .code(let v)? = self.step else { preconditionFailure() }
+      try visitor.visitSingularStringField(value: v, fieldNumber: 2)
+    }()
+    case .password?: try {
+      guard case .password(let v)? = self.step else { preconditionFailure() }
+      try visitor.visitSingularStringField(value: v, fieldNumber: 3)
+    }()
+    case .cancel?: try {
+      guard case .cancel(let v)? = self.step else { preconditionFailure() }
+      try visitor.visitSingularBoolField(value: v, fieldNumber: 4)
+    }()
+    case nil: break
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Applyant_V1_ConnectTelegramRequest, rhs: Applyant_V1_ConnectTelegramRequest) -> Bool {
+    if lhs.step != rhs.step {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Applyant_V1_ConnectTelegramStart: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ConnectTelegramStart"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}phone\0\u{3}api_id\0\u{3}api_hash\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.phone) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self._apiID) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self._apiHash) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    if !self.phone.isEmpty {
+      try visitor.visitSingularStringField(value: self.phone, fieldNumber: 1)
+    }
+    try { if let v = self._apiID {
+      try visitor.visitSingularStringField(value: v, fieldNumber: 2)
+    } }()
+    try { if let v = self._apiHash {
+      try visitor.visitSingularStringField(value: v, fieldNumber: 3)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Applyant_V1_ConnectTelegramStart, rhs: Applyant_V1_ConnectTelegramStart) -> Bool {
+    if lhs.phone != rhs.phone {return false}
+    if lhs._apiID != rhs._apiID {return false}
+    if lhs._apiHash != rhs._apiHash {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Applyant_V1_ConnectTelegramResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ConnectTelegramResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}telegram\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularMessageField(value: &self._telegram) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if let v = self._telegram {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Applyant_V1_ConnectTelegramResponse, rhs: Applyant_V1_ConnectTelegramResponse) -> Bool {
+    if lhs._telegram != rhs._telegram {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Applyant_V1_DisconnectTelegramRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".DisconnectTelegramRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Applyant_V1_DisconnectTelegramRequest, rhs: Applyant_V1_DisconnectTelegramRequest) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Applyant_V1_DisconnectTelegramResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".DisconnectTelegramResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}telegram\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularMessageField(value: &self._telegram) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if let v = self._telegram {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Applyant_V1_DisconnectTelegramResponse, rhs: Applyant_V1_DisconnectTelegramResponse) -> Bool {
+    if lhs._telegram != rhs._telegram {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

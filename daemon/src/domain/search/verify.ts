@@ -29,6 +29,7 @@ import type { Decide } from '../../models/decide.ts';
 import type { Handler, Outcome } from '../../queue/types.ts';
 import { jobPostingNode, readPostingText } from './posting-text.ts';
 import { atsJobKey } from './readers/ats-embed.ts';
+import { checkTelegramPost, telegramPostOf } from './telegram-post.ts';
 
 export type Verdict =
   | {
@@ -56,14 +57,24 @@ export const verifyPosting: Handler<'verify_posting'> = async (task, ctx) => {
   ctx.progress({ message: `opening ${posting.canonicalUrl}` });
   let verdict: Verdict;
   try {
-    const reader = readerFor(ctx.deps, posting.canonicalUrl, {
-      taskId: task.id,
-      progress: (message) => ctx.progress({ message }),
-    });
-    verdict = await checkPosting(reader, posting.canonicalUrl, {
-      signal: ctx.signal,
-      now: ctx.now(),
-    });
+    const open = (url: string) =>
+      checkPosting(
+        readerFor(ctx.deps, url, {
+          taskId: task.id,
+          progress: (message) => ctx.progress({ message }),
+        }),
+        url,
+        { signal: ctx.signal, now: ctx.now() },
+      );
+    // A Telegram post (phase 15): the post must still be there; its job page, if it links one,
+    // is verified like any posting.
+    verdict = telegramPostOf(posting.canonicalUrl)
+      ? await checkTelegramPost(posting, {
+          fetch: ctx.deps.fetch ?? globalThis.fetch,
+          signal: ctx.signal,
+          open,
+        })
+      : await open(posting.canonicalUrl);
   } catch (err) {
     ctx.signal.throwIfAborted();
     // LinkedIn/Xing paused or in use by the candidate: try again later, the posting unjudged.

@@ -23,6 +23,7 @@ public enum SearchText {
     public static let kindTitles: [String: String] = [
         "greenhouse": "Greenhouse", "ashby": "Ashby", "lever": "Lever", "workable": "Workable",
         "page": "Career pages and feeds", "board": "Job boards",
+        "linkedin": "LinkedIn", "xing": "Xing", "telegram": "Telegram channels",
     ]
 
     /// "6 h" · "90 min" · "1 day".
@@ -91,7 +92,8 @@ public enum SearchText {
     public static func sourceGroups(_ list: SearchList) -> [(kind: Applyant_V1_SearchSourceKind, rows: [SearchRow])] {
         list.kinds.compactMap { kind in
             let rows = list.sources.filter { $0.kind == kind.kind }.map { sourceRow($0) }
-            return rows.isEmpty ? nil : (kind, rows)
+            // Telegram channels stay listed with none followed yet: that's where one is followed.
+            return rows.isEmpty && kind.kind != "telegram" ? nil : (kind, rows)
         }
     }
 

@@ -18,6 +18,7 @@ import {
 } from '../../db/schema.ts';
 import { ATS_KINDS, type Ats, boardFromUrl } from './readers/ats-embed.ts';
 import { BOARDS, BOARDS_OFF, type BoardId, isBoardId } from './readers/boards.ts';
+import { telegramChannelOf } from './readers/telegram.ts';
 
 export class SearchError extends Error {}
 
@@ -30,6 +31,7 @@ export const KIND_LABELS: Record<SearchSourceKind, string> = {
   board: 'Job boards',
   linkedin: 'LinkedIn',
   xing: 'Xing',
+  telegram: 'Telegram channels',
 };
 
 /** The guarded platforms' own job search: built in, read only once Applyant's browser is signed in. */
@@ -74,7 +76,7 @@ export function isAts(kind: string): kind is Ats {
  * reports what it actually got.
  */
 export function completeList(kind: SearchSourceKind, resolved: ResolvedSource | null): boolean {
-  if (kind === 'board' || isPlatformKind(kind)) return false;
+  if (kind === 'board' || kind === 'telegram' || isPlatformKind(kind)) return false;
   if (kind === 'page') return resolved !== null && resolved.via !== 'recipe';
   return true;
 }
@@ -134,9 +136,12 @@ export function parseSourceInput(args: string[], label: string | null = null): S
   if (!first)
     throw new SearchError('which source? a kind and its board (greenhouse gitlab) or a URL');
   if (second === undefined) {
+    if (/^@[a-z][a-z0-9_]{3,31}$/i.test(first)) {
+      return { kind: 'telegram', locator: first.slice(1), label };
+    }
     let url: URL;
     try {
-      url = new URL(first);
+      url = new URL(/^(t\.me|telegram\.me)\//i.test(first) ? `https://${first}` : first);
     } catch {
       throw new SearchError(
         `"${first}" is neither a URL nor a kind; use e.g. \`greenhouse gitlab\` or a career page URL`,
@@ -144,6 +149,13 @@ export function parseSourceInput(args: string[], label: string | null = null): S
     }
     if (url.protocol !== 'http:' && url.protocol !== 'https:') {
       throw new SearchError(`only http(s) pages can be sources: "${first}"`);
+    }
+    const channel = /^(www\.)?(t\.me|telegram\.me)$/i.test(url.hostname)
+      ? telegramChannelOf(url.toString())
+      : null;
+    if (channel) return { kind: 'telegram', locator: channel, label };
+    if (/^(www\.)?(t\.me|telegram\.me)$/i.test(url.hostname)) {
+      throw new SearchError(`"${first}" isn't a Telegram channel link (t.me/<channel>)`);
     }
     const platform = platformOf(url.toString());
     if (platform) {
@@ -166,6 +178,15 @@ export function parseSourceInput(args: string[], label: string | null = null): S
     throw new SearchError(`unknown board "${second}" (${Object.keys(BOARDS).join(' | ')})`);
   }
   if (first === 'page') return parseSourceInput([second], label);
+  if (first === 'telegram') {
+    const channel = telegramChannelOf(second);
+    if (!channel) {
+      throw new SearchError(
+        `"${second}" isn't a Telegram channel (@name, t.me/name or t.me/+invite)`,
+      );
+    }
+    return { kind: 'telegram', locator: channel, label };
+  }
   if (isPlatformKind(first)) {
     throw new SearchError(
       `${KIND_LABELS[first]} is a built-in source (${sourceKey(first, PLATFORM_SOURCES[first].locator)}); switch it on or off instead`,
@@ -192,7 +213,9 @@ export function addSource(
       ? BOARDS[input.locator as BoardId]
       : input.kind === 'page'
         ? new URL(input.locator).hostname.replace(/^www\./, '')
-        : input.locator);
+        : input.kind === 'telegram' && !input.locator.startsWith('+')
+          ? `@${input.locator}`
+          : input.locator);
   const source = conn
     .insert(searchSources)
     .values({

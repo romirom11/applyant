@@ -10,6 +10,7 @@ import type { TextExtractor } from './domain/knowledge/text/extract.ts';
 import type { FxSource } from './domain/scoring/fx.ts';
 import type { Fetch } from './domain/search/readers/types.ts';
 import type { CaptchaSolver } from './integrations/capmonster.ts';
+import type { TelegramAccess } from './integrations/gramjs.ts';
 import type { MailAccess } from './integrations/mail-service.ts';
 import type { McpAccess } from './mcp/server.ts';
 import type { AgentRunner } from './models/agent-runner.ts';
@@ -33,6 +34,8 @@ export interface Deps {
    * captchas then go to the candidate.
    */
   captcha?: (CaptchaSolver & { configured(): Promise<boolean> }) | null;
+  /** The candidate's Telegram account (phase 15): private channels and Telegram applications. */
+  telegram?: TelegramAccess | null;
   /** LinkedIn/Xing guardrails (phase 14): one lane, daily caps, pacing, pause on challenge. */
   guardrails?: Guardrails | null;
   /** Every model call goes through a role here; handlers never name a provider. */
