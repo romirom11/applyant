@@ -4,6 +4,7 @@ import type { z } from 'zod';
 import { decisionSchema } from '../decide.ts';
 import { answerCheckSchema, writerSchema } from './application.ts';
 import { claimCheckSchema } from './claim-check.ts';
+import { companyResearchSchema } from './company.ts';
 import { cvPlanSchema } from './cv.ts';
 import { sourceExtractionSchema } from './extractor.ts';
 import { interviewSchema } from './interview.ts';
@@ -21,12 +22,14 @@ export const ROLE_SCHEMAS: Record<string, z.ZodType> = {
   interviewer: interviewSchema,
   reader_builder: recipeOutputSchema,
   search_planner: plannerSchema,
+  researcher: companyResearchSchema,
   // Fallback for the Jev decision roles (field_classify, option_match, posting_liveness).
   decision: decisionSchema,
 };
 
 export * from './application.ts';
 export { CLAIM_ISSUES, type ClaimCheck, claimCheckSchema } from './claim-check.ts';
+export * from './company.ts';
 export * from './cv.ts';
 export { type SourceExtraction, sourceExtractionSchema } from './extractor.ts';
 export * from './interview.ts';

@@ -9,6 +9,7 @@ import {
   RECIPE_STATUSES,
   type RecipeListing,
 } from '../domain/search/recipes/types.ts';
+import type { CompanyProfile } from '../models/schemas/company.ts';
 
 const now = sql`(cast(unixepoch('subsec') * 1000 as integer))`;
 
@@ -841,6 +842,35 @@ export const interviewTurns = sqliteTable(
   ],
 );
 
+// ---- Company research (phase 12) --------------------------------------------------------
+
+/**
+ * One row per company, shared by all of its postings (matched by `key`, the normalised name).
+ * `profile` is the researcher's last good result; a refresh that fails keeps it.
+ */
+export const companies = sqliteTable('companies', {
+  id: integer('id').primaryKey(),
+  /** companyKey(name): lower case, legal suffixes and punctuation dropped. */
+  key: text('key').notNull().unique(),
+  name: text('name').notNull(),
+  /** queued (waiting or running) · done · failed (the last attempt; `profile` may still hold an older one) */
+  status: text('status', { enum: ['queued', 'done', 'failed'] })
+    .notNull()
+    .default('queued'),
+  /** Who asked last: preparation, or the candidate (Company research). */
+  trigger: text('trigger', { enum: ['prepare', 'manual'] })
+    .notNull()
+    .default('prepare'),
+  profile: text('profile', { mode: 'json' }).$type<CompanyProfile>(),
+  /** When `profile` was researched; older than 30 days is stale. */
+  researchedAt: integer('researched_at', { mode: 'timestamp_ms' }),
+  /** The last attempt, successful or not. */
+  attemptedAt: integer('attempted_at', { mode: 'timestamp_ms' }),
+  note: text('note'),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull().default(now),
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull().default(now),
+});
+
 /** Small daemon-internal state, key → JSON (e.g. which embedder made the fact vectors). */
 export const appState = sqliteTable('app_state', {
   key: text('key').primaryKey(),
@@ -874,3 +904,4 @@ export type SearchRunRow = typeof searchRuns.$inferSelect;
 export type ListingRecipeRow = typeof listingRecipes.$inferSelect;
 export type SearchPlanRow = typeof searchPlans.$inferSelect;
 export type RoleRouteRow = typeof roleRoutes.$inferSelect;
+export type CompanyRow = typeof companies.$inferSelect;

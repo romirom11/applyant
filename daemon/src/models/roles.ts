@@ -73,7 +73,7 @@ export const ROLE_INFO: Record<Role, string> = {
   search_planner: 'proposes search strategies and finds new boards with web search',
   reader_builder: 'writes a listing recipe for a career page without a feed',
   matcher: 'strong / partial / missing per requirement, with facts',
-  researcher: 'company research (phase 12)',
+  researcher: 'company research with web search: a sourced profile with red flags',
   application_writer: 'answers and the tailored CV',
   claim_verifier: 'checks each written sentence against its facts',
   interviewer: 'the agent interview',
@@ -146,6 +146,8 @@ export const TASK_ROLE: Partial<Record<string, Role>> = {
   // Search (phase 11): a listing recipe for a page, and the planner's strategies and boards.
   build_recipe: 'reader_builder',
   plan_search: 'search_planner',
+  // Company research (phase 12): one sourced profile per company, with web search.
+  research_company: 'researcher',
 };
 
 /**

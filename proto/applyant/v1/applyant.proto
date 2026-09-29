@@ -145,6 +145,15 @@ service ApplyantService {
   rpc SetRole(SetRoleRequest) returns (SetRoleResponse);
   // ResetRoles puts one role (or every role) back on its default route.
   rpc ResetRoles(ResetRolesRequest) returns (ResetRolesResponse);
+
+  // Companies: one research profile per company (researcher, Codex by default, with web
+  // search), shared by all of its postings. It runs as part of preparing an application and
+  // on demand; a profile is reused for 30 days. Red flags feed the score as a soft component.
+  rpc ListCompanies(ListCompaniesRequest) returns (ListCompaniesResponse);
+  // GetCompany returns one company's profile with every finding and its sources.
+  rpc GetCompany(GetCompanyRequest) returns (GetCompanyResponse);
+  // ResearchCompany starts research now (Company research): kept when fresh unless refresh.
+  rpc ResearchCompany(ResearchCompanyRequest) returns (ResearchCompanyResponse);
 }
 
 enum PostingStage {
@@ -205,6 +214,8 @@ message Posting {
   // The posting's application, once there is one.
   optional int64 application_id = 27;
   ApplicationStage application_stage = 28;
+  // Only filled by GetPosting: the company's research (without its sections), once asked for.
+  optional Company company_research = 29;
 }
 
 // How to find a form control again: getByRole(role, {name, exact}).nth(nth) inside the
@@ -485,6 +496,13 @@ message SearchEvent {
   optional int64 source_id = 5;
 }
 
+// Company research was queued, finished or failed.
+message CompanyEvent {
+  int64 company_id = 1;
+  // queued | done | failed
+  string status = 2;
+}
+
 message Event {
   int64 id = 1;
   google.protobuf.Timestamp at = 2;
@@ -498,6 +516,7 @@ message Event {
     HandOffEvent handoff = 13;
     InterviewEvent interview = 14;
     SearchEvent search = 15;
+    CompanyEvent company = 16;
   }
 }
 
@@ -998,6 +1017,9 @@ message Application {
   optional HandOff hand_off = 21;
   // The CV its form takes; unset when the form takes none. Only filled by GetApplication.
   optional Cv cv = 22;
+  // The company's research summary and red flags (no sections), for the evidence panel. Only
+  // filled by GetApplication (and the review RPCs).
+  optional Company company_research = 23;
 }
 
 message CvLine {
@@ -1517,4 +1539,101 @@ message ResetRolesRequest {
 message ResetRolesResponse {
   // The roles that went back to their defaults.
   repeated string roles = 1;
+}
+
+// ---- Companies ------------------------------------------------------------------------------
+
+message CompanyFinding {
+  string text = 1;
+  // YYYY-MM or YYYY-MM-DD, when it matters.
+  optional string date = 2;
+  // The pages that say it.
+  repeated string sources = 3;
+}
+
+message CompanySection {
+  // product | funding | size | founders | stack | news | layoffs | reviews | remote | salary
+  string key = 1;
+  // "Product", "Funding", …
+  string label = 2;
+  repeated CompanyFinding findings = 3;
+}
+
+message CompanyRedFlag {
+  // layoffs | reviews | outstaffing | pay | funding | legal | other
+  string kind = 1;
+  // low | medium | high
+  string severity = 2;
+  string text = 3;
+  repeated string sources = 4;
+}
+
+message CompanyPosting {
+  int64 id = 1;
+  optional string title = 2;
+  optional int32 score = 3;
+  PostingStage stage = 4;
+}
+
+message Company {
+  int64 id = 1;
+  string name = 2;
+  // queued (waiting or running) | done | failed (the last attempt; an older profile is kept)
+  string status = 3;
+  // Research is waiting or running now.
+  bool researching = 4;
+  // The profile is younger than 30 days.
+  bool fresh = 5;
+  // prepare | manual: who asked last.
+  string trigger = 6;
+  optional string website = 7;
+  // Two to four sentences on what the company does; unset until researched.
+  optional string summary = 8;
+  repeated CompanyRedFlag red_flags = 9;
+  // Only filled by GetCompany: every section with its findings and sources.
+  repeated CompanySection sections = 10;
+  optional google.protobuf.Timestamp researched_at = 11;
+  optional google.protobuf.Timestamp attempted_at = 12;
+  // What the researcher couldn't find, or why research failed.
+  optional string note = 13;
+  // Its postings (by name), newest first.
+  repeated CompanyPosting postings = 14;
+  // How many findings the profile has.
+  int32 findings = 15;
+}
+
+message ListCompaniesRequest {}
+
+message ListCompaniesResponse {
+  repeated Company companies = 1;
+}
+
+message GetCompanyRequest {
+  oneof target {
+    // An id or a name.
+    string company = 1;
+    int64 posting_id = 2;
+  }
+}
+
+message GetCompanyResponse {
+  // Unset when the company has never been researched.
+  optional Company company = 1;
+}
+
+message ResearchCompanyRequest {
+  oneof target {
+    // An id or a name.
+    string company = 1;
+    // The posting's company.
+    int64 posting_id = 2;
+  }
+  // Research again even when the profile is fresh.
+  bool refresh = 3;
+}
+
+message ResearchCompanyResponse {
+  Company company = 1;
+  // False when research was already waiting or running, or the profile is fresh.
+  bool queued = 2;
 }

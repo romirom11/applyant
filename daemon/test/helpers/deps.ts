@@ -139,6 +139,7 @@ export function handlers(partial: Partial<Handlers>): Handlers {
     search: never as Handler<'search'>,
     build_recipe: never as Handler<'build_recipe'>,
     plan_search: never as Handler<'plan_search'>,
+    research_company: never as Handler<'research_company'>,
     ...partial,
   };
 }

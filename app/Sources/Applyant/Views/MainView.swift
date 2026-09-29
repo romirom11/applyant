@@ -15,6 +15,7 @@ struct MainView: View {
                 case .interview: InterviewList(store: store)
                 case .search: SearchList(store: store)
                 case .agentRuns: RunsList(store: store)
+                case .companies: CompaniesList(store: store)
                 default: PostingList(store: store)
                 }
             }
@@ -42,6 +43,8 @@ struct Detail: View {
             SearchDetail(store: store)
         } else if store.navigation.section == .agentRuns {
             RunDetail(store: store)
+        } else if store.navigation.section == .companies {
+            CompanyDetail(store: store)
         } else if store.navigation.section == .interview {
             if let target = store.navigation.interview {
                 InterviewThreadView(store: store, target: target)

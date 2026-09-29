@@ -17,6 +17,7 @@ import { catchUpDeliveries, deliverApplication } from './domain/applications/del
 import { prepareApplication } from './domain/applications/prepare.ts';
 import { readFormHandler, requestFormRead } from './domain/applications/read-form.ts';
 import { catchUpApplications } from './domain/applications/store.ts';
+import { researchCompany } from './domain/companies/research.ts';
 import { embedFacts, ensureFactIndex } from './domain/knowledge/embed-index.ts';
 import { interviewOpen, interviewTurn } from './domain/knowledge/interview-agent.ts';
 import { syncSource } from './domain/knowledge/sync.ts';
@@ -167,6 +168,7 @@ export async function runDaemon(config: Config = loadConfig()): Promise<() => Pr
     search: searchHandler,
     build_recipe: buildRecipe,
     plan_search: planSearch,
+    research_company: researchCompany,
   };
 
   // Catch up: vectors for facts that have none (or were made by another embedder), and a

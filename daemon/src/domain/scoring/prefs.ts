@@ -67,6 +67,7 @@ export const DEFAULT_WEIGHTS: Weights = {
   salary: 10,
   language: 5,
   employment: 5,
+  company: 10,
 };
 
 export const DEFAULT_PREFERENCES: Preferences = {

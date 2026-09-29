@@ -13,6 +13,8 @@ export const COMPONENT_KEYS = [
   'salary',
   'language',
   'employment',
+  // Red flags from company research (phase 12): soft, only ever lowers the score.
+  'company',
 ] as const;
 export type ComponentKey = (typeof COMPONENT_KEYS)[number];
 

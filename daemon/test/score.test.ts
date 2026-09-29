@@ -125,6 +125,7 @@ describe('score()', () => {
       ['salary', 10, 1, 'Salary €3,000/month · at target'],
       ['language', 5, 1, 'English (professional) · you have C1'],
       ['employment', 5, 1, 'Full-time'],
+      ['company', 0, 1, 'not researched'],
     ]);
   });
 

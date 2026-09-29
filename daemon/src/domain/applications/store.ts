@@ -28,6 +28,7 @@ import {
   tasks,
 } from '../../db/schema.ts';
 import type { HandOff, Tx } from '../../queue/types.ts';
+import { type CompanyView, companyForPosting, companyView } from '../companies/store.ts';
 import { type CvView, cvView } from './cv/store.ts';
 import { activeRefs, type FieldRole, fieldRole } from './standard-fields.ts';
 
@@ -132,6 +133,8 @@ export interface ApplicationView {
   receipt: ReceiptView | null;
   /** The most recent delivery hand-off still waiting on the candidate, if any. */
   handOff: HandOff | null;
+  /** The company's research (phase 12), once asked for (postings left out). */
+  company: CompanyView | null;
 }
 
 // ---- creating and (re-)preparing ------------------------------------------------------------
@@ -560,10 +563,16 @@ export function applicationView(conn: Conn, id: number): ApplicationView {
         }
       : null,
     handOff,
+    company: companyBriefView(conn, posting),
     blockers,
     missing,
     unconfirmedFactIds: [...unconfirmed],
   };
+}
+
+function companyBriefView(conn: Conn, posting: Pick<PostingRow, 'company'>): CompanyView | null {
+  const row = companyForPosting(conn, posting);
+  return row ? { ...companyView(conn, row, new Date()), postings: [] } : null;
 }
 
 export function stepOf(fieldRef: string): number {

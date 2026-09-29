@@ -474,6 +474,9 @@ struct EvidencePanel: View {
                 } else {
                     Text("Select an answer to see what it rests on.").foregroundStyle(.secondary)
                 }
+                if app.hasCompanyResearch {
+                    CompanyCard(store: store, company: app.companyResearch, compact: true)
+                }
             }
     }
 

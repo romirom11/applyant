@@ -24,6 +24,7 @@ const REASONS: Array<[RegExp, ComponentKey]> = [
   [/german|english|greek|french|language|speak/i, 'language'],
   [/senior|junior|level|title|role|manager|management|lead/i, 'role'],
   [/stack|tech|skill|requirement|experience|framework|language model|domain/i, 'must'],
+  [/layoff|laid off|glassdoor|kununu|reviews?\b|culture|reputation|red flag|funding/i, 'company'],
 ];
 
 /** The score component a free-text skip reason points at, if any. */

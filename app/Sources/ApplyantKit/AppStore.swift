@@ -60,6 +60,10 @@ public final class AppStore {
     public private(set) var sourceDetails: [String: SearchSource] = [:]
     /// The events of the runs open on screen (Agent runs).
     public private(set) var runEvents: [Int64: [DaemonEvent]] = [:]
+    /// Researched companies (the Companies section).
+    public private(set) var companies: [Company] = []
+    /// GetCompany results for the companies open on screen.
+    public private(set) var companyDetails: [Int64: Company] = [:]
     /// The last failed action, for an alert.
     public var lastError: String?
     /// Where the main window is (notifications and the menu bar move it).
@@ -124,13 +128,15 @@ public final class AppStore {
         async let interviewList = api.listInterview()
         async let searchList = api.listSearch()
         async let runList = api.listSearchRuns(limit: 50)
-        let (p, a, i, s, r) = try await (postingList, applicationList, interviewList, searchList, runList)
+        async let companyList = api.listCompanies()
+        let (p, a, i, s, r, c) = try await (postingList, applicationList, interviewList, searchList, runList, companyList)
         postings = Dictionary(p.map { ($0.id, $0) }, uniquingKeysWith: { _, last in last })
         applications = Dictionary(a.map { ($0.id, $0) }, uniquingKeysWith: { _, last in last })
         interviewQuestions = i.questions
         projectInterviews = i.projects
         search = s
         searchRuns = r
+        companies = c
         activity = Activity()
         reloads += 1
         // What's open on screen may have changed while we were away.
@@ -138,6 +144,7 @@ public final class AppStore {
         for id in applicationDetails.keys { await refreshApplication(id, api) }
         for target in interviewThreads.keys { await refreshThread(target, api) }
         for run in runEvents.keys { await refreshRunEvents(run, api) }
+        for id in companyDetails.keys { await refreshCompany(id, api) }
     }
 
     // MARK: Events
@@ -172,6 +179,12 @@ public final class AppStore {
             await refreshInterview(api)
         case .search?:
             await refreshSearch(api)
+        case let .company(c)?:
+            await refreshCompanies(api)
+            if companyDetails[c.companyID] != nil { await refreshCompany(c.companyID, api) }
+            // A posting or review open on screen shows the company's research too.
+            for id in postingDetails.keys { await refreshPosting(id, api) }
+            for id in applicationDetails.keys { await refreshApplication(id, api) }
         case nil:
             break
         }
@@ -419,6 +432,34 @@ public final class AppStore {
 
     public func runs(of strategy: Int64) -> [SearchRun] { searchRuns.filter { $0.strategyID == strategy } }
 
+    // MARK: Companies
+
+    private func refreshCompanies(_ api: DaemonAPI) async {
+        if let list = try? await api.listCompanies() { companies = list }
+    }
+
+    private func refreshCompany(_ id: Int64, _ api: DaemonAPI) async {
+        if let c = try? await api.company(.id(id)) { companyDetails[id] = c }
+    }
+
+    public func openCompany(_ id: Int64) async {
+        guard let api, let found = await attempt({ try await api.company(.id(id)) }), let c = found else { return }
+        companyDetails[id] = c
+    }
+
+    /// Company research: for a posting's company (from its detail) or a company (Companies).
+    /// Returns the company, or nil when the call failed.
+    @discardableResult
+    public func researchCompany(_ target: CompanyTarget, refresh: Bool = false) async -> Company? {
+        guard let api, let res = await attempt({ try await api.researchCompany(target, refresh: refresh) }) else { return nil }
+        companyDetails[res.company.id] = res.company
+        await refreshCompanies(api)
+        if case let .posting(id) = target { await refreshPosting(id, api) }
+        return res.company
+    }
+
+    public func companyListing(_ id: Int64) -> Company? { companies.first { $0.id == id } }
+
     // MARK: The interview
 
     /// Loads a thread for its chat view (and keeps it current from then on).
@@ -496,6 +537,8 @@ public final class AppStore {
         // A badge on Search only while a run is going.
         if section == .search { return search.strategies.filter(\.running).count + (planning ? 1 : 0) }
         if section == .agentRuns { return 0 }
+        // A badge on Companies only while research is going.
+        if section == .companies { return companies.filter(\.researching).count }
         return section.isBuilt ? items(section).count : 0
     }
 

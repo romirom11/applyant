@@ -178,6 +178,44 @@ final class FakeDaemon: DaemonAPI, @unchecked Sendable {
         return true
     }
 
+    /// Companies (ListCompanies / GetCompany); researchCompany marks one researching.
+    var companies: [Company] = []
+    func listCompanies() async throws -> [Company] {
+        log("listCompanies")
+        return companies.map { var c = $0; c.sections = []; return c }
+    }
+    func company(_ target: CompanyTarget) async throws -> Company? {
+        log("company \(target)")
+        switch target {
+        case let .id(id): return companies.first { $0.id == id }
+        case let .posting(id): return companies.first { $0.postings.contains { $0.id == id } }
+        }
+    }
+    func researchCompany(_ target: CompanyTarget, refresh: Bool) async throws -> (company: Company, queued: Bool) {
+        log("researchCompany \(target) \(refresh)")
+        let index: Int? = switch target {
+        case let .id(id): companies.firstIndex { $0.id == id }
+        case let .posting(id): companies.firstIndex { $0.postings.contains { $0.id == id } }
+        }
+        guard let i = index else {
+            guard case let .posting(pid) = target else { throw APIError("no company") }
+            let c = Company.with {
+                $0.id = Int64(companies.count + 1)
+                $0.name = postings[pid]?.company ?? "?"
+                $0.status = "queued"
+                $0.researching = true
+                $0.postings = [.with { $0.id = pid }]
+            }
+            companies.append(c)
+            postings[pid]?.companyResearch = c
+            return (c, true)
+        }
+        if companies[i].researching || (companies[i].fresh && !refresh) { return (companies[i], false) }
+        companies[i].researching = true
+        companies[i].status = "queued"
+        return (companies[i], true)
+    }
+
     /// Changes a question everywhere it's listed.
     func setQuestion(_ id: Int64, _ change: (inout InterviewQuestion) -> Void) throws -> InterviewQuestion {
         guard let i = questions.firstIndex(where: { $0.id == id }) else { throw APIError("no question \(id)") }

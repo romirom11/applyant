@@ -19,6 +19,9 @@ struct PostingDetail: View {
                         if !p.breakdown.isEmpty { breakdown(p) }
                         if !p.requirements.isEmpty { requirements(p) }
                         issues(p)
+                        if p.hasCompany {
+                            CompanyCard(store: store, company: p.hasCompanyResearch ? p.companyResearch : nil, postingId: p.id)
+                        }
                         facts(p)
                     }
                     .padding(20)

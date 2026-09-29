@@ -69,7 +69,7 @@ public enum Section: String, CaseIterable, Identifiable, Sendable {
     /// Sections with content so far; the rest show an empty state until their phase.
     public var isBuilt: Bool {
         switch self {
-        case .inbox, .readyToReview, .preparing, .interested, .skipped, .applied, .interview, .search, .agentRuns: true
+        case .inbox, .readyToReview, .preparing, .interested, .skipped, .applied, .interview, .search, .agentRuns, .companies: true
         default: false
         }
     }
@@ -80,7 +80,6 @@ public enum Section: String, CaseIterable, Identifiable, Sendable {
         case .overview: "the funnel view"
         case .interviews, .offers: "mail tracking (phase 13)"
         case .profile, .projects: "onboarding (phase 16); the CLI has them now"
-        case .companies: "company research (phase 12)"
         case .settings: "onboarding (phase 16); `applyant secrets` and `candidate prefs` now"
         default: nil
         }
@@ -98,6 +97,8 @@ public struct Navigation: Equatable, Sendable {
     public var search: SearchSelection?
     /// The run open in the Agent runs section.
     public var run: Int64?
+    /// The company open in the Companies section.
+    public var company: Int64?
     public init() {}
 
     public mutating func showInterview(_ target: InterviewTarget) {
@@ -181,7 +182,7 @@ public enum StageText {
 public enum Score {
     public static let componentTitles: [String: String] = [
         "must": "Must-haves", "nice": "Nice-to-haves", "role": "Role & seniority", "location": "Location",
-        "remote": "Remote", "salary": "Salary", "language": "Language", "employment": "Employment",
+        "remote": "Remote", "salary": "Salary", "language": "Language", "employment": "Employment", "company": "Company",
     ]
 
     /// Points earned and available for one component, as the breakdown shows them ("38/40").

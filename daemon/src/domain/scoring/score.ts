@@ -16,7 +16,11 @@
 //   countries, offices only where they don't want to work, in every location it is listed
 //   in) is capped at OUT_OF_REACH_CAP. The location component says so. A role listed in
 //   several places counts its best one.
+// - Company red flags (phase 12) are a soft component: it counts only when research found
+//   flags, costs in proportion to their severity and never goes below COMPANY_FLOOR, so a
+//   flagged company lowers the score but can't sink it.
 import type { PostingExtraction, RemoteRegion, Seniority } from '../../models/schemas/posting.ts';
+import type { CompanyScoreInfo } from '../companies/store.ts';
 import type { FxRates } from './fx.ts';
 import { convert } from './fx.ts';
 import type { CefrLevel, Preferences } from './prefs.ts';
@@ -38,6 +42,8 @@ export interface ScoreInput {
   fx: FxRates | null;
   /** Where the posting's listings say it is (a role listed per country has several). */
   locations?: string[] | null;
+  /** The company's research: its red flags. Null/absent = not researched. */
+  company?: CompanyScoreInfo | null;
 }
 
 /** Salary value = 1 − SALARY_SLOPE × shortfall: 5% below → 0.88, 17% → 0.58, 40% → 0. */
@@ -48,6 +54,10 @@ export const NOTHING_KNOWN = 50;
 export const OUT_OF_REACH_CAP = 30;
 /** Core fit at or above this lets logistics count in full. */
 export const CORE_FIT_FULL = 0.7;
+/** What one red flag costs the company component (1 = no flags). */
+export const RED_FLAG_COST = { high: 0.4, medium: 0.2, low: 0.1 } as const;
+/** The company component never goes below this, however many flags. */
+export const COMPANY_FLOOR = 0.2;
 
 /** The share of logistics that counts for a core fit: (fit / CORE_FIT_FULL)², capped at 1. */
 export function logisticsScale(coreFit: number | null): number {
@@ -79,6 +89,7 @@ export function score(input: ScoreInput, prefs: Preferences, w: Weights): ScoreR
     salaryPart(p, prefs, input.fx, (text) => dealbreakers.push(text)),
     languagePart(p, prefs, hard),
     employmentPart(p, prefs, hard),
+    companyPart(input.company ?? null),
   ];
 
   const counted = (c: Part) => c.applies && !c.uncertain;
@@ -469,4 +480,27 @@ function employmentPart(p: PostingExtraction, prefs: Preferences, hard: Hard): P
   const label = EMPLOYMENT_LABEL[p.employment] ?? p.employment;
   if (!ok) hard('employment', label);
   return part('employment', true, ok ? 1 : 0.3, `${label}${outstaff}`);
+}
+
+// ---- company --------------------------------------------------------------------------
+
+function companyPart(company: CompanyScoreInfo | null): Part {
+  if (!company) return part('company', false, 1, 'not researched');
+  const flags = company.redFlags;
+  if (flags.length === 0) return part('company', false, 1, 'researched · no red flags');
+  const order = { high: 0, medium: 1, low: 2 } as const;
+  const sorted = [...flags].sort((a, b) => order[a.severity] - order[b.severity]);
+  const cost = flags.reduce((sum, f) => sum + RED_FLAG_COST[f.severity], 0);
+  const value = Math.max(COMPANY_FLOOR, 1 - cost);
+  const shown = sorted
+    .slice(0, 3)
+    .map((f) => `${f.kind} (${f.severity})`)
+    .join(' · ');
+  const more = flags.length > 3 ? ` · +${flags.length - 3} more` : '';
+  return part(
+    'company',
+    true,
+    value,
+    `${flags.length} red flag${flags.length === 1 ? '' : 's'}: ${shown}${more}`,
+  );
 }

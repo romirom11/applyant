@@ -5,6 +5,7 @@ import type { Db } from '../db/client.ts';
 import { type EventRow, postings as postingsTable } from '../db/schema.ts';
 import { READABLE_STAGES, requestFormRead } from '../domain/applications/read-form.ts';
 import { applicationsByPosting } from '../domain/applications/store.ts';
+import { companyForPosting } from '../domain/companies/store.ts';
 import { DecisionError, recordDecision, requestScoring } from '../domain/scoring/store.ts';
 import { InvalidUrlError } from '../domain/search/canonical-url.ts';
 import {
@@ -19,6 +20,7 @@ import {
 } from '../domain/search/postings.ts';
 import type { ApplyantService } from '../gen/applyant/v1/applyant_pb.js';
 import type { EventBus } from '../queue/events.ts';
+import { companyBriefToPb } from './companies.ts';
 import { eventToPb, postingToPb, stageFromPb } from './mapping.ts';
 
 export interface RpcContext {
@@ -77,9 +79,18 @@ export function postingRpcs(
       const found = getPosting(c.db, id(req.id, 'id'));
       if (!found) throw new ConnectError(`posting ${req.id} not found`, Code.NotFound);
       const app = applicationsByPosting(c.db).get(found.posting.id) ?? null;
-      return {
-        posting: postingToPb(found.posting, found.sources, citedFacts(c.db, found.posting), app),
-      };
+      const posting = postingToPb(
+        found.posting,
+        found.sources,
+        citedFacts(c.db, found.posting),
+        app,
+      );
+      posting.companyResearch = companyBriefToPb(
+        c.db,
+        companyForPosting(c.db, found.posting),
+        c.now(),
+      );
+      return { posting };
     },
 
     skipPosting(req) {

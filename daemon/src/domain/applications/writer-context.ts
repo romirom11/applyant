@@ -5,11 +5,13 @@
 // search_facts / get_project (≤ 3 calls, capped by the MCP endpoint); whatever those return
 // joins the citable set. Every fact id in the output must be in that set.
 import { POINTS_BACK } from '../../browser/form-read.ts';
-import type { ReadDb } from '../../db/client.ts';
+import type { Conn, ReadDb } from '../../db/client.ts';
 import type { ReadExec } from '../../db/read-pool.ts';
 import type { PostingRow } from '../../db/schema.ts';
 import type { Embedder } from '../../models/embeddings.ts';
 import type { WriterOutput } from '../../models/schemas/application.ts';
+import type { CompanyFinding } from '../../models/schemas/company.ts';
+import { companyForPosting } from '../companies/store.ts';
 import { factRefs } from '../knowledge/facts.ts';
 import { interviewFactIds } from '../knowledge/interview.ts';
 import { listProjects } from '../knowledge/projects.ts';
@@ -48,6 +50,16 @@ export interface MatchedRequirement {
   facts: FactRef[];
 }
 
+/** The company's research, for "Why us?": what they do and a few sourced specifics. */
+export interface CompanyBrief {
+  name: string;
+  summary: string;
+  website: string | null;
+  /** Product, recent news and remote culture findings (text only), most useful first. */
+  highlights: string[];
+  researchedAt: Date | null;
+}
+
 export interface WriterContext {
   job: {
     title: string | null;
@@ -57,6 +69,8 @@ export interface WriterContext {
     /** The posting text (capped), for "Why us?" and instructions the questions point back to. */
     text: string | null;
   };
+  /** Company research (phase 12), when there is a profile. */
+  company: CompanyBrief | null;
   /** The candidate's effective values for this application that answers may state. */
   profile: Record<string, string>;
   projects: ProjectIndexEntry[];
@@ -69,6 +83,31 @@ export interface WriterContext {
 
 export const POSTING_TEXT_LIMIT = 14_000;
 export const FACTS_PER_QUESTION = 8;
+/** Findings from the company profile given to the writer. */
+export const COMPANY_HIGHLIGHTS = 8;
+
+/** The company's research as the writer and the review screen see it; null without a profile. */
+export function companyBrief(
+  read: Conn,
+  posting: Pick<PostingRow, 'company'>,
+): CompanyBrief | null {
+  const row = companyForPosting(read, posting);
+  const p = row?.profile;
+  if (!row || !p) return null;
+  const pick = (list: CompanyFinding[], n: number) => list.slice(0, n).map((f) => f.text);
+  return {
+    name: row.name,
+    summary: p.summary,
+    website: p.website,
+    highlights: [
+      ...pick(p.product, 3),
+      ...pick(p.news, 3),
+      ...pick(p.remote, 1),
+      ...pick(p.stack, 1),
+    ].slice(0, COMPANY_HIGHLIGHTS),
+    researchedAt: row.researchedAt,
+  };
+}
 
 export async function buildWriterContext(
   read: ReadDb,
@@ -153,6 +192,7 @@ export async function buildWriterContext(
   for (const f of priorFacts.values()) citable.set(f.id, f);
 
   return {
+    company: companyBrief(read, posting),
     job: {
       title: posting.title,
       company: posting.company,

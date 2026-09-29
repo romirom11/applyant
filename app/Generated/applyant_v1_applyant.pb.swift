@@ -532,6 +532,16 @@ public nonisolated struct Applyant_V1_Posting: @unchecked Sendable {
     set {_uniqueStorage()._applicationStage = newValue}
   }
 
+  /// Only filled by GetPosting: the company's research (without its sections), once asked for.
+  public var companyResearch: Applyant_V1_Company {
+    get {_storage._companyResearch ?? Applyant_V1_Company()}
+    set {_uniqueStorage()._companyResearch = newValue}
+  }
+  /// Returns true if `companyResearch` has been explicitly set.
+  public var hasCompanyResearch: Bool {_storage._companyResearch != nil}
+  /// Clears the value of `companyResearch`. Subsequent reads from it will return its default value.
+  public mutating func clearCompanyResearch() {_uniqueStorage()._companyResearch = nil}
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -1419,6 +1429,22 @@ public nonisolated struct Applyant_V1_SearchEvent: Sendable {
   fileprivate var _sourceID: Int64? = nil
 }
 
+/// Company research was queued, finished or failed.
+public nonisolated struct Applyant_V1_CompanyEvent: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var companyID: Int64 = 0
+
+  /// queued | done | failed
+  public var status: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
 public nonisolated struct Applyant_V1_Event: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
@@ -1497,6 +1523,14 @@ public nonisolated struct Applyant_V1_Event: Sendable {
     set {payload = .search(newValue)}
   }
 
+  public var company: Applyant_V1_CompanyEvent {
+    get {
+      if case .company(let v)? = payload {return v}
+      return Applyant_V1_CompanyEvent()
+    }
+    set {payload = .company(newValue)}
+  }
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public nonisolated enum OneOf_Payload: Equatable, Sendable {
@@ -1506,6 +1540,7 @@ public nonisolated struct Applyant_V1_Event: Sendable {
     case handoff(Applyant_V1_HandOffEvent)
     case interview(Applyant_V1_InterviewEvent)
     case search(Applyant_V1_SearchEvent)
+    case company(Applyant_V1_CompanyEvent)
 
   }
 
@@ -3276,6 +3311,17 @@ public nonisolated struct Applyant_V1_Application: @unchecked Sendable {
   public var hasCv: Bool {_storage._cv != nil}
   /// Clears the value of `cv`. Subsequent reads from it will return its default value.
   public mutating func clearCv() {_uniqueStorage()._cv = nil}
+
+  /// The company's research summary and red flags (no sections), for the evidence panel. Only
+  /// filled by GetApplication (and the review RPCs).
+  public var companyResearch: Applyant_V1_Company {
+    get {_storage._companyResearch ?? Applyant_V1_Company()}
+    set {_uniqueStorage()._companyResearch = newValue}
+  }
+  /// Returns true if `companyResearch` has been explicitly set.
+  public var hasCompanyResearch: Bool {_storage._companyResearch != nil}
+  /// Clears the value of `companyResearch`. Subsequent reads from it will return its default value.
+  public mutating func clearCompanyResearch() {_uniqueStorage()._companyResearch = nil}
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -5268,6 +5314,367 @@ public nonisolated struct Applyant_V1_ResetRolesResponse: Sendable {
   public init() {}
 }
 
+public nonisolated struct Applyant_V1_CompanyFinding: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var text: String = String()
+
+  /// YYYY-MM or YYYY-MM-DD, when it matters.
+  public var date: String {
+    get {_date ?? String()}
+    set {_date = newValue}
+  }
+  /// Returns true if `date` has been explicitly set.
+  public var hasDate: Bool {self._date != nil}
+  /// Clears the value of `date`. Subsequent reads from it will return its default value.
+  public mutating func clearDate() {self._date = nil}
+
+  /// The pages that say it.
+  public var sources: [String] = []
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _date: String? = nil
+}
+
+public nonisolated struct Applyant_V1_CompanySection: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// product | funding | size | founders | stack | news | layoffs | reviews | remote | salary
+  public var key: String = String()
+
+  /// "Product", "Funding", …
+  public var label: String = String()
+
+  public var findings: [Applyant_V1_CompanyFinding] = []
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Applyant_V1_CompanyRedFlag: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// layoffs | reviews | outstaffing | pay | funding | legal | other
+  public var kind: String = String()
+
+  /// low | medium | high
+  public var severity: String = String()
+
+  public var text: String = String()
+
+  public var sources: [String] = []
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Applyant_V1_CompanyPosting: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var id: Int64 = 0
+
+  public var title: String {
+    get {_title ?? String()}
+    set {_title = newValue}
+  }
+  /// Returns true if `title` has been explicitly set.
+  public var hasTitle: Bool {self._title != nil}
+  /// Clears the value of `title`. Subsequent reads from it will return its default value.
+  public mutating func clearTitle() {self._title = nil}
+
+  public var score: Int32 {
+    get {_score ?? 0}
+    set {_score = newValue}
+  }
+  /// Returns true if `score` has been explicitly set.
+  public var hasScore: Bool {self._score != nil}
+  /// Clears the value of `score`. Subsequent reads from it will return its default value.
+  public mutating func clearScore() {self._score = nil}
+
+  public var stage: Applyant_V1_PostingStage = .unspecified
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _title: String? = nil
+  fileprivate var _score: Int32? = nil
+}
+
+public nonisolated struct Applyant_V1_Company: @unchecked Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var id: Int64 {
+    get {_storage._id}
+    set {_uniqueStorage()._id = newValue}
+  }
+
+  public var name: String {
+    get {_storage._name}
+    set {_uniqueStorage()._name = newValue}
+  }
+
+  /// queued (waiting or running) | done | failed (the last attempt; an older profile is kept)
+  public var status: String {
+    get {_storage._status}
+    set {_uniqueStorage()._status = newValue}
+  }
+
+  /// Research is waiting or running now.
+  public var researching: Bool {
+    get {_storage._researching}
+    set {_uniqueStorage()._researching = newValue}
+  }
+
+  /// The profile is younger than 30 days.
+  public var fresh: Bool {
+    get {_storage._fresh}
+    set {_uniqueStorage()._fresh = newValue}
+  }
+
+  /// prepare | manual: who asked last.
+  public var trigger: String {
+    get {_storage._trigger}
+    set {_uniqueStorage()._trigger = newValue}
+  }
+
+  public var website: String {
+    get {_storage._website ?? String()}
+    set {_uniqueStorage()._website = newValue}
+  }
+  /// Returns true if `website` has been explicitly set.
+  public var hasWebsite: Bool {_storage._website != nil}
+  /// Clears the value of `website`. Subsequent reads from it will return its default value.
+  public mutating func clearWebsite() {_uniqueStorage()._website = nil}
+
+  /// Two to four sentences on what the company does; unset until researched.
+  public var summary: String {
+    get {_storage._summary ?? String()}
+    set {_uniqueStorage()._summary = newValue}
+  }
+  /// Returns true if `summary` has been explicitly set.
+  public var hasSummary: Bool {_storage._summary != nil}
+  /// Clears the value of `summary`. Subsequent reads from it will return its default value.
+  public mutating func clearSummary() {_uniqueStorage()._summary = nil}
+
+  public var redFlags: [Applyant_V1_CompanyRedFlag] {
+    get {_storage._redFlags}
+    set {_uniqueStorage()._redFlags = newValue}
+  }
+
+  /// Only filled by GetCompany: every section with its findings and sources.
+  public var sections: [Applyant_V1_CompanySection] {
+    get {_storage._sections}
+    set {_uniqueStorage()._sections = newValue}
+  }
+
+  public var researchedAt: SwiftProtobuf.Google_Protobuf_Timestamp {
+    get {_storage._researchedAt ?? SwiftProtobuf.Google_Protobuf_Timestamp()}
+    set {_uniqueStorage()._researchedAt = newValue}
+  }
+  /// Returns true if `researchedAt` has been explicitly set.
+  public var hasResearchedAt: Bool {_storage._researchedAt != nil}
+  /// Clears the value of `researchedAt`. Subsequent reads from it will return its default value.
+  public mutating func clearResearchedAt() {_uniqueStorage()._researchedAt = nil}
+
+  public var attemptedAt: SwiftProtobuf.Google_Protobuf_Timestamp {
+    get {_storage._attemptedAt ?? SwiftProtobuf.Google_Protobuf_Timestamp()}
+    set {_uniqueStorage()._attemptedAt = newValue}
+  }
+  /// Returns true if `attemptedAt` has been explicitly set.
+  public var hasAttemptedAt: Bool {_storage._attemptedAt != nil}
+  /// Clears the value of `attemptedAt`. Subsequent reads from it will return its default value.
+  public mutating func clearAttemptedAt() {_uniqueStorage()._attemptedAt = nil}
+
+  /// What the researcher couldn't find, or why research failed.
+  public var note: String {
+    get {_storage._note ?? String()}
+    set {_uniqueStorage()._note = newValue}
+  }
+  /// Returns true if `note` has been explicitly set.
+  public var hasNote: Bool {_storage._note != nil}
+  /// Clears the value of `note`. Subsequent reads from it will return its default value.
+  public mutating func clearNote() {_uniqueStorage()._note = nil}
+
+  /// Its postings (by name), newest first.
+  public var postings: [Applyant_V1_CompanyPosting] {
+    get {_storage._postings}
+    set {_uniqueStorage()._postings = newValue}
+  }
+
+  /// How many findings the profile has.
+  public var findings: Int32 {
+    get {_storage._findings}
+    set {_uniqueStorage()._findings = newValue}
+  }
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _storage = _StorageClass.defaultInstance
+}
+
+public nonisolated struct Applyant_V1_ListCompaniesRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Applyant_V1_ListCompaniesResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var companies: [Applyant_V1_Company] = []
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Applyant_V1_GetCompanyRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var target: Applyant_V1_GetCompanyRequest.OneOf_Target? = nil
+
+  /// An id or a name.
+  public var company: String {
+    get {
+      if case .company(let v)? = target {return v}
+      return String()
+    }
+    set {target = .company(newValue)}
+  }
+
+  public var postingID: Int64 {
+    get {
+      if case .postingID(let v)? = target {return v}
+      return 0
+    }
+    set {target = .postingID(newValue)}
+  }
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public nonisolated enum OneOf_Target: Equatable, Sendable {
+    /// An id or a name.
+    case company(String)
+    case postingID(Int64)
+
+  }
+
+  public init() {}
+}
+
+public nonisolated struct Applyant_V1_GetCompanyResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// Unset when the company has never been researched.
+  public var company: Applyant_V1_Company {
+    get {_company ?? Applyant_V1_Company()}
+    set {_company = newValue}
+  }
+  /// Returns true if `company` has been explicitly set.
+  public var hasCompany: Bool {self._company != nil}
+  /// Clears the value of `company`. Subsequent reads from it will return its default value.
+  public mutating func clearCompany() {self._company = nil}
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _company: Applyant_V1_Company? = nil
+}
+
+public nonisolated struct Applyant_V1_ResearchCompanyRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var target: Applyant_V1_ResearchCompanyRequest.OneOf_Target? = nil
+
+  /// An id or a name.
+  public var company: String {
+    get {
+      if case .company(let v)? = target {return v}
+      return String()
+    }
+    set {target = .company(newValue)}
+  }
+
+  /// The posting's company.
+  public var postingID: Int64 {
+    get {
+      if case .postingID(let v)? = target {return v}
+      return 0
+    }
+    set {target = .postingID(newValue)}
+  }
+
+  /// Research again even when the profile is fresh.
+  public var refresh: Bool = false
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public nonisolated enum OneOf_Target: Equatable, Sendable {
+    /// An id or a name.
+    case company(String)
+    /// The posting's company.
+    case postingID(Int64)
+
+  }
+
+  public init() {}
+}
+
+public nonisolated struct Applyant_V1_ResearchCompanyResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var company: Applyant_V1_Company {
+    get {_company ?? Applyant_V1_Company()}
+    set {_company = newValue}
+  }
+  /// Returns true if `company` has been explicitly set.
+  public var hasCompany: Bool {self._company != nil}
+  /// Clears the value of `company`. Subsequent reads from it will return its default value.
+  public mutating func clearCompany() {self._company = nil}
+
+  /// False when research was already waiting or running, or the profile is fresh.
+  public var queued: Bool = false
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _company: Applyant_V1_Company? = nil
+}
+
 // MARK: - Code below here is support for the SwiftProtobuf runtime.
 
 fileprivate nonisolated let _protobuf_package = "applyant.v1"
@@ -5294,7 +5701,7 @@ nonisolated extension Applyant_V1_ApplicationStage: SwiftProtobuf._ProtoNameProv
 
 nonisolated extension Applyant_V1_Posting: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Posting"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}stage\0\u{3}canonical_url\0\u{1}title\0\u{1}company\0\u{3}first_seen_at\0\u{3}verified_at\0\u{3}verify_note\0\u{1}sources\0\u{1}score\0\u{1}breakdown\0\u{1}dealbreakers\0\u{3}scored_at\0\u{3}score_note\0\u{1}decision\0\u{3}decision_reason\0\u{1}summary\0\u{1}requirements\0\u{3}salary_text\0\u{3}core_fit\0\u{3}structured_fields\0\u{3}apply_url\0\u{3}form_status\0\u{3}form_note\0\u{3}form_read_at\0\u{1}form\0\u{3}application_id\0\u{3}application_stage\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}stage\0\u{3}canonical_url\0\u{1}title\0\u{1}company\0\u{3}first_seen_at\0\u{3}verified_at\0\u{3}verify_note\0\u{1}sources\0\u{1}score\0\u{1}breakdown\0\u{1}dealbreakers\0\u{3}scored_at\0\u{3}score_note\0\u{1}decision\0\u{3}decision_reason\0\u{1}summary\0\u{1}requirements\0\u{3}salary_text\0\u{3}core_fit\0\u{3}structured_fields\0\u{3}apply_url\0\u{3}form_status\0\u{3}form_note\0\u{3}form_read_at\0\u{1}form\0\u{3}application_id\0\u{3}application_stage\0\u{3}company_research\0")
 
   fileprivate class _StorageClass {
     var _id: Int64 = 0
@@ -5325,6 +5732,7 @@ nonisolated extension Applyant_V1_Posting: SwiftProtobuf.Message, SwiftProtobuf.
     var _form: Applyant_V1_ApplicationForm? = nil
     var _applicationID: Int64? = nil
     var _applicationStage: Applyant_V1_ApplicationStage = .unspecified
+    var _companyResearch: Applyant_V1_Company? = nil
 
       // This property is used as the initial default value for new instances of the type.
       // The type itself is protecting the reference to its storage via CoW semantics.
@@ -5363,6 +5771,7 @@ nonisolated extension Applyant_V1_Posting: SwiftProtobuf.Message, SwiftProtobuf.
       _form = source._form
       _applicationID = source._applicationID
       _applicationStage = source._applicationStage
+      _companyResearch = source._companyResearch
     }
   }
 
@@ -5409,6 +5818,7 @@ nonisolated extension Applyant_V1_Posting: SwiftProtobuf.Message, SwiftProtobuf.
         case 26: try { try decoder.decodeSingularMessageField(value: &_storage._form) }()
         case 27: try { try decoder.decodeSingularInt64Field(value: &_storage._applicationID) }()
         case 28: try { try decoder.decodeSingularEnumField(value: &_storage._applicationStage) }()
+        case 29: try { try decoder.decodeSingularMessageField(value: &_storage._companyResearch) }()
         default: break
         }
       }
@@ -5505,6 +5915,9 @@ nonisolated extension Applyant_V1_Posting: SwiftProtobuf.Message, SwiftProtobuf.
       if _storage._applicationStage != .unspecified {
         try visitor.visitSingularEnumField(value: _storage._applicationStage, fieldNumber: 28)
       }
+      try { if let v = _storage._companyResearch {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 29)
+      } }()
     }
     try unknownFields.traverse(visitor: &visitor)
   }
@@ -5542,6 +5955,7 @@ nonisolated extension Applyant_V1_Posting: SwiftProtobuf.Message, SwiftProtobuf.
         if _storage._form != rhs_storage._form {return false}
         if _storage._applicationID != rhs_storage._applicationID {return false}
         if _storage._applicationStage != rhs_storage._applicationStage {return false}
+        if _storage._companyResearch != rhs_storage._companyResearch {return false}
         return true
       }
       if !storagesAreEqual {return false}
@@ -7118,9 +7532,44 @@ nonisolated extension Applyant_V1_SearchEvent: SwiftProtobuf.Message, SwiftProto
   }
 }
 
+nonisolated extension Applyant_V1_CompanyEvent: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".CompanyEvent"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}company_id\0\u{1}status\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularInt64Field(value: &self.companyID) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.status) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.companyID != 0 {
+      try visitor.visitSingularInt64Field(value: self.companyID, fieldNumber: 1)
+    }
+    if !self.status.isEmpty {
+      try visitor.visitSingularStringField(value: self.status, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Applyant_V1_CompanyEvent, rhs: Applyant_V1_CompanyEvent) -> Bool {
+    if lhs.companyID != rhs.companyID {return false}
+    if lhs.status != rhs.status {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
 nonisolated extension Applyant_V1_Event: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Event"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}at\0\u{3}run_id\0\u{1}message\0\u{2}\u{6}task\0\u{1}posting\0\u{1}application\0\u{1}handoff\0\u{1}interview\0\u{1}search\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}at\0\u{3}run_id\0\u{1}message\0\u{2}\u{6}task\0\u{1}posting\0\u{1}application\0\u{1}handoff\0\u{1}interview\0\u{1}search\0\u{1}company\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -7210,6 +7659,19 @@ nonisolated extension Applyant_V1_Event: SwiftProtobuf.Message, SwiftProtobuf._M
           self.payload = .search(v)
         }
       }()
+      case 16: try {
+        var v: Applyant_V1_CompanyEvent?
+        var hadOneofValue = false
+        if let current = self.payload {
+          hadOneofValue = true
+          if case .company(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.payload = .company(v)
+        }
+      }()
       default: break
       }
     }
@@ -7256,6 +7718,10 @@ nonisolated extension Applyant_V1_Event: SwiftProtobuf.Message, SwiftProtobuf._M
     case .search?: try {
       guard case .search(let v)? = self.payload else { preconditionFailure() }
       try visitor.visitSingularMessageField(value: v, fieldNumber: 15)
+    }()
+    case .company?: try {
+      guard case .company(let v)? = self.payload else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 16)
     }()
     case nil: break
     }
@@ -9896,7 +10362,7 @@ nonisolated extension Applyant_V1_Answer: SwiftProtobuf.Message, SwiftProtobuf._
 
 nonisolated extension Applyant_V1_Application: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Application"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}posting_id\0\u{1}stage\0\u{1}channel\0\u{1}note\0\u{1}title\0\u{1}company\0\u{1}score\0\u{3}posting_url\0\u{3}form_url\0\u{3}created_at\0\u{3}prepared_at\0\u{3}approved_at\0\u{1}blockers\0\u{1}missing\0\u{3}unconfirmed_fact_ids\0\u{1}fields\0\u{1}answers\0\u{3}applied_at\0\u{1}receipt\0\u{3}hand_off\0\u{1}cv\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}posting_id\0\u{1}stage\0\u{1}channel\0\u{1}note\0\u{1}title\0\u{1}company\0\u{1}score\0\u{3}posting_url\0\u{3}form_url\0\u{3}created_at\0\u{3}prepared_at\0\u{3}approved_at\0\u{1}blockers\0\u{1}missing\0\u{3}unconfirmed_fact_ids\0\u{1}fields\0\u{1}answers\0\u{3}applied_at\0\u{1}receipt\0\u{3}hand_off\0\u{1}cv\0\u{3}company_research\0")
 
   fileprivate class _StorageClass {
     var _id: Int64 = 0
@@ -9921,6 +10387,7 @@ nonisolated extension Applyant_V1_Application: SwiftProtobuf.Message, SwiftProto
     var _receipt: Applyant_V1_Receipt? = nil
     var _handOff: Applyant_V1_HandOff? = nil
     var _cv: Applyant_V1_Cv? = nil
+    var _companyResearch: Applyant_V1_Company? = nil
 
       // This property is used as the initial default value for new instances of the type.
       // The type itself is protecting the reference to its storage via CoW semantics.
@@ -9953,6 +10420,7 @@ nonisolated extension Applyant_V1_Application: SwiftProtobuf.Message, SwiftProto
       _receipt = source._receipt
       _handOff = source._handOff
       _cv = source._cv
+      _companyResearch = source._companyResearch
     }
   }
 
@@ -9993,6 +10461,7 @@ nonisolated extension Applyant_V1_Application: SwiftProtobuf.Message, SwiftProto
         case 20: try { try decoder.decodeSingularMessageField(value: &_storage._receipt) }()
         case 21: try { try decoder.decodeSingularMessageField(value: &_storage._handOff) }()
         case 22: try { try decoder.decodeSingularMessageField(value: &_storage._cv) }()
+        case 23: try { try decoder.decodeSingularMessageField(value: &_storage._companyResearch) }()
         default: break
         }
       }
@@ -10071,6 +10540,9 @@ nonisolated extension Applyant_V1_Application: SwiftProtobuf.Message, SwiftProto
       try { if let v = _storage._cv {
         try visitor.visitSingularMessageField(value: v, fieldNumber: 22)
       } }()
+      try { if let v = _storage._companyResearch {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 23)
+      } }()
     }
     try unknownFields.traverse(visitor: &visitor)
   }
@@ -10102,6 +10574,7 @@ nonisolated extension Applyant_V1_Application: SwiftProtobuf.Message, SwiftProto
         if _storage._receipt != rhs_storage._receipt {return false}
         if _storage._handOff != rhs_storage._handOff {return false}
         if _storage._cv != rhs_storage._cv {return false}
+        if _storage._companyResearch != rhs_storage._companyResearch {return false}
         return true
       }
       if !storagesAreEqual {return false}
@@ -13183,6 +13656,593 @@ nonisolated extension Applyant_V1_ResetRolesResponse: SwiftProtobuf.Message, Swi
 
   public static func ==(lhs: Applyant_V1_ResetRolesResponse, rhs: Applyant_V1_ResetRolesResponse) -> Bool {
     if lhs.roles != rhs.roles {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Applyant_V1_CompanyFinding: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".CompanyFinding"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}text\0\u{1}date\0\u{1}sources\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.text) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self._date) }()
+      case 3: try { try decoder.decodeRepeatedStringField(value: &self.sources) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    if !self.text.isEmpty {
+      try visitor.visitSingularStringField(value: self.text, fieldNumber: 1)
+    }
+    try { if let v = self._date {
+      try visitor.visitSingularStringField(value: v, fieldNumber: 2)
+    } }()
+    if !self.sources.isEmpty {
+      try visitor.visitRepeatedStringField(value: self.sources, fieldNumber: 3)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Applyant_V1_CompanyFinding, rhs: Applyant_V1_CompanyFinding) -> Bool {
+    if lhs.text != rhs.text {return false}
+    if lhs._date != rhs._date {return false}
+    if lhs.sources != rhs.sources {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Applyant_V1_CompanySection: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".CompanySection"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}key\0\u{1}label\0\u{1}findings\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.key) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.label) }()
+      case 3: try { try decoder.decodeRepeatedMessageField(value: &self.findings) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.key.isEmpty {
+      try visitor.visitSingularStringField(value: self.key, fieldNumber: 1)
+    }
+    if !self.label.isEmpty {
+      try visitor.visitSingularStringField(value: self.label, fieldNumber: 2)
+    }
+    if !self.findings.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.findings, fieldNumber: 3)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Applyant_V1_CompanySection, rhs: Applyant_V1_CompanySection) -> Bool {
+    if lhs.key != rhs.key {return false}
+    if lhs.label != rhs.label {return false}
+    if lhs.findings != rhs.findings {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Applyant_V1_CompanyRedFlag: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".CompanyRedFlag"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}kind\0\u{1}severity\0\u{1}text\0\u{1}sources\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.kind) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.severity) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.text) }()
+      case 4: try { try decoder.decodeRepeatedStringField(value: &self.sources) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.kind.isEmpty {
+      try visitor.visitSingularStringField(value: self.kind, fieldNumber: 1)
+    }
+    if !self.severity.isEmpty {
+      try visitor.visitSingularStringField(value: self.severity, fieldNumber: 2)
+    }
+    if !self.text.isEmpty {
+      try visitor.visitSingularStringField(value: self.text, fieldNumber: 3)
+    }
+    if !self.sources.isEmpty {
+      try visitor.visitRepeatedStringField(value: self.sources, fieldNumber: 4)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Applyant_V1_CompanyRedFlag, rhs: Applyant_V1_CompanyRedFlag) -> Bool {
+    if lhs.kind != rhs.kind {return false}
+    if lhs.severity != rhs.severity {return false}
+    if lhs.text != rhs.text {return false}
+    if lhs.sources != rhs.sources {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Applyant_V1_CompanyPosting: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".CompanyPosting"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}title\0\u{1}score\0\u{1}stage\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularInt64Field(value: &self.id) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self._title) }()
+      case 3: try { try decoder.decodeSingularInt32Field(value: &self._score) }()
+      case 4: try { try decoder.decodeSingularEnumField(value: &self.stage) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    if self.id != 0 {
+      try visitor.visitSingularInt64Field(value: self.id, fieldNumber: 1)
+    }
+    try { if let v = self._title {
+      try visitor.visitSingularStringField(value: v, fieldNumber: 2)
+    } }()
+    try { if let v = self._score {
+      try visitor.visitSingularInt32Field(value: v, fieldNumber: 3)
+    } }()
+    if self.stage != .unspecified {
+      try visitor.visitSingularEnumField(value: self.stage, fieldNumber: 4)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Applyant_V1_CompanyPosting, rhs: Applyant_V1_CompanyPosting) -> Bool {
+    if lhs.id != rhs.id {return false}
+    if lhs._title != rhs._title {return false}
+    if lhs._score != rhs._score {return false}
+    if lhs.stage != rhs.stage {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Applyant_V1_Company: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".Company"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}name\0\u{1}status\0\u{1}researching\0\u{1}fresh\0\u{1}trigger\0\u{1}website\0\u{1}summary\0\u{3}red_flags\0\u{1}sections\0\u{3}researched_at\0\u{3}attempted_at\0\u{1}note\0\u{1}postings\0\u{1}findings\0")
+
+  fileprivate class _StorageClass {
+    var _id: Int64 = 0
+    var _name: String = String()
+    var _status: String = String()
+    var _researching: Bool = false
+    var _fresh: Bool = false
+    var _trigger: String = String()
+    var _website: String? = nil
+    var _summary: String? = nil
+    var _redFlags: [Applyant_V1_CompanyRedFlag] = []
+    var _sections: [Applyant_V1_CompanySection] = []
+    var _researchedAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
+    var _attemptedAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
+    var _note: String? = nil
+    var _postings: [Applyant_V1_CompanyPosting] = []
+    var _findings: Int32 = 0
+
+      // This property is used as the initial default value for new instances of the type.
+      // The type itself is protecting the reference to its storage via CoW semantics.
+      // This will force a copy to be made of this reference when the first mutation occurs;
+      // hence, it is safe to mark this as `nonisolated(unsafe)`.
+      static nonisolated(unsafe) let defaultInstance = _StorageClass()
+
+    private init() {}
+
+    init(copying source: _StorageClass) {
+      _id = source._id
+      _name = source._name
+      _status = source._status
+      _researching = source._researching
+      _fresh = source._fresh
+      _trigger = source._trigger
+      _website = source._website
+      _summary = source._summary
+      _redFlags = source._redFlags
+      _sections = source._sections
+      _researchedAt = source._researchedAt
+      _attemptedAt = source._attemptedAt
+      _note = source._note
+      _postings = source._postings
+      _findings = source._findings
+    }
+  }
+
+  fileprivate mutating func _uniqueStorage() -> _StorageClass {
+    if !isKnownUniquelyReferenced(&_storage) {
+      _storage = _StorageClass(copying: _storage)
+    }
+    return _storage
+  }
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    _ = _uniqueStorage()
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      while let fieldNumber = try decoder.nextFieldNumber() {
+        // The use of inline closures is to circumvent an issue where the compiler
+        // allocates stack space for every case branch when no optimizations are
+        // enabled. https://github.com/apple/swift-protobuf/issues/1034
+        switch fieldNumber {
+        case 1: try { try decoder.decodeSingularInt64Field(value: &_storage._id) }()
+        case 2: try { try decoder.decodeSingularStringField(value: &_storage._name) }()
+        case 3: try { try decoder.decodeSingularStringField(value: &_storage._status) }()
+        case 4: try { try decoder.decodeSingularBoolField(value: &_storage._researching) }()
+        case 5: try { try decoder.decodeSingularBoolField(value: &_storage._fresh) }()
+        case 6: try { try decoder.decodeSingularStringField(value: &_storage._trigger) }()
+        case 7: try { try decoder.decodeSingularStringField(value: &_storage._website) }()
+        case 8: try { try decoder.decodeSingularStringField(value: &_storage._summary) }()
+        case 9: try { try decoder.decodeRepeatedMessageField(value: &_storage._redFlags) }()
+        case 10: try { try decoder.decodeRepeatedMessageField(value: &_storage._sections) }()
+        case 11: try { try decoder.decodeSingularMessageField(value: &_storage._researchedAt) }()
+        case 12: try { try decoder.decodeSingularMessageField(value: &_storage._attemptedAt) }()
+        case 13: try { try decoder.decodeSingularStringField(value: &_storage._note) }()
+        case 14: try { try decoder.decodeRepeatedMessageField(value: &_storage._postings) }()
+        case 15: try { try decoder.decodeSingularInt32Field(value: &_storage._findings) }()
+        default: break
+        }
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every if/case branch local when no optimizations
+      // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+      // https://github.com/apple/swift-protobuf/issues/1182
+      if _storage._id != 0 {
+        try visitor.visitSingularInt64Field(value: _storage._id, fieldNumber: 1)
+      }
+      if !_storage._name.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._name, fieldNumber: 2)
+      }
+      if !_storage._status.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._status, fieldNumber: 3)
+      }
+      if _storage._researching != false {
+        try visitor.visitSingularBoolField(value: _storage._researching, fieldNumber: 4)
+      }
+      if _storage._fresh != false {
+        try visitor.visitSingularBoolField(value: _storage._fresh, fieldNumber: 5)
+      }
+      if !_storage._trigger.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._trigger, fieldNumber: 6)
+      }
+      try { if let v = _storage._website {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 7)
+      } }()
+      try { if let v = _storage._summary {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 8)
+      } }()
+      if !_storage._redFlags.isEmpty {
+        try visitor.visitRepeatedMessageField(value: _storage._redFlags, fieldNumber: 9)
+      }
+      if !_storage._sections.isEmpty {
+        try visitor.visitRepeatedMessageField(value: _storage._sections, fieldNumber: 10)
+      }
+      try { if let v = _storage._researchedAt {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 11)
+      } }()
+      try { if let v = _storage._attemptedAt {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 12)
+      } }()
+      try { if let v = _storage._note {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 13)
+      } }()
+      if !_storage._postings.isEmpty {
+        try visitor.visitRepeatedMessageField(value: _storage._postings, fieldNumber: 14)
+      }
+      if _storage._findings != 0 {
+        try visitor.visitSingularInt32Field(value: _storage._findings, fieldNumber: 15)
+      }
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Applyant_V1_Company, rhs: Applyant_V1_Company) -> Bool {
+    if lhs._storage !== rhs._storage {
+      let storagesAreEqual: Bool = withExtendedLifetime((lhs._storage, rhs._storage)) { (_args: (_StorageClass, _StorageClass)) in
+        let _storage = _args.0
+        let rhs_storage = _args.1
+        if _storage._id != rhs_storage._id {return false}
+        if _storage._name != rhs_storage._name {return false}
+        if _storage._status != rhs_storage._status {return false}
+        if _storage._researching != rhs_storage._researching {return false}
+        if _storage._fresh != rhs_storage._fresh {return false}
+        if _storage._trigger != rhs_storage._trigger {return false}
+        if _storage._website != rhs_storage._website {return false}
+        if _storage._summary != rhs_storage._summary {return false}
+        if _storage._redFlags != rhs_storage._redFlags {return false}
+        if _storage._sections != rhs_storage._sections {return false}
+        if _storage._researchedAt != rhs_storage._researchedAt {return false}
+        if _storage._attemptedAt != rhs_storage._attemptedAt {return false}
+        if _storage._note != rhs_storage._note {return false}
+        if _storage._postings != rhs_storage._postings {return false}
+        if _storage._findings != rhs_storage._findings {return false}
+        return true
+      }
+      if !storagesAreEqual {return false}
+    }
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Applyant_V1_ListCompaniesRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ListCompaniesRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Applyant_V1_ListCompaniesRequest, rhs: Applyant_V1_ListCompaniesRequest) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Applyant_V1_ListCompaniesResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ListCompaniesResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}companies\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeRepeatedMessageField(value: &self.companies) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.companies.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.companies, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Applyant_V1_ListCompaniesResponse, rhs: Applyant_V1_ListCompaniesResponse) -> Bool {
+    if lhs.companies != rhs.companies {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Applyant_V1_GetCompanyRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".GetCompanyRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}company\0\u{3}posting_id\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try {
+        var v: String?
+        try decoder.decodeSingularStringField(value: &v)
+        if let v = v {
+          if self.target != nil {try decoder.handleConflictingOneOf()}
+          self.target = .company(v)
+        }
+      }()
+      case 2: try {
+        var v: Int64?
+        try decoder.decodeSingularInt64Field(value: &v)
+        if let v = v {
+          if self.target != nil {try decoder.handleConflictingOneOf()}
+          self.target = .postingID(v)
+        }
+      }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    switch self.target {
+    case .company?: try {
+      guard case .company(let v)? = self.target else { preconditionFailure() }
+      try visitor.visitSingularStringField(value: v, fieldNumber: 1)
+    }()
+    case .postingID?: try {
+      guard case .postingID(let v)? = self.target else { preconditionFailure() }
+      try visitor.visitSingularInt64Field(value: v, fieldNumber: 2)
+    }()
+    case nil: break
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Applyant_V1_GetCompanyRequest, rhs: Applyant_V1_GetCompanyRequest) -> Bool {
+    if lhs.target != rhs.target {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Applyant_V1_GetCompanyResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".GetCompanyResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}company\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularMessageField(value: &self._company) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if let v = self._company {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Applyant_V1_GetCompanyResponse, rhs: Applyant_V1_GetCompanyResponse) -> Bool {
+    if lhs._company != rhs._company {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Applyant_V1_ResearchCompanyRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ResearchCompanyRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}company\0\u{3}posting_id\0\u{1}refresh\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try {
+        var v: String?
+        try decoder.decodeSingularStringField(value: &v)
+        if let v = v {
+          if self.target != nil {try decoder.handleConflictingOneOf()}
+          self.target = .company(v)
+        }
+      }()
+      case 2: try {
+        var v: Int64?
+        try decoder.decodeSingularInt64Field(value: &v)
+        if let v = v {
+          if self.target != nil {try decoder.handleConflictingOneOf()}
+          self.target = .postingID(v)
+        }
+      }()
+      case 3: try { try decoder.decodeSingularBoolField(value: &self.refresh) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    switch self.target {
+    case .company?: try {
+      guard case .company(let v)? = self.target else { preconditionFailure() }
+      try visitor.visitSingularStringField(value: v, fieldNumber: 1)
+    }()
+    case .postingID?: try {
+      guard case .postingID(let v)? = self.target else { preconditionFailure() }
+      try visitor.visitSingularInt64Field(value: v, fieldNumber: 2)
+    }()
+    case nil: break
+    }
+    if self.refresh != false {
+      try visitor.visitSingularBoolField(value: self.refresh, fieldNumber: 3)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Applyant_V1_ResearchCompanyRequest, rhs: Applyant_V1_ResearchCompanyRequest) -> Bool {
+    if lhs.target != rhs.target {return false}
+    if lhs.refresh != rhs.refresh {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Applyant_V1_ResearchCompanyResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ResearchCompanyResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}company\0\u{1}queued\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularMessageField(value: &self._company) }()
+      case 2: try { try decoder.decodeSingularBoolField(value: &self.queued) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if let v = self._company {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
+    } }()
+    if self.queued != false {
+      try visitor.visitSingularBoolField(value: self.queued, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Applyant_V1_ResearchCompanyResponse, rhs: Applyant_V1_ResearchCompanyResponse) -> Bool {
+    if lhs._company != rhs._company {return false}
+    if lhs.queued != rhs.queued {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

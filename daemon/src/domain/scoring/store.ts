@@ -15,6 +15,7 @@ import type { EventBus } from '../../queue/events.ts';
 import { runInTx } from '../../queue/tx.ts';
 import type { Tx } from '../../queue/types.ts';
 import { ensureApplication } from '../applications/store.ts';
+import { type CompanyScoreInfo, companyKey, companyScoreInfo } from '../companies/store.ts';
 import {
   effectiveWeights,
   feedbackMultipliers,
@@ -37,6 +38,8 @@ export interface ScoringContext {
   multipliers: Weights;
   weights: Weights;
   fx: ReturnType<typeof loadRates>;
+  /** Researched companies' red flags, by companyKey. */
+  companies: Map<string, CompanyScoreInfo>;
 }
 
 export function scoringContext(conn: Conn): ScoringContext {
@@ -47,6 +50,7 @@ export function scoringContext(conn: Conn): ScoringContext {
     multipliers,
     weights: effectiveWeights(prefs.weights, multipliers),
     fx: loadRates(conn),
+    companies: companyScoreInfo(conn),
   };
 }
 
@@ -59,6 +63,7 @@ export function scorePostingRow(row: PostingRow, ctx: ScoringContext): ScoreResu
       matches: row.matches,
       fx: ctx.fx,
       locations: row.locations,
+      company: ctx.companies.get(companyKey(row.company)) ?? null,
     },
     ctx.prefs,
     ctx.weights,

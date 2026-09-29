@@ -253,6 +253,20 @@ public protocol Applyant_V1_ApplyantServiceClientInterface: Sendable {
     /// ResetRoles puts one role (or every role) back on its default route.
     @available(iOS 13, *)
     func `resetRoles`(request: Applyant_V1_ResetRolesRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_ResetRolesResponse>
+
+    /// Companies: one research profile per company (researcher, Codex by default, with web
+    /// search), shared by all of its postings. It runs as part of preparing an application and
+    /// on demand; a profile is reused for 30 days. Red flags feed the score as a soft component.
+    @available(iOS 13, *)
+    func `listCompanies`(request: Applyant_V1_ListCompaniesRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_ListCompaniesResponse>
+
+    /// GetCompany returns one company's profile with every finding and its sources.
+    @available(iOS 13, *)
+    func `getCompany`(request: Applyant_V1_GetCompanyRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_GetCompanyResponse>
+
+    /// ResearchCompany starts research now (Company research): kept when fresh unless refresh.
+    @available(iOS 13, *)
+    func `researchCompany`(request: Applyant_V1_ResearchCompanyRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_ResearchCompanyResponse>
 }
 
 /// Concrete implementation of `Applyant_V1_ApplyantServiceClientInterface`.
@@ -543,6 +557,21 @@ public final class Applyant_V1_ApplyantServiceClient: Applyant_V1_ApplyantServic
         return await self.client.unary(path: "/applyant.v1.ApplyantService/ResetRoles", idempotencyLevel: .unknown, request: request, headers: headers)
     }
 
+    @available(iOS 13, *)
+    public func `listCompanies`(request: Applyant_V1_ListCompaniesRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_ListCompaniesResponse> {
+        return await self.client.unary(path: "/applyant.v1.ApplyantService/ListCompanies", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
+    public func `getCompany`(request: Applyant_V1_GetCompanyRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_GetCompanyResponse> {
+        return await self.client.unary(path: "/applyant.v1.ApplyantService/GetCompany", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
+    public func `researchCompany`(request: Applyant_V1_ResearchCompanyRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_ResearchCompanyResponse> {
+        return await self.client.unary(path: "/applyant.v1.ApplyantService/ResearchCompany", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
     public enum Metadata {
         public enum Methods {
             public static let addPosting = Connect.MethodSpec(name: "AddPosting", service: "applyant.v1.ApplyantService", type: .unary)
@@ -601,6 +630,9 @@ public final class Applyant_V1_ApplyantServiceClient: Applyant_V1_ApplyantServic
             public static let listRoles = Connect.MethodSpec(name: "ListRoles", service: "applyant.v1.ApplyantService", type: .unary)
             public static let setRole = Connect.MethodSpec(name: "SetRole", service: "applyant.v1.ApplyantService", type: .unary)
             public static let resetRoles = Connect.MethodSpec(name: "ResetRoles", service: "applyant.v1.ApplyantService", type: .unary)
+            public static let listCompanies = Connect.MethodSpec(name: "ListCompanies", service: "applyant.v1.ApplyantService", type: .unary)
+            public static let getCompany = Connect.MethodSpec(name: "GetCompany", service: "applyant.v1.ApplyantService", type: .unary)
+            public static let researchCompany = Connect.MethodSpec(name: "ResearchCompany", service: "applyant.v1.ApplyantService", type: .unary)
         }
     }
 }

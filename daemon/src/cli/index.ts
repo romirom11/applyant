@@ -4,6 +4,7 @@ import { Command } from 'commander';
 import { registerApplications } from './applications.ts';
 import { registerCandidate } from './candidate.ts';
 import { type ApplyantClient, connect, describeError } from './client.ts';
+import { registerCompanies } from './companies.ts';
 import { registerConfig } from './config.ts';
 import { eventJson, eventLine } from './format.ts';
 import { registerHandoff } from './handoff.ts';
@@ -63,6 +64,7 @@ export function buildCli(client: () => ApplyantClient): Command {
 
   registerJobs(program, client);
   registerSearch(program, client);
+  registerCompanies(program, client);
   registerCandidate(program, client);
   registerApplications(program, client);
   registerHandoff(program, client);

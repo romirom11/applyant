@@ -29,6 +29,7 @@ import {
   answerSentences,
   answers,
   applications,
+  type CompanyRow,
   type CvRow,
   cvs,
   type FieldSource,
@@ -42,6 +43,15 @@ import {
 import type { Provider } from '../../models/roles.ts';
 import type { Draft } from '../../models/schemas/application.ts';
 import type { Handler, HandlerContext, Outcome, Task, Tx } from '../../queue/types.ts';
+import {
+  companyForPosting,
+  companyKey,
+  isFresh,
+  RETRY_FAILED_MS,
+  requestResearch,
+  researchInFlight,
+  researchPaused,
+} from '../companies/store.ts';
 import { factRefs } from '../knowledge/facts.ts';
 import { applicationQuestion, askQuestion } from '../knowledge/interview.ts';
 import { getStandardProfile, type StandardProfile } from '../knowledge/profile.ts';
@@ -150,6 +160,12 @@ export const prepareApplication: Handler<'prepare_application'> = async (task, c
   const toWrite = questionsToWrite(fields, { app, rows, stored, valueFor });
 
   if (needFields || toWrite.length) {
+    // Company research runs once per company as part of preparing. Answers wait for research
+    // the company has never had, so "Why us?" is written from its profile.
+    const gate = companyGate(ctx, posting);
+    if (gate.kind === 'start') return startResearch(app, posting, gate.wait && toWrite.length > 0);
+    if (gate.kind === 'wait' && toWrite.length) return waitForResearch(app, gate.company);
+
     let drafts = new Map<string, Draft>();
     let questions: WriterQuestion[] = [];
     if (toWrite.length) {
@@ -758,6 +774,72 @@ function finalize(tx: Tx, app: ApplicationRow): void {
       ? `application ${app.id}: ready for review${flagged ? ` (${flagged} sentence(s) to look at)` : ''}`
       : `application ${app.id}: needs you (${view.missing.length})`,
   );
+}
+
+// ---- company research ------------------------------------------------------------------
+
+type ResearchGate =
+  | { kind: 'ready' }
+  /** Research is needed; `wait` when there's no profile at all to write from meanwhile. */
+  | { kind: 'start'; wait: boolean }
+  | { kind: 'wait'; company: CompanyRow };
+
+function companyGate(ctx: HandlerContext, posting: PostingRow): ResearchGate {
+  if (!companyKey(posting.company)) return { kind: 'ready' };
+  try {
+    ctx.deps.models.routeFor('researcher');
+  } catch {
+    return { kind: 'ready' };
+  }
+  const now = ctx.now();
+  const row = companyForPosting(ctx.read, posting);
+  if (!row) return { kind: 'start', wait: true };
+  if (researchInFlight(ctx.read, row.id)) {
+    // Research held by a subscription limit, or an older profile to write from: go on.
+    if (row.profile || researchPaused(ctx.read, row.id, now)) return { kind: 'ready' };
+    return { kind: 'wait', company: row };
+  }
+  if (isFresh(row, now)) return { kind: 'ready' };
+  const failedLately =
+    row.status === 'failed' &&
+    !!row.attemptedAt &&
+    now.getTime() - row.attemptedAt.getTime() < RETRY_FAILED_MS;
+  if (failedLately) return { kind: 'ready' };
+  return { kind: 'start', wait: !row.profile };
+}
+
+/** Starts the company's research; the application goes on now, or when research is done. */
+function startResearch(app: ApplicationRow, posting: PostingRow, wait: boolean): Outcome {
+  return {
+    kind: 'done',
+    commit: (tx) => {
+      if (getApplicationStage(tx, app.id) === 'approved') return;
+      const { company } = requestResearch(tx, posting.company ?? '', { trigger: 'prepare' });
+      if (wait && researchInFlight(tx.db, company.id)) {
+        tx.db
+          .update(applications)
+          .set({ note: `waiting for company research on ${company.name}`, updatedAt: tx.now })
+          .where(eq(applications.id, app.id))
+          .run();
+      } else {
+        tx.enqueue('prepare_application', app.id);
+      }
+    },
+  };
+}
+
+function waitForResearch(app: ApplicationRow, company: CompanyRow): Outcome {
+  // research_company's commit starts preparation again (done or failed).
+  return {
+    kind: 'done',
+    commit: (tx) => {
+      tx.db
+        .update(applications)
+        .set({ note: `waiting for company research on ${company.name}`, updatedAt: tx.now })
+        .where(eq(applications.id, app.id))
+        .run();
+    },
+  };
 }
 
 function waitForForm(app: ApplicationRow, posting: PostingRow): Outcome {

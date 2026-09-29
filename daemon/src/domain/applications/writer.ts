@@ -21,6 +21,7 @@ Truthfulness rules (the most important part):
 - Facts of kind team_context describe other people's or the team's work: never present them as the candidate's own.
 - If the facts and profile values can't answer a question honestly (it asks about the candidate's situation, history, preferences or experience that nothing given shows), return status "needs_candidate", no sentences, and say in "missing" exactly what the candidate has to tell. Never guess, never answer from what is typical.
 - Prefer confirmed facts when an unconfirmed one says the same.
+- Company research (when given) is about the company, not the candidate: use it for "why us" and interest in the company, stated plainly and only as the research says it. It never supports a claim about the candidate, and sentences that use only it cite nothing.
 
 Writing:
 - Choose the project that fits each question best from the list of all projects: tell that story concretely, don't retell the CV.
@@ -51,6 +52,14 @@ export function writerPrompt(ctx: WriterContext): string {
       '"""',
       ctx.job.text,
       '"""',
+    );
+  }
+  if (ctx.company) {
+    parts.push(
+      '',
+      `About ${ctx.company.name} (company research, for "why us"; not facts about the candidate):`,
+      `  ${ctx.company.summary}`,
+      ...ctx.company.highlights.map((h) => `  - ${h}`),
     );
   }
   const profile = Object.entries(ctx.profile);

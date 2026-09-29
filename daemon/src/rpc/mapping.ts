@@ -39,6 +39,7 @@ import {
   TaskEventType,
 } from '../gen/applyant/v1/applyant_pb.js';
 import type { HandOff as HandOffRecord } from '../queue/types.ts';
+import { companyToPb } from './companies.ts';
 
 const FACT_STATUS_TO_PB = {
   unconfirmed: PbFactStatus.UNCONFIRMED,
@@ -151,6 +152,7 @@ export function applicationToPb(view: ApplicationView, full = true): Application
       : [],
     answers: full ? view.answers.map(answerToPb) : [],
     cv: full && view.cv ? cvToPb(view.cv) : undefined,
+    companyResearch: full && view.company ? companyToPb(view.company) : undefined,
   });
 }
 
@@ -451,6 +453,15 @@ export function eventToPb(row: EventRow): Event {
             ? { planId: BigInt(row.entityId ?? 0) }
             : { sourceId: BigInt(row.entityId ?? 0) }),
         },
+      },
+    });
+  }
+  if (row.kind === 'company') {
+    return create(EventSchema, {
+      ...base,
+      payload: {
+        case: 'company',
+        value: { companyId: BigInt(row.entityId ?? 0), status: row.stage ?? '' },
       },
     });
   }

@@ -35,7 +35,10 @@ export type EventKind =
   | 'search.recipe'
   // A search_planner run was queued, finished or failed (entity_id = plan id, stage = queued |
   // done | failed; message = what it added).
-  | 'search.plan';
+  | 'search.plan'
+  // Company research was queued, finished or failed (entity_id = company id, stage = queued |
+  // done | failed; message = what it found).
+  | 'company';
 
 export interface EventInput {
   kind: EventKind;

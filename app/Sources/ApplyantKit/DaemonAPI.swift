@@ -21,6 +21,13 @@ public typealias SearchStrategy = Applyant_V1_SearchStrategy
 public typealias SearchSource = Applyant_V1_SearchSource
 public typealias SearchRun = Applyant_V1_SearchRun
 public typealias SearchPlan = Applyant_V1_SearchPlan
+public typealias Company = Applyant_V1_Company
+
+/// Which company: by id, or a posting's company.
+public enum CompanyTarget: Hashable, Sendable {
+    case id(Int64)
+    case posting(Int64)
+}
 
 public struct APIError: Error, LocalizedError, Equatable {
     public let message: String
@@ -83,6 +90,13 @@ public protocol DaemonAPI: Sendable {
     func rebuildRecipe(_ key: String) async throws -> Bool
     /// The events of one run (its tasks, the postings it found), oldest first.
     func runEvents(_ runId: Int64) async throws -> [DaemonEvent]
+
+    /// Researched companies (without their sections), most recently changed first.
+    func listCompanies() async throws -> [Company]
+    /// One company's profile with every finding and its sources; nil when never researched.
+    func company(_ target: CompanyTarget) async throws -> Company?
+    /// Company research now; `queued` is false when it was already going or the profile is fresh.
+    func researchCompany(_ target: CompanyTarget, refresh: Bool) async throws -> (company: Company, queued: Bool)
 }
 
 /// Unary answers → value or APIError.
@@ -321,6 +335,33 @@ public final class ConnectDaemonAPI: DaemonAPI {
             $0.limit = 500
         }
         return try unwrap(await unary.listEvents(request: request, headers: headers)).events
+    }
+
+    public func listCompanies() async throws -> [Company] {
+        try unwrap(await unary.listCompanies(request: .init(), headers: headers)).companies
+    }
+
+    public func company(_ target: CompanyTarget) async throws -> Company? {
+        let request = Applyant_V1_GetCompanyRequest.with {
+            switch target {
+            case let .id(id): $0.company = String(id)
+            case let .posting(id): $0.postingID = id
+            }
+        }
+        let response = try unwrap(await unary.getCompany(request: request, headers: headers))
+        return response.hasCompany ? response.company : nil
+    }
+
+    public func researchCompany(_ target: CompanyTarget, refresh: Bool) async throws -> (company: Company, queued: Bool) {
+        let request = Applyant_V1_ResearchCompanyRequest.with {
+            switch target {
+            case let .id(id): $0.company = String(id)
+            case let .posting(id): $0.postingID = id
+            }
+            $0.refresh = refresh
+        }
+        let response = try unwrap(await unary.researchCompany(request: request, headers: headers))
+        return (response.company, response.queued)
     }
 }
 

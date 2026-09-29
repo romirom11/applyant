@@ -15,6 +15,7 @@ import { facts, postings } from '../../src/db/schema.ts';
 import { CV_SYSTEM } from '../../src/domain/applications/cv/select.ts';
 import { deliverApplication } from '../../src/domain/applications/deliver.ts';
 import { prepareApplication } from '../../src/domain/applications/prepare.ts';
+import { researchCompany } from '../../src/domain/companies/research.ts';
 import { embedFacts } from '../../src/domain/knowledge/embed-index.ts';
 import { interviewOpen, interviewTurn } from '../../src/domain/knowledge/interview-agent.ts';
 import { type StandardKey, setProfileValue } from '../../src/domain/knowledge/profile.ts';
@@ -344,6 +345,8 @@ export interface PrepareHarness {
 export interface PrepareHarnessOptions {
   /** The submission browser runs headless unless a test needs to see (or minimise) a window. */
   headless?: boolean;
+  /** A scripted codex (researcher, phase 12); without one there's no provider for research. */
+  codex?: FakeProvider;
 }
 
 /**
@@ -377,7 +380,7 @@ export async function prepareHarness(
   const deps = testDeps({
     dir: t.dir,
     db: t.db,
-    providers: [claude.provider],
+    providers: [claude.provider, ...(o.codex ? [o.codex] : [])],
     read: t.read,
     embedder,
     mcp: hub,
@@ -404,6 +407,7 @@ export async function prepareHarness(
       embed_facts: embedFacts,
       interview_open: interviewOpen,
       interview_turn: interviewTurn,
+      research_company: researchCompany,
     }),
     log: quietLog,
     concurrency: 1,

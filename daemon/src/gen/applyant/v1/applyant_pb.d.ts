@@ -188,6 +188,13 @@ export declare type Posting = Message<"applyant.v1.Posting"> & {
    * @generated from field: applyant.v1.ApplicationStage application_stage = 28;
    */
   applicationStage: ApplicationStage;
+
+  /**
+   * Only filled by GetPosting: the company's research (without its sections), once asked for.
+   *
+   * @generated from field: optional applyant.v1.Company company_research = 29;
+   */
+  companyResearch?: Company | undefined;
 };
 
 /**
@@ -1207,6 +1214,31 @@ export declare type SearchEvent = Message<"applyant.v1.SearchEvent"> & {
 export declare const SearchEventSchema: GenMessage<SearchEvent>;
 
 /**
+ * Company research was queued, finished or failed.
+ *
+ * @generated from message applyant.v1.CompanyEvent
+ */
+export declare type CompanyEvent = Message<"applyant.v1.CompanyEvent"> & {
+  /**
+   * @generated from field: int64 company_id = 1;
+   */
+  companyId: bigint;
+
+  /**
+   * queued | done | failed
+   *
+   * @generated from field: string status = 2;
+   */
+  status: string;
+};
+
+/**
+ * Describes the message applyant.v1.CompanyEvent.
+ * Use `create(CompanyEventSchema)` to create a new message.
+ */
+export declare const CompanyEventSchema: GenMessage<CompanyEvent>;
+
+/**
  * @generated from message applyant.v1.Event
  */
 export declare type Event = Message<"applyant.v1.Event"> & {
@@ -1271,6 +1303,12 @@ export declare type Event = Message<"applyant.v1.Event"> & {
      */
     value: SearchEvent;
     case: "search";
+  } | {
+    /**
+     * @generated from field: applyant.v1.CompanyEvent company = 16;
+     */
+    value: CompanyEvent;
+    case: "company";
   } | { case: undefined; value?: undefined };
 };
 
@@ -3093,6 +3131,14 @@ export declare type Application = Message<"applyant.v1.Application"> & {
    * @generated from field: optional applyant.v1.Cv cv = 22;
    */
   cv?: Cv | undefined;
+
+  /**
+   * The company's research summary and red flags (no sections), for the evidence panel. Only
+   * filled by GetApplication (and the review RPCs).
+   *
+   * @generated from field: optional applyant.v1.Company company_research = 23;
+   */
+  companyResearch?: Company | undefined;
 };
 
 /**
@@ -5143,6 +5189,374 @@ export declare type ResetRolesResponse = Message<"applyant.v1.ResetRolesResponse
 export declare const ResetRolesResponseSchema: GenMessage<ResetRolesResponse>;
 
 /**
+ * @generated from message applyant.v1.CompanyFinding
+ */
+export declare type CompanyFinding = Message<"applyant.v1.CompanyFinding"> & {
+  /**
+   * @generated from field: string text = 1;
+   */
+  text: string;
+
+  /**
+   * YYYY-MM or YYYY-MM-DD, when it matters.
+   *
+   * @generated from field: optional string date = 2;
+   */
+  date?: string | undefined;
+
+  /**
+   * The pages that say it.
+   *
+   * @generated from field: repeated string sources = 3;
+   */
+  sources: string[];
+};
+
+/**
+ * Describes the message applyant.v1.CompanyFinding.
+ * Use `create(CompanyFindingSchema)` to create a new message.
+ */
+export declare const CompanyFindingSchema: GenMessage<CompanyFinding>;
+
+/**
+ * @generated from message applyant.v1.CompanySection
+ */
+export declare type CompanySection = Message<"applyant.v1.CompanySection"> & {
+  /**
+   * product | funding | size | founders | stack | news | layoffs | reviews | remote | salary
+   *
+   * @generated from field: string key = 1;
+   */
+  key: string;
+
+  /**
+   * "Product", "Funding", …
+   *
+   * @generated from field: string label = 2;
+   */
+  label: string;
+
+  /**
+   * @generated from field: repeated applyant.v1.CompanyFinding findings = 3;
+   */
+  findings: CompanyFinding[];
+};
+
+/**
+ * Describes the message applyant.v1.CompanySection.
+ * Use `create(CompanySectionSchema)` to create a new message.
+ */
+export declare const CompanySectionSchema: GenMessage<CompanySection>;
+
+/**
+ * @generated from message applyant.v1.CompanyRedFlag
+ */
+export declare type CompanyRedFlag = Message<"applyant.v1.CompanyRedFlag"> & {
+  /**
+   * layoffs | reviews | outstaffing | pay | funding | legal | other
+   *
+   * @generated from field: string kind = 1;
+   */
+  kind: string;
+
+  /**
+   * low | medium | high
+   *
+   * @generated from field: string severity = 2;
+   */
+  severity: string;
+
+  /**
+   * @generated from field: string text = 3;
+   */
+  text: string;
+
+  /**
+   * @generated from field: repeated string sources = 4;
+   */
+  sources: string[];
+};
+
+/**
+ * Describes the message applyant.v1.CompanyRedFlag.
+ * Use `create(CompanyRedFlagSchema)` to create a new message.
+ */
+export declare const CompanyRedFlagSchema: GenMessage<CompanyRedFlag>;
+
+/**
+ * @generated from message applyant.v1.CompanyPosting
+ */
+export declare type CompanyPosting = Message<"applyant.v1.CompanyPosting"> & {
+  /**
+   * @generated from field: int64 id = 1;
+   */
+  id: bigint;
+
+  /**
+   * @generated from field: optional string title = 2;
+   */
+  title?: string | undefined;
+
+  /**
+   * @generated from field: optional int32 score = 3;
+   */
+  score?: number | undefined;
+
+  /**
+   * @generated from field: applyant.v1.PostingStage stage = 4;
+   */
+  stage: PostingStage;
+};
+
+/**
+ * Describes the message applyant.v1.CompanyPosting.
+ * Use `create(CompanyPostingSchema)` to create a new message.
+ */
+export declare const CompanyPostingSchema: GenMessage<CompanyPosting>;
+
+/**
+ * @generated from message applyant.v1.Company
+ */
+export declare type Company = Message<"applyant.v1.Company"> & {
+  /**
+   * @generated from field: int64 id = 1;
+   */
+  id: bigint;
+
+  /**
+   * @generated from field: string name = 2;
+   */
+  name: string;
+
+  /**
+   * queued (waiting or running) | done | failed (the last attempt; an older profile is kept)
+   *
+   * @generated from field: string status = 3;
+   */
+  status: string;
+
+  /**
+   * Research is waiting or running now.
+   *
+   * @generated from field: bool researching = 4;
+   */
+  researching: boolean;
+
+  /**
+   * The profile is younger than 30 days.
+   *
+   * @generated from field: bool fresh = 5;
+   */
+  fresh: boolean;
+
+  /**
+   * prepare | manual: who asked last.
+   *
+   * @generated from field: string trigger = 6;
+   */
+  trigger: string;
+
+  /**
+   * @generated from field: optional string website = 7;
+   */
+  website?: string | undefined;
+
+  /**
+   * Two to four sentences on what the company does; unset until researched.
+   *
+   * @generated from field: optional string summary = 8;
+   */
+  summary?: string | undefined;
+
+  /**
+   * @generated from field: repeated applyant.v1.CompanyRedFlag red_flags = 9;
+   */
+  redFlags: CompanyRedFlag[];
+
+  /**
+   * Only filled by GetCompany: every section with its findings and sources.
+   *
+   * @generated from field: repeated applyant.v1.CompanySection sections = 10;
+   */
+  sections: CompanySection[];
+
+  /**
+   * @generated from field: optional google.protobuf.Timestamp researched_at = 11;
+   */
+  researchedAt?: Timestamp | undefined;
+
+  /**
+   * @generated from field: optional google.protobuf.Timestamp attempted_at = 12;
+   */
+  attemptedAt?: Timestamp | undefined;
+
+  /**
+   * What the researcher couldn't find, or why research failed.
+   *
+   * @generated from field: optional string note = 13;
+   */
+  note?: string | undefined;
+
+  /**
+   * Its postings (by name), newest first.
+   *
+   * @generated from field: repeated applyant.v1.CompanyPosting postings = 14;
+   */
+  postings: CompanyPosting[];
+
+  /**
+   * How many findings the profile has.
+   *
+   * @generated from field: int32 findings = 15;
+   */
+  findings: number;
+};
+
+/**
+ * Describes the message applyant.v1.Company.
+ * Use `create(CompanySchema)` to create a new message.
+ */
+export declare const CompanySchema: GenMessage<Company>;
+
+/**
+ * @generated from message applyant.v1.ListCompaniesRequest
+ */
+export declare type ListCompaniesRequest = Message<"applyant.v1.ListCompaniesRequest"> & {
+};
+
+/**
+ * Describes the message applyant.v1.ListCompaniesRequest.
+ * Use `create(ListCompaniesRequestSchema)` to create a new message.
+ */
+export declare const ListCompaniesRequestSchema: GenMessage<ListCompaniesRequest>;
+
+/**
+ * @generated from message applyant.v1.ListCompaniesResponse
+ */
+export declare type ListCompaniesResponse = Message<"applyant.v1.ListCompaniesResponse"> & {
+  /**
+   * @generated from field: repeated applyant.v1.Company companies = 1;
+   */
+  companies: Company[];
+};
+
+/**
+ * Describes the message applyant.v1.ListCompaniesResponse.
+ * Use `create(ListCompaniesResponseSchema)` to create a new message.
+ */
+export declare const ListCompaniesResponseSchema: GenMessage<ListCompaniesResponse>;
+
+/**
+ * @generated from message applyant.v1.GetCompanyRequest
+ */
+export declare type GetCompanyRequest = Message<"applyant.v1.GetCompanyRequest"> & {
+  /**
+   * @generated from oneof applyant.v1.GetCompanyRequest.target
+   */
+  target: {
+    /**
+     * An id or a name.
+     *
+     * @generated from field: string company = 1;
+     */
+    value: string;
+    case: "company";
+  } | {
+    /**
+     * @generated from field: int64 posting_id = 2;
+     */
+    value: bigint;
+    case: "postingId";
+  } | { case: undefined; value?: undefined };
+};
+
+/**
+ * Describes the message applyant.v1.GetCompanyRequest.
+ * Use `create(GetCompanyRequestSchema)` to create a new message.
+ */
+export declare const GetCompanyRequestSchema: GenMessage<GetCompanyRequest>;
+
+/**
+ * @generated from message applyant.v1.GetCompanyResponse
+ */
+export declare type GetCompanyResponse = Message<"applyant.v1.GetCompanyResponse"> & {
+  /**
+   * Unset when the company has never been researched.
+   *
+   * @generated from field: optional applyant.v1.Company company = 1;
+   */
+  company?: Company | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.GetCompanyResponse.
+ * Use `create(GetCompanyResponseSchema)` to create a new message.
+ */
+export declare const GetCompanyResponseSchema: GenMessage<GetCompanyResponse>;
+
+/**
+ * @generated from message applyant.v1.ResearchCompanyRequest
+ */
+export declare type ResearchCompanyRequest = Message<"applyant.v1.ResearchCompanyRequest"> & {
+  /**
+   * @generated from oneof applyant.v1.ResearchCompanyRequest.target
+   */
+  target: {
+    /**
+     * An id or a name.
+     *
+     * @generated from field: string company = 1;
+     */
+    value: string;
+    case: "company";
+  } | {
+    /**
+     * The posting's company.
+     *
+     * @generated from field: int64 posting_id = 2;
+     */
+    value: bigint;
+    case: "postingId";
+  } | { case: undefined; value?: undefined };
+
+  /**
+   * Research again even when the profile is fresh.
+   *
+   * @generated from field: bool refresh = 3;
+   */
+  refresh: boolean;
+};
+
+/**
+ * Describes the message applyant.v1.ResearchCompanyRequest.
+ * Use `create(ResearchCompanyRequestSchema)` to create a new message.
+ */
+export declare const ResearchCompanyRequestSchema: GenMessage<ResearchCompanyRequest>;
+
+/**
+ * @generated from message applyant.v1.ResearchCompanyResponse
+ */
+export declare type ResearchCompanyResponse = Message<"applyant.v1.ResearchCompanyResponse"> & {
+  /**
+   * @generated from field: applyant.v1.Company company = 1;
+   */
+  company?: Company | undefined;
+
+  /**
+   * False when research was already waiting or running, or the profile is fresh.
+   *
+   * @generated from field: bool queued = 2;
+   */
+  queued: boolean;
+};
+
+/**
+ * Describes the message applyant.v1.ResearchCompanyResponse.
+ * Use `create(ResearchCompanyResponseSchema)` to create a new message.
+ */
+export declare const ResearchCompanyResponseSchema: GenMessage<ResearchCompanyResponse>;
+
+/**
  * @generated from enum applyant.v1.PostingStage
  */
 export enum PostingStage {
@@ -5942,6 +6356,38 @@ export declare const ApplyantService: GenService<{
     methodKind: "unary";
     input: typeof ResetRolesRequestSchema;
     output: typeof ResetRolesResponseSchema;
+  },
+  /**
+   * Companies: one research profile per company (researcher, Codex by default, with web
+   * search), shared by all of its postings. It runs as part of preparing an application and
+   * on demand; a profile is reused for 30 days. Red flags feed the score as a soft component.
+   *
+   * @generated from rpc applyant.v1.ApplyantService.ListCompanies
+   */
+  listCompanies: {
+    methodKind: "unary";
+    input: typeof ListCompaniesRequestSchema;
+    output: typeof ListCompaniesResponseSchema;
+  },
+  /**
+   * GetCompany returns one company's profile with every finding and its sources.
+   *
+   * @generated from rpc applyant.v1.ApplyantService.GetCompany
+   */
+  getCompany: {
+    methodKind: "unary";
+    input: typeof GetCompanyRequestSchema;
+    output: typeof GetCompanyResponseSchema;
+  },
+  /**
+   * ResearchCompany starts research now (Company research): kept when fresh unless refresh.
+   *
+   * @generated from rpc applyant.v1.ApplyantService.ResearchCompany
+   */
+  researchCompany: {
+    methodKind: "unary";
+    input: typeof ResearchCompanyRequestSchema;
+    output: typeof ResearchCompanyResponseSchema;
   },
 }>;
 

@@ -31,6 +31,8 @@ export const TASK_ENTITY = {
   build_recipe: 'search_source',
   // One search_planner run (phase 11): strategies from the profile, boards from web search.
   plan_search: 'search_plan',
+  // Company research (phase 12): researcher's sourced profile of one company, with red flags.
+  research_company: 'company',
 } as const;
 export type TaskKind = keyof typeof TASK_ENTITY;
 export const TASK_KINDS = Object.keys(TASK_ENTITY) as TaskKind[];

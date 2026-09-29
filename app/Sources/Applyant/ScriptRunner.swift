@@ -20,7 +20,7 @@ struct ScriptStep: Decodable {
     /// skip · interested · prepare · confirmAll · confirmFacts · editAnswer · setField · approve · submit · setCvMode ·
     /// startInterview · answerInterview · dismissInterview · pauseStrategy · resumeStrategy · runStrategy ·
     /// sourceOff · sourceOn (value: a source key or kind) · planSearch · rebuildRecipe (value: a source
-    /// key) · wait
+    /// key) · researchCompany (the posting on screen, or `company`; value "refresh" researches again) · wait
     var action: String?
     var application: Int64?
     var facts: [Int64]?
@@ -35,8 +35,11 @@ struct ScriptStep: Decodable {
     /// Keep waiting (up to `wait`) until this is true: "stage:<app>:<stage>", "posting:<id>",
     /// "handoff:<app>", "question" (the thread on screen has an open question), "settled",
     /// "run:<strategy>" (its latest run finished), "plan" (the latest planner run finished),
-    /// "recipe:<source key>" (its recipe is built or failed).
+    /// "recipe:<source key>" (its recipe is built or failed), "company:<id>" (its research is done
+    /// or failed).
     var until: String?
+    /// The Companies section: a company.
+    var company: Int64?
     /// The Search section: a strategy or a source; the Agent runs section: a run.
     var searchStrategy: Int64?
     var searchSource: String?
@@ -121,6 +124,10 @@ final class ScriptRunner {
             store.navigation.section = .agentRuns
             store.navigation.run = run
         }
+        if let c = s.company {
+            store.navigation.section = .companies
+            store.navigation.company = c
+        }
         if let p = s.interviewProject { store.navigation.showInterview(.project(p)) }
         if let q = s.interviewQuestion { store.navigation.showInterview(.question(q)) }
         let app = s.application ?? store.navigation.reviewing ?? 0
@@ -192,6 +199,12 @@ final class ScriptRunner {
             note("planSearch: plan \(plan.map(String.init) ?? "none (one is already going)")")
         case "rebuildRecipe":
             await store.rebuildRecipe(s.value ?? "")
+        case "researchCompany":
+            let target: CompanyTarget? = s.company.map { .id($0) } ?? store.navigation.postingId.map { .posting($0) }
+            if let target {
+                let c = await store.researchCompany(target, refresh: s.value == "refresh")
+                note("researchCompany: \(c.map { "company \($0.id) \($0.name), researching \($0.researching)" } ?? "failed")")
+            }
         case "showBrowser": note("showBrowser: Applyant's Chrome brought forward = \(ChromeWindow.bringForward())")
         default: break
         }
@@ -226,6 +239,9 @@ final class ScriptRunner {
             let key = parts.dropFirst().joined(separator: ":")
             guard let source = store.source(key), source.hasRecipe else { return false }
             return source.recipe.status != "building"
+        case "company":
+            guard parts.count == 2, let id = Int64(parts[1]), let c = store.companyListing(id) else { return false }
+            return !c.researching && (c.hasSummary || c.status == "failed")
         case "settled":
             // "settled": the thread on screen isn't waiting on the interviewer.
             guard let target = store.navigation.interview, let thread = store.interviewThreads[target] else { return false }

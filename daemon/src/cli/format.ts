@@ -208,6 +208,10 @@ export function eventJson(e: Event) {
       status: r.status,
     };
   }
+  if (e.payload.case === 'company') {
+    const c = e.payload.value;
+    return { ...base, type: 'company', companyId: Number(c.companyId), status: c.status };
+  }
   return { ...base, type: 'unknown' };
 }
 
@@ -243,6 +247,10 @@ export function eventLine(e: Event): string {
       return `${time(e)}${run}  recipe for source ${r.sourceId} ${r.status.replace(/^recipe_/, '')}${msg}`;
     }
     return `${time(e)}${run}  search strategy ${r.strategyId} ${r.status}${msg}`;
+  }
+  if (e.payload.case === 'company') {
+    const c = e.payload.value;
+    return `${time(e)}${run}  company ${c.companyId} research ${c.status}${msg}`;
   }
   return `${time(e)}${run}${msg}`;
 }

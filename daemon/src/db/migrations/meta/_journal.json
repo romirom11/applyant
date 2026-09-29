@@ -99,6 +99,13 @@
       "when": 1790660769557,
       "tag": "0013_locations",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "6",
+      "when": 1790661748810,
+      "tag": "0014_companies",
+      "breakpoints": true
     }
   ]
 }
