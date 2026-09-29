@@ -9,6 +9,7 @@ let package = Package(
     products: [
         .executable(name: "Applyant", targets: ["Applyant"]),
         .executable(name: "applyantd", targets: ["applyantd"]),
+        .executable(name: "ApplyantShare", targets: ["ApplyantShare"]),
     ],
     dependencies: [
         // Pinned to the versions of the hosted buf plugins in buf.gen.yaml.
@@ -38,6 +39,8 @@ let package = Package(
         .executableTarget(name: "Applyant", dependencies: ["ApplyantKit", "ApplyantAPI"]),
         // What launchd starts: a signed Mach-O that execs the bundled Node on the daemon.
         .executableTarget(name: "applyantd", dependencies: ["ApplyantKit"]),
+        // The Share extension's executable; scripts/bundle.sh wraps it in PlugIns/ApplyantShare.appex.
+        .executableTarget(name: "ApplyantShare", dependencies: ["ApplyantKit"]),
         .testTarget(name: "ApplyantKitTests", dependencies: ["ApplyantKit", "ApplyantAPI"]),
     ]
 )

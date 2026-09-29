@@ -111,4 +111,26 @@ struct DaemonIntegrationTests {
         #expect(store.postingDetails[posting.id]?.id == posting.id)
         #expect(store.lastError == nil)
     }
+
+    /// The Share extension's request (16b): the daemon's own endpoint.json and AddPosting.
+    @Test func theShareExtensionAddsAPostingOnce() async throws {
+        let daemon = try RunningDaemon(node: try #require(node24()))
+        defer { daemon.stop() }
+        _ = try await daemon.waitForEndpoint()
+
+        let share = ShareClient(dirs: [daemon.home])
+        let url = URL(string: "http://127.0.0.1:9/jobs/share-1")!
+        #expect(await share.add(url) == .added(title: nil, company: nil))
+        guard case let .alreadyKnown(_, _, stage) = await share.add(url) else {
+            Issue.record("the second share should find the posting")
+            return
+        }
+        #expect(["found", "failed verification"].contains(stage))
+        guard case .refused = await share.add(URL(string: "https://")!) else {
+            Issue.record("the daemon should refuse a URL without a host")
+            return
+        }
+        let (status, out) = daemon.cli(["jobs", "list"])
+        #expect(status == 0 && out.contains("127.0.0.1:9/jobs/share-1"), "\(out)")
+    }
 }

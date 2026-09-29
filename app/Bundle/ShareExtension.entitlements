@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Every app extension is sandboxed. -->
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+	<!-- Without it the Connect call to 127.0.0.1 fails silently (TDD). -->
+	<key>com.apple.security.network.client</key>
+	<true/>
+	<!--
+	  The endpoint (port + token) the daemon writes, read-only and nothing else in its data
+	  directory. Stands in for an App Group container: the app is ad-hoc signed, has no Team
+	  ID, and macOS 15+ doesn't authorise app group claims without one (16b notes).
+	-->
+	<key>com.apple.security.temporary-exception.files.home-relative-path.read-only</key>
+	<array>
+		<string>/Library/Application Support/Applyant/endpoint.json</string>
+	</array>
+</dict>
+</plist>

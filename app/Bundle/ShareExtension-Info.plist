@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Applyant.app/Contents/PlugIns/ApplyantShare.appex (16b). Share → Applyant sends a page's URL to AddPosting. -->
+	<key>CFBundleIdentifier</key>
+	<string>com.applyant.app.share</string>
+	<key>CFBundleName</key>
+	<string>ApplyantShare</string>
+	<key>CFBundleDisplayName</key>
+	<string>Applyant</string>
+	<key>CFBundleExecutable</key>
+	<string>ApplyantShare</string>
+	<key>CFBundlePackageType</key>
+	<string>XPC!</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.1.0</string>
+	<key>CFBundleVersion</key>
+	<string>__BUILD__</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>15.0</string>
+	<key>NSExtension</key>
+	<dict>
+		<key>NSExtensionPointIdentifier</key>
+		<string>com.apple.share-services</string>
+		<key>NSExtensionPrincipalClass</key>
+		<string>ShareViewController</string>
+		<key>NSExtensionAttributes</key>
+		<dict>
+			<!-- Offered for one web page link (Safari, Chrome), nothing else. -->
+			<key>NSExtensionActivationRule</key>
+			<dict>
+				<key>NSExtensionActivationSupportsWebURLWithMaxCount</key>
+				<integer>1</integer>
+			</dict>
+		</dict>
+	</dict>
+</dict>
+</plist>

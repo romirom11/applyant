@@ -7,6 +7,7 @@
 #   Applyant.app/Contents/
 #   ├── MacOS/Applyant · MacOS/applyantd        the menu bar app · what launchd starts
 #   ├── Helpers/applyant-native                 the Swift helper (Keychain, PDFKit, wake)
+#   ├── PlugIns/ApplyantShare.appex             the Share extension (sandboxed; Share → Applyant)
 #   ├── Resources/node/bin/node                 the official Node, darwin-arm64
 #   ├── Resources/daemon/                       daemon/src + production node_modules (hoisted)
 #   └── Resources/bin/applyant                  the CLI launcher (symlinked to ~/.local/bin)
@@ -65,6 +66,10 @@ APP_BIN="$(swift build -c release --package-path "$ROOT/app" --arch arm64 --show
 mkdir -p "$C/MacOS" "$C/Helpers"
 cp "$APP_BIN/Applyant" "$APP_BIN/applyantd" "$C/MacOS/"
 cp "$NATIVE_BIN/applyant-native" "$C/Helpers/"
+# SwiftPM can't make an .appex: its executable goes into the bundle an extension needs.
+APPEX="$C/PlugIns/ApplyantShare.appex"
+mkdir -p "$APPEX/Contents/MacOS"
+cp "$APP_BIN/ApplyantShare" "$APPEX/Contents/MacOS/"
 
 step "Daemon: sources + production node_modules"
 STAGE="$BUILD/stage/daemon"
@@ -104,6 +109,9 @@ BUILD_NUMBER="$(git -C "$ROOT" rev-list --count HEAD 2>/dev/null || echo 1)"
 sed "s/__BUILD__/$BUILD_NUMBER/" "$ROOT/app/Bundle/Info.plist" > "$C/Info.plist"
 printf 'APPL????' > "$C/PkgInfo"
 plutil -lint "$C/Info.plist" >/dev/null
+sed "s/__BUILD__/$BUILD_NUMBER/" "$ROOT/app/Bundle/ShareExtension-Info.plist" > "$APPEX/Contents/Info.plist"
+printf 'XPC!????' > "$APPEX/Contents/PkgInfo"
+plutil -lint "$APPEX/Contents/Info.plist" >/dev/null
 
 step "Ad-hoc signing: every Mach-O inside out, the app last"
 sign() { codesign --force --sign - --timestamp=none "$@"; }
@@ -122,6 +130,8 @@ sign "$C/Resources/node/bin/node"
 sign --identifier com.applyant.native -r='designated => identifier "com.applyant.native"' \
   "$C/Helpers/applyant-native"
 sign --identifier com.applyant.daemon "$C/MacOS/applyantd"
+# The extension before the app that contains it, with its sandbox entitlements.
+sign --identifier com.applyant.app.share --entitlements "$ROOT/app/Bundle/ShareExtension.entitlements" "$APPEX"
 sign --identifier com.applyant.app "$APP"
 codesign --verify --deep --strict "$APP"
 du -sh "$APP" | sed 's/^/size: /'
