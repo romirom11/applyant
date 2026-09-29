@@ -5,6 +5,7 @@ import { eq } from 'drizzle-orm';
 import { postings } from '../db/schema.ts';
 import { editCvLine, setCvMode } from '../domain/applications/cv/store.ts';
 import { markSubmittedByHand } from '../domain/applications/deliver.ts';
+import { emailsFor } from '../domain/applications/mail-status.ts';
 import {
   ApprovalBlocked,
   approveApplication,
@@ -28,6 +29,7 @@ import type { ApplyantService, Fact } from '../gen/applyant/v1/applyant_pb.js';
 import { runInTx } from '../queue/tx.ts';
 import type { Tx } from '../queue/types.ts';
 import { factToPb } from './candidate.ts';
+import { emailToPb } from './mail.ts';
 import { answerToPb, applicationToPb, appStageFromPb, handOffToPb } from './mapping.ts';
 import type { RpcContext } from './postings.ts';
 
@@ -86,9 +88,12 @@ export function applicationRpcs(
     },
 
     getApplication(req) {
-      return guard(() => ({
-        application: applicationToPb(applicationView(c.db, id(req.id, 'id'))),
-      }));
+      return guard(() => {
+        const appId = id(req.id, 'id');
+        const application = applicationToPb(applicationView(c.db, appId));
+        application.emails = emailsFor(c.db, appId).map((e) => emailToPb(e));
+        return { application };
+      });
     },
 
     prepareApplication(req) {

@@ -30,6 +30,7 @@ struct ReviewApplication: View {
                                 header(app)
                                 if app.hasHandOff { HandOffCard(store: store, app: app) }
                                 if app.hasReceipt { receipt(app.receipt) }
+                                if !app.emails.isEmpty { ApplicationReplies(app: app) }
                                 if app.hasNote && !app.hasHandOff && app.stage != .needsCandidate { note(app.note) }
                                 needsYou(app)
                                 standardFields(app)

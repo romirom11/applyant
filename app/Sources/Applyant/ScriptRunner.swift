@@ -40,6 +40,8 @@ struct ScriptStep: Decodable {
     var until: String?
     /// The Companies section: a company.
     var company: Int64?
+    /// Which application?: a reply in the queue.
+    var email: Int64?
     /// The Search section: a strategy or a source; the Agent runs section: a run.
     var searchStrategy: Int64?
     var searchSource: String?
@@ -128,6 +130,10 @@ final class ScriptRunner {
             store.navigation.section = .companies
             store.navigation.company = c
         }
+        if let e = s.email {
+            store.navigation.section = .whichApplication
+            store.navigation.email = e
+        }
         if let p = s.interviewProject { store.navigation.showInterview(.project(p)) }
         if let q = s.interviewQuestion { store.navigation.showInterview(.question(q)) }
         let app = s.application ?? store.navigation.reviewing ?? 0
@@ -199,6 +205,13 @@ final class ScriptRunner {
             note("planSearch: plan \(plan.map(String.init) ?? "none (one is already going)")")
         case "rebuildRecipe":
             await store.rebuildRecipe(s.value ?? "")
+        case "assignEmail":
+            // `application` (0 or absent = none), `value` = what the email is.
+            let target = s.application.flatMap { $0 == 0 ? nil : $0 }
+            await store.assignEmail(s.email ?? store.navigation.email ?? 0, application: target, label: s.value)
+            note("assignEmail: queue now \(store.mailQueue.count)")
+        case "syncMail":
+            note("syncMail: queued \(await store.syncMailbox())")
         case "researchCompany":
             let target: CompanyTarget? = s.company.map { .id($0) } ?? store.navigation.postingId.map { .posting($0) }
             if let target {

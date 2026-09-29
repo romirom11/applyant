@@ -26,6 +26,7 @@ import {
   receipts,
   tasks,
 } from '../../db/schema.ts';
+import { parseInvite } from '../../integrations/gcal.ts';
 import type { MailMessage } from '../../integrations/mailbox.ts';
 import type { AgentRunner } from '../../models/agent-runner.ts';
 import { describeRoute } from '../../models/roles.ts';
@@ -34,6 +35,7 @@ import type { EventBus } from '../../queue/events.ts';
 import { runInTx } from '../../queue/tx.ts';
 import type { Handler, Tx } from '../../queue/types.ts';
 import { companyKey } from '../companies/store.ts';
+import { queueInterviewEvent } from './interview-event.ts';
 import { ApplicationError, emitStage } from './store.ts';
 
 /** Applications whose mail is followed: sent (or about to be), and not closed. */
@@ -404,6 +406,7 @@ export function storeMail(
         status: decision.status,
         candidates: match.ids.slice(0, 5),
         note: decision.note || null,
+        invite: parseInvite(msg.calendar),
         createdAt: tx.now,
       })
       .onConflictDoNothing()
@@ -422,6 +425,8 @@ export function storeMail(
     }
     if (decision.applicationId && moveApplication(tx, decision.applicationId, cls.label, msg))
       moved++;
+    // An interview invite linked to its application → a calendar event (interview-event.ts).
+    queueInterviewEvent(tx, inserted);
   }
   return { stored, moved, asked };
 }
@@ -530,6 +535,7 @@ export function assignEmail(
         ? `"${email.subject}": not about an application`
         : `"${email.subject}" → application ${applicationId}`,
   });
+  queueInterviewEvent(tx, row);
   return row;
 }
 

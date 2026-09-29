@@ -517,7 +517,7 @@ message CompanyEvent {
 }
 
 message MailEvent {
-  // synced (entity = mailbox) · ask · assigned (entity = email)
+  // synced (entity = mailbox) · ask · assigned · calendar (entity = email)
   string status = 1;
   int64 entity_id = 2;
 }
@@ -1044,6 +1044,9 @@ message Application {
   // The company's research summary and red flags (no sections), for the evidence panel. Only
   // filled by GetApplication (and the review RPCs).
   optional Company company_research = 23;
+  // The replies linked to it (newest first): rejection, interview invites, offer. Only filled
+  // by GetApplication.
+  repeated Email emails = 24;
 }
 
 message CvLine {
@@ -1753,6 +1756,15 @@ message Email {
   optional string note = 12;
   // Applications it may belong to, best first.
   repeated MailCandidate candidates = 13;
+  // An interview invite's start, as its calendar attachment gave it (RFC 3339 local time with
+  // `invite_time_zone`, RFC 3339 UTC, or a date).
+  optional string invite_start = 14;
+  optional string invite_time_zone = 15;
+  // The Google Calendar event made for it: created | cancelled | skipped.
+  optional string calendar_status = 16;
+  optional string calendar_link = 17;
+  // Why there's no event (skipped).
+  optional string calendar_note = 18;
 }
 
 message ListMailQueueRequest {}

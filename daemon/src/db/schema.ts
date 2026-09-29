@@ -929,6 +929,34 @@ export type EmailLabel = (typeof EMAIL_LABELS)[number];
  * ask        in the "Which application is this?" queue
  * assigned   the candidate linked it (or said it belongs to none: application_id null)
  */
+/** A time as Google Calendar takes it: a timed start (local time + IANA zone, or UTC) or a day. */
+export interface EventTime {
+  dateTime?: string;
+  timeZone?: string;
+  date?: string;
+}
+
+export interface EmailInvite {
+  start: EventTime;
+  end: EventTime;
+  summary: string | null;
+  location: string | null;
+  /** The invite's own UID (the organiser's calendar). */
+  uid: string | null;
+}
+
+/**
+ * created    the event exists on the candidate's calendar
+ * cancelled  the candidate deleted it there; it's never made again
+ * skipped    no Google account, or no time in the invite (note says which)
+ */
+export interface EmailCalendar {
+  status: 'created' | 'cancelled' | 'skipped';
+  eventId: string | null;
+  link: string | null;
+  note: string | null;
+}
+
 export const EMAIL_STATUSES = ['matched', 'ask', 'assigned'] as const;
 export type EmailStatus = (typeof EMAIL_STATUSES)[number];
 
@@ -966,6 +994,10 @@ export const emails = sqliteTable(
     candidates: text('candidates', { mode: 'json' }).$type<number[]>().notNull(),
     /** Why it was matched, or why it's asked about. */
     note: text('note'),
+    /** An interview invite's time, from the email's calendar attachment (.ics), if it had one. */
+    invite: text('invite', { mode: 'json' }).$type<EmailInvite | null>(),
+    /** The Google Calendar event made for an interview invite (integrations/gcal.ts). */
+    calendar: text('calendar', { mode: 'json' }).$type<EmailCalendar | null>(),
     createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull().default(now),
   },
   (t) => [

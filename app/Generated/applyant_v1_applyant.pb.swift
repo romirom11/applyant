@@ -1464,7 +1464,7 @@ public nonisolated struct Applyant_V1_MailEvent: Sendable {
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  /// synced (entity = mailbox) · ask · assigned (entity = email)
+  /// synced (entity = mailbox) · ask · assigned · calendar (entity = email)
   public var status: String = String()
 
   public var entityID: Int64 = 0
@@ -3360,6 +3360,13 @@ public nonisolated struct Applyant_V1_Application: @unchecked Sendable {
   public var hasCompanyResearch: Bool {_storage._companyResearch != nil}
   /// Clears the value of `companyResearch`. Subsequent reads from it will return its default value.
   public mutating func clearCompanyResearch() {_uniqueStorage()._companyResearch = nil}
+
+  /// The replies linked to it (newest first): rejection, interview invites, offer. Only filled
+  /// by GetApplication.
+  public var emails: [Applyant_V1_Email] {
+    get {_storage._emails}
+    set {_uniqueStorage()._emails = newValue}
+  }
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -5986,95 +5993,160 @@ public nonisolated struct Applyant_V1_MailCandidate: Sendable {
   fileprivate var _company: String? = nil
 }
 
-public nonisolated struct Applyant_V1_Email: Sendable {
+public nonisolated struct Applyant_V1_Email: @unchecked Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  public var id: Int64 = 0
+  public var id: Int64 {
+    get {_storage._id}
+    set {_uniqueStorage()._id = newValue}
+  }
 
-  public var fromAddress: String = String()
+  public var fromAddress: String {
+    get {_storage._fromAddress}
+    set {_uniqueStorage()._fromAddress = newValue}
+  }
 
   public var fromName: String {
-    get {_fromName ?? String()}
-    set {_fromName = newValue}
+    get {_storage._fromName ?? String()}
+    set {_uniqueStorage()._fromName = newValue}
   }
   /// Returns true if `fromName` has been explicitly set.
-  public var hasFromName: Bool {self._fromName != nil}
+  public var hasFromName: Bool {_storage._fromName != nil}
   /// Clears the value of `fromName`. Subsequent reads from it will return its default value.
-  public mutating func clearFromName() {self._fromName = nil}
+  public mutating func clearFromName() {_uniqueStorage()._fromName = nil}
 
-  public var subject: String = String()
+  public var subject: String {
+    get {_storage._subject}
+    set {_uniqueStorage()._subject = newValue}
+  }
 
   /// The start of the text.
-  public var snippet: String = String()
+  public var snippet: String {
+    get {_storage._snippet}
+    set {_uniqueStorage()._snippet = newValue}
+  }
 
   public var receivedAt: SwiftProtobuf.Google_Protobuf_Timestamp {
-    get {_receivedAt ?? SwiftProtobuf.Google_Protobuf_Timestamp()}
-    set {_receivedAt = newValue}
+    get {_storage._receivedAt ?? SwiftProtobuf.Google_Protobuf_Timestamp()}
+    set {_uniqueStorage()._receivedAt = newValue}
   }
   /// Returns true if `receivedAt` has been explicitly set.
-  public var hasReceivedAt: Bool {self._receivedAt != nil}
+  public var hasReceivedAt: Bool {_storage._receivedAt != nil}
   /// Clears the value of `receivedAt`. Subsequent reads from it will return its default value.
-  public mutating func clearReceivedAt() {self._receivedAt = nil}
+  public mutating func clearReceivedAt() {_uniqueStorage()._receivedAt = nil}
 
   /// rejection | interview | offer | acknowledgement | security_code | other | unknown
-  public var label: String = String()
+  public var label: String {
+    get {_storage._label}
+    set {_uniqueStorage()._label = newValue}
+  }
 
   public var confidence: Double {
-    get {_confidence ?? 0}
-    set {_confidence = newValue}
+    get {_storage._confidence ?? 0}
+    set {_uniqueStorage()._confidence = newValue}
   }
   /// Returns true if `confidence` has been explicitly set.
-  public var hasConfidence: Bool {self._confidence != nil}
+  public var hasConfidence: Bool {_storage._confidence != nil}
   /// Clears the value of `confidence`. Subsequent reads from it will return its default value.
-  public mutating func clearConfidence() {self._confidence = nil}
+  public mutating func clearConfidence() {_uniqueStorage()._confidence = nil}
 
   /// The route that classified it ("apple", "claude:haiku"); unset when nothing could.
   public var classifiedBy: String {
-    get {_classifiedBy ?? String()}
-    set {_classifiedBy = newValue}
+    get {_storage._classifiedBy ?? String()}
+    set {_uniqueStorage()._classifiedBy = newValue}
   }
   /// Returns true if `classifiedBy` has been explicitly set.
-  public var hasClassifiedBy: Bool {self._classifiedBy != nil}
+  public var hasClassifiedBy: Bool {_storage._classifiedBy != nil}
   /// Clears the value of `classifiedBy`. Subsequent reads from it will return its default value.
-  public mutating func clearClassifiedBy() {self._classifiedBy = nil}
+  public mutating func clearClassifiedBy() {_uniqueStorage()._classifiedBy = nil}
 
   public var applicationID: Int64 {
-    get {_applicationID ?? 0}
-    set {_applicationID = newValue}
+    get {_storage._applicationID ?? 0}
+    set {_uniqueStorage()._applicationID = newValue}
   }
   /// Returns true if `applicationID` has been explicitly set.
-  public var hasApplicationID: Bool {self._applicationID != nil}
+  public var hasApplicationID: Bool {_storage._applicationID != nil}
   /// Clears the value of `applicationID`. Subsequent reads from it will return its default value.
-  public mutating func clearApplicationID() {self._applicationID = nil}
+  public mutating func clearApplicationID() {_uniqueStorage()._applicationID = nil}
 
   /// matched | ask | assigned
-  public var status: String = String()
+  public var status: String {
+    get {_storage._status}
+    set {_uniqueStorage()._status = newValue}
+  }
 
   /// Why it was matched, or why it's asked about.
   public var note: String {
-    get {_note ?? String()}
-    set {_note = newValue}
+    get {_storage._note ?? String()}
+    set {_uniqueStorage()._note = newValue}
   }
   /// Returns true if `note` has been explicitly set.
-  public var hasNote: Bool {self._note != nil}
+  public var hasNote: Bool {_storage._note != nil}
   /// Clears the value of `note`. Subsequent reads from it will return its default value.
-  public mutating func clearNote() {self._note = nil}
+  public mutating func clearNote() {_uniqueStorage()._note = nil}
 
   /// Applications it may belong to, best first.
-  public var candidates: [Applyant_V1_MailCandidate] = []
+  public var candidates: [Applyant_V1_MailCandidate] {
+    get {_storage._candidates}
+    set {_uniqueStorage()._candidates = newValue}
+  }
+
+  /// An interview invite's start, as its calendar attachment gave it (RFC 3339 local time with
+  /// `invite_time_zone`, RFC 3339 UTC, or a date).
+  public var inviteStart: String {
+    get {_storage._inviteStart ?? String()}
+    set {_uniqueStorage()._inviteStart = newValue}
+  }
+  /// Returns true if `inviteStart` has been explicitly set.
+  public var hasInviteStart: Bool {_storage._inviteStart != nil}
+  /// Clears the value of `inviteStart`. Subsequent reads from it will return its default value.
+  public mutating func clearInviteStart() {_uniqueStorage()._inviteStart = nil}
+
+  public var inviteTimeZone: String {
+    get {_storage._inviteTimeZone ?? String()}
+    set {_uniqueStorage()._inviteTimeZone = newValue}
+  }
+  /// Returns true if `inviteTimeZone` has been explicitly set.
+  public var hasInviteTimeZone: Bool {_storage._inviteTimeZone != nil}
+  /// Clears the value of `inviteTimeZone`. Subsequent reads from it will return its default value.
+  public mutating func clearInviteTimeZone() {_uniqueStorage()._inviteTimeZone = nil}
+
+  /// The Google Calendar event made for it: created | cancelled | skipped.
+  public var calendarStatus: String {
+    get {_storage._calendarStatus ?? String()}
+    set {_uniqueStorage()._calendarStatus = newValue}
+  }
+  /// Returns true if `calendarStatus` has been explicitly set.
+  public var hasCalendarStatus: Bool {_storage._calendarStatus != nil}
+  /// Clears the value of `calendarStatus`. Subsequent reads from it will return its default value.
+  public mutating func clearCalendarStatus() {_uniqueStorage()._calendarStatus = nil}
+
+  public var calendarLink: String {
+    get {_storage._calendarLink ?? String()}
+    set {_uniqueStorage()._calendarLink = newValue}
+  }
+  /// Returns true if `calendarLink` has been explicitly set.
+  public var hasCalendarLink: Bool {_storage._calendarLink != nil}
+  /// Clears the value of `calendarLink`. Subsequent reads from it will return its default value.
+  public mutating func clearCalendarLink() {_uniqueStorage()._calendarLink = nil}
+
+  /// Why there's no event (skipped).
+  public var calendarNote: String {
+    get {_storage._calendarNote ?? String()}
+    set {_uniqueStorage()._calendarNote = newValue}
+  }
+  /// Returns true if `calendarNote` has been explicitly set.
+  public var hasCalendarNote: Bool {_storage._calendarNote != nil}
+  /// Clears the value of `calendarNote`. Subsequent reads from it will return its default value.
+  public mutating func clearCalendarNote() {_uniqueStorage()._calendarNote = nil}
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
 
-  fileprivate var _fromName: String? = nil
-  fileprivate var _receivedAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
-  fileprivate var _confidence: Double? = nil
-  fileprivate var _classifiedBy: String? = nil
-  fileprivate var _applicationID: Int64? = nil
-  fileprivate var _note: String? = nil
+  fileprivate var _storage = _StorageClass.defaultInstance
 }
 
 public nonisolated struct Applyant_V1_ListMailQueueRequest: Sendable {
@@ -10894,7 +10966,7 @@ nonisolated extension Applyant_V1_Answer: SwiftProtobuf.Message, SwiftProtobuf._
 
 nonisolated extension Applyant_V1_Application: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Application"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}posting_id\0\u{1}stage\0\u{1}channel\0\u{1}note\0\u{1}title\0\u{1}company\0\u{1}score\0\u{3}posting_url\0\u{3}form_url\0\u{3}created_at\0\u{3}prepared_at\0\u{3}approved_at\0\u{1}blockers\0\u{1}missing\0\u{3}unconfirmed_fact_ids\0\u{1}fields\0\u{1}answers\0\u{3}applied_at\0\u{1}receipt\0\u{3}hand_off\0\u{1}cv\0\u{3}company_research\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}posting_id\0\u{1}stage\0\u{1}channel\0\u{1}note\0\u{1}title\0\u{1}company\0\u{1}score\0\u{3}posting_url\0\u{3}form_url\0\u{3}created_at\0\u{3}prepared_at\0\u{3}approved_at\0\u{1}blockers\0\u{1}missing\0\u{3}unconfirmed_fact_ids\0\u{1}fields\0\u{1}answers\0\u{3}applied_at\0\u{1}receipt\0\u{3}hand_off\0\u{1}cv\0\u{3}company_research\0\u{1}emails\0")
 
   fileprivate class _StorageClass {
     var _id: Int64 = 0
@@ -10920,6 +10992,7 @@ nonisolated extension Applyant_V1_Application: SwiftProtobuf.Message, SwiftProto
     var _handOff: Applyant_V1_HandOff? = nil
     var _cv: Applyant_V1_Cv? = nil
     var _companyResearch: Applyant_V1_Company? = nil
+    var _emails: [Applyant_V1_Email] = []
 
       // This property is used as the initial default value for new instances of the type.
       // The type itself is protecting the reference to its storage via CoW semantics.
@@ -10953,6 +11026,7 @@ nonisolated extension Applyant_V1_Application: SwiftProtobuf.Message, SwiftProto
       _handOff = source._handOff
       _cv = source._cv
       _companyResearch = source._companyResearch
+      _emails = source._emails
     }
   }
 
@@ -10994,6 +11068,7 @@ nonisolated extension Applyant_V1_Application: SwiftProtobuf.Message, SwiftProto
         case 21: try { try decoder.decodeSingularMessageField(value: &_storage._handOff) }()
         case 22: try { try decoder.decodeSingularMessageField(value: &_storage._cv) }()
         case 23: try { try decoder.decodeSingularMessageField(value: &_storage._companyResearch) }()
+        case 24: try { try decoder.decodeRepeatedMessageField(value: &_storage._emails) }()
         default: break
         }
       }
@@ -11075,6 +11150,9 @@ nonisolated extension Applyant_V1_Application: SwiftProtobuf.Message, SwiftProto
       try { if let v = _storage._companyResearch {
         try visitor.visitSingularMessageField(value: v, fieldNumber: 23)
       } }()
+      if !_storage._emails.isEmpty {
+        try visitor.visitRepeatedMessageField(value: _storage._emails, fieldNumber: 24)
+      }
     }
     try unknownFields.traverse(visitor: &visitor)
   }
@@ -11107,6 +11185,7 @@ nonisolated extension Applyant_V1_Application: SwiftProtobuf.Message, SwiftProto
         if _storage._handOff != rhs_storage._handOff {return false}
         if _storage._cv != rhs_storage._cv {return false}
         if _storage._companyResearch != rhs_storage._companyResearch {return false}
+        if _storage._emails != rhs_storage._emails {return false}
         return true
       }
       if !storagesAreEqual {return false}
@@ -15206,93 +15285,188 @@ nonisolated extension Applyant_V1_MailCandidate: SwiftProtobuf.Message, SwiftPro
 
 nonisolated extension Applyant_V1_Email: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Email"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}from_address\0\u{3}from_name\0\u{1}subject\0\u{1}snippet\0\u{3}received_at\0\u{1}label\0\u{1}confidence\0\u{3}classified_by\0\u{3}application_id\0\u{1}status\0\u{1}note\0\u{1}candidates\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}from_address\0\u{3}from_name\0\u{1}subject\0\u{1}snippet\0\u{3}received_at\0\u{1}label\0\u{1}confidence\0\u{3}classified_by\0\u{3}application_id\0\u{1}status\0\u{1}note\0\u{1}candidates\0\u{3}invite_start\0\u{3}invite_time_zone\0\u{3}calendar_status\0\u{3}calendar_link\0\u{3}calendar_note\0")
+
+  fileprivate class _StorageClass {
+    var _id: Int64 = 0
+    var _fromAddress: String = String()
+    var _fromName: String? = nil
+    var _subject: String = String()
+    var _snippet: String = String()
+    var _receivedAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
+    var _label: String = String()
+    var _confidence: Double? = nil
+    var _classifiedBy: String? = nil
+    var _applicationID: Int64? = nil
+    var _status: String = String()
+    var _note: String? = nil
+    var _candidates: [Applyant_V1_MailCandidate] = []
+    var _inviteStart: String? = nil
+    var _inviteTimeZone: String? = nil
+    var _calendarStatus: String? = nil
+    var _calendarLink: String? = nil
+    var _calendarNote: String? = nil
+
+      // This property is used as the initial default value for new instances of the type.
+      // The type itself is protecting the reference to its storage via CoW semantics.
+      // This will force a copy to be made of this reference when the first mutation occurs;
+      // hence, it is safe to mark this as `nonisolated(unsafe)`.
+      static nonisolated(unsafe) let defaultInstance = _StorageClass()
+
+    private init() {}
+
+    init(copying source: _StorageClass) {
+      _id = source._id
+      _fromAddress = source._fromAddress
+      _fromName = source._fromName
+      _subject = source._subject
+      _snippet = source._snippet
+      _receivedAt = source._receivedAt
+      _label = source._label
+      _confidence = source._confidence
+      _classifiedBy = source._classifiedBy
+      _applicationID = source._applicationID
+      _status = source._status
+      _note = source._note
+      _candidates = source._candidates
+      _inviteStart = source._inviteStart
+      _inviteTimeZone = source._inviteTimeZone
+      _calendarStatus = source._calendarStatus
+      _calendarLink = source._calendarLink
+      _calendarNote = source._calendarNote
+    }
+  }
+
+  fileprivate mutating func _uniqueStorage() -> _StorageClass {
+    if !isKnownUniquelyReferenced(&_storage) {
+      _storage = _StorageClass(copying: _storage)
+    }
+    return _storage
+  }
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
-    while let fieldNumber = try decoder.nextFieldNumber() {
-      // The use of inline closures is to circumvent an issue where the compiler
-      // allocates stack space for every case branch when no optimizations are
-      // enabled. https://github.com/apple/swift-protobuf/issues/1034
-      switch fieldNumber {
-      case 1: try { try decoder.decodeSingularInt64Field(value: &self.id) }()
-      case 2: try { try decoder.decodeSingularStringField(value: &self.fromAddress) }()
-      case 3: try { try decoder.decodeSingularStringField(value: &self._fromName) }()
-      case 4: try { try decoder.decodeSingularStringField(value: &self.subject) }()
-      case 5: try { try decoder.decodeSingularStringField(value: &self.snippet) }()
-      case 6: try { try decoder.decodeSingularMessageField(value: &self._receivedAt) }()
-      case 7: try { try decoder.decodeSingularStringField(value: &self.label) }()
-      case 8: try { try decoder.decodeSingularDoubleField(value: &self._confidence) }()
-      case 9: try { try decoder.decodeSingularStringField(value: &self._classifiedBy) }()
-      case 10: try { try decoder.decodeSingularInt64Field(value: &self._applicationID) }()
-      case 11: try { try decoder.decodeSingularStringField(value: &self.status) }()
-      case 12: try { try decoder.decodeSingularStringField(value: &self._note) }()
-      case 13: try { try decoder.decodeRepeatedMessageField(value: &self.candidates) }()
-      default: break
+    _ = _uniqueStorage()
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      while let fieldNumber = try decoder.nextFieldNumber() {
+        // The use of inline closures is to circumvent an issue where the compiler
+        // allocates stack space for every case branch when no optimizations are
+        // enabled. https://github.com/apple/swift-protobuf/issues/1034
+        switch fieldNumber {
+        case 1: try { try decoder.decodeSingularInt64Field(value: &_storage._id) }()
+        case 2: try { try decoder.decodeSingularStringField(value: &_storage._fromAddress) }()
+        case 3: try { try decoder.decodeSingularStringField(value: &_storage._fromName) }()
+        case 4: try { try decoder.decodeSingularStringField(value: &_storage._subject) }()
+        case 5: try { try decoder.decodeSingularStringField(value: &_storage._snippet) }()
+        case 6: try { try decoder.decodeSingularMessageField(value: &_storage._receivedAt) }()
+        case 7: try { try decoder.decodeSingularStringField(value: &_storage._label) }()
+        case 8: try { try decoder.decodeSingularDoubleField(value: &_storage._confidence) }()
+        case 9: try { try decoder.decodeSingularStringField(value: &_storage._classifiedBy) }()
+        case 10: try { try decoder.decodeSingularInt64Field(value: &_storage._applicationID) }()
+        case 11: try { try decoder.decodeSingularStringField(value: &_storage._status) }()
+        case 12: try { try decoder.decodeSingularStringField(value: &_storage._note) }()
+        case 13: try { try decoder.decodeRepeatedMessageField(value: &_storage._candidates) }()
+        case 14: try { try decoder.decodeSingularStringField(value: &_storage._inviteStart) }()
+        case 15: try { try decoder.decodeSingularStringField(value: &_storage._inviteTimeZone) }()
+        case 16: try { try decoder.decodeSingularStringField(value: &_storage._calendarStatus) }()
+        case 17: try { try decoder.decodeSingularStringField(value: &_storage._calendarLink) }()
+        case 18: try { try decoder.decodeSingularStringField(value: &_storage._calendarNote) }()
+        default: break
+        }
       }
     }
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    // The use of inline closures is to circumvent an issue where the compiler
-    // allocates stack space for every if/case branch local when no optimizations
-    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
-    // https://github.com/apple/swift-protobuf/issues/1182
-    if self.id != 0 {
-      try visitor.visitSingularInt64Field(value: self.id, fieldNumber: 1)
-    }
-    if !self.fromAddress.isEmpty {
-      try visitor.visitSingularStringField(value: self.fromAddress, fieldNumber: 2)
-    }
-    try { if let v = self._fromName {
-      try visitor.visitSingularStringField(value: v, fieldNumber: 3)
-    } }()
-    if !self.subject.isEmpty {
-      try visitor.visitSingularStringField(value: self.subject, fieldNumber: 4)
-    }
-    if !self.snippet.isEmpty {
-      try visitor.visitSingularStringField(value: self.snippet, fieldNumber: 5)
-    }
-    try { if let v = self._receivedAt {
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 6)
-    } }()
-    if !self.label.isEmpty {
-      try visitor.visitSingularStringField(value: self.label, fieldNumber: 7)
-    }
-    try { if let v = self._confidence {
-      try visitor.visitSingularDoubleField(value: v, fieldNumber: 8)
-    } }()
-    try { if let v = self._classifiedBy {
-      try visitor.visitSingularStringField(value: v, fieldNumber: 9)
-    } }()
-    try { if let v = self._applicationID {
-      try visitor.visitSingularInt64Field(value: v, fieldNumber: 10)
-    } }()
-    if !self.status.isEmpty {
-      try visitor.visitSingularStringField(value: self.status, fieldNumber: 11)
-    }
-    try { if let v = self._note {
-      try visitor.visitSingularStringField(value: v, fieldNumber: 12)
-    } }()
-    if !self.candidates.isEmpty {
-      try visitor.visitRepeatedMessageField(value: self.candidates, fieldNumber: 13)
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every if/case branch local when no optimizations
+      // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+      // https://github.com/apple/swift-protobuf/issues/1182
+      if _storage._id != 0 {
+        try visitor.visitSingularInt64Field(value: _storage._id, fieldNumber: 1)
+      }
+      if !_storage._fromAddress.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._fromAddress, fieldNumber: 2)
+      }
+      try { if let v = _storage._fromName {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 3)
+      } }()
+      if !_storage._subject.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._subject, fieldNumber: 4)
+      }
+      if !_storage._snippet.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._snippet, fieldNumber: 5)
+      }
+      try { if let v = _storage._receivedAt {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 6)
+      } }()
+      if !_storage._label.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._label, fieldNumber: 7)
+      }
+      try { if let v = _storage._confidence {
+        try visitor.visitSingularDoubleField(value: v, fieldNumber: 8)
+      } }()
+      try { if let v = _storage._classifiedBy {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 9)
+      } }()
+      try { if let v = _storage._applicationID {
+        try visitor.visitSingularInt64Field(value: v, fieldNumber: 10)
+      } }()
+      if !_storage._status.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._status, fieldNumber: 11)
+      }
+      try { if let v = _storage._note {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 12)
+      } }()
+      if !_storage._candidates.isEmpty {
+        try visitor.visitRepeatedMessageField(value: _storage._candidates, fieldNumber: 13)
+      }
+      try { if let v = _storage._inviteStart {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 14)
+      } }()
+      try { if let v = _storage._inviteTimeZone {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 15)
+      } }()
+      try { if let v = _storage._calendarStatus {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 16)
+      } }()
+      try { if let v = _storage._calendarLink {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 17)
+      } }()
+      try { if let v = _storage._calendarNote {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 18)
+      } }()
     }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Applyant_V1_Email, rhs: Applyant_V1_Email) -> Bool {
-    if lhs.id != rhs.id {return false}
-    if lhs.fromAddress != rhs.fromAddress {return false}
-    if lhs._fromName != rhs._fromName {return false}
-    if lhs.subject != rhs.subject {return false}
-    if lhs.snippet != rhs.snippet {return false}
-    if lhs._receivedAt != rhs._receivedAt {return false}
-    if lhs.label != rhs.label {return false}
-    if lhs._confidence != rhs._confidence {return false}
-    if lhs._classifiedBy != rhs._classifiedBy {return false}
-    if lhs._applicationID != rhs._applicationID {return false}
-    if lhs.status != rhs.status {return false}
-    if lhs._note != rhs._note {return false}
-    if lhs.candidates != rhs.candidates {return false}
+    if lhs._storage !== rhs._storage {
+      let storagesAreEqual: Bool = withExtendedLifetime((lhs._storage, rhs._storage)) { (_args: (_StorageClass, _StorageClass)) in
+        let _storage = _args.0
+        let rhs_storage = _args.1
+        if _storage._id != rhs_storage._id {return false}
+        if _storage._fromAddress != rhs_storage._fromAddress {return false}
+        if _storage._fromName != rhs_storage._fromName {return false}
+        if _storage._subject != rhs_storage._subject {return false}
+        if _storage._snippet != rhs_storage._snippet {return false}
+        if _storage._receivedAt != rhs_storage._receivedAt {return false}
+        if _storage._label != rhs_storage._label {return false}
+        if _storage._confidence != rhs_storage._confidence {return false}
+        if _storage._classifiedBy != rhs_storage._classifiedBy {return false}
+        if _storage._applicationID != rhs_storage._applicationID {return false}
+        if _storage._status != rhs_storage._status {return false}
+        if _storage._note != rhs_storage._note {return false}
+        if _storage._candidates != rhs_storage._candidates {return false}
+        if _storage._inviteStart != rhs_storage._inviteStart {return false}
+        if _storage._inviteTimeZone != rhs_storage._inviteTimeZone {return false}
+        if _storage._calendarStatus != rhs_storage._calendarStatus {return false}
+        if _storage._calendarLink != rhs_storage._calendarLink {return false}
+        if _storage._calendarNote != rhs_storage._calendarNote {return false}
+        return true
+      }
+      if !storagesAreEqual {return false}
+    }
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

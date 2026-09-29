@@ -64,6 +64,9 @@ public final class AppStore {
     public private(set) var companies: [Company] = []
     /// GetCompany results for the companies open on screen.
     public private(set) var companyDetails: [Int64: Company] = [:]
+    /// The connected mailbox (nil when none is), and the replies waiting for "Which application?".
+    public private(set) var mailbox: Mailbox?
+    public private(set) var mailQueue: [Email] = []
     /// The last failed action, for an alert.
     public var lastError: String?
     /// Where the main window is (notifications and the menu bar move it).
@@ -129,7 +132,12 @@ public final class AppStore {
         async let searchList = api.listSearch()
         async let runList = api.listSearchRuns(limit: 50)
         async let companyList = api.listCompanies()
+        async let box = api.mailbox()
+        async let queue = api.mailQueue()
         let (p, a, i, s, r, c) = try await (postingList, applicationList, interviewList, searchList, runList, companyList)
+        // An older daemon without the mailbox RPCs still loads everything else.
+        mailbox = (try? await box) ?? nil
+        mailQueue = (try? await queue) ?? []
         postings = Dictionary(p.map { ($0.id, $0) }, uniquingKeysWith: { _, last in last })
         applications = Dictionary(a.map { ($0.id, $0) }, uniquingKeysWith: { _, last in last })
         interviewQuestions = i.questions
@@ -185,10 +193,13 @@ public final class AppStore {
             // A posting or review open on screen shows the company's research too.
             for id in postingDetails.keys { await refreshPosting(id, api) }
             for id in applicationDetails.keys { await refreshApplication(id, api) }
-        case .mail?:
-            // Mailbox events (phase 13): status moves also arrive as application events; the
-            // mailbox and "Which application is this?" views come with 13b.
-            break
+        case let .mail(m)?:
+            // Syncs, new questions and answers (status moves also arrive as application
+            // events); a calendar event changes what an open application shows.
+            await refreshMail(api)
+            if m.status == "calendar" || m.status == "assigned" {
+                for id in applicationDetails.keys { await refreshApplication(id, api) }
+            }
         case nil:
             break
         }
@@ -464,6 +475,38 @@ public final class AppStore {
 
     public func companyListing(_ id: Int64) -> Company? { companies.first { $0.id == id } }
 
+    // MARK: The mailbox
+
+    private func refreshMail(_ api: DaemonAPI) async {
+        if let box = try? await api.mailbox() { mailbox = box } else { mailbox = nil }
+        if let queue = try? await api.mailQueue() { mailQueue = queue }
+    }
+
+    /// Fresh mailbox state and queue (the Which application? screen opens with this).
+    public func openMail() async {
+        guard let api else { return }
+        await refreshMail(api)
+    }
+
+    /// "Which application is this?": an application, or none (`application` nil). `label` is
+    /// what the email is, when the classifier couldn't tell.
+    public func assignEmail(_ id: Int64, application: Int64?, label: String? = nil) async {
+        guard let api, await attempt({ try await api.assignEmail(id, application: application, label: label) }) != nil else {
+            return
+        }
+        mailQueue.removeAll { $0.id == id }
+        await refreshMail(api)
+        if let application { await refreshApplication(application, api) }
+    }
+
+    /// Reads the mailbox now; false when a sync was already going (or there's no mailbox).
+    @discardableResult
+    public func syncMailbox() async -> Bool {
+        guard let api, let queued = await attempt({ try await api.syncMailbox() }) else { return false }
+        await refreshMail(api)
+        return queued
+    }
+
     // MARK: The interview
 
     /// Loads a thread for its chat view (and keeps it current from then on).
@@ -530,7 +573,12 @@ public final class AppStore {
         case .preparing:
             return applicationItems { $0.stage == .preparing }
         case .applied:
-            return applicationItems { $0.stage == .approved || $0.stage == .applied }
+            // Sent, and where the mail left them: rejections stay here, marked.
+            return applicationItems { $0.stage == .approved || $0.stage == .applied || $0.stage == .rejected }
+        case .interviews:
+            return applicationItems { $0.stage == .interview }
+        case .offers:
+            return applicationItems { $0.stage == .offer }
         default:
             return []
         }
@@ -543,6 +591,7 @@ public final class AppStore {
         if section == .agentRuns { return 0 }
         // A badge on Companies only while research is going.
         if section == .companies { return companies.filter(\.researching).count }
+        if section == .whichApplication { return mailQueue.count }
         return section.isBuilt ? items(section).count : 0
     }
 

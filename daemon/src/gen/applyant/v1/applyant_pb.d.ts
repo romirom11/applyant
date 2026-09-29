@@ -1243,7 +1243,7 @@ export declare const CompanyEventSchema: GenMessage<CompanyEvent>;
  */
 export declare type MailEvent = Message<"applyant.v1.MailEvent"> & {
   /**
-   * synced (entity = mailbox) · ask · assigned (entity = email)
+   * synced (entity = mailbox) · ask · assigned · calendar (entity = email)
    *
    * @generated from field: string status = 1;
    */
@@ -3168,6 +3168,14 @@ export declare type Application = Message<"applyant.v1.Application"> & {
    * @generated from field: optional applyant.v1.Company company_research = 23;
    */
   companyResearch?: Company | undefined;
+
+  /**
+   * The replies linked to it (newest first): rejection, interview invites, offer. Only filled
+   * by GetApplication.
+   *
+   * @generated from field: repeated applyant.v1.Email emails = 24;
+   */
+  emails: Email[];
 };
 
 /**
@@ -5944,6 +5952,38 @@ export declare type Email = Message<"applyant.v1.Email"> & {
    * @generated from field: repeated applyant.v1.MailCandidate candidates = 13;
    */
   candidates: MailCandidate[];
+
+  /**
+   * An interview invite's start, as its calendar attachment gave it (RFC 3339 local time with
+   * `invite_time_zone`, RFC 3339 UTC, or a date).
+   *
+   * @generated from field: optional string invite_start = 14;
+   */
+  inviteStart?: string | undefined;
+
+  /**
+   * @generated from field: optional string invite_time_zone = 15;
+   */
+  inviteTimeZone?: string | undefined;
+
+  /**
+   * The Google Calendar event made for it: created | cancelled | skipped.
+   *
+   * @generated from field: optional string calendar_status = 16;
+   */
+  calendarStatus?: string | undefined;
+
+  /**
+   * @generated from field: optional string calendar_link = 17;
+   */
+  calendarLink?: string | undefined;
+
+  /**
+   * Why there's no event (skipped).
+   *
+   * @generated from field: optional string calendar_note = 18;
+   */
+  calendarNote?: string | undefined;
 };
 
 /**

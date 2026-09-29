@@ -19,6 +19,8 @@ export interface MailMessage {
   /** Plain text (HTML turned to text when that's all there is). */
   text: string;
   date: Date;
+  /** The calendar invite it carries (a text/calendar part: an .ics), if any. */
+  calendar?: string | null;
 }
 
 /** Where the last sync stopped (Gmail historyId, IMAP `<uidvalidity>:<uid>`); null = never. */
@@ -92,7 +94,17 @@ export async function parseMessage(key: string, raw: Buffer | string): Promise<M
     subject: m.subject ?? '',
     text: (m.text ?? (typeof m.html === 'string' ? htmlToText(m.html) : '')).trim(),
     date: m.date ?? new Date(),
+    calendar: calendarPart(m.attachments),
   };
+}
+
+/** The first text/calendar (or .ics) part, as text. */
+function calendarPart(parts: Array<{ contentType: string; filename?: string; content: Buffer }>) {
+  const ics = parts.find(
+    (a) =>
+      /^(text\/calendar|application\/ics)/i.test(a.contentType) || /\.ics$/i.test(a.filename ?? ''),
+  );
+  return ics ? ics.content.toString('utf8').slice(0, 50_000) : null;
 }
 
 function htmlToText(html: string): string {

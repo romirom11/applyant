@@ -81,6 +81,11 @@ export function emailToPb(
       company: c.company ?? undefined,
       stage: appStageToPb(c.stage),
     })),
+    inviteStart: row.invite?.start.dateTime ?? row.invite?.start.date ?? undefined,
+    inviteTimeZone: row.invite?.start.timeZone ?? undefined,
+    calendarStatus: row.calendar?.status ?? undefined,
+    calendarLink: row.calendar?.link ?? undefined,
+    calendarNote: row.calendar?.note ?? undefined,
   });
 }
 

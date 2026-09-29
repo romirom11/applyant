@@ -97,6 +97,15 @@ public protocol DaemonAPI: Sendable {
     func company(_ target: CompanyTarget) async throws -> Company?
     /// Company research now; `queued` is false when it was already going or the profile is fresh.
     func researchCompany(_ target: CompanyTarget, refresh: Bool) async throws -> (company: Company, queued: Bool)
+
+    /// The connected mailbox (or the one being connected); nil when there is none.
+    func mailbox() async throws -> Mailbox?
+    /// Replies waiting for "Which application is this?", newest first.
+    func mailQueue() async throws -> [Email]
+    /// The candidate's answer: an application (nil = none), and what the email is if they say.
+    func assignEmail(_ id: Int64, application: Int64?, label: String?) async throws -> Email
+    /// Reads the mailbox now; false when a sync was already waiting or running.
+    func syncMailbox() async throws -> Bool
 }
 
 /// Unary answers → value or APIError.
@@ -112,9 +121,9 @@ func unwrap<T>(_ response: ResponseMessage<T>) throws -> T {
 }
 
 public final class ConnectDaemonAPI: DaemonAPI {
-    private let unary: Applyant_V1_ApplyantServiceClient
+    let unary: Applyant_V1_ApplyantServiceClient
     private let streaming: Applyant_V1_ApplyantServiceClient
-    private let headers: Headers
+    let headers: Headers
 
     public init(endpoint: Endpoint) {
         let host = "http://\(endpoint.host):\(endpoint.port)"
@@ -362,6 +371,30 @@ public final class ConnectDaemonAPI: DaemonAPI {
         }
         let response = try unwrap(await unary.researchCompany(request: request, headers: headers))
         return (response.company, response.queued)
+    }
+}
+
+extension ConnectDaemonAPI {
+    public func mailbox() async throws -> Mailbox? {
+        let response = try unwrap(await unary.getMailbox(request: .init(), headers: headers))
+        return response.hasMailbox ? response.mailbox : nil
+    }
+
+    public func mailQueue() async throws -> [Email] {
+        try unwrap(await unary.listMailQueue(request: .init(), headers: headers)).emails
+    }
+
+    public func assignEmail(_ id: Int64, application: Int64?, label: String?) async throws -> Email {
+        let request = Applyant_V1_AssignEmailRequest.with {
+            $0.emailID = id
+            if let application { $0.applicationID = application }
+            if let label { $0.label = label }
+        }
+        return try unwrap(await unary.assignEmail(request: request, headers: headers)).email
+    }
+
+    public func syncMailbox() async throws -> Bool {
+        try unwrap(await unary.syncMailbox(request: .init(), headers: headers)).queued
     }
 }
 

@@ -216,6 +216,31 @@ final class FakeDaemon: DaemonAPI, @unchecked Sendable {
         return (companies[i], true)
     }
 
+    // The mailbox: its state, the ask queue, and what assigning does.
+    var mailboxState: Mailbox?
+    var queue: [Email] = []
+    var syncs = 0
+
+    func mailbox() async throws -> Mailbox? { log("mailbox"); return mailboxState }
+    func mailQueue() async throws -> [Email] { log("mailQueue"); return queue }
+    func assignEmail(_ id: Int64, application: Int64?, label: String?) async throws -> Email {
+        log("assignEmail \(id) \(application.map(String.init) ?? "none") \(label ?? "-")")
+        guard let i = queue.firstIndex(where: { $0.id == id }) else { throw APIError("no email \(id)") }
+        var e = queue.remove(at: i)
+        e.status = "assigned"
+        if let application {
+            e.applicationID = application
+            if (label ?? e.label) == "interview" { applications[application]?.stage = .interview }
+        }
+        mailboxState?.asking = Int32(queue.count)
+        return e
+    }
+    func syncMailbox() async throws -> Bool {
+        log("syncMailbox")
+        syncs += 1
+        return syncs == 1
+    }
+
     /// Changes a question everywhere it's listed.
     func setQuestion(_ id: Int64, _ change: (inout InterviewQuestion) -> Void) throws -> InterviewQuestion {
         guard let i = questions.firstIndex(where: { $0.id == id }) else { throw APIError("no question \(id)") }

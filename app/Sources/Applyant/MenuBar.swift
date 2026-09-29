@@ -28,6 +28,15 @@ struct StatusMenu: View {
             Text(note)
         }
 
+        Text(MailText.menuLine(store.mailbox))
+        if !store.mailQueue.isEmpty {
+            Button("Which application? (\(store.mailQueue.count))") {
+                store.navigation.section = .whichApplication
+                store.navigation.email = store.mailQueue.first?.id
+                open()
+            }
+        }
+
         Divider()
         let ready = store.items(.readyToReview)
         let needs = store.needsYou

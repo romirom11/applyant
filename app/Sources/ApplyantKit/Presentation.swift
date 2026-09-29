@@ -6,7 +6,7 @@ import Foundation
 public enum Section: String, CaseIterable, Identifiable, Sendable {
     case overview
     case inbox, readyToReview, preparing, interested, skipped
-    case applied, interviews, offers
+    case applied, interviews, offers, whichApplication
     case profile, projects, interview
     case search, agentRuns, companies, settings
 
@@ -18,7 +18,7 @@ public enum Section: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .overview: .top
         case .inbox, .readyToReview, .preparing, .interested, .skipped: .jobs
-        case .applied, .interviews, .offers: .applications
+        case .applied, .interviews, .offers, .whichApplication: .applications
         case .profile, .projects, .interview: .me
         case .search, .agentRuns, .companies, .settings: .system
         }
@@ -35,6 +35,7 @@ public enum Section: String, CaseIterable, Identifiable, Sendable {
         case .applied: "Applied"
         case .interviews: "Interviews"
         case .offers: "Offers"
+        case .whichApplication: "Which application?"
         case .profile: "Profile"
         case .projects: "Projects"
         case .interview: "Interview"
@@ -56,6 +57,7 @@ public enum Section: String, CaseIterable, Identifiable, Sendable {
         case .applied: "paperplane"
         case .interviews: "phone"
         case .offers: "checkmark.seal"
+        case .whichApplication: "questionmark.bubble"
         case .profile: "person.crop.circle"
         case .projects: "folder"
         case .interview: "bubble.left.and.bubble.right"
@@ -69,7 +71,8 @@ public enum Section: String, CaseIterable, Identifiable, Sendable {
     /// Sections with content so far; the rest show an empty state until their phase.
     public var isBuilt: Bool {
         switch self {
-        case .inbox, .readyToReview, .preparing, .interested, .skipped, .applied, .interview, .search, .agentRuns, .companies: true
+        case .inbox, .readyToReview, .preparing, .interested, .skipped, .applied, .interviews, .offers, .whichApplication,
+             .interview, .search, .agentRuns, .companies: true
         default: false
         }
     }
@@ -78,7 +81,6 @@ public enum Section: String, CaseIterable, Identifiable, Sendable {
     public var comesWith: String? {
         switch self {
         case .overview: "the funnel view"
-        case .interviews, .offers: "mail tracking (phase 13)"
         case .profile, .projects: "onboarding (phase 16); the CLI has them now"
         case .settings: "onboarding (phase 16); `applyant secrets` and `candidate prefs` now"
         default: nil
@@ -99,6 +101,8 @@ public struct Navigation: Equatable, Sendable {
     public var run: Int64?
     /// The company open in the Companies section.
     public var company: Int64?
+    /// The reply open in Which application?.
+    public var email: Int64?
     public init() {}
 
     public mutating func showInterview(_ target: InterviewTarget) {
@@ -174,6 +178,9 @@ public enum StageText {
             ? Chip(text: "Finish in browser", tone: .warning)
             : Chip(text: "Approved · delivering", tone: .good)
         case .applied: Chip(text: "Applied", tone: .good)
+        case .interview: Chip(text: "Interview", tone: .good)
+        case .offer: Chip(text: "Offer", tone: .good)
+        case .rejected: Chip(text: "Rejected", tone: .warning)
         default: Chip(text: "Application", tone: .neutral)
         }
     }

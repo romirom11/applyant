@@ -141,6 +141,7 @@ export function handlers(partial: Partial<Handlers>): Handlers {
     plan_search: never as Handler<'plan_search'>,
     research_company: never as Handler<'research_company'>,
     sync_mail: never as Handler<'sync_mail'>,
+    interview_event: never as Handler<'interview_event'>,
     ...partial,
   };
 }

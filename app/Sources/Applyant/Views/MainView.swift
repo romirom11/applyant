@@ -16,6 +16,7 @@ struct MainView: View {
                 case .search: SearchList(store: store)
                 case .agentRuns: RunsList(store: store)
                 case .companies: CompaniesList(store: store)
+                case .whichApplication: WhichApplicationList(store: store)
                 default: PostingList(store: store)
                 }
             }
@@ -45,6 +46,8 @@ struct Detail: View {
             RunDetail(store: store)
         } else if store.navigation.section == .companies {
             CompanyDetail(store: store)
+        } else if store.navigation.section == .whichApplication {
+            WhichApplicationDetail(store: store)
         } else if store.navigation.section == .interview {
             if let target = store.navigation.interview {
                 InterviewThreadView(store: store, target: target)
@@ -150,7 +153,7 @@ struct PostingList: View {
         guard let item = items.first(where: { $0.id == id }) else { return }
         store.navigation.postingId = item.postingId
         // Application sections open the review; posting sections open the posting.
-        let reviewSections: Set<ApplyantKit.Section> = [.readyToReview, .preparing, .applied]
+        let reviewSections: Set<ApplyantKit.Section> = [.readyToReview, .preparing, .applied, .interviews, .offers]
         store.navigation.reviewing = reviewSections.contains(section) ? item.applicationId : nil
     }
 
@@ -160,6 +163,8 @@ struct PostingList: View {
         case .readyToReview: "Nothing to review"
         case .preparing: "Nothing being prepared"
         case .applied: "No applications sent yet"
+        case .interviews: "No interviews yet"
+        case .offers: "No offers yet"
         default: "Empty"
         }
     }

@@ -15,6 +15,7 @@ import { ReadPool } from './db/read-pool.ts';
 import { agentRuns } from './db/schema.ts';
 import type { Deps } from './deps.ts';
 import { catchUpDeliveries, deliverApplication } from './domain/applications/deliver.ts';
+import { interviewEvent } from './domain/applications/interview-event.ts';
 import { requestMailSync, syncMail } from './domain/applications/mail-status.ts';
 import { prepareApplication } from './domain/applications/prepare.ts';
 import { readFormHandler, requestFormRead } from './domain/applications/read-form.ts';
@@ -149,6 +150,7 @@ export async function runDaemon(config: Config = loadConfig()): Promise<() => Pr
       ...(g.authUrl ? { authUrl: g.authUrl } : {}),
       ...(g.tokenUrl ? { tokenUrl: g.tokenUrl } : {}),
       ...(g.gmailApi ? { gmailApi: g.gmailApi } : {}),
+      ...(g.calendarApi ? { calendarApi: g.calendarApi } : {}),
     },
     sinceDays: config.mail.sinceDays,
   });
@@ -193,6 +195,7 @@ export async function runDaemon(config: Config = loadConfig()): Promise<() => Pr
     plan_search: planSearch,
     research_company: researchCompany,
     sync_mail: syncMail,
+    interview_event: interviewEvent,
   };
 
   // Catch up: vectors for facts that have none (or were made by another embedder), and a

@@ -5,6 +5,7 @@ import type { Conn, Db } from '../db/client.ts';
 import { type MailboxRow, type MailboxSettings, mailboxes } from '../db/schema.ts';
 import type { Secrets } from '../secrets/secrets.ts';
 import type { Logger } from '../util/log.ts';
+import { type Calendar, GCAL_API, GoogleCalendar } from './gcal.ts';
 import { GmailMailbox } from './gmail.ts';
 import {
   type Consent,
@@ -26,6 +27,7 @@ export interface GoogleConfig extends GoogleEndpoints {
   clientId: string | null;
   clientSecret: string | null;
   gmailApi: string;
+  calendarApi: string;
 }
 
 export const DEFAULT_GOOGLE: GoogleConfig = {
@@ -33,6 +35,7 @@ export const DEFAULT_GOOGLE: GoogleConfig = {
   clientId: null,
   clientSecret: null,
   gmailApi: 'https://gmail.googleapis.com/gmail/v1/users/me',
+  calendarApi: GCAL_API,
 };
 
 /** What handlers use (the security-code step, the email channel, sync_mail). */
@@ -44,6 +47,11 @@ export interface MailAccess {
   /** How long delivery waits for an emailed security code. */
   readonly codeTimeoutMs: number;
   readonly codePollMs: number;
+  /**
+   * The candidate's Google Calendar (interview events), when the connected mailbox is a Google
+   * account; null otherwise. Optional so test doubles without a calendar needn't say so.
+   */
+  calendar?(): Promise<Calendar | null>;
 }
 
 export function connectedMailbox(conn: Conn): MailboxRow | null {
@@ -103,6 +111,21 @@ export class MailService implements MailAccess {
     const row = connectedMailbox(this.o.read);
     if (!row) return null;
     return this.mailboxFor(row);
+  }
+
+  async calendar(): Promise<Calendar | null> {
+    const row = connectedMailbox(this.o.read);
+    if (row?.kind !== 'gmail') return null;
+    const client = await this.googleClient(row.settings.clientId);
+    return new GoogleCalendar({
+      auth: new GoogleAuth({
+        client,
+        secrets: this.o.secrets,
+        ...(this.o.fetch ? { fetch: this.o.fetch } : {}),
+      }),
+      api: this.google.calendarApi,
+      ...(this.o.fetch ? { fetch: this.o.fetch } : {}),
+    });
   }
 
   async mailboxFor(row: Pick<MailboxRow, 'kind' | 'address' | 'settings'>): Promise<Mailbox> {

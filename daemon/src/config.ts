@@ -59,6 +59,7 @@ export interface Config {
     authUrl: string | null;
     tokenUrl: string | null;
     gmailApi: string | null;
+    calendarApi: string | null;
   };
   worker: {
     concurrency: number;
@@ -148,6 +149,7 @@ export function loadConfig(env: Env = process.env): Config {
       authUrl: env.APPLYANT_GOOGLE_AUTH_URL || null,
       tokenUrl: env.APPLYANT_GOOGLE_TOKEN_URL || null,
       gmailApi: env.APPLYANT_GMAIL_API || null,
+      calendarApi: env.APPLYANT_GCAL_API || null,
     },
     worker: {
       concurrency: int(env, 'APPLYANT_WORKERS', 2),
