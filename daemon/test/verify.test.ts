@@ -141,6 +141,39 @@ describe('checkPosting on fixture pages', () => {
     expect(await check('/spa.html')).toMatchObject({ kind: 'live', note: 'apply form on page' });
   });
 
+  it('a board that shows the employer link to members only: a lone resume widget is no form, and Apply opens a sign-in', async () => {
+    expect(await check('/board-signin.html')).toMatchObject({
+      kind: 'dead',
+      note: `pressing "Apply Now" asks to sign in on ${new URL(site.origin).host} before the application`,
+      title: 'Senior Backend Engineer · Remote board',
+    });
+    // Pressing Apply sent nothing anywhere.
+    expect(site.writes).toEqual([]);
+  });
+
+  it("a board's employer link wins over its own ads and similar-job links", async () => {
+    expect(await check('/board-employer-link.html')).toMatchObject({
+      kind: 'live',
+      note: `apply form at ${site.altOrigin}/form.html`,
+      applyUrl: `${site.altOrigin}/form.html`,
+    });
+  });
+
+  it('an apply button that reveals the form on the page', async () => {
+    expect(await check('/apply-button-form.html')).toMatchObject({
+      kind: 'live',
+      note: 'apply form on page after pressing "Apply for this job"',
+      applyUrl: site.url('/apply-button-form.html'),
+    });
+  });
+
+  it('an apply button with no visible effect keeps the posting live', async () => {
+    expect(await check('/apply-button-inert.html')).toMatchObject({
+      kind: 'live',
+      note: 'apply button on page',
+    });
+  });
+
   it('a job list is not a posting', async () => {
     expect(await check('/job-list.html')).toMatchObject({
       kind: 'dead',

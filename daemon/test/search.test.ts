@@ -277,6 +277,35 @@ describe('sources that are off', () => {
       enabled: false,
       lastNote: expect.stringContaining('HTTP 403'),
     });
+    // So does Jobicy: its Apply is behind a sign-in.
+    expect(sources.find((s) => s.key === 'board:jobicy')).toMatchObject({
+      enabled: false,
+      lastNote: expect.stringContaining('sign in'),
+    });
     expect(kinds.find((k) => k.kind === 'workable')).toMatchObject({ enabled: false, sources: 1 });
+  });
+
+  it("a board the planner found that its ATS says doesn't exist is switched off; the candidate's own stays on", async () => {
+    h = searchHarness(t, { fetch: recordedFetch(), now: () => now });
+    addSource(t.db, { kind: 'ashby', locator: 'gone-by-agent', origin: 'agent' }, now);
+    addSource(t.db, { kind: 'ashby', locator: 'gone-by-me' }, now);
+    const run = await h.run({ name: 'Engineers', queries: ['engineer'], sources: ['ashby'] });
+    expect(h.runRow(run)?.results.map((x) => x.error)).toEqual([
+      expect.stringMatching(/^HTTP 404 from /),
+      expect.stringMatching(/^HTTP 404 from /),
+    ]);
+    const { sources } = listSources(t.db);
+    expect(sources.find((s) => s.key === 'ashby:gone-by-agent')).toMatchObject({
+      enabled: false,
+      lastNote: expect.stringMatching(/^switched off: the board isn't there \(HTTP 404 from /),
+    });
+    expect(sources.find((s) => s.key === 'ashby:gone-by-me')).toMatchObject({
+      enabled: true,
+      lastNote: expect.stringMatching(/^failed: HTTP 404 from /),
+    });
+    // The next run doesn't read it.
+    h.fetch.calls.length = 0;
+    await h.again(1);
+    expect(h.fetch.calls.some((u) => u.includes('gone-by-agent'))).toBe(false);
   });
 });

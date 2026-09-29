@@ -1,0 +1,20 @@
+<!doctype html>
+<!-- Synthetic. Modelled on Jobicy's job pages (2026-09): a site-wide "upload your resume" file
+     input outside any form, a theme switch, a search form, and an "Apply Now" button that opens
+     a sign-in dialog; the employer's application link is shown to members only. -->
+<html lang="en"><head><meta charset="utf-8"><title>Senior Backend Engineer · Remote board</title></head>
+<body>
+<form class="jh-search" action="/jobs" method="get" role="search"><input type="search" name="q"></form>
+<label><input type="checkbox" id="themeSwitchInput"> Dark mode</label>
+<input type="file" id="global_resume_upload_input" accept=".pdf,.docx" style="display: none;">
+<h1>Senior Backend Engineer</h1>
+<p>Acme is hiring a senior backend engineer to build Python services. Fully remote.</p>
+<h3>Continue on the employer website</h3>
+<button type="button" id="open-apply" onclick="document.getElementById('gate').showModal()">Apply Now</button>
+<dialog id="gate">
+  <span>One quick step before you apply</span>
+  <h2>Sign in to continue.</h2>
+  <p>Sign in or create a free account to continue to the employer's application.</p>
+  <button type="button">Continue with Google</button>
+</dialog>
+</body></html>

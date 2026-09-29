@@ -23,10 +23,14 @@ import {
 /**
  * Boards that start switched off, and why (the candidate can switch them on). Himalayas' job
  * pages answer the headless reader with HTTP 403, so none of its postings can be verified.
+ * Jobicy's "Apply Now" asks to sign in before it shows the employer's link, and its API
+ * doesn't give that link either, so its postings fail verification too.
  */
 export const BOARDS_OFF: Partial<Record<BoardId, string>> = {
   himalayas:
     'off by default: its job pages refuse the headless reader (HTTP 403), so its postings fail verification',
+  jobicy:
+    "off by default: its Apply asks to sign in before showing the employer's link, so its postings fail verification",
 };
 
 export const BOARDS = {

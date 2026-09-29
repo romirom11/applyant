@@ -6,6 +6,9 @@
 //   JSON-LD JobPosting   validThrough in the past → dead
 //   page text            "no longer accepting applications" and similar → dead
 //   apply path           application form (any frame) · mailto · apply link/button
+//                        a button with no link is pressed (writes blocked): a sign-in wall
+//                        behind it (a board that shows the employer's link only to members)
+//                        → dead
 //                        apply link that lands on the homepage → dead
 //   posting_liveness     a live verdict is checked once more by a model (Jev; fallback
 //                        claude:haiku): a page that reads as closed or as no single posting
@@ -18,6 +21,7 @@
 // its stage and everything built on it, dead closes it.
 import { eq } from 'drizzle-orm';
 import type { Frame, Page } from 'playwright';
+import { guardReadOnly } from '../../browser/form-read.ts';
 import type { ReaderPool } from '../../browser/reader-pool.ts';
 import { type PostingStage, postings } from '../../db/schema.ts';
 import type { Decide } from '../../models/decide.ts';
@@ -343,6 +347,13 @@ export function closedMarker(text: string): string | null {
 const APPLY_NAME =
   /(^|[\s"'«(])(apply|bewerben|postuler|candidatar|candidatura|aplicar|solliciteren|откликнуться|відгукнутися|подати заявку)/i;
 
+/** A control whose name starts with an apply word: the posting's own apply button or link. */
+const APPLY_LEAD =
+  /^["'«(]?\s*(apply|bewerben|postuler|candidatar|candidatura|aplicar|solliciteren|откликнуться|відгукнутися|подати заявку)/i;
+
+/** Apply-named links that aren't the application (as in form-read.ts's opening of the form). */
+const NOT_APPLY = /linkedin|indeed|with google|later|save|share|similar|refer/i;
+
 /** A page with this many different apply targets on its own host is a job list. */
 const LIST_THRESHOLD = 3;
 
@@ -354,6 +365,7 @@ interface ApplyPath {
 }
 
 interface ApplyControl {
+  name: string;
   href: string | null;
   frameUrl: string;
 }
@@ -400,10 +412,23 @@ async function findApplyPath(page: Page, signal?: AbortSignal): Promise<ApplyPat
     };
   }
 
-  const link = controls.find(
-    (c) => c.href && /^https?:/.test(c.href) && stripHash(c.href) !== here,
-  );
-  if (!link?.href) return { ok: true, note: 'apply button on page', url: page.url() };
+  // Which link is the application: one named like an apply button ("Apply for this position",
+  // not "…automatically applying" in an ad), to another site (a board's employer link, not its
+  // "similar jobs" or its own services), not a social or save/share link; else the first.
+  const link = controls
+    .map((c, i) => ({ c, i }))
+    .filter(
+      ({ c }) =>
+        c.href && /^https?:/.test(c.href) && stripHash(c.href) !== here && !NOT_APPLY.test(c.name),
+    )
+    .map((x) => ({
+      ...x,
+      lead: APPLY_LEAD.test(x.c.name),
+      away: new URL(x.c.href as string).host !== host,
+    }))
+    .sort((a, b) => Number(b.lead) - Number(a.lead) || Number(b.away) - Number(a.away) || a.i - b.i)
+    .at(0)?.c;
+  if (!link?.href) return pressApplyButton(page, signal);
 
   if (isRoot(link.href)) {
     return { ok: false, note: `apply link leads to the homepage ${link.href}`, url: null };
@@ -438,7 +463,119 @@ async function findApplyPath(page: Page, signal?: AbortSignal): Promise<ApplyPat
   }
 }
 
-/** A file upload, or an email field among at least three fillable controls. */
+/**
+ * An apply button with no link: press it (writes blocked) and see what it opens. A form, or the
+ * employer's page, keeps the posting live; a sign-in wall (Jobicy's "Sign in to continue" before
+ * the employer's link) means there is no application to reach without an account. When the
+ * button does nothing visible, the posting stays live as before.
+ */
+async function pressApplyButton(page: Page, signal?: AbortSignal): Promise<ApplyPath> {
+  const onPage: ApplyPath = { ok: true, note: 'apply button on page', url: page.url() };
+  signal?.throwIfAborted();
+  let frame: Frame | null = null;
+  let name: string | null = null;
+  for (const f of page.frames()) {
+    name = await markApplyButton(f);
+    if (name) {
+      frame = f;
+      break;
+    }
+  }
+  if (!frame || !name) return onPage;
+
+  await guardReadOnly(page.context());
+  const before = stripHash(page.url());
+  const popup = page
+    .context()
+    .waitForEvent('page', { timeout: 3_000 })
+    .catch(() => null);
+  try {
+    await frame.locator('[data-applyant-apply]').first().click({ timeout: 5_000 });
+  } catch {
+    return onPage;
+  }
+  const opened = await popup;
+  signal?.throwIfAborted();
+  const target = opened ?? page;
+  await target.waitForLoadState('domcontentloaded').catch(() => {});
+  await settle(target);
+
+  const pressed = `pressing "${name}"`;
+  const landed = stripHash(target.url());
+  const moved = opened !== null || landed !== before;
+  if (moved && isRoot(landed)) {
+    return { ok: false, note: `${pressed} leads to the homepage ${landed}`, url: null };
+  }
+  for (const f of target.frames()) {
+    if (await hasApplicationForm(f)) {
+      return moved
+        ? { ok: true, note: `apply form at ${landed}`, url: landed }
+        : { ok: true, note: `apply form on page after ${pressed}`, url: page.url() };
+    }
+  }
+  for (const f of target.frames()) {
+    if (await signInWall(f)) {
+      return {
+        ok: false,
+        note: `${pressed} asks to sign in on ${new URL(landed).host} before the application`,
+        url: null,
+      };
+    }
+  }
+  return moved ? { ok: true, note: `apply link to ${landed}`, url: landed } : onPage;
+}
+
+/** Marks the first visible apply button (no link of its own) for a click; returns its name. */
+async function markApplyButton(frame: Frame): Promise<string | null> {
+  return frame
+    .evaluate((pattern) => {
+      const re = new RegExp(pattern, 'i');
+      for (const el of document.querySelectorAll('button, [role=button], input[type=submit], a')) {
+        const html = el as HTMLElement;
+        const r = html.getBoundingClientRect();
+        if (r.width + r.height === 0 || getComputedStyle(html).visibility === 'hidden') continue;
+        if (el instanceof HTMLAnchorElement && /^(https?|mailto):/.test(el.href)) continue;
+        const name = (
+          html.innerText?.trim() ||
+          el.getAttribute('aria-label') ||
+          (el as HTMLInputElement).value ||
+          el.getAttribute('title') ||
+          ''
+        ).slice(0, 80);
+        if (!re.test(name)) continue;
+        el.setAttribute('data-applyant-apply', '');
+        return name.replace(/\s+/g, ' ');
+      }
+      return null;
+    }, APPLY_NAME.source)
+    .catch(() => null);
+}
+
+const SIGN_IN_TEXT = /\b(sign in|log in|login|sign up|create (a |an )?(free )?account)\b/i;
+
+/** A shown password field, or a dialog that asks to sign in or create an account. */
+async function signInWall(frame: Frame): Promise<boolean> {
+  return frame
+    .evaluate((pattern) => {
+      const re = new RegExp(pattern, 'i');
+      const visible = (el: Element) => {
+        const r = (el as HTMLElement).getBoundingClientRect();
+        const style = getComputedStyle(el as HTMLElement);
+        return style.visibility !== 'hidden' && style.display !== 'none' && r.width + r.height > 0;
+      };
+      if ([...document.querySelectorAll('input[type=password]')].some(visible)) return true;
+      return [...document.querySelectorAll('dialog[open], [role=dialog], [aria-modal=true]')].some(
+        (d) => visible(d) && re.test((d as HTMLElement).innerText ?? ''),
+      );
+    }, SIGN_IN_TEXT.source)
+    .catch(() => false);
+}
+
+/**
+ * A file upload with at least one other field to fill beside it (in its form, or shown on the
+ * page), or an email field among at least three fillable controls. A lone file input is a
+ * site-wide "upload your resume" widget (Jobicy has one on every job page), not a form.
+ */
 async function hasApplicationForm(frame: Frame): Promise<boolean> {
   return frame
     .evaluate(() => {
@@ -452,10 +589,19 @@ async function hasApplicationForm(frame: Frame): Promise<boolean> {
           'input:not([type]), input[type=text], input[type=email], input[type=tel], input[type=url], input[type=file], textarea, select',
         ),
       ].filter((el) => !el.closest('[role=search]'));
+      const isFile = (el: Element) => (el as HTMLInputElement).type === 'file';
       // File inputs are often visually hidden behind a styled button.
-      const hasFile = fillable.some((el) => (el as HTMLInputElement).type === 'file');
-      const shown = fillable.filter(
-        (el) => visible(el) || (el as HTMLInputElement).type === 'file',
+      const shown = fillable.filter((el) => visible(el) || isFile(el));
+      const hasFile = fillable.some(
+        (el) =>
+          isFile(el) &&
+          shown.some(
+            (other) =>
+              other !== el &&
+              !isFile(other) &&
+              (visible(other) ||
+                (!!el.closest('form') && other.closest('form') === el.closest('form'))),
+          ),
       );
       const hasEmail = shown.some((el) => {
         const input = el as HTMLInputElement;
@@ -475,7 +621,7 @@ async function applyControls(frame: Frame): Promise<ApplyControl[]> {
   const found = await frame
     .evaluate((pattern) => {
       const re = new RegExp(pattern, 'i');
-      const out: Array<{ href: string | null }> = [];
+      const out: Array<{ name: string; href: string | null }> = [];
       for (const el of document.querySelectorAll('a, button, [role=button], input[type=submit]')) {
         const name =
           (el as HTMLElement).innerText?.trim() ||
@@ -485,11 +631,14 @@ async function applyControls(frame: Frame): Promise<ApplyControl[]> {
           '';
         if (!re.test(name.slice(0, 80))) continue;
         const href = el instanceof HTMLAnchorElement ? el.href : null;
-        out.push({ href: href && !href.startsWith('javascript:') ? href : null });
+        out.push({
+          name: name.trim().replace(/\s+/g, ' ').slice(0, 80),
+          href: href && !href.startsWith('javascript:') ? href : null,
+        });
       }
       return out;
     }, APPLY_NAME.source)
-    .catch(() => [] as Array<{ href: string | null }>);
+    .catch(() => [] as Array<{ name: string; href: string | null }>);
   return found.map((c) => ({ ...c, frameUrl: frame.url() }));
 }
 

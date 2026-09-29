@@ -438,19 +438,30 @@ export function commitSearch(tx: Tx, input: CommitInput): void {
       recordRecipeRead(tx, r.recipe.id, { count: r.recipe.count, sampled: r.recipe.sampled });
   }
 
-  // The sources' own state: last read, and what a page resolved to.
+  // The sources' own state: last read, and what a page resolved to. A company board the
+  // planner found whose ATS says it doesn't exist (a stale search result) is switched off,
+  // with the reason, instead of failing every run; the candidate's own boards stay on.
   for (const r of input.reads) {
     const label =
       r.company && r.source.label === r.source.locator && r.source.kind !== 'page'
         ? r.company
         : r.source.label;
+    const gone =
+      r.source.origin === 'agent' && isAts(r.source.kind) && /^HTTP (404|410) /.test(r.error ?? '');
     tx.db
       .update(searchSources)
       .set({
         lastRunAt: tx.now,
         lastCount: r.run ? r.run.listings.length : null,
         lastComplete: r.run ? r.run.complete : null,
-        lastNote: r.needsRecipe ? r.error : r.error ? `failed: ${r.error}` : (r.run?.note ?? null),
+        lastNote: gone
+          ? `switched off: the board isn't there (${r.error})`
+          : r.needsRecipe
+            ? r.error
+            : r.error
+              ? `failed: ${r.error}`
+              : (r.run?.note ?? null),
+        ...(gone ? { enabled: false } : {}),
         label,
         ...(r.resolved ? { resolved: r.resolved } : {}),
       })
