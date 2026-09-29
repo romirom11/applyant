@@ -21,7 +21,8 @@
 // its stage and everything built on it, dead closes it.
 import { eq } from 'drizzle-orm';
 import type { Frame, Page } from 'playwright';
-import { guardReadOnly } from '../../browser/form-read.ts';
+import { guardReadOnly, readScope } from '../../browser/form-read.ts';
+import { isPlatformHold, readerFor } from '../../browser/platform-reader.ts';
 import type { ReaderPool } from '../../browser/reader-pool.ts';
 import { type PostingStage, postings } from '../../db/schema.ts';
 import type { Decide } from '../../models/decide.ts';
@@ -55,12 +56,24 @@ export const verifyPosting: Handler<'verify_posting'> = async (task, ctx) => {
   ctx.progress({ message: `opening ${posting.canonicalUrl}` });
   let verdict: Verdict;
   try {
-    verdict = await checkPosting(ctx.deps.reader, posting.canonicalUrl, {
+    const reader = readerFor(ctx.deps, posting.canonicalUrl, {
+      taskId: task.id,
+      progress: (message) => ctx.progress({ message }),
+    });
+    verdict = await checkPosting(reader, posting.canonicalUrl, {
       signal: ctx.signal,
       now: ctx.now(),
     });
   } catch (err) {
     ctx.signal.throwIfAborted();
+    // LinkedIn/Xing paused or in use by the candidate: try again later, the posting unjudged.
+    if (isPlatformHold(err)) {
+      return {
+        kind: 'retry',
+        after: new Date(ctx.now().getTime() + 60 * 60_000),
+        reason: err.message,
+      };
+    }
     verdict = { kind: 'transient', note: navigationError(err) };
   }
 
@@ -172,7 +185,7 @@ export interface CheckOptions {
 }
 
 export async function checkPosting(
-  reader: ReaderPool,
+  reader: Pick<ReaderPool, 'withPage'>,
   url: string,
   opts: CheckOptions = {},
 ): Promise<Verdict> {
@@ -483,7 +496,7 @@ async function pressApplyButton(page: Page, signal?: AbortSignal): Promise<Apply
   }
   if (!frame || !name) return onPage;
 
-  await guardReadOnly(page.context());
+  await guardReadOnly(readScope(page));
   const before = stripHash(page.url());
   const popup = page
     .context()

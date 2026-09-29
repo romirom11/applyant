@@ -2,6 +2,7 @@
 // listings a strategy wants, and which postings they are, is decided after (handlers.ts,
 // dedupe.ts). Posting text is read at verification, not here.
 import type { ReaderPool } from '../../../browser/reader-pool.ts';
+import type { PlatformAccess } from './platform.ts';
 
 /** One job as a source lists it. */
 export interface Listing {
@@ -47,6 +48,10 @@ export interface ReaderContext {
   /** The headless reader, for career pages that only show their ATS embed once rendered. */
   reader?: ReaderPool | null;
   now: Date;
+  /** The strategy's locations (LinkedIn/Xing put the first place in their search). */
+  locations?: string[];
+  /** LinkedIn/Xing: Applyant's signed-in browser and the platform guardrails (phase 14). */
+  platform?: PlatformAccess | null;
 }
 
 /** The longest description kept per listing (dedupe needs a sample, not the whole page). */

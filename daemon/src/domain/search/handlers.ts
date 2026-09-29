@@ -31,8 +31,11 @@ import { applyAbsence, reopenPosting } from './absence.ts';
 import { type Cluster, DedupeIndex } from './dedupe.ts';
 import { readAtsBoard } from './readers/ats-api.ts';
 import { isBoardId, readBoard } from './readers/boards.ts';
+import { LINKEDIN } from './readers/linkedin.ts';
 import { NeedsRecipeError, readPage } from './readers/page.ts';
+import { type PlatformAccess, readPlatform } from './readers/platform.ts';
 import type { Listing, ReaderContext, ReaderRun } from './readers/types.ts';
+import { XING } from './readers/xing.ts';
 import {
   type RecipeForRun,
   type RecipeRequest,
@@ -42,7 +45,7 @@ import {
   SAMPLE_EVERY_MS,
 } from './recipes/store.ts';
 import type { RecipeListing } from './recipes/types.ts';
-import { isAts, sourcesFor } from './sources.ts';
+import { isAts, isPlatformKind, sourcesFor } from './sources.ts';
 import { matchesStrategy } from './strategies.ts';
 
 /** New postings one run may add; the rest wait for the next run (they're still new then). */
@@ -94,6 +97,10 @@ export async function readSource(
     } else if (source.kind === 'board') {
       if (!isBoardId(source.locator)) throw new Error(`unknown board "${source.locator}"`);
       read.run = await readBoard(source.locator, ctx);
+    } else if (isPlatformKind(source.kind)) {
+      // LinkedIn/Xing: a stored recipe for the source (when one is ok) over the built-in one.
+      const stored = recipe?.status === 'ok' ? recipe.recipe : null;
+      read.run = await readPlatform(source.kind === 'linkedin' ? LINKEDIN : XING, ctx, stored);
     } else {
       const run = await readPage(source.locator, ctx, source.resolved ?? null, recipe);
       read.run = run;
@@ -190,6 +197,17 @@ async function mapLimit<T, R>(
   return out;
 }
 
+/** LinkedIn/Xing reads: the guardrails and a page of Applyant's signed-in browser profile. */
+function platformAccess(
+  ctx: Parameters<typeof searchHandler>[1],
+  taskId: number,
+): PlatformAccess | null {
+  const guardrails = ctx.deps.guardrails;
+  const submit = ctx.deps.submit;
+  if (!guardrails || typeof submit?.deliver !== 'function') return null;
+  return { guardrails, browse: (fn) => submit.deliver(fn), taskId };
+}
+
 export const searchHandler: Handler<'search'> = async (task, ctx) => {
   const strategy = ctx.read
     .select()
@@ -212,7 +230,7 @@ export const searchHandler: Handler<'search'> = async (task, ctx) => {
   const sources = sourcesFor(ctx.read, strategy.sources).filter((s) => !only || only.has(s.id));
   const recipes = recipesFor(
     ctx.read,
-    sources.filter((s) => s.kind === 'page').map((s) => s.id),
+    sources.filter((s) => s.kind === 'page' || isPlatformKind(s.kind)).map((s) => s.id),
   );
   ctx.progress({ message: `${strategy.name}: reading ${sources.length} source(s)` });
   const reader = ctx.deps.reader as ReaderPool | undefined;
@@ -222,6 +240,8 @@ export const searchHandler: Handler<'search'> = async (task, ctx) => {
     queries: strategy.queries,
     reader: typeof reader?.withPage === 'function' ? reader : null,
     now: ctx.now(),
+    locations: strategy.locations,
+    platform: platformAccess(ctx, task.id),
   };
   const reads = await mapLimit(sources, PARALLEL_SOURCES, async (s) => {
     const recipe = recipes.get(s.id) ?? null;

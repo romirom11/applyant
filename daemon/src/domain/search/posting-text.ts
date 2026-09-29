@@ -107,7 +107,7 @@ export async function readPostingText(page: Page): Promise<PostingText> {
 
 /** Opens the posting in the reader and captures its text (re-reads, and postings verified before scoring). */
 export async function fetchPostingText(
-  reader: ReaderPool,
+  reader: Pick<ReaderPool, 'withPage'>,
   url: string,
   signal: AbortSignal,
 ): Promise<PostingText> {

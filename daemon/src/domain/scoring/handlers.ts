@@ -12,6 +12,7 @@
 // or fails: nothing already paid for is asked twice. Re-running score_posting with nothing
 // changed makes no model call at all.
 import { eq } from 'drizzle-orm';
+import { readerFor } from '../../browser/platform-reader.ts';
 import { type PostingRow, postings } from '../../db/schema.ts';
 import { matcherSchema, postingExtractionSchema } from '../../models/schemas/posting.ts';
 import type { Handler, HandlerContext, Outcome, Task } from '../../queue/types.ts';
@@ -53,7 +54,7 @@ export const scorePosting: Handler<'score_posting'> = async (task, ctx) => {
     ctx.progress({ message: `reading ${posting.canonicalUrl}` });
     try {
       ({ text, jsonLd } = await fetchPostingText(
-        ctx.deps.reader,
+        readerFor(ctx.deps, posting.canonicalUrl, { taskId: task.id }),
         posting.canonicalUrl,
         ctx.signal,
       ));

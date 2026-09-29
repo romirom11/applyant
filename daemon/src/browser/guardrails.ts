@@ -371,9 +371,19 @@ export class Guardrails {
     platform: PlatformKey,
     action: PlatformAction,
     fn: (s: GuardedSession) => Promise<T>,
-    o: { signal?: AbortSignal; progress?(message: string): void; taskId?: number } = {},
+    o: {
+      signal?: AbortSignal;
+      progress?(message: string): void;
+      taskId?: number;
+      /**
+       * false: a page read for a task that isn't a search or an application (verifying a
+       * posting, reading its form): lane, pacing and pauses as usual, not counted against a cap.
+       */
+      count?: boolean;
+    } = {},
   ): Promise<T> {
-    this.admit(platform, action);
+    const counted = o.count !== false;
+    this.admit(platform, action, counted);
     const previous = this.lanes.get(platform) ?? Promise.resolve();
     let release = () => {};
     const mine = new Promise<void>((resolve) => {
@@ -389,7 +399,7 @@ export class Guardrails {
       await previous;
       o.signal?.throwIfAborted();
       // The one before may have hit a challenge or used up the cap.
-      this.admit(platform, action);
+      this.admit(platform, action, counted);
       await this.waitWhileActive(platform, o);
       const last = this.lastEnd.get(platform);
       if (last !== undefined) {
@@ -401,12 +411,14 @@ export class Guardrails {
           await this.sleep(gap, o.signal);
         }
       }
-      runInTx(this.o.db, this.o.bus, { now: this.now() }, (tx) => {
-        tx.db
-          .insert(platformActions)
-          .values({ platform, action, taskId: o.taskId ?? null, at: tx.now })
-          .run();
-      });
+      if (counted) {
+        runInTx(this.o.db, this.o.bus, { now: this.now() }, (tx) => {
+          tx.db
+            .insert(platformActions)
+            .values({ platform, action, taskId: o.taskId ?? null, at: tx.now })
+            .run();
+        });
+      }
       this.running.set(platform, (this.running.get(platform) ?? 0) + 1);
       try {
         return await fn(this.session(platform, o.signal));
@@ -423,9 +435,10 @@ export class Guardrails {
   }
 
   /** Throws when the platform is paused or the action's daily cap is used up. */
-  admit(platform: PlatformKey, action: PlatformAction): void {
+  admit(platform: PlatformKey, action: PlatformAction, counted = true): void {
     const r = this.row(platform);
     if (r?.pausedAt) throw new PlatformPaused(platform, r.pauseReason ?? 'a challenge');
+    if (!counted) return;
     const caps = this.caps(platform);
     const cap = action === 'apply' ? caps.applications : caps.searches;
     const done = this.counted(platform, action);

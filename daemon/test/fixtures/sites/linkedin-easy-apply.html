@@ -1,0 +1,44 @@
+<!doctype html>
+<!-- Synthetic: a LinkedIn-like job page whose "Easy Apply" button opens a two-step modal form
+     (Next, then Submit application), served by the tests at www.linkedin.com and on the local
+     test server (never the real site). -->
+<html lang="en"><head><meta charset="utf-8"><title>Senior AI Engineer | Guarded Co | LinkedIn</title>
+<style>[hidden] { display: none !important; }</style>
+</head><body>
+<main>
+  <h1>Senior AI Engineer</h1>
+  <p>Guarded Co · Berlin, Germany (Remote)</p>
+  <button id="easy" class="jobs-apply-button" aria-label="Easy Apply to Senior AI Engineer at Guarded Co">Easy Apply</button>
+  <section><h2>About the job</h2><p>Build agents that apply to jobs, carefully.</p></section>
+</main>
+<div id="modal" role="dialog" aria-modal="true" aria-label="Apply to Guarded Co" hidden>
+  <form id="apply" novalidate onsubmit="return false">
+    <section data-step="1">
+      <div><label for="name">Full Name *</label><input id="name" required></div>
+      <div><label for="email">Email *</label><input id="email" type="email" required></div>
+      <button type="button" id="next" aria-label="Continue to next step">Next</button>
+    </section>
+    <section data-step="2" hidden>
+      <div><label for="why">Why this role?</label><input id="why"></div>
+      <button type="button" id="submit" aria-label="Submit application">Submit application</button>
+    </section>
+  </form>
+  <div id="confirmation" hidden>Your application was sent to Guarded Co!</div>
+</div>
+<script>
+  window.__submitted = 0;
+  document.getElementById('easy').addEventListener('click', () => {
+    document.getElementById('modal').hidden = false;
+  });
+  document.getElementById('next').addEventListener('click', () => {
+    if (!document.getElementById('name').value || !document.getElementById('email').value) return;
+    document.querySelector('[data-step="1"]').hidden = true;
+    document.querySelector('[data-step="2"]').hidden = false;
+  });
+  document.getElementById('submit').addEventListener('click', () => {
+    window.__submitted++;
+    document.getElementById('apply').hidden = true;
+    document.getElementById('confirmation').hidden = false;
+  });
+</script>
+</body></html>

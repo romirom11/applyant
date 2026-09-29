@@ -72,7 +72,7 @@ public enum Section: String, CaseIterable, Identifiable, Sendable {
     public var isBuilt: Bool {
         switch self {
         case .inbox, .readyToReview, .preparing, .interested, .skipped, .applied, .interviews, .offers, .whichApplication,
-             .interview, .search, .agentRuns, .companies: true
+             .interview, .search, .agentRuns, .companies, .settings: true
         default: false
         }
     }
@@ -82,7 +82,6 @@ public enum Section: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .overview: "the funnel view"
         case .profile, .projects: "onboarding (phase 16); the CLI has them now"
-        case .settings: "onboarding (phase 16); `applyant secrets` and `candidate prefs` now"
         default: nil
         }
     }

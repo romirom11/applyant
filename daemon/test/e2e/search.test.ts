@@ -109,6 +109,9 @@ describe('search from the CLI', () => {
       'board:himalayas',
       'board:arbeitnow',
       'board:jobicy',
+      // LinkedIn and Xing: built in, read only once Applyant's browser is signed in (phase 14).
+      'linkedin:jobs',
+      'xing:jobs',
     ]);
     expect(listed.kinds.map((k) => k.kind)).toEqual([
       'greenhouse',
@@ -117,6 +120,8 @@ describe('search from the CLI', () => {
       'workable',
       'page',
       'board',
+      'linkedin',
+      'xing',
     ]);
 
     const careers = site.url('/careers-jsonld.html');

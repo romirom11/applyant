@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { asc, eq } from 'drizzle-orm';
 import { postingSources, postings, searchRuns, searchSources, tasks } from '../../src/db/schema.ts';
+import type { Deps } from '../../src/deps.ts';
 import { searchHandler } from '../../src/domain/search/handlers.ts';
 import type { Fetch } from '../../src/domain/search/readers/types.ts';
 import { ensureBuiltinSources } from '../../src/domain/search/sources.ts';
@@ -101,7 +102,13 @@ export interface SearchHarness {
  */
 export function searchHarness(
   t: TempDb,
-  o: { fetch?: RecordedFetch; embedder?: Embedder; now?: () => Date } = {},
+  o: {
+    fetch?: RecordedFetch;
+    embedder?: Embedder;
+    now?: () => Date;
+    /** Extra deps (LinkedIn/Xing tests: the guardrails and a fake signed-in browser). */
+    deps?: Partial<Deps>;
+  } = {},
 ): SearchHarness {
   const bus = new EventBus();
   const fetch = o.fetch ?? recordedFetch();
@@ -115,7 +122,10 @@ export function searchHarness(
       search: searchHandler,
       verify_posting: done as Handler<'verify_posting'>,
     }),
-    deps: testDeps({ dir: t.dir, fetch, ...(o.embedder ? { embedder: o.embedder } : {}) }),
+    deps: {
+      ...testDeps({ dir: t.dir, fetch, ...(o.embedder ? { embedder: o.embedder } : {}) }),
+      ...o.deps,
+    },
     log: quietLog,
     concurrency: 2,
     leaseMs: 60_000,

@@ -296,6 +296,52 @@ describe('challenges pause the platform and are never solved', () => {
     expect(guardrails.status('linkedin').applicationsToday).toBe(1);
   });
 
+  it('Easy Apply: the modal form is filled and sent through the form engine, as one guarded application', async () => {
+    t = tempDb();
+    const asked: CaptchaChallenge[] = [];
+    const solver = {
+      async configured() {
+        return true;
+      },
+      async solve(c: CaptchaChallenge) {
+        asked.push(c);
+        return 'must-not-be-used';
+      },
+    };
+    const bus = new EventBus();
+    const guardrails = new Guardrails({ db: t.db, bus, pacing: NO_PACING });
+    h = await prepareHarness(t, {}, { deps: { captcha: solver, guardrails } });
+    const { context } = await (
+      h.submit as unknown as { ensure(): Promise<{ context: BrowserContext }> }
+    ).ensure();
+    await routeLinkedIn(context, 'linkedin-easy-apply.html');
+
+    // Read pressed "Easy Apply" and read both steps of the modal.
+    const run = await runRead(browser, site.url('/linkedin-easy-apply.html'));
+    closers.push(run.close);
+    expect(run.read.requirements.steps).toHaveLength(2);
+    setProfile(t.db, SYNTHETIC_PROFILE, now);
+    const job = 'https://www.linkedin.com/jobs/view/4002002/';
+    const id = seedPosting(t.db, run.read, { now, stage: 'verified' });
+    t.db
+      .update(postings)
+      .set({ canonicalUrl: job, applyUrl: job })
+      .where(eq(postings.id, id))
+      .run();
+    const app = runInTx(t.db, h.bus, { now }, (tx) => ensureApplication(tx, id, 't').app.id);
+    await h.worker.idle();
+    runInTx(t.db, h.bus, { now }, (tx) => approveApplication(tx, app));
+    await h.worker.idle();
+
+    const view = applicationView(t.db, app);
+    expect(view.handOff ?? null).toBeNull();
+    expect(view.app.stage).toBe('applied');
+    expect(asked).toEqual([]);
+    const status = guardrails.status('linkedin');
+    expect(status.applicationsToday).toBe(1);
+    expect(status.pausedAt).toBeNull();
+  });
+
   it("prefers the company's own form when the LinkedIn posting also has one", () => {
     t = tempDb();
     const id = t.db

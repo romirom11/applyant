@@ -17,6 +17,7 @@ struct MainView: View {
                 case .agentRuns: RunsList(store: store)
                 case .companies: CompaniesList(store: store)
                 case .whichApplication: WhichApplicationList(store: store)
+                case .settings: SettingsView(store: store)
                 default: PostingList(store: store)
                 }
             }

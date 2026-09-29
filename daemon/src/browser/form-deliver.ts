@@ -13,7 +13,7 @@ import {
   waitForForm,
   waitForOutcome,
 } from './form-engine.ts';
-import { dismissConsent } from './form-read.ts';
+import { dismissConsent, followApply } from './form-read.ts';
 import { refKey } from './form-types.ts';
 import { formSignature, type SnapField, snapshotForm } from './snapshot.ts';
 
@@ -118,7 +118,9 @@ export async function deliverForm(page: Page, o: DeliverFormOptions): Promise<De
   await page.goto(o.url, { waitUntil: 'domcontentloaded' });
   await settle(page, 500);
   await dismissConsent(page);
-  const found = await waitForForm(page, 10_000);
+  // A job page whose form opens from its Apply button (LinkedIn's Easy Apply modal, Xing's
+  // apply dialog): pressed like Read pressed it.
+  const found = (await waitForForm(page, 10_000)) || (await followApply(page, o.signal));
   if (!found) {
     return {
       kind: 'handoff',

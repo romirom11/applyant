@@ -106,6 +106,18 @@ public protocol DaemonAPI: Sendable {
     func assignEmail(_ id: Int64, application: Int64?, label: String?) async throws -> Email
     /// Reads the mailbox now; false when a sync was already waiting or running.
     func syncMailbox() async throws -> Bool
+
+    // LinkedIn/Xing and the captcha solver (phase 14): Settings.
+    /// The guarded platforms, whether a CapMonster key is stored, and an open sign-in window.
+    func listPlatforms() async throws -> PlatformList
+    /// A platform's daily caps (nil leaves that cap as it is).
+    func setPlatformCaps(_ platform: String, searches: Int32?, applications: Int32?) async throws -> Platform
+    /// Lets a platform paused by a challenge run again.
+    func resumePlatform(_ platform: String) async throws -> Platform
+    /// Opens Applyant's browser profile, unautomated, for a one-time sign-in; the URL it opened.
+    func signIn(_ target: String, force: Bool) async throws -> String
+    /// Stores a secret (write-only: values never come back).
+    func setSecret(_ name: String, value: String) async throws
 }
 
 /// Unary answers → value or APIError.
@@ -395,6 +407,39 @@ extension ConnectDaemonAPI {
 
     public func syncMailbox() async throws -> Bool {
         try unwrap(await unary.syncMailbox(request: .init(), headers: headers)).queued
+    }
+
+    public func listPlatforms() async throws -> PlatformList {
+        try unwrap(await unary.listPlatforms(request: .init(), headers: headers))
+    }
+
+    public func setPlatformCaps(_ platform: String, searches: Int32?, applications: Int32?) async throws -> Platform {
+        let request = Applyant_V1_SetPlatformCapsRequest.with {
+            $0.platform = platform
+            if let searches { $0.searchesPerDay = searches }
+            if let applications { $0.applicationsPerDay = applications }
+        }
+        return try unwrap(await unary.setPlatformCaps(request: request, headers: headers)).platform
+    }
+
+    public func resumePlatform(_ platform: String) async throws -> Platform {
+        try unwrap(await unary.resumePlatform(request: .with { $0.platform = platform }, headers: headers)).platform
+    }
+
+    public func signIn(_ target: String, force: Bool) async throws -> String {
+        let request = Applyant_V1_SignInRequest.with {
+            $0.target = target
+            $0.force = force
+        }
+        return try unwrap(await unary.signIn(request: request, headers: headers)).url
+    }
+
+    public func setSecret(_ name: String, value: String) async throws {
+        let request = Applyant_V1_SetSecretRequest.with {
+            $0.name = name
+            $0.value = value
+        }
+        _ = try unwrap(await unary.setSecret(request: request, headers: headers))
     }
 }
 

@@ -120,6 +120,8 @@ export const postingSources = sqliteTable(
  * greenhouse · ashby · lever · workable: a company's board, read through that ATS's public
  * list API (complete lists). page: a career page or feed URL, read by the generic reader (a
  * feed or JSON-LD first, then a known ATS embed). board: a job board (HN, RemoteOK, …).
+ * linkedin · xing: the platform's job search, read under the candidate's session in Applyant's
+ * browser with the platform guardrails (phase 14); never a complete list.
  */
 export const SEARCH_SOURCE_KINDS = [
   'greenhouse',
@@ -128,6 +130,8 @@ export const SEARCH_SOURCE_KINDS = [
   'workable',
   'page',
   'board',
+  'linkedin',
+  'xing',
 ] as const;
 export type SearchSourceKind = (typeof SEARCH_SOURCE_KINDS)[number];
 

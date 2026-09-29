@@ -1,8 +1,12 @@
 // The search source registry: every place postings can be listed, each with an on/off switch
 // (and a switch per kind). A disabled source, or a source of a disabled kind, is never queried.
 import { count, eq, inArray, isNotNull, sql } from 'drizzle-orm';
+import { platformOf } from '../../browser/guardrails.ts';
 import type { Conn } from '../../db/client.ts';
 import {
+  PLATFORM_KEYS,
+  type PlatformKey,
+  platforms,
   postingSources,
   postings,
   type ResolvedSource,
@@ -24,7 +28,36 @@ export const KIND_LABELS: Record<SearchSourceKind, string> = {
   workable: 'Workable',
   page: 'Career pages and feeds',
   board: 'Job boards',
+  linkedin: 'LinkedIn',
+  xing: 'Xing',
 };
+
+/** The guarded platforms' own job search: built in, read only once Applyant's browser is signed in. */
+export const PLATFORM_SOURCES: Record<PlatformKey, { locator: string; label: string }> = {
+  linkedin: { locator: 'jobs', label: 'LinkedIn Jobs' },
+  xing: { locator: 'jobs', label: 'Xing Jobs' },
+};
+
+export function isPlatformKind(kind: string): kind is PlatformKey {
+  return (PLATFORM_KEYS as readonly string[]).includes(kind);
+}
+
+/** Platforms Applyant's browser is signed in to (their sources are off until then). */
+export function signedInPlatforms(conn: Conn): Set<PlatformKey> {
+  return new Set(
+    conn
+      .select({ platform: platforms.platform })
+      .from(platforms)
+      .where(isNotNull(platforms.signedInAt))
+      .all()
+      .map((r) => r.platform),
+  );
+}
+
+export function signInNote(p: PlatformKey): string {
+  const name = KIND_LABELS[p];
+  return `off until Applyant's browser is signed in to ${name} (Settings → Sign in, or \`applyant platforms signin ${p}\`)`;
+}
 
 export function isSourceKind(kind: string): kind is SearchSourceKind {
   return (SEARCH_SOURCE_KINDS as readonly string[]).includes(kind);
@@ -41,7 +74,7 @@ export function isAts(kind: string): kind is Ats {
  * reports what it actually got.
  */
 export function completeList(kind: SearchSourceKind, resolved: ResolvedSource | null): boolean {
-  if (kind === 'board') return false;
+  if (kind === 'board' || isPlatformKind(kind)) return false;
   if (kind === 'page') return resolved !== null && resolved.via !== 'recipe';
   return true;
 }
@@ -64,6 +97,23 @@ export function ensureBuiltinSources(conn: Conn, now: Date): void {
         origin: 'builtin',
         enabled: !off,
         lastNote: off ?? null,
+        createdAt: now,
+      })
+      .onConflictDoNothing()
+      .run();
+  }
+  for (const [kind, s] of Object.entries(PLATFORM_SOURCES) as [
+    PlatformKey,
+    typeof PLATFORM_SOURCES.linkedin,
+  ][]) {
+    conn
+      .insert(searchSources)
+      .values({
+        key: sourceKey(kind, s.locator),
+        kind,
+        locator: s.locator,
+        label: s.label,
+        origin: 'builtin',
         createdAt: now,
       })
       .onConflictDoNothing()
@@ -95,6 +145,12 @@ export function parseSourceInput(args: string[], label: string | null = null): S
     if (url.protocol !== 'http:' && url.protocol !== 'https:') {
       throw new SearchError(`only http(s) pages can be sources: "${first}"`);
     }
+    const platform = platformOf(url.toString());
+    if (platform) {
+      throw new SearchError(
+        `${KIND_LABELS[platform]} is searched by its built-in source (${sourceKey(platform, PLATFORM_SOURCES[platform].locator)}) under the platform guardrails, not as a page`,
+      );
+    }
     // A board's own URL (jobs.lever.co/acme, job-boards.greenhouse.io/acme) is that board.
     const board = boardFromUrl(url.toString());
     if (board && !/\/embed\b/.test(url.pathname)) {
@@ -110,6 +166,11 @@ export function parseSourceInput(args: string[], label: string | null = null): S
     throw new SearchError(`unknown board "${second}" (${Object.keys(BOARDS).join(' | ')})`);
   }
   if (first === 'page') return parseSourceInput([second], label);
+  if (isPlatformKind(first)) {
+    throw new SearchError(
+      `${KIND_LABELS[first]} is a built-in source (${sourceKey(first, PLATFORM_SOURCES[first].locator)}); switch it on or off instead`,
+    );
+  }
   if (!/^[a-z0-9][a-z0-9._-]*$/i.test(second)) {
     throw new SearchError(`"${second}" doesn't look like a ${KIND_LABELS[first]} board name`);
   }
@@ -232,14 +293,19 @@ export function validateSelectors(conn: Conn, selectors: string[]): string[] {
  */
 export function sourcesFor(conn: Conn, selectors: string[]): SearchSourceRow[] {
   const off = kindsOff(conn);
+  const signedIn = signedInPlatforms(conn);
   const order = (k: SearchSourceKind) => SEARCH_SOURCE_KINDS.indexOf(k);
-  return conn
-    .select()
-    .from(searchSources)
-    .where(eq(searchSources.enabled, true))
-    .all()
-    .filter((s) => !off.has(s.kind) && selectors.some((sel) => selects(sel, s)))
-    .sort((a, b) => order(a.kind) - order(b.kind) || a.id - b.id);
+  return (
+    conn
+      .select()
+      .from(searchSources)
+      .where(eq(searchSources.enabled, true))
+      .all()
+      .filter((s) => !off.has(s.kind) && selectors.some((sel) => selects(sel, s)))
+      // LinkedIn/Xing are off until Applyant's browser is signed in there.
+      .filter((s) => !isPlatformKind(s.kind) || signedIn.has(s.kind))
+      .sort((a, b) => order(a.kind) - order(b.kind) || a.id - b.id)
+  );
 }
 
 export interface SearchStats {
@@ -280,6 +346,8 @@ export function sourceStats(conn: Conn): Map<number, SearchStats> {
 
 export interface SourceView extends SearchSourceRow {
   kindEnabled: boolean;
+  /** LinkedIn/Xing before Applyant's browser is signed in: not read yet (lastNote says why). */
+  needsSignIn: boolean;
   completeList: boolean;
   stats: SearchStats;
 }
@@ -293,6 +361,7 @@ export interface KindView {
 
 export function listSources(conn: Conn): { sources: SourceView[]; kinds: KindView[] } {
   const off = kindsOff(conn);
+  const signedIn = signedInPlatforms(conn);
   const stats = sourceStats(conn);
   const rows = conn.select().from(searchSources).all();
   const counts = new Map(
@@ -306,12 +375,17 @@ export function listSources(conn: Conn): { sources: SourceView[]; kinds: KindVie
   const order = (k: SearchSourceKind) => SEARCH_SOURCE_KINDS.indexOf(k);
   return {
     sources: rows
-      .map((s) => ({
-        ...s,
-        kindEnabled: !off.has(s.kind),
-        completeList: completeList(s.kind, s.resolved ?? null),
-        stats: stats.get(s.id) ?? NO_STATS,
-      }))
+      .map((s) => {
+        const needsSignIn = isPlatformKind(s.kind) && !signedIn.has(s.kind);
+        return {
+          ...s,
+          lastNote: needsSignIn && isPlatformKind(s.kind) ? signInNote(s.kind) : s.lastNote,
+          needsSignIn,
+          kindEnabled: !off.has(s.kind),
+          completeList: completeList(s.kind, s.resolved ?? null),
+          stats: stats.get(s.id) ?? NO_STATS,
+        };
+      })
       .sort((a, b) => order(a.kind) - order(b.kind) || a.id - b.id),
     kinds: SEARCH_SOURCE_KINDS.map((kind) => ({
       kind,

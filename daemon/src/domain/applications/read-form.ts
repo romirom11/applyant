@@ -4,8 +4,9 @@
 // dry-fill, so conditional fields are recorded under the branch their answer takes.
 
 import { and, eq, inArray, isNull } from 'drizzle-orm';
-import { guardReadOnly, readForm } from '../../browser/form-read.ts';
+import { guardReadOnly, readForm, readScope } from '../../browser/form-read.ts';
 import { type FormRead, fieldCount } from '../../browser/form-types.ts';
+import { isPlatformHold, readerFor } from '../../browser/platform-reader.ts';
 import { emailForm } from '../../channels/email.ts';
 import type { Db } from '../../db/client.ts';
 import {
@@ -60,9 +61,14 @@ export const readFormHandler: Handler<'read_form'> = async (task, ctx) => {
   let outcome: Awaited<ReturnType<typeof readForm>>;
   let blocked = 0;
   try {
-    outcome = await ctx.deps.reader.withPage(
+    // An Easy Apply / Xing form is read in the signed-in profile, under the guardrails.
+    const reader = readerFor(ctx.deps, url, {
+      taskId: task.id,
+      progress: (message) => ctx.progress({ message }),
+    });
+    outcome = await reader.withPage(
       async (page) => {
-        const guard = await guardReadOnly(page.context());
+        const guard = await guardReadOnly(readScope(page));
         try {
           return await readForm(page, {
             url,
@@ -78,6 +84,13 @@ export const readFormHandler: Handler<'read_form'> = async (task, ctx) => {
     );
   } catch (err) {
     ctx.signal.throwIfAborted();
+    if (isPlatformHold(err)) {
+      return {
+        kind: 'retry',
+        after: new Date(ctx.now().getTime() + 60 * 60_000),
+        reason: err.message,
+      };
+    }
     const reason = (err as Error).message.split('\n')[0] ?? 'read failed';
     if (task.attempts + 1 < READ_FORM_ATTEMPTS) {
       return {

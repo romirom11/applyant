@@ -67,6 +67,8 @@ public final class AppStore {
     /// The connected mailbox (nil when none is), and the replies waiting for "Which application?".
     public private(set) var mailbox: Mailbox?
     public private(set) var mailQueue: [Email] = []
+    /// LinkedIn/Xing (caps, pauses, sign-in) and the captcha solver's key status: Settings.
+    public private(set) var platforms: PlatformList?
     /// The last failed action, for an alert.
     public var lastError: String?
     /// Where the main window is (notifications and the menu bar move it).
@@ -138,6 +140,7 @@ public final class AppStore {
         // An older daemon without the mailbox RPCs still loads everything else.
         mailbox = (try? await box) ?? nil
         mailQueue = (try? await queue) ?? []
+        platforms = try? await api.listPlatforms()
         postings = Dictionary(p.map { ($0.id, $0) }, uniquingKeysWith: { _, last in last })
         applications = Dictionary(a.map { ($0.id, $0) }, uniquingKeysWith: { _, last in last })
         interviewQuestions = i.questions
@@ -201,9 +204,9 @@ public final class AppStore {
                 for id in applicationDetails.keys { await refreshApplication(id, api) }
             }
         case .platform?:
-            // LinkedIn/Xing paused, resumed, capped or signed in: Settings shows it (14b). A
-            // pause also arrives as the delivery's hand-off event, which notifies.
-            break
+            // LinkedIn/Xing paused, resumed, capped or signed in: Settings shows it. A pause
+            // during a delivery also arrives as its hand-off event, which notifies.
+            await refreshPlatforms(api)
         case nil:
             break
         }
@@ -509,6 +512,49 @@ public final class AppStore {
         guard let api, let queued = await attempt({ try await api.syncMailbox() }) else { return false }
         await refreshMail(api)
         return queued
+    }
+
+    // MARK: Settings: LinkedIn/Xing and the captcha solver
+
+    private func refreshPlatforms(_ api: DaemonAPI) async {
+        if let list = try? await api.listPlatforms() { platforms = list }
+    }
+
+    /// Fresh platform state (Settings opens with this).
+    public func openSettings() async {
+        guard let api else { return }
+        await refreshPlatforms(api)
+    }
+
+    public func platform(_ key: String) -> Platform? { platforms?.platforms.first { $0.platform == key } }
+
+    public func setPlatformCaps(_ key: String, searches: Int32?, applications: Int32?) async {
+        guard let api, await attempt({ try await api.setPlatformCaps(key, searches: searches, applications: applications) }) != nil else {
+            return
+        }
+        await refreshPlatforms(api)
+    }
+
+    public func resumePlatform(_ key: String) async {
+        guard let api, await attempt({ try await api.resumePlatform(key) }) != nil else { return }
+        await refreshPlatforms(api)
+    }
+
+    /// Opens the sign-in window; the URL it opened, nil when it couldn't (the reason is shown).
+    @discardableResult
+    public func signIn(_ target: String, force: Bool = false) async -> String? {
+        guard let api, let url = await attempt({ try await api.signIn(target, force: force) }) else { return nil }
+        await refreshPlatforms(api)
+        return url
+    }
+
+    /// Stores the CapMonster key through the secrets path; the value is never read back.
+    public func setCaptchaKey(_ key: String) async {
+        let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let api, !trimmed.isEmpty, await attempt({ try await api.setSecret(PlatformText.captchaSecret, value: trimmed) }) != nil else {
+            return
+        }
+        await refreshPlatforms(api)
     }
 
     // MARK: The interview

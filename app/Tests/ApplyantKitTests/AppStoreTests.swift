@@ -241,6 +241,43 @@ final class FakeDaemon: DaemonAPI, @unchecked Sendable {
         return syncs == 1
     }
 
+    // LinkedIn/Xing and the captcha key (Settings).
+    var platformList = PlatformList.with {
+        $0.platforms = [
+            .with { $0.platform = "linkedin"; $0.name = "LinkedIn"; $0.searchesPerDay = 8; $0.applicationsPerDay = 15 },
+            .with { $0.platform = "xing"; $0.name = "Xing"; $0.searchesPerDay = 8; $0.applicationsPerDay = 15 },
+        ]
+    }
+    var secrets: [String: String] = [:]
+
+    func listPlatforms() async throws -> PlatformList { log("listPlatforms"); return platformList }
+    private func changePlatform(_ key: String, _ change: (inout Platform) -> Void) throws -> Platform {
+        guard let i = platformList.platforms.firstIndex(where: { $0.platform == key }) else { throw APIError("unknown platform \(key)") }
+        change(&platformList.platforms[i])
+        return platformList.platforms[i]
+    }
+    func setPlatformCaps(_ platform: String, searches: Int32?, applications: Int32?) async throws -> Platform {
+        log("setPlatformCaps \(platform) \(searches.map(String.init) ?? "-") \(applications.map(String.init) ?? "-")")
+        return try changePlatform(platform) {
+            if let searches { $0.searchesPerDay = searches }
+            if let applications { $0.applicationsPerDay = applications }
+        }
+    }
+    func resumePlatform(_ platform: String) async throws -> Platform {
+        log("resumePlatform \(platform)")
+        return try changePlatform(platform) { $0.clearPausedAt(); $0.clearPauseReason() }
+    }
+    func signIn(_ target: String, force: Bool) async throws -> String {
+        log("signIn \(target)")
+        platformList.signInOpen = "https://www.linkedin.com/login"
+        return platformList.signInOpen
+    }
+    func setSecret(_ name: String, value: String) async throws {
+        log("setSecret \(name)")
+        secrets[name] = value
+        if name == "capmonster" { platformList.captchaSolver = true }
+    }
+
     /// Changes a question everywhere it's listed.
     func setQuestion(_ id: Int64, _ change: (inout InterviewQuestion) -> Void) throws -> InterviewQuestion {
         guard let i = questions.firstIndex(where: { $0.id == id }) else { throw APIError("no question \(id)") }

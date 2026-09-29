@@ -63,6 +63,22 @@ export function isGraphqlQuery(body: string | null): boolean {
   }
 }
 
+/**
+ * Pages of Applyant's shared, signed-in profile lent to a read (LinkedIn/Xing, phase 14): the
+ * read-only guard goes on the page, never on the profile's context, where it would outlive the
+ * read and block deliveries and the candidate's hand-off windows.
+ */
+const sharedPages = new WeakSet<Page>();
+
+export function markSharedPage(page: Page): void {
+  sharedPages.add(page);
+}
+
+/** What a read's read-only guard is put on: the throwaway context, or the lent page alone. */
+export function readScope(page: Page): BrowserContext | Page {
+  return sharedPages.has(page) ? page : page.context();
+}
+
 export interface ReadGuard {
   /** Requests aborted because they could have written something. */
   blocked: string[];
@@ -73,7 +89,7 @@ export interface ReadGuard {
  * queries) and heavy resources Read doesn't need. Registered last, so it runs before any
  * other route (e.g. routeFromHAR) and falls back to it.
  */
-export async function guardReadOnly(context: BrowserContext): Promise<ReadGuard> {
+export async function guardReadOnly(context: BrowserContext | Page): Promise<ReadGuard> {
   const guard: ReadGuard = { blocked: [] };
   await context.route('**/*', async (route: Route) => {
     const req = route.request();
@@ -92,8 +108,10 @@ export async function guardReadOnly(context: BrowserContext): Promise<ReadGuard>
 
 // ---- opening the form ---------------------------------------------------------------------
 
+// The quote is written \u0022: a raw `"` in a regex breaks Playwright's `hasText` selector
+// ("Invalid flags"), which made the Apply-button follow find nothing.
 const APPLY =
-  /(^|[\s"'«(])(apply|bewerben|postuler|candidatar|candidatura|aplicar|solliciteren|откликнуться|відгукнутися|подати заявку)/i;
+  /(^|[\s\u0022'«(])(apply|bewerben|postuler|candidatar|candidatura|aplicar|solliciteren|откликнуться|відгукнутися|подати заявку)/i;
 const NOT_APPLY = /linkedin|indeed|seek|with google|later|save|share|similar|refer/i;
 
 async function settle(page: Page): Promise<void> {
@@ -127,8 +145,11 @@ export async function dismissConsent(page: Page): Promise<void> {
   }
 }
 
-/** Follows the page's Apply link or button (not one inside a form). True if a form showed. */
-async function followApply(page: Page, signal?: AbortSignal): Promise<boolean> {
+/**
+ * Follows the page's Apply link or button (not one inside a form): a job page's "Apply", or
+ * LinkedIn's "Easy Apply" opening its modal form. True if a form showed.
+ */
+export async function followApply(page: Page, signal?: AbortSignal): Promise<boolean> {
   for (const frame of page.frames()) {
     const controls = frame
       .locator('a, button, [role=button]')
@@ -143,7 +164,8 @@ async function followApply(page: Page, signal?: AbortSignal): Promise<boolean> {
           text: (el as HTMLElement).innerText?.trim().slice(0, 80) ?? '',
           href: el instanceof HTMLAnchorElement ? el.href : null,
           inForm: !!el.closest('form'),
-          submit: (el as HTMLButtonElement).type === 'submit',
+          // A button outside any form is "submit" by default but submits nothing (Easy Apply).
+          submit: el instanceof HTMLButtonElement && el.type === 'submit' && el.form !== null,
         }))
         .catch(() => null);
       if (!info || info.inForm || info.submit || NOT_APPLY.test(info.text)) continue;
