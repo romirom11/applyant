@@ -101,6 +101,29 @@ export class SubmitProfile {
     }
   }
 
+  /**
+   * Lets go of the profile for the unautomated sign-in window: waits for the running delivery,
+   * closes the automated browser (Chrome allows one process per profile), and keeps later
+   * deliveries queued until `until` settles; they then relaunch it. Resolves once it's closed.
+   */
+  hold(until: Promise<void>): Promise<void> {
+    const previous = this.queue;
+    let release = () => {};
+    this.queue = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    return (async () => {
+      await previous;
+      try {
+        await this.close();
+      } catch (err) {
+        release();
+        throw err;
+      }
+      until.then(release, release);
+    })();
+  }
+
   /** Pages currently open in the profile (tests: what a hand-off left behind). */
   async openPages(): Promise<Page[]> {
     if (!this.context) return [];

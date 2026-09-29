@@ -2,6 +2,7 @@
 // Shares `fillStep` with Read; the difference is what a missing or unfillable control means:
 // Read just notes it, Deliver either escalates to the field/step agent or hands off.
 import type { Locator, Page } from 'playwright';
+import { type CaptchaStep, captchaStep } from './captcha.ts';
 import {
   type Advance,
   advanceDeterministic,
@@ -44,6 +45,11 @@ export interface DeliverFormOptions {
    * mailbox), or null when it didn't come. Unset: no mailbox, so a code step hands off.
    */
   securityCode?(since: Date): Promise<string | null>;
+  /**
+   * The captcha step, run once the step is filled (phase 14: CapMonster, or a guarded
+   * platform's challenge rule). Unset: a captcha goes to the candidate (phase 6).
+   */
+  captcha?(page: Page): Promise<CaptchaStep>;
   signal?: AbortSignal;
   progress?(message: string): void;
   maxSteps?: number;
@@ -57,27 +63,13 @@ export type DeliverFormResult =
       step: number;
       fieldLabel: string | null;
       reason: string;
+      /** A guarded platform's challenge (LinkedIn/Xing checkpoint): the platform pauses. */
+      challenge?: string;
     }
   /** A control only live delivery revealed, resolvable from the profile: back to Prepare, not sent. */
   | { kind: 'new_field'; step: number; field: SnapField; value: string };
 
-const CAPTCHA_HOST = /(^|\.)(recaptcha\.net|hcaptcha\.com|challenges\.cloudflare\.com)$/;
-
-/** Captchas go straight to hand-off (phase 14 adds a solver): detected by frame host or URL. */
-export function detectCaptcha(page: Page): string | null {
-  for (const frame of page.frames()) {
-    try {
-      const u = new URL(frame.url());
-      if (CAPTCHA_HOST.test(u.hostname)) return u.hostname;
-      if (u.hostname.endsWith('google.com') && u.pathname.startsWith('/recaptcha')) {
-        return 'recaptcha';
-      }
-    } catch {
-      // about:blank frames etc.
-    }
-  }
-  return null;
-}
+export { detectCaptcha } from './captcha.ts';
 
 const CODE_FIELD =
   /(security|verification|confirmation|one[- ]?time|access)[\s_-]*(code|pin)|\botp\b|security_code|verification_code/i;
@@ -191,16 +183,17 @@ export async function deliverForm(page: Page, o: DeliverFormOptions): Promise<De
       };
     }
 
-    // A captcha is handed off only now, with the step filled: the candidate solves it and
-    // presses the button, nothing more.
-    const captcha = detectCaptcha(page);
-    if (captcha) {
+    // The captcha step runs only now, with the step filled: solved (CapMonster), or handed to
+    // the candidate, who then only solves it and presses the button.
+    const captcha = o.captcha ? await o.captcha(page) : await captchaStep(page, null);
+    if (captcha.kind === 'handoff') {
       return {
         kind: 'handoff',
         scope: 'captcha',
         step,
         fieldLabel: null,
-        reason: `a captcha (${captcha}) is on this step; everything else is filled`,
+        reason: captcha.reason,
+        ...(captcha.challenge ? { challenge: captcha.challenge } : {}),
       };
     }
 

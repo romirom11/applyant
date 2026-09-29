@@ -477,6 +477,15 @@ export function eventToPb(row: EventRow): Event {
       },
     });
   }
+  if (row.kind === 'platform') {
+    return create(EventSchema, {
+      ...base,
+      payload: {
+        case: 'platform',
+        value: { platform: row.message.split(':')[0] ?? '', status: row.stage ?? '' },
+      },
+    });
+  }
   if (row.kind === 'posting.stage' || row.kind === 'posting.form') {
     return create(EventSchema, {
       ...base,

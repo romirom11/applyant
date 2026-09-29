@@ -42,7 +42,11 @@ export type EventKind =
   // The mailbox (phase 13): a sync stored replies (entity_id = mailbox id, stage = synced), an
   // email waits in the ask queue (entity_id = email id, stage = ask), or the candidate linked
   // one (stage = assigned).
-  | 'mail';
+  | 'mail'
+  // A guarded platform (phase 14; entity: none, message starts with the platform key): paused
+  // after a challenge, resumed, its caps changed, or Applyant's browser signed in there (stage =
+  // paused | resumed | caps | signed_in | signing_in).
+  | 'platform';
 
 export interface EventInput {
   kind: EventKind;

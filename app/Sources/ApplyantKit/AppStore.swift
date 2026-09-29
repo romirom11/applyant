@@ -200,6 +200,10 @@ public final class AppStore {
             if m.status == "calendar" || m.status == "assigned" {
                 for id in applicationDetails.keys { await refreshApplication(id, api) }
             }
+        case .platform?:
+            // LinkedIn/Xing paused, resumed, capped or signed in: Settings shows it (14b). A
+            // pause also arrives as the delivery's hand-off event, which notifies.
+            break
         case nil:
             break
         }

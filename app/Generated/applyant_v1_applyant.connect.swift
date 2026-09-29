@@ -289,6 +289,24 @@ public protocol Applyant_V1_ApplyantServiceClientInterface: Sendable {
     /// AssignEmail answers it: an application (and optionally what the email is), or none.
     @available(iOS 13, *)
     func `assignEmail`(request: Applyant_V1_AssignEmailRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_AssignEmailResponse>
+
+    /// Guarded platforms (LinkedIn, Xing): daily caps, the pause after a challenge, and the
+    /// one-time sign-in in Applyant's browser profile. Captcha solving is `SetSecret capmonster`.
+    @available(iOS 13, *)
+    func `listPlatforms`(request: Applyant_V1_ListPlatformsRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_ListPlatformsResponse>
+
+    /// SetPlatformCaps sets a platform's daily caps (an unset field keeps its value).
+    @available(iOS 13, *)
+    func `setPlatformCaps`(request: Applyant_V1_SetPlatformCapsRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_SetPlatformCapsResponse>
+
+    /// ResumePlatform ends the pause after the candidate answered a challenge.
+    @available(iOS 13, *)
+    func `resumePlatform`(request: Applyant_V1_ResumePlatformRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_ResumePlatformResponse>
+
+    /// SignIn opens Applyant's profile in plain Chrome (no automation) at a platform's sign-in
+    /// page or any URL; returns once the window is open. Deliveries wait until it's closed.
+    @available(iOS 13, *)
+    func `signIn`(request: Applyant_V1_SignInRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_SignInResponse>
 }
 
 /// Concrete implementation of `Applyant_V1_ApplyantServiceClientInterface`.
@@ -619,6 +637,26 @@ public final class Applyant_V1_ApplyantServiceClient: Applyant_V1_ApplyantServic
         return await self.client.unary(path: "/applyant.v1.ApplyantService/AssignEmail", idempotencyLevel: .unknown, request: request, headers: headers)
     }
 
+    @available(iOS 13, *)
+    public func `listPlatforms`(request: Applyant_V1_ListPlatformsRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_ListPlatformsResponse> {
+        return await self.client.unary(path: "/applyant.v1.ApplyantService/ListPlatforms", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
+    public func `setPlatformCaps`(request: Applyant_V1_SetPlatformCapsRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_SetPlatformCapsResponse> {
+        return await self.client.unary(path: "/applyant.v1.ApplyantService/SetPlatformCaps", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
+    public func `resumePlatform`(request: Applyant_V1_ResumePlatformRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_ResumePlatformResponse> {
+        return await self.client.unary(path: "/applyant.v1.ApplyantService/ResumePlatform", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
+    public func `signIn`(request: Applyant_V1_SignInRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_SignInResponse> {
+        return await self.client.unary(path: "/applyant.v1.ApplyantService/SignIn", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
     public enum Metadata {
         public enum Methods {
             public static let addPosting = Connect.MethodSpec(name: "AddPosting", service: "applyant.v1.ApplyantService", type: .unary)
@@ -685,6 +723,10 @@ public final class Applyant_V1_ApplyantServiceClient: Applyant_V1_ApplyantServic
             public static let syncMailbox = Connect.MethodSpec(name: "SyncMailbox", service: "applyant.v1.ApplyantService", type: .unary)
             public static let listMailQueue = Connect.MethodSpec(name: "ListMailQueue", service: "applyant.v1.ApplyantService", type: .unary)
             public static let assignEmail = Connect.MethodSpec(name: "AssignEmail", service: "applyant.v1.ApplyantService", type: .unary)
+            public static let listPlatforms = Connect.MethodSpec(name: "ListPlatforms", service: "applyant.v1.ApplyantService", type: .unary)
+            public static let setPlatformCaps = Connect.MethodSpec(name: "SetPlatformCaps", service: "applyant.v1.ApplyantService", type: .unary)
+            public static let resumePlatform = Connect.MethodSpec(name: "ResumePlatform", service: "applyant.v1.ApplyantService", type: .unary)
+            public static let signIn = Connect.MethodSpec(name: "SignIn", service: "applyant.v1.ApplyantService", type: .unary)
         }
     }
 }

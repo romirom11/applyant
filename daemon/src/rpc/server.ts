@@ -14,6 +14,7 @@ import { companyRpcs } from './companies.ts';
 import { configRpcs } from './config.ts';
 import { interviewRpcs } from './interview.ts';
 import { mailRpcs } from './mail.ts';
+import { type PlatformServices, platformRpcs } from './platforms.ts';
 import { postingRpcs, type RpcContext } from './postings.ts';
 import { prefsRpcs } from './prefs.ts';
 import { searchRpcs } from './search.ts';
@@ -25,6 +26,8 @@ export interface RpcServerOptions extends RpcContext {
   setup: SetupContext;
   /** The mailbox (phase 13); null in tests that don't need it. */
   mail?: MailService | null;
+  /** LinkedIn/Xing guardrails, the sign-in window, the captcha key (phase 14). */
+  platforms?: PlatformServices | null;
   token: string;
   host: string;
   port: number;
@@ -60,6 +63,7 @@ export async function startRpcServer(o: RpcServerOptions): Promise<RpcServer> {
         ...searchRpcs(o),
         ...companyRpcs(o),
         ...mailRpcs({ ...o, mail: o.mail ?? null }),
+        ...platformRpcs(o.platforms ?? null),
         ...configRpcs(o),
         ...secretRpcs(o.secrets),
         ...setupRpcs(o.setup),

@@ -167,6 +167,17 @@ service ApplyantService {
   rpc ListMailQueue(ListMailQueueRequest) returns (ListMailQueueResponse);
   // AssignEmail answers it: an application (and optionally what the email is), or none.
   rpc AssignEmail(AssignEmailRequest) returns (AssignEmailResponse);
+
+  // Guarded platforms (LinkedIn, Xing): daily caps, the pause after a challenge, and the
+  // one-time sign-in in Applyant's browser profile. Captcha solving is `SetSecret capmonster`.
+  rpc ListPlatforms(ListPlatformsRequest) returns (ListPlatformsResponse);
+  // SetPlatformCaps sets a platform's daily caps (an unset field keeps its value).
+  rpc SetPlatformCaps(SetPlatformCapsRequest) returns (SetPlatformCapsResponse);
+  // ResumePlatform ends the pause after the candidate answered a challenge.
+  rpc ResumePlatform(ResumePlatformRequest) returns (ResumePlatformResponse);
+  // SignIn opens Applyant's profile in plain Chrome (no automation) at a platform's sign-in
+  // page or any URL; returns once the window is open. Deliveries wait until it's closed.
+  rpc SignIn(SignInRequest) returns (SignInResponse);
 }
 
 enum PostingStage {
@@ -522,6 +533,12 @@ message MailEvent {
   int64 entity_id = 2;
 }
 
+// A guarded platform changed: paused | resumed | caps | signed_in | signing_in.
+message PlatformEvent {
+  string platform = 1;
+  string status = 2;
+}
+
 message Event {
   int64 id = 1;
   google.protobuf.Timestamp at = 2;
@@ -537,6 +554,7 @@ message Event {
     SearchEvent search = 15;
     CompanyEvent company = 16;
     MailEvent mail = 17;
+    PlatformEvent platform = 18;
   }
 }
 
@@ -1783,4 +1801,61 @@ message AssignEmailRequest {
 
 message AssignEmailResponse {
   Email email = 1;
+}
+
+// ---- Guarded platforms (phase 14) -----------------------------------------------------------
+
+message Platform {
+  // linkedin | xing
+  string platform = 1;
+  string name = 2;
+  int32 searches_per_day = 3;
+  int32 applications_per_day = 4;
+  // In the last 24 hours.
+  int32 searches_today = 5;
+  int32 applications_today = 6;
+  optional google.protobuf.Timestamp paused_at = 7;
+  optional string pause_reason = 8;
+  optional google.protobuf.Timestamp signed_in_at = 9;
+}
+
+message ListPlatformsRequest {}
+
+message ListPlatformsResponse {
+  repeated Platform platforms = 1;
+  // A CapMonster key is stored: captchas off LinkedIn/Xing are solved before any hand-off.
+  bool captcha_solver = 2;
+  // The sign-in window is open (at this URL).
+  optional string sign_in_open = 3;
+}
+
+message SetPlatformCapsRequest {
+  string platform = 1;
+  optional int32 searches_per_day = 2;
+  optional int32 applications_per_day = 3;
+}
+
+message SetPlatformCapsResponse {
+  Platform platform = 1;
+}
+
+message ResumePlatformRequest {
+  string platform = 1;
+}
+
+message ResumePlatformResponse {
+  Platform platform = 1;
+}
+
+message SignInRequest {
+  // linkedin | xing | an https URL (a Workday tenant, Djinni…).
+  string target = 1;
+  // Close hand-off windows left open in Applyant's browser (their filled forms are lost).
+  bool force = 2;
+}
+
+message SignInResponse {
+  string url = 1;
+  // The guarded platform the URL belongs to, if any.
+  optional string platform = 2;
 }

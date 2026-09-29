@@ -1,0 +1,12 @@
+<!doctype html>
+<!-- Synthetic: a reCAPTCHA v2 checkbox widget as the vendor's markup leaves it (no vendor script
+     loaded: tests are offline). The callback named on the widget records the token. -->
+<html lang="en"><head><meta charset="utf-8"><title>reCAPTCHA v2</title>
+<script>function onCaptcha(t) { window.__callback = t; document.getElementById('go').disabled = false; }</script>
+</head><body>
+<form id="f" onsubmit="return false">
+  <div class="g-recaptcha" data-sitekey="6LfTestV2SiteKey000000000000000000000000" data-callback="onCaptcha"></div>
+  <textarea id="g-recaptcha-response" name="g-recaptcha-response" style="display:none"></textarea>
+  <button id="go" disabled>Submit</button>
+</form>
+</body></html>

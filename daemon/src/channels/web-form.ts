@@ -154,6 +154,7 @@ export class WebFormChannel implements Channel {
           step: number;
           fieldLabel: string | null;
           snapshotPath: string | null;
+          challenge: string | null;
         }
     >(async (page) => {
       const deps = { models: this.d.models, mcp: this.d.mcp, taskPages: this.d.taskPages };
@@ -197,6 +198,7 @@ export class WebFormChannel implements Channel {
         agentStep: (fields, errors, advance) =>
           agentFixAndAdvance(deps, agentCtx, fields, errors, advance),
         ...(ctx.securityCode ? { securityCode: ctx.securityCode } : {}),
+        ...(ctx.captcha ? { captcha: ctx.captcha } : {}),
         signal: ctx.signal,
         progress: ctx.progress,
       });
@@ -223,7 +225,10 @@ export class WebFormChannel implements Channel {
           keepOpen: false,
         };
       }
-      // Hand-off: save a snapshot, restore the window, and leave it open.
+      // Hand-off: save a snapshot, restore the window, and leave it open. On LinkedIn/Xing,
+      // first: is this where the platform challenged the session?
+      const challenge =
+        outcome.challenge ?? (ctx.challenge ? await ctx.challenge(page).catch(() => null) : null);
       const snapshotPath = await saveSnapshot(page, this.d.snapshotsDir, ctx.taskId).catch(
         () => null,
       );
@@ -236,6 +241,7 @@ export class WebFormChannel implements Channel {
           step: outcome.step,
           fieldLabel: outcome.fieldLabel,
           snapshotPath,
+          challenge,
         },
         keepOpen: true,
       };
@@ -268,8 +274,9 @@ export class WebFormChannel implements Channel {
     }
     return {
       kind: 'needs_candidate',
+      ...(result.challenge ? { challenge: result.challenge } : {}),
       handOff: {
-        reason: result.reason,
+        reason: result.challenge && result.scope !== 'captcha' ? result.challenge : result.reason,
         detail: null,
         browser: {
           scope: result.scope,

@@ -1007,6 +1007,42 @@ export const emails = sqliteTable(
   ],
 );
 
+// ---- Guarded platforms (phase 14) ----------------------------------------------------------
+
+export const PLATFORM_KEYS = ['linkedin', 'xing'] as const;
+export type PlatformKey = (typeof PLATFORM_KEYS)[number];
+export const PLATFORM_ACTIONS = ['search', 'apply'] as const;
+export type PlatformAction = (typeof PLATFORM_ACTIONS)[number];
+
+/**
+ * LinkedIn and Xing, run under the candidate's own session with guardrails
+ * (browser/guardrails.ts): daily caps (null = the default), a pause after any challenge, and
+ * when Applyant's profile was last signed in there.
+ */
+export const platforms = sqliteTable('platforms', {
+  platform: text('platform', { enum: PLATFORM_KEYS }).primaryKey(),
+  searchesPerDay: integer('searches_per_day'),
+  applicationsPerDay: integer('applications_per_day'),
+  /** Set when a checkpoint / verification / unusual captcha stopped a task; cleared by resume. */
+  pausedAt: integer('paused_at', { mode: 'timestamp_ms' }),
+  pauseReason: text('pause_reason'),
+  signedInAt: integer('signed_in_at', { mode: 'timestamp_ms' }),
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull().default(now),
+});
+
+/** One guarded search or application started on a platform: what the daily caps count. */
+export const platformActions = sqliteTable(
+  'platform_actions',
+  {
+    id: integer('id').primaryKey(),
+    platform: text('platform', { enum: PLATFORM_KEYS }).notNull(),
+    action: text('action', { enum: PLATFORM_ACTIONS }).notNull(),
+    taskId: integer('task_id'),
+    at: integer('at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (t) => [index('platform_actions_at').on(t.platform, t.action, t.at)],
+);
+
 /** Small daemon-internal state, key → JSON (e.g. which embedder made the fact vectors). */
 export const appState = sqliteTable('app_state', {
   key: text('key').primaryKey(),
@@ -1014,6 +1050,7 @@ export const appState = sqliteTable('app_state', {
 });
 
 export type PostingRow = typeof postings.$inferSelect;
+export type PlatformRow = typeof platforms.$inferSelect;
 export type PostingSourceRow = typeof postingSources.$inferSelect;
 export type TaskRow = typeof tasks.$inferSelect;
 export type EventRow = typeof events.$inferSelect;

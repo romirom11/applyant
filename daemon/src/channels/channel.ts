@@ -3,6 +3,8 @@
 // `interface Channel { read, deliver }`: `read` is the phase-4 reader (kept as a plain function
 // there too, since `read_form`'s handler already calls it directly and nothing here should
 // risk that path); `deliver` is new in this phase.
+import type { Page } from 'playwright';
+import type { CaptchaStep } from '../browser/captcha.ts';
 import type { ReadFormOptions, ReadFormResult } from '../browser/form-read.ts';
 import type { FieldSpec } from '../browser/form-types.ts';
 import type { ApplicationRow, FieldSource, PostingRow } from '../db/schema.ts';
@@ -40,7 +42,8 @@ export interface NewFieldFound {
 
 export type DeliverOutcome =
   | { kind: 'applied'; receipt: DeliveryReceipt }
-  | { kind: 'needs_candidate'; handOff: HandOff }
+  /** `challenge`: a guarded platform's own check was on the page (the platform pauses). */
+  | { kind: 'needs_candidate'; handOff: HandOff; challenge?: string }
   | { kind: 'new_field'; field: NewFieldFound };
 
 export interface DeliverContext {
@@ -54,6 +57,13 @@ export interface DeliverContext {
    * mailbox (phase 13); absent when no mailbox is connected.
    */
   securityCode?(since: Date): Promise<string | null>;
+  /**
+   * The captcha step once a step is filled (phase 14): CapMonster, or on LinkedIn/Xing a
+   * challenge for the candidate. Absent: captchas go to the candidate (phase 6).
+   */
+  captcha?(page: Page): Promise<CaptchaStep>;
+  /** A guarded platform: whether the page delivery stopped on is its challenge. */
+  challenge?(page: Page): Promise<string | null>;
 }
 
 /** What a channel needs to deliver: the application as review left it, and its posting. */

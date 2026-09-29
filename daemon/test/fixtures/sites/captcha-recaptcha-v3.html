@@ -1,0 +1,12 @@
+<!doctype html>
+<!-- Synthetic: score-based reCAPTCHA v3: no widget, only the script with the key as `render`,
+     and a submit that asks grecaptcha.execute for its token. The test answers the script URL
+     locally with a stub grecaptcha whose own token is "page-token". -->
+<html lang="en"><head><meta charset="utf-8"><title>reCAPTCHA v3</title>
+<script src="https://www.google.com/recaptcha/api.js?render=6LfTestV3SiteKey000000000000000000000000"></script>
+</head><body>
+<form id="f" onsubmit="return false">
+  <input type="hidden" name="token" id="token">
+  <button id="go" onclick="grecaptcha.execute('6LfTestV3SiteKey000000000000000000000000', {action: 'submit'}).then(function (t) { document.getElementById('token').value = t; })">Submit</button>
+</form>
+</body></html>

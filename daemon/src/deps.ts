@@ -1,4 +1,5 @@
 // What task handlers may use during their slow phase. Built once in main.ts.
+import type { Guardrails } from './browser/guardrails.ts';
 import type { ReaderPool } from './browser/reader-pool.ts';
 import type { SubmitProfile } from './browser/submit-profile.ts';
 import type { TaskPages } from './browser/task-pages.ts';
@@ -8,6 +9,7 @@ import type { GithubApi } from './domain/knowledge/sources/github.ts';
 import type { TextExtractor } from './domain/knowledge/text/extract.ts';
 import type { FxSource } from './domain/scoring/fx.ts';
 import type { Fetch } from './domain/search/readers/types.ts';
+import type { CaptchaSolver } from './integrations/capmonster.ts';
 import type { MailAccess } from './integrations/mail-service.ts';
 import type { McpAccess } from './mcp/server.ts';
 import type { AgentRunner } from './models/agent-runner.ts';
@@ -26,6 +28,13 @@ export interface Deps {
   secrets: Secrets;
   /** The connected mailbox (phase 13): replies, emailed security codes, email applications. */
   mail?: MailAccess | null;
+  /**
+   * The captcha solver (phase 14: CapMonster Cloud); `configured()` is false without a key, and
+   * captchas then go to the candidate.
+   */
+  captcha?: (CaptchaSolver & { configured(): Promise<boolean> }) | null;
+  /** LinkedIn/Xing guardrails (phase 14): one lane, daily caps, pacing, pause on challenge. */
+  guardrails?: Guardrails | null;
   /** Every model call goes through a role here; handlers never name a provider. */
   models: AgentRunner;
   /** Fact and query embeddings (in-process). */

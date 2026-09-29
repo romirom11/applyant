@@ -6,12 +6,26 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { and, eq, inArray } from 'drizzle-orm';
-import type { DeliverOutcome } from '../../channels/channel.ts';
+import type { Page } from 'playwright';
+import { captchaStep } from '../../browser/captcha.ts';
+import {
+  detectChallenge,
+  type Guardrails,
+  PlatformBusy,
+  PlatformCapReached,
+  type PlatformKey,
+  PlatformPaused,
+  platformName,
+  platformOf,
+} from '../../browser/guardrails.ts';
+import type { DeliverContext, DeliverOutcome } from '../../channels/channel.ts';
+import type { ReadDb } from '../../db/client.ts';
 import {
   type ApplicationRow,
   applications,
   fieldValues,
   type PostingRow,
+  postingSources,
   postings,
   receipts,
   tasks,
@@ -19,6 +33,7 @@ import {
 import type { MailAccess } from '../../integrations/mail-service.ts';
 import type { Handler, HandlerContext, HandOff, Outcome, Tx } from '../../queue/types.ts';
 import { getStandardProfile } from '../knowledge/profile.ts';
+import { atsJobKey } from '../search/readers/ats-embed.ts';
 import { waitForSecurityCode } from './security-code.ts';
 import { ApplicationError, applicationView, emitStage } from './store.ts';
 
@@ -44,17 +59,58 @@ export const deliverApplication: Handler<'deliver_application'> = async (task, c
   const cvProblem = tailoredCvChanged(view);
   if (cvProblem) return needsCandidate(app, cvProblem);
 
+  // The company's own form when the posting also has one (TDD: "listings prefer the original
+  // form"); Read used the same target, so the prepared fields match it.
+  const target = channelKey === 'web_form' ? applyTarget(ctx.read, posting) : null;
+  const platform = target ? platformOf(target) : null;
+  const guard = platform ? (ctx.deps.guardrails ?? null) : null;
+  if (platform && !guard) {
+    return needsCandidate(app, `${platformName(platform)} delivery needs the platform guardrails`);
+  }
+  // CapMonster only off the guarded platforms: a captcha on LinkedIn/Xing is a challenge.
+  const solver =
+    !platform && ctx.deps.captcha && (await ctx.deps.captcha.configured().catch(() => false))
+      ? ctx.deps.captcha
+      : null;
+  const progress = (message: string) => ctx.progress({ message });
+  const deliverCtx: DeliverContext = {
+    taskId: task.id,
+    signal: ctx.signal,
+    progress,
+    profile,
+    ...(mail ? { securityCode: securityCodeReader(mail, ctx) } : {}),
+    ...(platform
+      ? {
+          captcha: async (page: Page) => {
+            const step = await captchaStep(page, null);
+            return step.kind === 'handoff'
+              ? {
+                  ...step,
+                  challenge: `${step.reason.replace(/ is on this step.*$/, '')} on ${platformName(platform)}`,
+                }
+              : step;
+          },
+          challenge: (page: Page) => detectChallenge(page, platform),
+        }
+      : solver
+        ? { captcha: (page: Page) => captchaStep(page, solver, { signal: ctx.signal, progress }) }
+        : {}),
+  };
+  const sending =
+    target && target !== posting.applyUrl ? { ...posting, applyUrl: target } : posting;
+  const send = () => channel.deliver(app, sending as PostingRow, view, deliverCtx);
+
   let outcome: DeliverOutcome;
   try {
-    outcome = await channel.deliver(app, posting as PostingRow, view, {
-      taskId: task.id,
-      signal: ctx.signal,
-      progress: (message) => ctx.progress({ message }),
-      profile,
-      ...(mail ? { securityCode: securityCodeReader(mail, ctx) } : {}),
-    });
+    outcome =
+      guard && platform ? await guardedDelivery(guard, platform, send, task.id, ctx) : await send();
   } catch (err) {
     ctx.signal.throwIfAborted();
+    if (err instanceof PlatformPaused) return needsCandidate(app, err.message);
+    if (err instanceof PlatformCapReached) return deferDelivery(app, err.message, err.until);
+    if (err instanceof PlatformBusy) {
+      return deferDelivery(app, err.message, new Date(ctx.now().getTime() + 15 * 60_000));
+    }
     const reason = ((err as Error).message ?? String(err)).split('\n')[0] ?? 'delivery failed';
     if (task.attempts + 1 < DELIVER_ATTEMPTS) {
       return {
@@ -152,6 +208,76 @@ export const deliverApplication: Handler<'deliver_application'> = async (task, c
 
   return needsCandidate(app, outcome.handOff.reason, outcome.handOff);
 };
+
+/**
+ * A delivery on LinkedIn/Xing: in the platform's lane, within its cap, paced. A challenge on the
+ * page pauses the platform; the candidate gets the hand-off.
+ */
+async function guardedDelivery(
+  guard: Guardrails,
+  platform: PlatformKey,
+  send: () => Promise<DeliverOutcome>,
+  taskId: number,
+  ctx: HandlerContext,
+): Promise<DeliverOutcome> {
+  const outcome = await guard.run(platform, 'apply', () => send(), {
+    signal: ctx.signal,
+    progress: (message) => ctx.progress({ message }),
+    taskId,
+  });
+  if (outcome.kind === 'needs_candidate' && outcome.challenge) {
+    guard.pause(platform, outcome.challenge);
+    return {
+      ...outcome,
+      handOff: {
+        ...outcome.handOff,
+        reason: `${outcome.challenge}: never sent to a captcha solver. ${platformName(platform)} is paused until you answer it in the browser window and run \`applyant platforms resume ${platform}\``,
+      },
+    };
+  }
+  return outcome;
+}
+
+/**
+ * Where a posting is applied to (Read and Deliver agree on it): its apply URL, unless that's on
+ * LinkedIn/Xing and the same job is also known on the company's own ATS (another of its source
+ * URLs, or its canonical URL) — then the company's form (PRD: "the company's own form is the
+ * default").
+ */
+export function applyTarget(
+  read: ReadDb,
+  posting: Pick<PostingRow, 'id' | 'applyUrl' | 'canonicalUrl'>,
+): string {
+  const own = posting.applyUrl ?? posting.canonicalUrl;
+  if (!platformOf(own)) return own;
+  const urls = [
+    posting.canonicalUrl,
+    ...read
+      .select({ url: postingSources.url })
+      .from(postingSources)
+      .where(eq(postingSources.postingId, posting.id))
+      .all()
+      .map((r) => r.url),
+  ];
+  return urls.find((u) => !platformOf(u) && atsJobKey(u)) ?? own;
+}
+
+/** Over a platform's daily cap (or the candidate is using it): the delivery runs again later. */
+function deferDelivery(app: ApplicationRow, reason: string, after: Date): Outcome {
+  return {
+    kind: 'done',
+    commit: (tx) => {
+      const current = tx.db.select().from(applications).where(eq(applications.id, app.id)).get();
+      if (current?.stage !== 'approved') return;
+      tx.db
+        .update(applications)
+        .set({ note: `delivery waits: ${reason}`.slice(0, 1000), updatedAt: tx.now })
+        .where(eq(applications.id, app.id))
+        .run();
+      tx.enqueue('deliver_application', app.id, { runAfter: after });
+    },
+  };
+}
 
 /**
  * The security-code step's mailbox read: the connected mailbox, polled for a code sent after

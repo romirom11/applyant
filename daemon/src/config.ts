@@ -26,6 +26,8 @@ export interface Config {
   modelsDir: string;
   /** Jev endpoint; APPLYANT_JEV_URL overrides it (tests point it nowhere). */
   jevUrl: string | null;
+  /** CapMonster Cloud's API (tests point it at a local fake); the key is a secret. */
+  capmonsterUrl: string | null;
   /** gemma (default) · hash: an offline lexical stand-in (tests, machines without the model). */
   embedder: 'gemma' | 'hash';
   /**
@@ -132,6 +134,7 @@ export function loadConfig(env: Env = process.env): Config {
     cvTemplateDir: join(home, 'cv-template'),
     modelsDir: env.APPLYANT_MODELS_DIR || join(home, 'models'),
     jevUrl: env.APPLYANT_JEV_URL || null,
+    capmonsterUrl: env.APPLYANT_CAPMONSTER_URL || null,
     embedder: embedderKind(env.APPLYANT_EMBEDDER),
     nativeHelperPath: nativeHelperPath(env),
     installBrowsers: env.APPLYANT_INSTALL_BROWSERS === '1',

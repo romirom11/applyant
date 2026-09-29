@@ -19,6 +19,7 @@ import type { EventBus } from '../../queue/events.ts';
 import { runInTx } from '../../queue/tx.ts';
 import type { Handler, Tx } from '../../queue/types.ts';
 import { getStandardProfile } from '../knowledge/profile.ts';
+import { applyTarget } from './deliver.ts';
 import { FormJudge } from './form-judge.ts';
 import { formReadFor } from './store.ts';
 
@@ -37,7 +38,7 @@ export const readFormHandler: Handler<'read_form'> = async (task, ctx) => {
   const posting = ctx.read.select().from(postings).where(eq(postings.id, task.entityId)).get();
   if (!posting || !READABLE_STAGES.includes(posting.stage))
     return { kind: 'done', commit: () => {} };
-  const url = posting.applyUrl ?? posting.canonicalUrl;
+  const url = applyTarget(ctx.read, posting);
   if (url.startsWith('mailto:')) {
     return {
       kind: 'done',

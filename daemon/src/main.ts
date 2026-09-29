@@ -3,7 +3,9 @@
 // browser and the Connect server, then writes {port, token} for clients.
 import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
+import { Guardrails } from './browser/guardrails.ts';
 import { installReaderBrowser } from './browser/install.ts';
+import { LoginWindow, profileActivity } from './browser/login-window.ts';
 import { ReaderPool } from './browser/reader-pool.ts';
 import { SubmitProfile } from './browser/submit-profile.ts';
 import { TaskPages } from './browser/task-pages.ts';
@@ -35,6 +37,7 @@ import { buildRecipe } from './domain/search/recipes/build.ts';
 import { ensureBuiltinSources } from './domain/search/sources.ts';
 import { verifyPosting } from './domain/search/verify.ts';
 import { isAlive, readEndpoint, removeEndpoint, writeEndpoint } from './endpoint.ts';
+import { CapMonster } from './integrations/capmonster.ts';
 import { MailService } from './integrations/mail-service.ts';
 import { McpHub } from './mcp/server.ts';
 import { browserTools } from './mcp/tools/browser.ts';
@@ -132,6 +135,20 @@ export async function runDaemon(config: Config = loadConfig()): Promise<() => Pr
     log: log.child({ part: 'submit' }),
   });
   const taskPages = new TaskPages();
+  // Phase 14: the unautomated sign-in window, LinkedIn/Xing guardrails and the captcha solver.
+  const login = new LoginWindow({
+    userDataDir: config.browserDir,
+    profile: submit,
+    log: log.child({ part: 'login-window' }),
+    onClosed: ({ platform }) => {
+      if (platform) guardrails.markSignedIn(platform);
+    },
+  });
+  const guardrails = new Guardrails({ db, bus, activity: profileActivity(login, submit) });
+  const captcha = new CapMonster({
+    secrets,
+    ...(config.capmonsterUrl ? { url: config.capmonsterUrl } : {}),
+  });
   // Tools for agent runs (the writer's knowledge lookups, the form agent's browser control),
   // on 127.0.0.1 behind per-task tokens.
   const mcp = new McpHub({
@@ -171,6 +188,8 @@ export async function runDaemon(config: Config = loadConfig()): Promise<() => Pr
     },
     secrets,
     mail,
+    captcha,
+    guardrails,
     models,
     embedder,
     readPool,
@@ -263,6 +282,7 @@ export async function runDaemon(config: Config = loadConfig()): Promise<() => Pr
     secrets,
     setup: { cli, native, secrets, home: config.home, startedAt },
     mail,
+    platforms: { guardrails, login, captchaConfigured: () => captcha.configured() },
     now: () => new Date(),
     token,
     host: config.host,
@@ -288,6 +308,7 @@ export async function runDaemon(config: Config = loadConfig()): Promise<() => Pr
       scheduler.stop();
       await worker.stop();
       await mcp.close();
+      login.close();
       await submit.close();
       await reader.close();
       await readPool.close();

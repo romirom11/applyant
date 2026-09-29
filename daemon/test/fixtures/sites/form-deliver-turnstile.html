@@ -1,0 +1,23 @@
+<!doctype html>
+<!-- Synthetic, for captcha solving in delivery: standard fields the profile answers, then a
+     Turnstile widget (markup only, offline). Submitting without a token shows an error; with
+     one, a confirmation and the token that was sent. -->
+<html lang="en"><head><meta charset="utf-8"><title>Apply · Turnstile Co</title></head><body>
+<h1>Apply to Turnstile Co</h1>
+<form id="apply" novalidate>
+  <div><label for="name">Full Name *</label><input id="name" required></div>
+  <div><label for="email">Email *</label><input id="email" type="email" required></div>
+  <div><label for="resume">Resume *</label><input id="resume" type="file" required></div>
+  <div class="cf-turnstile" data-sitekey="0x4AAAAAAATestTurnstileKey"></div>
+  <p id="err" role="alert" hidden>Please complete the security check.</p>
+  <button id="submit" type="submit">Submit application</button>
+</form>
+<script>
+  document.getElementById('apply').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var t = document.querySelector('[name="cf-turnstile-response"]');
+    if (!t || !t.value) { document.getElementById('err').hidden = false; return; }
+    document.body.innerHTML = '<h1>Thank you! Your application was received.</h1><p id="sent">' + t.value + '</p>';
+  });
+</script>
+</body></html>

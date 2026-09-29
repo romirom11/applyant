@@ -1262,6 +1262,29 @@ export declare type MailEvent = Message<"applyant.v1.MailEvent"> & {
 export declare const MailEventSchema: GenMessage<MailEvent>;
 
 /**
+ * A guarded platform changed: paused | resumed | caps | signed_in | signing_in.
+ *
+ * @generated from message applyant.v1.PlatformEvent
+ */
+export declare type PlatformEvent = Message<"applyant.v1.PlatformEvent"> & {
+  /**
+   * @generated from field: string platform = 1;
+   */
+  platform: string;
+
+  /**
+   * @generated from field: string status = 2;
+   */
+  status: string;
+};
+
+/**
+ * Describes the message applyant.v1.PlatformEvent.
+ * Use `create(PlatformEventSchema)` to create a new message.
+ */
+export declare const PlatformEventSchema: GenMessage<PlatformEvent>;
+
+/**
  * @generated from message applyant.v1.Event
  */
 export declare type Event = Message<"applyant.v1.Event"> & {
@@ -1338,6 +1361,12 @@ export declare type Event = Message<"applyant.v1.Event"> & {
      */
     value: MailEvent;
     case: "mail";
+  } | {
+    /**
+     * @generated from field: applyant.v1.PlatformEvent platform = 18;
+     */
+    value: PlatformEvent;
+    case: "platform";
   } | { case: undefined; value?: undefined };
 };
 
@@ -6067,6 +6096,230 @@ export declare type AssignEmailResponse = Message<"applyant.v1.AssignEmailRespon
 export declare const AssignEmailResponseSchema: GenMessage<AssignEmailResponse>;
 
 /**
+ * @generated from message applyant.v1.Platform
+ */
+export declare type Platform = Message<"applyant.v1.Platform"> & {
+  /**
+   * linkedin | xing
+   *
+   * @generated from field: string platform = 1;
+   */
+  platform: string;
+
+  /**
+   * @generated from field: string name = 2;
+   */
+  name: string;
+
+  /**
+   * @generated from field: int32 searches_per_day = 3;
+   */
+  searchesPerDay: number;
+
+  /**
+   * @generated from field: int32 applications_per_day = 4;
+   */
+  applicationsPerDay: number;
+
+  /**
+   * In the last 24 hours.
+   *
+   * @generated from field: int32 searches_today = 5;
+   */
+  searchesToday: number;
+
+  /**
+   * @generated from field: int32 applications_today = 6;
+   */
+  applicationsToday: number;
+
+  /**
+   * @generated from field: optional google.protobuf.Timestamp paused_at = 7;
+   */
+  pausedAt?: Timestamp | undefined;
+
+  /**
+   * @generated from field: optional string pause_reason = 8;
+   */
+  pauseReason?: string | undefined;
+
+  /**
+   * @generated from field: optional google.protobuf.Timestamp signed_in_at = 9;
+   */
+  signedInAt?: Timestamp | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.Platform.
+ * Use `create(PlatformSchema)` to create a new message.
+ */
+export declare const PlatformSchema: GenMessage<Platform>;
+
+/**
+ * @generated from message applyant.v1.ListPlatformsRequest
+ */
+export declare type ListPlatformsRequest = Message<"applyant.v1.ListPlatformsRequest"> & {
+};
+
+/**
+ * Describes the message applyant.v1.ListPlatformsRequest.
+ * Use `create(ListPlatformsRequestSchema)` to create a new message.
+ */
+export declare const ListPlatformsRequestSchema: GenMessage<ListPlatformsRequest>;
+
+/**
+ * @generated from message applyant.v1.ListPlatformsResponse
+ */
+export declare type ListPlatformsResponse = Message<"applyant.v1.ListPlatformsResponse"> & {
+  /**
+   * @generated from field: repeated applyant.v1.Platform platforms = 1;
+   */
+  platforms: Platform[];
+
+  /**
+   * A CapMonster key is stored: captchas off LinkedIn/Xing are solved before any hand-off.
+   *
+   * @generated from field: bool captcha_solver = 2;
+   */
+  captchaSolver: boolean;
+
+  /**
+   * The sign-in window is open (at this URL).
+   *
+   * @generated from field: optional string sign_in_open = 3;
+   */
+  signInOpen?: string | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.ListPlatformsResponse.
+ * Use `create(ListPlatformsResponseSchema)` to create a new message.
+ */
+export declare const ListPlatformsResponseSchema: GenMessage<ListPlatformsResponse>;
+
+/**
+ * @generated from message applyant.v1.SetPlatformCapsRequest
+ */
+export declare type SetPlatformCapsRequest = Message<"applyant.v1.SetPlatformCapsRequest"> & {
+  /**
+   * @generated from field: string platform = 1;
+   */
+  platform: string;
+
+  /**
+   * @generated from field: optional int32 searches_per_day = 2;
+   */
+  searchesPerDay?: number | undefined;
+
+  /**
+   * @generated from field: optional int32 applications_per_day = 3;
+   */
+  applicationsPerDay?: number | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.SetPlatformCapsRequest.
+ * Use `create(SetPlatformCapsRequestSchema)` to create a new message.
+ */
+export declare const SetPlatformCapsRequestSchema: GenMessage<SetPlatformCapsRequest>;
+
+/**
+ * @generated from message applyant.v1.SetPlatformCapsResponse
+ */
+export declare type SetPlatformCapsResponse = Message<"applyant.v1.SetPlatformCapsResponse"> & {
+  /**
+   * @generated from field: applyant.v1.Platform platform = 1;
+   */
+  platform?: Platform | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.SetPlatformCapsResponse.
+ * Use `create(SetPlatformCapsResponseSchema)` to create a new message.
+ */
+export declare const SetPlatformCapsResponseSchema: GenMessage<SetPlatformCapsResponse>;
+
+/**
+ * @generated from message applyant.v1.ResumePlatformRequest
+ */
+export declare type ResumePlatformRequest = Message<"applyant.v1.ResumePlatformRequest"> & {
+  /**
+   * @generated from field: string platform = 1;
+   */
+  platform: string;
+};
+
+/**
+ * Describes the message applyant.v1.ResumePlatformRequest.
+ * Use `create(ResumePlatformRequestSchema)` to create a new message.
+ */
+export declare const ResumePlatformRequestSchema: GenMessage<ResumePlatformRequest>;
+
+/**
+ * @generated from message applyant.v1.ResumePlatformResponse
+ */
+export declare type ResumePlatformResponse = Message<"applyant.v1.ResumePlatformResponse"> & {
+  /**
+   * @generated from field: applyant.v1.Platform platform = 1;
+   */
+  platform?: Platform | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.ResumePlatformResponse.
+ * Use `create(ResumePlatformResponseSchema)` to create a new message.
+ */
+export declare const ResumePlatformResponseSchema: GenMessage<ResumePlatformResponse>;
+
+/**
+ * @generated from message applyant.v1.SignInRequest
+ */
+export declare type SignInRequest = Message<"applyant.v1.SignInRequest"> & {
+  /**
+   * linkedin | xing | an https URL (a Workday tenant, Djinni…).
+   *
+   * @generated from field: string target = 1;
+   */
+  target: string;
+
+  /**
+   * Close hand-off windows left open in Applyant's browser (their filled forms are lost).
+   *
+   * @generated from field: bool force = 2;
+   */
+  force: boolean;
+};
+
+/**
+ * Describes the message applyant.v1.SignInRequest.
+ * Use `create(SignInRequestSchema)` to create a new message.
+ */
+export declare const SignInRequestSchema: GenMessage<SignInRequest>;
+
+/**
+ * @generated from message applyant.v1.SignInResponse
+ */
+export declare type SignInResponse = Message<"applyant.v1.SignInResponse"> & {
+  /**
+   * @generated from field: string url = 1;
+   */
+  url: string;
+
+  /**
+   * The guarded platform the URL belongs to, if any.
+   *
+   * @generated from field: optional string platform = 2;
+   */
+  platform?: string | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.SignInResponse.
+ * Use `create(SignInResponseSchema)` to create a new message.
+ */
+export declare const SignInResponseSchema: GenMessage<SignInResponse>;
+
+/**
  * @generated from enum applyant.v1.PostingStage
  */
 export enum PostingStage {
@@ -6966,6 +7219,48 @@ export declare const ApplyantService: GenService<{
     methodKind: "unary";
     input: typeof AssignEmailRequestSchema;
     output: typeof AssignEmailResponseSchema;
+  },
+  /**
+   * Guarded platforms (LinkedIn, Xing): daily caps, the pause after a challenge, and the
+   * one-time sign-in in Applyant's browser profile. Captcha solving is `SetSecret capmonster`.
+   *
+   * @generated from rpc applyant.v1.ApplyantService.ListPlatforms
+   */
+  listPlatforms: {
+    methodKind: "unary";
+    input: typeof ListPlatformsRequestSchema;
+    output: typeof ListPlatformsResponseSchema;
+  },
+  /**
+   * SetPlatformCaps sets a platform's daily caps (an unset field keeps its value).
+   *
+   * @generated from rpc applyant.v1.ApplyantService.SetPlatformCaps
+   */
+  setPlatformCaps: {
+    methodKind: "unary";
+    input: typeof SetPlatformCapsRequestSchema;
+    output: typeof SetPlatformCapsResponseSchema;
+  },
+  /**
+   * ResumePlatform ends the pause after the candidate answered a challenge.
+   *
+   * @generated from rpc applyant.v1.ApplyantService.ResumePlatform
+   */
+  resumePlatform: {
+    methodKind: "unary";
+    input: typeof ResumePlatformRequestSchema;
+    output: typeof ResumePlatformResponseSchema;
+  },
+  /**
+   * SignIn opens Applyant's profile in plain Chrome (no automation) at a platform's sign-in
+   * page or any URL; returns once the window is open. Deliveries wait until it's closed.
+   *
+   * @generated from rpc applyant.v1.ApplyantService.SignIn
+   */
+  signIn: {
+    methodKind: "unary";
+    input: typeof SignInRequestSchema;
+    output: typeof SignInResponseSchema;
   },
 }>;
 

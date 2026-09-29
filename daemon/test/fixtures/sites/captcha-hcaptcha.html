@@ -1,0 +1,10 @@
+<!doctype html>
+<!-- Synthetic: an hCaptcha widget (Lever's), invisible, with a dotted callback path. -->
+<html lang="en"><head><meta charset="utf-8"><title>hCaptcha</title>
+<script>window.app = { captcha: { done(t) { window.__callback = t; } } };</script>
+</head><body>
+<form id="f" onsubmit="return false">
+  <div class="h-captcha" data-sitekey="10000000-ffff-ffff-ffff-000000000001" data-size="invisible" data-callback="app.captcha.done"></div>
+  <button>Submit</button>
+</form>
+</body></html>

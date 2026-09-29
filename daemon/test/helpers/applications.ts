@@ -12,6 +12,7 @@ import { WebFormChannel } from '../../src/channels/web-form.ts';
 import type { Db } from '../../src/db/client.ts';
 import { directExec } from '../../src/db/read-pool.ts';
 import { facts, postings } from '../../src/db/schema.ts';
+import type { Deps } from '../../src/deps.ts';
 import { CV_SYSTEM } from '../../src/domain/applications/cv/select.ts';
 import { deliverApplication } from '../../src/domain/applications/deliver.ts';
 import { prepareApplication } from '../../src/domain/applications/prepare.ts';
@@ -347,6 +348,8 @@ export interface PrepareHarnessOptions {
   headless?: boolean;
   /** A scripted codex (researcher, phase 12); without one there's no provider for research. */
   codex?: FakeProvider;
+  /** Extra handler dependencies (phase 14: the captcha solver, platform guardrails). */
+  deps?: Partial<Deps>;
 }
 
 /**
@@ -396,6 +399,7 @@ export async function prepareHarness(
     mcp: hub,
     snapshotsDir: join(t.dir, 'handoffs'),
   });
+  Object.assign(deps, o.deps ?? {});
   const worker = new Worker({
     db: t.db,
     read: t.read,
