@@ -71,6 +71,13 @@ public final class AppStore {
     public private(set) var platforms: PlatformList?
     /// The candidate's Telegram account (Settings → Telegram).
     public private(set) var telegram: TelegramAccount?
+    /// The first-launch setup (phase 16): what the daemon says, and the setup window's state.
+    public private(set) var setup: OnboardingStatus?
+    public var onboarding = OnboardingFlow()
+    public private(set) var preferencesDraft: [PreferenceSuggestion] = []
+    /// The setup window is open: on the first launch while setup isn't done, or from the menu.
+    public var showOnboarding = false
+    private var onboardingOffered = false
     /// The last failed action, for an alert.
     public var lastError: String?
     /// Where the main window is (notifications and the menu bar move it).
@@ -143,6 +150,7 @@ public final class AppStore {
         mailbox = (try? await box) ?? nil
         mailQueue = (try? await queue) ?? []
         platforms = try? await api.listPlatforms()
+        if let status = try? await api.setupStatus(refresh: false) { applySetup(status) }
         postings = Dictionary(p.map { ($0.id, $0) }, uniquingKeysWith: { _, last in last })
         applications = Dictionary(a.map { ($0.id, $0) }, uniquingKeysWith: { _, last in last })
         interviewQuestions = i.questions
@@ -630,6 +638,93 @@ public final class AppStore {
 
     public var interviewRows: (waiting: [InterviewRow], projects: [InterviewRow]) {
         InterviewText.rows(questions: interviewQuestions, projects: projectInterviews)
+    }
+
+    // MARK: The first-launch setup
+
+    /// Takes the daemon's setup state; the first time it says setup isn't done, the window opens.
+    private func applySetup(_ status: OnboardingStatus) {
+        setup = status
+        onboarding.merge(status)
+        if !status.setupDone && !onboardingOffered {
+            onboardingOffered = true
+            showOnboarding = true
+        }
+    }
+
+    /// Opens the setup (the menu, Settings); it's reachable after setup is done too.
+    public func openOnboarding() async {
+        showOnboarding = true
+        await refreshSetup()
+    }
+
+    public func refreshSetup(refresh: Bool = false) async {
+        guard let api, let status = try? await api.setupStatus(refresh: refresh) else { return }
+        setup = status
+        onboarding.merge(status)
+    }
+
+    /// A step done, skipped or left for later. Settling the Interview (the last step) closes the
+    /// window; finishing Preferences starts search, so Search reloads.
+    @discardableResult
+    public func settleStep(_ step: OnboardingStep, as state: String = "done") async -> Bool {
+        var next = onboarding
+        guard let api, next.settle(step, as: state),
+              let status = await attempt({ try await api.setSetupStep(step.rawValue, state: state) })
+        else { return false }
+        onboarding = next
+        setup = status
+        onboarding.merge(status)
+        if step == .preferences, let list = try? await api.listSearch() { search = list }
+        if step == .interview { showOnboarding = false }
+        return true
+    }
+
+    public func loadPreferencesDraft() async {
+        guard let api else { return }
+        preferencesDraft = (try? await api.preferencesDraft()) ?? []
+    }
+
+    /// The candidate's preferences (key → SetPreference value; empty values are left alone),
+    /// then Preferences done: search starts.
+    @discardableResult
+    public func confirmPreferences(_ values: [(key: String, value: String)]) async -> Bool {
+        guard let api else { return false }
+        for (key, value) in values {
+            let v = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            if v.isEmpty { continue }
+            guard await attempt({ try await api.setPreference(key, value: v) }) != nil else { return false }
+        }
+        return await settleStep(.preferences)
+    }
+
+    /// Import: a CV or LinkedIn PDF (a path on this Mac) or a link (a page, a Google Doc).
+    @discardableResult
+    public func importSource(_ input: String) async -> Bool {
+        let s = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let api, !s.isEmpty else { return false }
+        let kind: Applyant_V1_SourceKind = s.hasPrefix("/") ? .file : OnboardingText.sourceKind(for: s)
+        guard await attempt({ try await api.addKnowledgeSource(project: nil, kind: kind, locator: s) }) != nil else {
+            return false
+        }
+        await refreshSetup()
+        return true
+    }
+
+    /// Connections: the GitHub login(s) whose commits are the candidate's own work.
+    public func setGithubLogin(_ login: String) async {
+        let s = login.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let api, !s.isEmpty, await attempt({ try await api.setProfileValue("github_logins", value: s) }) != nil else {
+            return
+        }
+        await refreshSetup()
+    }
+
+    /// Connections: the Jev key (write-only, like the captcha key).
+    public func setJevKey(_ key: String) async {
+        let s = key.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let api, !s.isEmpty, await attempt({ try await api.setSecret("jev", value: s) }) != nil else { return }
+        await refreshSetup()
     }
 
     private func attempt<T>(_ call: () async throws -> T) async -> T? {

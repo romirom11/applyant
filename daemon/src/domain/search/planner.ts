@@ -70,7 +70,12 @@ export function startPlan(tx: Tx, trigger: SearchPlanRow['trigger']): number | n
     entityId: plan.id,
     runId: null,
     stage: 'queued',
-    message: trigger === 'manual' ? 'planning searches' : 'planning searches (weekly)',
+    message:
+      trigger === 'manual'
+        ? 'planning searches'
+        : trigger === 'setup'
+          ? 'planning searches (setup finished)'
+          : 'planning searches (weekly)',
   });
   return plan.id;
 }

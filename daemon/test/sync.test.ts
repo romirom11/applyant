@@ -223,8 +223,11 @@ describe('sync_source on a CV', () => {
       }),
     ).toThrow(/belongs to a project/);
     expect(() => addSource(t.db, bus, { project: null, kind: 'drive', locator: 'x', now })).toThrow(
-      /can't be read yet/,
+      /not a Google Drive link/,
     );
+    expect(() =>
+      addSource(t.db, bus, { project: null, kind: 'manual', locator: 'x', now }),
+    ).toThrow(/can't be read yet/);
     expect(() =>
       addSource(t.db, bus, { project: 'nope', kind: 'url', locator: 'https://x.dev', now }),
     ).toThrow(/no project "nope"/);

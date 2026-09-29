@@ -5,6 +5,7 @@ import type { SubmitProfile } from './browser/submit-profile.ts';
 import type { TaskPages } from './browser/task-pages.ts';
 import type { Channel } from './channels/channel.ts';
 import type { ReadExec } from './db/read-pool.ts';
+import type { DriveAccess } from './domain/knowledge/sources/drive.ts';
 import type { GithubApi } from './domain/knowledge/sources/github.ts';
 import type { TextExtractor } from './domain/knowledge/text/extract.ts';
 import type { FxSource } from './domain/scoring/fx.ts';
@@ -34,6 +35,8 @@ export interface Deps {
    * captchas then go to the candidate.
    */
   captcha?: (CaptchaSolver & { configured(): Promise<boolean> }) | null;
+  /** Google Drive knowledge sources (phase 16), through the mailbox's Google consent. */
+  drive?: DriveAccess | null;
   /** The candidate's Telegram account (phase 15): private channels and Telegram applications. */
   telegram?: TelegramAccess | null;
   /** LinkedIn/Xing guardrails (phase 14): one lane, daily caps, pacing, pause on challenge. */

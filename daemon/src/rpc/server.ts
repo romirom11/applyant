@@ -71,7 +71,7 @@ export async function startRpcServer(o: RpcServerOptions): Promise<RpcServer> {
         ...telegramRpcs(o.telegram ?? null),
         ...configRpcs(o),
         ...secretRpcs(o.secrets),
-        ...setupRpcs(o.setup),
+        ...setupRpcs({ ...o.setup, db: o.db, bus: o.bus, now: o.now }),
       }),
   });
   const server: Server = createServer(handler);

@@ -131,6 +131,30 @@ public protocol DaemonAPI: Sendable {
     func disconnectTelegram() async throws -> TelegramAccount
     /// Follows a source: a Telegram channel (@name, t.me link), a board URL or a career page.
     func addSearchSource(kind: String, locator: String) async throws -> SearchSource
+
+    // The first-launch setup (phase 16).
+    /// The connections, the setup steps, the import's progress and whether search has started.
+    func setupStatus(refresh: Bool) async throws -> OnboardingStatus
+    /// A step done, skipped or left for later; finishing Preferences starts search.
+    func setSetupStep(_ step: String, state: String) async throws -> OnboardingStatus
+    /// Preferences pre-filled from the imported CV (nothing stored until SetPreference).
+    func preferencesDraft() async throws -> [PreferenceSuggestion]
+    func setPreference(_ key: String, value: String) async throws
+    /// A knowledge source (nil project = the profile: a CV that covers many projects); it syncs.
+    func addKnowledgeSource(project: String?, kind: Applyant_V1_SourceKind, locator: String) async throws
+    func setProfileValue(_ key: String, value: String) async throws
+}
+
+/// Older fakes and daemons: the setup RPCs answer "not available" unless implemented.
+public extension DaemonAPI {
+    func setupStatus(refresh: Bool) async throws -> OnboardingStatus { throw APIError("setup isn't available") }
+    func setSetupStep(_ step: String, state: String) async throws -> OnboardingStatus { throw APIError("setup isn't available") }
+    func preferencesDraft() async throws -> [PreferenceSuggestion] { [] }
+    func setPreference(_ key: String, value: String) async throws { throw APIError("setup isn't available") }
+    func addKnowledgeSource(project: String?, kind: Applyant_V1_SourceKind, locator: String) async throws {
+        throw APIError("setup isn't available")
+    }
+    func setProfileValue(_ key: String, value: String) async throws { throw APIError("setup isn't available") }
 }
 
 /// Unary answers → value or APIError.
@@ -461,6 +485,47 @@ extension ConnectDaemonAPI {
             $0.value = value
         }
         _ = try unwrap(await unary.setSecret(request: request, headers: headers))
+    }
+
+    public func setupStatus(refresh: Bool) async throws -> OnboardingStatus {
+        try unwrap(await unary.getSetupStatus(request: .with { $0.refresh = refresh }, headers: headers)).status
+    }
+
+    public func setSetupStep(_ step: String, state: String) async throws -> OnboardingStatus {
+        let request = Applyant_V1_SetSetupStepRequest.with {
+            $0.step = step
+            $0.state = state
+        }
+        return try unwrap(await unary.setSetupStep(request: request, headers: headers)).status
+    }
+
+    public func preferencesDraft() async throws -> [PreferenceSuggestion] {
+        try unwrap(await unary.getPreferencesDraft(request: .init(), headers: headers)).suggestions
+    }
+
+    public func setPreference(_ key: String, value: String) async throws {
+        let request = Applyant_V1_SetPreferenceRequest.with {
+            $0.key = key
+            $0.value = value
+        }
+        _ = try unwrap(await unary.setPreference(request: request, headers: headers))
+    }
+
+    public func addKnowledgeSource(project: String?, kind: Applyant_V1_SourceKind, locator: String) async throws {
+        let request = Applyant_V1_AddSourceRequest.with {
+            $0.project = project ?? ""
+            $0.kind = kind
+            $0.locator = locator
+        }
+        _ = try unwrap(await unary.addSource(request: request, headers: headers))
+    }
+
+    public func setProfileValue(_ key: String, value: String) async throws {
+        let request = Applyant_V1_SetProfileValueRequest.with {
+            $0.key = key
+            $0.value = value
+        }
+        _ = try unwrap(await unary.setProfileValue(request: request, headers: headers))
     }
 
     public func telegram() async throws -> TelegramAccount {

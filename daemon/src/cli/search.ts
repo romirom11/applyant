@@ -170,7 +170,7 @@ function planJson(p: SearchPlan) {
 
 export function planLines(p: SearchPlan): string[] {
   const lines = [
-    `Plan ${p.id} · ${p.trigger === 'schedule' ? 'weekly' : 'by you'} · ${p.status} · ${when(p.startedAt)}${p.note ? ` · ${p.note}` : ''}`,
+    `Plan ${p.id} · ${p.trigger === 'schedule' ? 'weekly' : p.trigger === 'setup' ? 'after setup' : 'by you'} · ${p.status} · ${when(p.startedAt)}${p.note ? ` · ${p.note}` : ''}`,
   ];
   if (p.strategyIds.length) lines.push(`  strategies added: ${p.strategyIds.join(', ')}`);
   if (p.boardKeys.length) lines.push(`  boards watched: ${p.boardKeys.join(', ')}`);

@@ -28,6 +28,10 @@ struct MainView: View {
         .toolbar {
             ToolbarItem(placement: .status) { ConnectionBadge(connection: store.connection) }
         }
+        .sheet(isPresented: $store.showOnboarding) {
+            OnboardingView(store: store)
+                .frame(minWidth: 900, idealWidth: 980, minHeight: 640, idealHeight: 720)
+        }
         .alert(
             "Applyant",
             isPresented: Binding(get: { store.lastError != nil }, set: { if !$0 { store.lastError = nil } }),

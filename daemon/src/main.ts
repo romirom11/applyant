@@ -170,6 +170,7 @@ export async function runDaemon(config: Config = loadConfig()): Promise<() => Pr
       ...(g.tokenUrl ? { tokenUrl: g.tokenUrl } : {}),
       ...(g.gmailApi ? { gmailApi: g.gmailApi } : {}),
       ...(g.calendarApi ? { calendarApi: g.calendarApi } : {}),
+      ...(g.driveApi ? { driveApi: g.driveApi } : {}),
     },
     sinceDays: config.mail.sinceDays,
   });
@@ -192,6 +193,7 @@ export async function runDaemon(config: Config = loadConfig()): Promise<() => Pr
     },
     secrets,
     mail,
+    drive: mail,
     telegram,
     captcha,
     guardrails,

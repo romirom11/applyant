@@ -323,14 +323,14 @@ export function registerCandidate(program: Command, client: () => ApplyantClient
   source
     .command('add <project> <kind> <locator>')
     .description(
-      'add a source and sync it: kind is file | url | github; project "profile" (or "-") for a CV that covers many projects',
+      'add a source and sync it: kind is file | url | github | drive (a Docs or Drive link, read through the Google account connected with `mail connect gmail`); project "profile" (or "-") for a CV that covers many projects',
     )
     .option('--json', 'print JSON')
     .action(
       async (projectRef: string, kindArg: string, locator: string, opts: { json?: boolean }) => {
         const kind = SOURCE_KINDS[kindArg];
         if (kind === undefined)
-          throw new Error(`unknown source kind "${kindArg}" (file | url | github)`);
+          throw new Error(`unknown source kind "${kindArg}" (file | url | github | drive)`);
         let value = locator;
         if (kind === SourceKind.FILE) {
           value = resolve(locator);
@@ -356,7 +356,7 @@ export function registerCandidate(program: Command, client: () => ApplyantClient
   candidate
     .command('sync [target]')
     .description(
-      're-read sources and extract facts: all, one project, "profile", or a kind (file | url | github)',
+      're-read sources and extract facts: all, one project, "profile", or a kind (file | url | github | drive)',
     )
     .option('--force', 're-extract even when a source has not changed')
     .option('--json', 'print JSON')

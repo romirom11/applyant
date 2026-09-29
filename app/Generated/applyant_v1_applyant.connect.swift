@@ -72,6 +72,16 @@ public protocol Applyant_V1_ApplyantServiceClientInterface: Sendable {
     @available(iOS 13, *)
     func `getSetupStatus`(request: Applyant_V1_GetSetupStatusRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_GetSetupStatusResponse>
 
+    /// Onboarding (phase 16): a setup step done, skipped or left for later. Finishing Preferences
+    /// starts search: the planner runs once when nothing searches yet.
+    @available(iOS 13, *)
+    func `setSetupStep`(request: Applyant_V1_SetSetupStepRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_SetSetupStepResponse>
+
+    /// Preferences pre-filled from the imported CV's facts, for the candidate to adjust and confirm
+    /// (each value is what SetPreference takes).
+    @available(iOS 13, *)
+    func `getPreferencesDraft`(request: Applyant_V1_GetPreferencesDraftRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_GetPreferencesDraftResponse>
+
     /// Candidate knowledge: profile, projects, sources and the facts extracted from them.
     @available(iOS 13, *)
     func `getCandidate`(request: Applyant_V1_GetCandidateRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_GetCandidateResponse>
@@ -413,6 +423,16 @@ public final class Applyant_V1_ApplyantServiceClient: Applyant_V1_ApplyantServic
     }
 
     @available(iOS 13, *)
+    public func `setSetupStep`(request: Applyant_V1_SetSetupStepRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_SetSetupStepResponse> {
+        return await self.client.unary(path: "/applyant.v1.ApplyantService/SetSetupStep", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
+    public func `getPreferencesDraft`(request: Applyant_V1_GetPreferencesDraftRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_GetPreferencesDraftResponse> {
+        return await self.client.unary(path: "/applyant.v1.ApplyantService/GetPreferencesDraft", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
     public func `getCandidate`(request: Applyant_V1_GetCandidateRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_GetCandidateResponse> {
         return await self.client.unary(path: "/applyant.v1.ApplyantService/GetCandidate", idempotencyLevel: .unknown, request: request, headers: headers)
     }
@@ -714,6 +734,8 @@ public final class Applyant_V1_ApplyantServiceClient: Applyant_V1_ApplyantServic
             public static let deleteSecret = Connect.MethodSpec(name: "DeleteSecret", service: "applyant.v1.ApplyantService", type: .unary)
             public static let listSecrets = Connect.MethodSpec(name: "ListSecrets", service: "applyant.v1.ApplyantService", type: .unary)
             public static let getSetupStatus = Connect.MethodSpec(name: "GetSetupStatus", service: "applyant.v1.ApplyantService", type: .unary)
+            public static let setSetupStep = Connect.MethodSpec(name: "SetSetupStep", service: "applyant.v1.ApplyantService", type: .unary)
+            public static let getPreferencesDraft = Connect.MethodSpec(name: "GetPreferencesDraft", service: "applyant.v1.ApplyantService", type: .unary)
             public static let getCandidate = Connect.MethodSpec(name: "GetCandidate", service: "applyant.v1.ApplyantService", type: .unary)
             public static let setProfileValue = Connect.MethodSpec(name: "SetProfileValue", service: "applyant.v1.ApplyantService", type: .unary)
             public static let createProject = Connect.MethodSpec(name: "CreateProject", service: "applyant.v1.ApplyantService", type: .unary)

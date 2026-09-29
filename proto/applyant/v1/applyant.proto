@@ -40,6 +40,12 @@ service ApplyantService {
   // CLIs were found (a launchd agent has no shell PATH), whether they're signed in, and which
   // Apple-only parts are reachable. The menu bar, `applyant status` and onboarding read it.
   rpc GetSetupStatus(GetSetupStatusRequest) returns (GetSetupStatusResponse);
+  // Onboarding (phase 16): a setup step done, skipped or left for later. Finishing Preferences
+  // starts search: the planner runs once when nothing searches yet.
+  rpc SetSetupStep(SetSetupStepRequest) returns (SetSetupStepResponse);
+  // Preferences pre-filled from the imported CV's facts, for the candidate to adjust and confirm
+  // (each value is what SetPreference takes).
+  rpc GetPreferencesDraft(GetPreferencesDraftRequest) returns (GetPreferencesDraftResponse);
 
   // Candidate knowledge: profile, projects, sources and the facts extracted from them.
   rpc GetCandidate(GetCandidateRequest) returns (GetCandidateResponse);
@@ -646,6 +652,74 @@ message SetupStatus {
   google.protobuf.Timestamp started_at = 7;
   // When the tool checks above ran (they're cached for a minute).
   google.protobuf.Timestamp checked_at = 8;
+  // Connections (phase 16 onboarding): what's set up, and what each says about itself.
+  Connection jev = 9;
+  Connection github = 10;
+  Connection mailbox = 11;
+  // Calendar and Drive come with a connected Google account (one consent).
+  Connection calendar = 12;
+  Connection drive = 13;
+  Connection telegram = 14;
+  Connection captcha = 15;
+  // connections · import · preferences · interview, in that order.
+  repeated SetupStep steps = 16;
+  ImportProgress import = 17;
+  // Preferences is done: search has started (or the candidate set it up by hand).
+  bool search_started = 18;
+  // Every step is done, skipped or left for later: the app stops showing the setup on launch.
+  bool setup_done = 19;
+}
+
+message Connection {
+  bool connected = 1;
+  // "sk-…" never: what it is ("me@gmail.com", "romirom11"), or what it's for when missing.
+  string detail = 2;
+}
+
+message SetupStep {
+  // connections | import | preferences | interview
+  string step = 1;
+  // pending | done | skipped | later
+  string state = 2;
+  google.protobuf.Timestamp updated_at = 3;
+}
+
+message ImportProgress {
+  int32 sources = 1;
+  // Sources waiting for or in their sync.
+  int32 syncing = 2;
+  // Sources whose last sync failed (their note says why).
+  int32 failed = 3;
+  int32 projects = 4;
+  int32 facts = 5;
+}
+
+message SetSetupStepRequest {
+  string step = 1;
+  // done | skipped | later | pending
+  string state = 2;
+}
+
+message SetSetupStepResponse {
+  SetupStatus status = 1;
+  // The planner run this call started (finishing Preferences); 0 when none.
+  int64 plan_id = 2;
+}
+
+message PreferenceSuggestion {
+  // A SetPreference key: roles · seniority · based_in · languages · salary …
+  string key = 1;
+  // In SetPreference's form ("backend, ai_ml", "en:C1, el:native").
+  string value = 2;
+  // Why: the CV lines it comes from.
+  string reason = 3;
+  repeated int64 fact_ids = 4;
+}
+
+message GetPreferencesDraftRequest {}
+
+message GetPreferencesDraftResponse {
+  repeated PreferenceSuggestion suggestions = 1;
 }
 
 message GetSetupStatusRequest {

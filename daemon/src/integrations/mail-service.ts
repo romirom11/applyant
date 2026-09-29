@@ -3,6 +3,7 @@
 import { eq } from 'drizzle-orm';
 import type { Conn, Db } from '../db/client.ts';
 import { type MailboxRow, type MailboxSettings, mailboxes } from '../db/schema.ts';
+import { DRIVE_API, type DriveApi, GoogleDrive } from '../domain/knowledge/sources/drive.ts';
 import type { Secrets } from '../secrets/secrets.ts';
 import type { Logger } from '../util/log.ts';
 import { type Calendar, GCAL_API, GoogleCalendar } from './gcal.ts';
@@ -28,6 +29,7 @@ export interface GoogleConfig extends GoogleEndpoints {
   clientSecret: string | null;
   gmailApi: string;
   calendarApi: string;
+  driveApi: string;
 }
 
 export const DEFAULT_GOOGLE: GoogleConfig = {
@@ -36,6 +38,7 @@ export const DEFAULT_GOOGLE: GoogleConfig = {
   clientSecret: null,
   gmailApi: 'https://gmail.googleapis.com/gmail/v1/users/me',
   calendarApi: GCAL_API,
+  driveApi: DRIVE_API,
 };
 
 /** What handlers use (the security-code step, the email channel, sync_mail). */
@@ -124,6 +127,22 @@ export class MailService implements MailAccess {
         ...(this.o.fetch ? { fetch: this.o.fetch } : {}),
       }),
       api: this.google.calendarApi,
+      ...(this.o.fetch ? { fetch: this.o.fetch } : {}),
+    });
+  }
+
+  /** The candidate's Google Drive (knowledge sources), when a Google account is connected. */
+  async drive(): Promise<DriveApi | null> {
+    const row = connectedMailbox(this.o.read);
+    if (row?.kind !== 'gmail') return null;
+    const client = await this.googleClient(row.settings.clientId);
+    return new GoogleDrive({
+      auth: new GoogleAuth({
+        client,
+        secrets: this.o.secrets,
+        ...(this.o.fetch ? { fetch: this.o.fetch } : {}),
+      }),
+      api: this.google.driveApi,
       ...(this.o.fetch ? { fetch: this.o.fetch } : {}),
     });
   }

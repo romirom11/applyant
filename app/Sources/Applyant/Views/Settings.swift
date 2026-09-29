@@ -11,6 +11,13 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
+            SwiftUI.Section("Setup") {
+                HStack {
+                    Text(OnboardingText.search(store.onboarding)).font(.callout)
+                    Spacer()
+                    Button("Open the setup…") { Task { await store.openOnboarding() } }
+                }
+            }
             SwiftUI.Section("Captcha solver") {
                 Text(PlatformText.captcha(store.platforms)).font(.callout)
                 HStack {

@@ -71,6 +71,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         notifications.install()
         store.onNotify = { notifications.post($0) }
         running = Task { await store.run() }
+        // First launch: the setup opens with the window as soon as the daemon says it isn't done.
+        Task { [weak self] in
+            for _ in 0..<120 {
+                guard let self else { return }
+                if self.store.showOnboarding {
+                    self.showMainWindow()
+                    return
+                }
+                if self.store.connection == .connected && self.store.setup != nil { return }
+                try? await Task.sleep(for: .milliseconds(500))
+            }
+        }
     }
 
     /// Opening the app again (Finder, Spotlight, Dock) shows the window.

@@ -62,6 +62,10 @@ struct StatusMenu: View {
 
         Divider()
         Button("Open Applyant") { open() }
+        Button(store.setup?.setupDone == false ? "Finish setting up Applyant…" : "Set up Applyant…") {
+            open()
+            Task { await store.openOnboarding() }
+        }
             .keyboardShortcut("o")
         Button("Refresh") { Task { await status.refresh() } }
             .keyboardShortcut("r")

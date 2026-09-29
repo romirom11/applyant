@@ -8,13 +8,14 @@ import type { EventBus } from '../../../queue/events.ts';
 import { runInTx } from '../../../queue/tx.ts';
 import type { Tx } from '../../../queue/types.ts';
 import { requireProject } from '../projects.ts';
+import { driveFileId } from './drive.ts';
 import { canonicalRepoLocator } from './github.ts';
 import { SourceReadError } from './material.ts';
 
 export class SourceError extends Error {}
 
-/** Source kinds that have a reader today. drive arrives in phase 16; manual facts come from the interview. */
-export const READABLE_KINDS: readonly SourceKind[] = ['file', 'url', 'github'];
+/** Source kinds that have a reader. Manual facts come from the interview. */
+export const READABLE_KINDS: readonly SourceKind[] = ['file', 'url', 'github', 'drive'];
 
 export function normaliseLocator(kind: SourceKind, locator: string, hasProject: boolean): string {
   const l = locator.trim();
@@ -45,6 +46,14 @@ export function normaliseLocator(kind: SourceKind, locator: string, hasProject: 
       }
       try {
         return canonicalRepoLocator(l);
+      } catch (err) {
+        if (err instanceof SourceReadError) throw new SourceError(err.message);
+        throw err;
+      }
+    }
+    case 'drive': {
+      try {
+        return driveFileId(l);
       } catch (err) {
         if (err instanceof SourceReadError) throw new SourceError(err.message);
         throw err;

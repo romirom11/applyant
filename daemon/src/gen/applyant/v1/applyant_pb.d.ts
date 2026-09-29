@@ -1663,6 +1663,71 @@ export declare type SetupStatus = Message<"applyant.v1.SetupStatus"> & {
    * @generated from field: google.protobuf.Timestamp checked_at = 8;
    */
   checkedAt?: Timestamp | undefined;
+
+  /**
+   * Connections (phase 16 onboarding): what's set up, and what each says about itself.
+   *
+   * @generated from field: applyant.v1.Connection jev = 9;
+   */
+  jev?: Connection | undefined;
+
+  /**
+   * @generated from field: applyant.v1.Connection github = 10;
+   */
+  github?: Connection | undefined;
+
+  /**
+   * @generated from field: applyant.v1.Connection mailbox = 11;
+   */
+  mailbox?: Connection | undefined;
+
+  /**
+   * Calendar and Drive come with a connected Google account (one consent).
+   *
+   * @generated from field: applyant.v1.Connection calendar = 12;
+   */
+  calendar?: Connection | undefined;
+
+  /**
+   * @generated from field: applyant.v1.Connection drive = 13;
+   */
+  drive?: Connection | undefined;
+
+  /**
+   * @generated from field: applyant.v1.Connection telegram = 14;
+   */
+  telegram?: Connection | undefined;
+
+  /**
+   * @generated from field: applyant.v1.Connection captcha = 15;
+   */
+  captcha?: Connection | undefined;
+
+  /**
+   * connections · import · preferences · interview, in that order.
+   *
+   * @generated from field: repeated applyant.v1.SetupStep steps = 16;
+   */
+  steps: SetupStep[];
+
+  /**
+   * @generated from field: applyant.v1.ImportProgress import = 17;
+   */
+  import?: ImportProgress | undefined;
+
+  /**
+   * Preferences is done: search has started (or the candidate set it up by hand).
+   *
+   * @generated from field: bool search_started = 18;
+   */
+  searchStarted: boolean;
+
+  /**
+   * Every step is done, skipped or left for later: the app stops showing the setup on launch.
+   *
+   * @generated from field: bool setup_done = 19;
+   */
+  setupDone: boolean;
 };
 
 /**
@@ -1670,6 +1735,210 @@ export declare type SetupStatus = Message<"applyant.v1.SetupStatus"> & {
  * Use `create(SetupStatusSchema)` to create a new message.
  */
 export declare const SetupStatusSchema: GenMessage<SetupStatus>;
+
+/**
+ * @generated from message applyant.v1.Connection
+ */
+export declare type Connection = Message<"applyant.v1.Connection"> & {
+  /**
+   * @generated from field: bool connected = 1;
+   */
+  connected: boolean;
+
+  /**
+   * "sk-…" never: what it is ("me@gmail.com", "romirom11"), or what it's for when missing.
+   *
+   * @generated from field: string detail = 2;
+   */
+  detail: string;
+};
+
+/**
+ * Describes the message applyant.v1.Connection.
+ * Use `create(ConnectionSchema)` to create a new message.
+ */
+export declare const ConnectionSchema: GenMessage<Connection>;
+
+/**
+ * @generated from message applyant.v1.SetupStep
+ */
+export declare type SetupStep = Message<"applyant.v1.SetupStep"> & {
+  /**
+   * connections | import | preferences | interview
+   *
+   * @generated from field: string step = 1;
+   */
+  step: string;
+
+  /**
+   * pending | done | skipped | later
+   *
+   * @generated from field: string state = 2;
+   */
+  state: string;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp updated_at = 3;
+   */
+  updatedAt?: Timestamp | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.SetupStep.
+ * Use `create(SetupStepSchema)` to create a new message.
+ */
+export declare const SetupStepSchema: GenMessage<SetupStep>;
+
+/**
+ * @generated from message applyant.v1.ImportProgress
+ */
+export declare type ImportProgress = Message<"applyant.v1.ImportProgress"> & {
+  /**
+   * @generated from field: int32 sources = 1;
+   */
+  sources: number;
+
+  /**
+   * Sources waiting for or in their sync.
+   *
+   * @generated from field: int32 syncing = 2;
+   */
+  syncing: number;
+
+  /**
+   * Sources whose last sync failed (their note says why).
+   *
+   * @generated from field: int32 failed = 3;
+   */
+  failed: number;
+
+  /**
+   * @generated from field: int32 projects = 4;
+   */
+  projects: number;
+
+  /**
+   * @generated from field: int32 facts = 5;
+   */
+  facts: number;
+};
+
+/**
+ * Describes the message applyant.v1.ImportProgress.
+ * Use `create(ImportProgressSchema)` to create a new message.
+ */
+export declare const ImportProgressSchema: GenMessage<ImportProgress>;
+
+/**
+ * @generated from message applyant.v1.SetSetupStepRequest
+ */
+export declare type SetSetupStepRequest = Message<"applyant.v1.SetSetupStepRequest"> & {
+  /**
+   * @generated from field: string step = 1;
+   */
+  step: string;
+
+  /**
+   * done | skipped | later | pending
+   *
+   * @generated from field: string state = 2;
+   */
+  state: string;
+};
+
+/**
+ * Describes the message applyant.v1.SetSetupStepRequest.
+ * Use `create(SetSetupStepRequestSchema)` to create a new message.
+ */
+export declare const SetSetupStepRequestSchema: GenMessage<SetSetupStepRequest>;
+
+/**
+ * @generated from message applyant.v1.SetSetupStepResponse
+ */
+export declare type SetSetupStepResponse = Message<"applyant.v1.SetSetupStepResponse"> & {
+  /**
+   * @generated from field: applyant.v1.SetupStatus status = 1;
+   */
+  status?: SetupStatus | undefined;
+
+  /**
+   * The planner run this call started (finishing Preferences); 0 when none.
+   *
+   * @generated from field: int64 plan_id = 2;
+   */
+  planId: bigint;
+};
+
+/**
+ * Describes the message applyant.v1.SetSetupStepResponse.
+ * Use `create(SetSetupStepResponseSchema)` to create a new message.
+ */
+export declare const SetSetupStepResponseSchema: GenMessage<SetSetupStepResponse>;
+
+/**
+ * @generated from message applyant.v1.PreferenceSuggestion
+ */
+export declare type PreferenceSuggestion = Message<"applyant.v1.PreferenceSuggestion"> & {
+  /**
+   * A SetPreference key: roles · seniority · based_in · languages · salary …
+   *
+   * @generated from field: string key = 1;
+   */
+  key: string;
+
+  /**
+   * In SetPreference's form ("backend, ai_ml", "en:C1, el:native").
+   *
+   * @generated from field: string value = 2;
+   */
+  value: string;
+
+  /**
+   * Why: the CV lines it comes from.
+   *
+   * @generated from field: string reason = 3;
+   */
+  reason: string;
+
+  /**
+   * @generated from field: repeated int64 fact_ids = 4;
+   */
+  factIds: bigint[];
+};
+
+/**
+ * Describes the message applyant.v1.PreferenceSuggestion.
+ * Use `create(PreferenceSuggestionSchema)` to create a new message.
+ */
+export declare const PreferenceSuggestionSchema: GenMessage<PreferenceSuggestion>;
+
+/**
+ * @generated from message applyant.v1.GetPreferencesDraftRequest
+ */
+export declare type GetPreferencesDraftRequest = Message<"applyant.v1.GetPreferencesDraftRequest"> & {
+};
+
+/**
+ * Describes the message applyant.v1.GetPreferencesDraftRequest.
+ * Use `create(GetPreferencesDraftRequestSchema)` to create a new message.
+ */
+export declare const GetPreferencesDraftRequestSchema: GenMessage<GetPreferencesDraftRequest>;
+
+/**
+ * @generated from message applyant.v1.GetPreferencesDraftResponse
+ */
+export declare type GetPreferencesDraftResponse = Message<"applyant.v1.GetPreferencesDraftResponse"> & {
+  /**
+   * @generated from field: repeated applyant.v1.PreferenceSuggestion suggestions = 1;
+   */
+  suggestions: PreferenceSuggestion[];
+};
+
+/**
+ * Describes the message applyant.v1.GetPreferencesDraftResponse.
+ * Use `create(GetPreferencesDraftResponseSchema)` to create a new message.
+ */
+export declare const GetPreferencesDraftResponseSchema: GenMessage<GetPreferencesDraftResponse>;
 
 /**
  * @generated from message applyant.v1.GetSetupStatusRequest
@@ -7008,6 +7277,28 @@ export declare const ApplyantService: GenService<{
     methodKind: "unary";
     input: typeof GetSetupStatusRequestSchema;
     output: typeof GetSetupStatusResponseSchema;
+  },
+  /**
+   * Onboarding (phase 16): a setup step done, skipped or left for later. Finishing Preferences
+   * starts search: the planner runs once when nothing searches yet.
+   *
+   * @generated from rpc applyant.v1.ApplyantService.SetSetupStep
+   */
+  setSetupStep: {
+    methodKind: "unary";
+    input: typeof SetSetupStepRequestSchema;
+    output: typeof SetSetupStepResponseSchema;
+  },
+  /**
+   * Preferences pre-filled from the imported CV's facts, for the candidate to adjust and confirm
+   * (each value is what SetPreference takes).
+   *
+   * @generated from rpc applyant.v1.ApplyantService.GetPreferencesDraft
+   */
+  getPreferencesDraft: {
+    methodKind: "unary";
+    input: typeof GetPreferencesDraftRequestSchema;
+    output: typeof GetPreferencesDraftResponseSchema;
   },
   /**
    * Candidate knowledge: profile, projects, sources and the facts extracted from them.

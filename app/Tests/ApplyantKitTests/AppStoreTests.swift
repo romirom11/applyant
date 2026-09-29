@@ -314,6 +314,45 @@ final class FakeDaemon: DaemonAPI, @unchecked Sendable {
         return .with { $0.key = "\(kind):\(locator)"; $0.kind = kind; $0.locator = locator }
     }
 
+    // The setup (phase 16): nil = an older daemon without it.
+    var setupState: OnboardingStatus?
+    var draft: [PreferenceSuggestion] = []
+    var preferences: [String: String] = [:]
+    var knowledgeSources: [String] = []
+    var profileValues: [String: String] = [:]
+    func setupStatus(refresh: Bool) async throws -> OnboardingStatus {
+        log("setupStatus")
+        guard let setupState else { throw APIError("unimplemented") }
+        return setupState
+    }
+    func setSetupStep(_ step: String, state: String) async throws -> OnboardingStatus {
+        log("setSetupStep \(step) \(state)")
+        guard var s = setupState else { throw APIError("unimplemented") }
+        if step == "preferences", state != "done" { throw APIError("Preferences can only be done") }
+        if let i = s.steps.firstIndex(where: { $0.step == step }) { s.steps[i].state = state }
+        if step == "preferences" { s.searchStarted = true }
+        s.setupDone = s.steps.allSatisfy { $0.state != "pending" }
+        setupState = s
+        return s
+    }
+    func preferencesDraft() async throws -> [PreferenceSuggestion] { log("preferencesDraft"); return draft }
+    func setPreference(_ key: String, value: String) async throws {
+        log("setPreference \(key)")
+        if key == "salary", !value.contains("/") { throw APIError("say per month or per year") }
+        preferences[key] = value
+    }
+    func addKnowledgeSource(project: String?, kind: Applyant_V1_SourceKind, locator: String) async throws {
+        log("addKnowledgeSource \(kind) \(locator)")
+        knowledgeSources.append(locator)
+        setupState?.import.sources += 1
+        setupState?.import.syncing += 1
+    }
+    func setProfileValue(_ key: String, value: String) async throws {
+        log("setProfileValue \(key)")
+        profileValues[key] = value
+        setupState?.github = .with { $0.connected = true; $0.detail = value }
+    }
+
     /// Changes a question everywhere it's listed.
     func setQuestion(_ id: Int64, _ change: (inout InterviewQuestion) -> Void) throws -> InterviewQuestion {
         guard let i = questions.firstIndex(where: { $0.id == id }) else { throw APIError("no question \(id)") }

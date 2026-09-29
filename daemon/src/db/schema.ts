@@ -331,7 +331,7 @@ export const listingRecipes = sqliteTable('listing_recipes', {
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull().default(now),
 });
 
-export const SEARCH_PLAN_TRIGGERS = ['manual', 'schedule'] as const;
+export const SEARCH_PLAN_TRIGGERS = ['manual', 'schedule', 'setup'] as const;
 
 /**
  * One search_planner run (phase 11): the strategies it proposed and the boards its web
@@ -539,6 +539,17 @@ export const agentRuns = sqliteTable(
 export const profile = sqliteTable('profile', {
   key: text('key').primaryKey(),
   value: text('value', { mode: 'json' }).notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull().default(now),
+});
+
+/** The first-launch setup (phase 16): one row per step the candidate has settled. */
+export const SETUP_STEPS = ['connections', 'import', 'preferences', 'interview'] as const;
+export type SetupStepKey = (typeof SETUP_STEPS)[number];
+export const SETUP_STATES = ['pending', 'done', 'skipped', 'later'] as const;
+export type SetupState = (typeof SETUP_STATES)[number];
+export const setupSteps = sqliteTable('setup_steps', {
+  step: text('step', { enum: SETUP_STEPS }).primaryKey(),
+  state: text('state', { enum: SETUP_STATES }).notNull(),
   updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull().default(now),
 });
 

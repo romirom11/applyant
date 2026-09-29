@@ -36,6 +36,7 @@ import {
 import { factKey, MAX_FACT_LENGTH } from './facts.ts';
 import { getIdentities, type Identities } from './profile.ts';
 import { createProject, fillProject, slugify } from './projects.ts';
+import { readDriveSource } from './sources/drive.ts';
 import { readFileSource } from './sources/file.ts';
 import { readGithubSource } from './sources/github.ts';
 import { type SourceMaterial, SourceReadError } from './sources/material.ts';
@@ -209,6 +210,8 @@ async function readSource(
         log: deps.log.child({ part: 'github' }),
         ...(deps.github !== undefined ? { gh: deps.github } : {}),
       });
+    case 'drive':
+      return readDriveSource(source.locator, deps.drive, signal);
     default:
       throw new SourceReadError(`${source.kind} sources can't be read yet`, true);
   }
