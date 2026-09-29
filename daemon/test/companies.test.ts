@@ -7,7 +7,11 @@ import { eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { companies, postings, tasks } from '../src/db/schema.ts';
 import { ensureApplication } from '../src/domain/applications/store.ts';
-import { normaliseResearch, validateResearch } from '../src/domain/companies/research.ts';
+import {
+  cleanSourceUrl,
+  normaliseResearch,
+  validateResearch,
+} from '../src/domain/companies/research.ts';
 import {
   companyKey,
   FRESH_MS,
@@ -339,6 +343,39 @@ describe('research output', () => {
       ],
     });
     expect(n.product).toEqual([{ text: 'A', date: null, sources: ['https://a.example/x'] }]);
+  });
+
+  it('source URLs lose tracking parameters, and the copies they made merge', () => {
+    // Seen in real researcher output (Grafana Labs, 2026-09-29).
+    expect(
+      cleanSourceUrl(
+        'https://job-boards.greenhouse.io/grafanalabs/jobs/6092955004?gh_src=Lead+Edge+Capital+job+board',
+      ),
+    ).toBe('https://job-boards.greenhouse.io/grafanalabs/jobs/6092955004');
+    expect(cleanSourceUrl('https://grafana.com/careers/?pg=oss-oncall&plcmt=contrib-cta')).toBe(
+      'https://grafana.com/careers/',
+    );
+    expect(cleanSourceUrl('https://x.example/a?id=7&utm_source=openai&UTM_Medium=x')).toBe(
+      'https://x.example/a?id=7',
+    );
+    // Meaningful parameters and fragments stay, and a clean URL is returned as written.
+    expect(cleanSourceUrl('https://x.example/list?pg=2')).toBe('https://x.example/list?pg=2');
+    expect(cleanSourceUrl('https://x.example/a?b=1#c')).toBe('https://x.example/a?b=1#c');
+    expect(cleanSourceUrl(' not a url ')).toBe('not a url');
+    const n = normaliseResearch({
+      ...RESEARCH,
+      remote: [
+        {
+          text: 'Fully remote.',
+          date: null,
+          sources: [
+            'https://grafana.com/careers/?pg=oss-oncall&plcmt=contrib-cta',
+            'https://grafana.com/careers/?utm_source=openai',
+          ],
+        },
+      ],
+    });
+    expect(n.remote[0]?.sources).toEqual(['https://grafana.com/careers/']);
   });
 
   it('one company, however its postings write the name', () => {

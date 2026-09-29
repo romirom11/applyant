@@ -32,7 +32,8 @@ Rules:
 - Only what the sources say. Say "about 120 employees (LinkedIn, 2026)", not "a mid-sized team". If something isn't findable, leave that list empty and say so in note. Don't pad lists.
 - Make sure it's the right company: several companies share names. The job postings below tell you which one is hiring.
 - Recent first; give dates for news, funding and layoffs.
-- Red flags: only real, sourced concerns for someone joining: layoffs in the last ~18 months, a pattern of poor employee reviews, an outstaffing / body-shop business presented as a product company, pay clearly below the market, money running out, lawsuits or regulatory trouble. Each red flag also appears as a finding in its section. No red flags is a fine and common answer.
+- Red flags: only real, sourced concerns for someone joining: layoffs in the last ~18 months, a pattern of poor employee reviews, an outstaffing / body-shop business presented as a product company, pay clearly below the market, money running out, lawsuits or regulatory trouble. A security incident, outage or product controversy the company has dealt with is news, not a red flag, unless it brought lawsuits, regulators or a threat to the business. Each red flag also appears as a finding in its section. No red flags is a fine and common answer.
+- Sources: cite the page's own URL, without tracking parameters (utm_*, gh_src and the like).
 - summary: two to four plain sentences on what the company does, for whom, how it makes money, and how big and far along it is. No praise, no marketing words.`;
 
 export interface ResearchPostingRef {
@@ -71,10 +72,49 @@ export function validateResearch(o: CompanyResearch): string | null {
   return null;
 }
 
-/** Sources trimmed, non-URLs dropped, duplicates removed. */
+/** Query parameters that only say how the page was reached (search result, ad, job board). */
+const TRACKING_PARAMS = new Set([
+  'gh_src', // Greenhouse: the board that linked the posting
+  'gclid',
+  'fbclid',
+  'msclkid',
+  'mc_cid',
+  'mc_eid',
+  'igshid',
+  '_hsenc',
+  '_hsmi',
+  'mkt_tok',
+  'srsltid', // Google search result
+  'plcmt', // placement of the link on the referring page (grafana.com, with `pg`)
+]);
+
+/** The source as it would be cited: tracking parameters (utm_*, gh_src, …) removed. */
+export function cleanSourceUrl(input: string): string {
+  const raw = input.trim();
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return raw;
+  }
+  const keys = [...url.searchParams.keys()];
+  const placement = keys.some((k) => k.toLowerCase() === 'plcmt');
+  let changed = false;
+  for (const key of new Set(keys)) {
+    const k = key.toLowerCase();
+    // `pg` is the referring page only next to `plcmt`; alone it may be a page number.
+    if (k.startsWith('utm_') || TRACKING_PARAMS.has(k) || (placement && k === 'pg')) {
+      url.searchParams.delete(key);
+      changed = true;
+    }
+  }
+  return changed ? url.toString() : raw;
+}
+
+/** Sources trimmed and cleaned of tracking parameters, non-URLs dropped, duplicates removed. */
 export function normaliseResearch(o: CompanyResearch): CompanyResearch {
   const urls = (list: string[]) => [
-    ...new Set(list.map((u) => u.trim()).filter((u) => URL_RE.test(u))),
+    ...new Set(list.map(cleanSourceUrl).filter((u) => URL_RE.test(u))),
   ];
   const out: CompanyResearch = {
     ...o,
