@@ -137,7 +137,7 @@ describe('a hybrid posting whose benefits mention remote work', () => {
     const res = score({ posting: extraction, matches: [], fx: null }, prefs, prefs.weights);
     expect(res.breakdown.find((c) => c.key === 'location')).toMatchObject({
       value: 0,
-      note: 'Remote only in US, PL · not GR',
+      note: expect.stringMatching(/^Remote only in US, PL · not GR/),
     });
   });
 

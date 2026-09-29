@@ -2,7 +2,7 @@
 // embeddings only for MinHash's grey zone, and the guards that keep distinct jobs apart.
 import { eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { postings, strategyPostings } from '../src/db/schema.ts';
+import { postingSources, postings, strategyPostings } from '../src/db/schema.ts';
 import {
   type Candidate,
   companyKey,
@@ -277,6 +277,111 @@ describe('the dedupe plan', () => {
     ]);
     expect(plan.map((p) => p.matchedBy)).toEqual(['new', 'new', 'new', 'new']);
     expect(plan[2]?.candidates).toHaveLength(2);
+  });
+});
+
+describe("a company board's per-country copies of one role", () => {
+  let t: TempDb;
+  beforeEach(() => {
+    t = tempDb();
+  });
+  afterEach(() => t.cleanup());
+
+  // Grafana Labs on Greenhouse (the 2026-09-29 check): one opening per country, each with its
+  // own job id, the country in the title, and the same description.
+  const copy = (id: string, country: string, description = DESCRIPTION) =>
+    listing({
+      url: `https://job-boards.greenhouse.io/grafanalabs/jobs/${id}`,
+      externalId: id,
+      title: `Senior Backend Engineer - Databases - Loki Query | ${country} | Remote`,
+      company: 'Grafana Labs',
+      location: `${country} (Remote)`,
+      description,
+    });
+  const board = (l: Listing, companyBoard = true): Candidate => ({
+    listing: l,
+    sourceId: 1,
+    companyBoard,
+  });
+
+  it('become one posting carrying every location, titled without the place', async () => {
+    const plan = await DedupeIndex.load(t.db).plan([
+      board(copy('101', 'UK')),
+      board(copy('102', 'Germany')),
+      board(copy('103', 'Spain')),
+      board(copy('104', 'Sweden')),
+    ]);
+    expect(plan).toHaveLength(1);
+    expect(plan[0]?.candidates.map((c) => c.listing.externalId)).toEqual([
+      '101',
+      '102',
+      '103',
+      '104',
+    ]);
+    expect(plan[0]?.locations).toEqual([
+      'UK (Remote)',
+      'Germany (Remote)',
+      'Spain (Remote)',
+      'Sweden (Remote)',
+    ]);
+    expect(plan[0]?.roleTitle).toBe('Senior Backend Engineer - Databases - Loki Query');
+    expect(plan[0]?.atsKey).toBe('greenhouse:101');
+  });
+
+  it('stay apart on a job board, with another description, or another role', async () => {
+    const other = [...WORDS].reverse().join(' ');
+    const plan = await DedupeIndex.load(t.db).plan([
+      board(copy('101', 'UK')),
+      board(copy('102', 'Germany', other)),
+      board(copy('103', 'Spain'), false),
+      board(
+        listing({
+          ...copy('104', 'Sweden'),
+          title: 'Senior Backend Engineer - Databases - Mimir | Sweden | Remote',
+        }),
+      ),
+    ]);
+    expect(plan.map((p) => p.matchedBy)).toEqual(['new', 'new', 'new', 'new']);
+  });
+
+  it('keep the exact keys: a later run finds each copy by its own URL', async () => {
+    const t0 = new Date('2026-09-28T10:00:00Z');
+    const { source: src } = addSource(t.db, { kind: 'greenhouse', locator: 'grafanalabs' }, t0);
+    const id = t.db
+      .insert(postings)
+      .values({
+        stage: 'scored',
+        firstSeenAt: t0,
+        canonicalUrl: 'https://job-boards.greenhouse.io/grafanalabs/jobs/101',
+        title: 'Senior Backend Engineer - Databases - Loki Query',
+        company: 'Grafana Labs',
+        atsKey: 'greenhouse:101',
+        minhash: minhash(DESCRIPTION),
+        locations: ['UK (Remote)', 'Germany (Remote)'],
+      })
+      .returning()
+      .get().id;
+    for (const ext of ['101', '102']) {
+      t.db
+        .insert(postingSources)
+        .values({
+          postingId: id,
+          kind: 'greenhouse',
+          url: `https://job-boards.greenhouse.io/grafanalabs/jobs/${ext}`,
+          firstSeenAt: t0,
+          searchSourceId: src.id,
+          externalId: ext,
+          lastSeenAt: t0,
+        })
+        .run();
+    }
+    const plan = await DedupeIndex.load(t.db).plan([
+      { ...board(copy('102', 'Germany')), sourceId: src.id },
+      { ...board(copy('105', 'Ireland')), sourceId: src.id },
+    ]);
+    expect(plan).toHaveLength(1);
+    expect(plan[0]).toMatchObject({ postingId: id, matchedBy: 'url' });
+    expect(plan[0]?.candidates).toHaveLength(2);
   });
 });
 

@@ -54,7 +54,12 @@ export function scorePostingRow(row: PostingRow, ctx: ScoringContext): ScoreResu
   const effective = effectiveExtraction(row);
   if (!effective || !row.matches) return null;
   return score(
-    { posting: effective.extraction, matches: row.matches, fx: ctx.fx },
+    {
+      posting: effective.extraction,
+      matches: row.matches,
+      fx: ctx.fx,
+      locations: row.locations,
+    },
     ctx.prefs,
     ctx.weights,
   );

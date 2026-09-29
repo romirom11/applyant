@@ -1,6 +1,7 @@
 // Which countries a posting's stated remote region covers, for "can I work this from where
 // I live?". Coarse on purpose: a region not listed here counts as not covering a country.
 import type { RemoteRegion } from '../../models/schemas/posting.ts';
+import { countryCode } from './structured.ts';
 
 // biome-ignore format: a data table reads better packed
 const EU = [
@@ -47,4 +48,45 @@ const REGION_COUNTRIES: Record<Exclude<RemoteRegion, 'worldwide'>, readonly stri
 export function regionCovers(region: RemoteRegion, country: string): boolean {
   if (region === 'worldwide') return true;
   return REGION_COUNTRIES[region].includes(country);
+}
+
+const REGION_WORDS: Array<[RegExp, RemoteRegion]> = [
+  [/\b(worldwide|anywhere|global|globally)\b/, 'worldwide'],
+  [/\bemea\b/, 'emea'],
+  [/\b(eu|european union)\b/, 'eu'],
+  [/\beurope\b/, 'europe'],
+  [/\bnorth america\b/, 'north_america'],
+  [/\b(latam|latin america|south america)\b/, 'latam'],
+  [/\bamericas\b/, 'americas'],
+  [/\b(apac|asia pacific)\b/, 'apac'],
+  [/\bmiddle east\b/, 'middle_east'],
+  [/\bafrica\b/, 'africa'],
+];
+
+/**
+ * The countries and regions a listing's location names ("Remote - Germany", "Berlin, DE",
+ * "US / Canada", "Remote (Europe)"). Coarse: a city alone names nothing.
+ */
+export function listedPlace(text: string): { countries: string[]; regions: RemoteRegion[] } {
+  const folded = text
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+  const regions = REGION_WORDS.filter(([re]) => re.test(folded)).map(([, r]) => r);
+  const countries = new Set<string>();
+  const pieces = text.split(/[,;|/()·•]+|\s+[-–—]\s+|\s+or\s+|\s+and\s+|\s*&\s*/);
+  for (const raw of pieces) {
+    const piece = raw.replace(/^\s*(remote|hybrid|on-?site|office)\s*[:-]?\s*/i, '').trim();
+    if (!piece) continue;
+    // Two-letter pieces only as written codes ("DE", "US"), not words.
+    const code =
+      piece.length === 2
+        ? /^[A-Z]{2}$/.test(piece)
+          ? countryCode(piece)
+          : null
+        : countryCode(piece);
+    if (code) countries.add(code);
+    else if (/^(usa|u\.s\.a?\.?)$/i.test(piece)) countries.add('US');
+  }
+  return { countries: [...countries], regions };
 }

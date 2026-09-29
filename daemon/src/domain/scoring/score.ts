@@ -12,11 +12,15 @@
 // - A component the posting doesn't say enough about is "uncertain": shown, not counted.
 // - Deviations cost in proportion to how far off they are (salary 17% below costs more than 5%).
 // - Dealbreakers are flags the candidate chose; they never zero the score.
+// - Out of reach: a role the candidate can't take from where they are (remote only in other
+//   countries, offices only where they don't want to work, in every location it is listed
+//   in) is capped at OUT_OF_REACH_CAP. The location component says so. A role listed in
+//   several places counts its best one.
 import type { PostingExtraction, RemoteRegion, Seniority } from '../../models/schemas/posting.ts';
 import type { FxRates } from './fx.ts';
 import { convert } from './fx.ts';
 import type { CefrLevel, Preferences } from './prefs.ts';
-import { regionCovers } from './regions.ts';
+import { listedPlace, regionCovers } from './regions.ts';
 import { formatMoney, formatRange, type Money, normaliseSalary, perPeriod } from './salary.ts';
 import {
   type Component,
@@ -32,12 +36,16 @@ export interface ScoreInput {
   matches: RequirementMatch[];
   /** Cached reference rates; null = only same-currency salaries are comparable. */
   fx: FxRates | null;
+  /** Where the posting's listings say it is (a role listed per country has several). */
+  locations?: string[] | null;
 }
 
 /** Salary value = 1 − SALARY_SLOPE × shortfall: 5% below → 0.88, 17% → 0.58, 40% → 0. */
 export const SALARY_SLOPE = 2.5;
 /** Score when nothing at all can be compared. */
 export const NOTHING_KNOWN = 50;
+/** The highest score a role out of the candidate's reach can get. */
+export const OUT_OF_REACH_CAP = 30;
 /** Core fit at or above this lets logistics count in full. */
 export const CORE_FIT_FULL = 0.7;
 
@@ -66,7 +74,7 @@ export function score(input: ScoreInput, prefs: Preferences, w: Weights): ScoreR
       input.matches.filter((m) => !m.must),
     ),
     rolePart(p, prefs, hard),
-    locationPart(p, prefs, hard),
+    locationPart(p, prefs, hard, input.locations ?? []),
     remotePart(p, prefs, hard),
     salaryPart(p, prefs, input.fx, (text) => dealbreakers.push(text)),
     languagePart(p, prefs, hard),
@@ -100,7 +108,14 @@ export function score(input: ScoreInput, prefs: Preferences, w: Weights): ScoreR
     total += c.weight;
     sum += c.weight * c.value * c.scale;
   }
-  const result = total > 0 ? Math.round((100 * sum) / total) : NOTHING_KNOWN;
+  let result = total > 0 ? Math.round((100 * sum) / total) : NOTHING_KNOWN;
+  const where = breakdown.find((c) => c.key === 'location');
+  if (where && where.weight > 0 && !where.uncertain && where.value === 0) {
+    if (result > OUT_OF_REACH_CAP) {
+      where.note = `${where.note ?? ''} · out of your reach: score capped at ${OUT_OF_REACH_CAP}`;
+    }
+    result = Math.min(result, OUT_OF_REACH_CAP);
+  }
   return {
     score: Math.max(0, Math.min(100, result)),
     coreFit: coreFit === null ? null : round2(coreFit),
@@ -234,11 +249,52 @@ function scopeLabel(regions: RemoteRegion[], countries: string[]): string {
   return labels.join(', ');
 }
 
-function locationPart(p: PostingExtraction, prefs: Preferences, hard: Hard): Part {
+function locationPart(
+  p: PostingExtraction,
+  prefs: Preferences,
+  hard: Hard,
+  listed: string[],
+): Part {
   const bases = prefs.basedIn ? [prefs.basedIn] : prefs.locations;
   const officeOk = new Set([...(prefs.basedIn ? [prefs.basedIn] : []), ...prefs.locations]);
   if (bases.length === 0) return part('location', false, 1, 'no location preferences');
 
+  // The listings' own places: the best one for the candidate counts.
+  const places = listed.map((text) => ({ text, ...listedPlace(text) }));
+  const reachable = places.find(
+    (l) =>
+      l.countries.some((c) => officeOk.has(c)) ||
+      l.regions.some((r) => bases.some((b) => regionCovers(r, b))),
+  );
+  const placesKnown = places.some((l) => l.countries.length > 0 || l.regions.length > 0);
+  const where = (base: Part): Part => {
+    if (base.value === 1 && !base.uncertain) return base;
+    if (reachable) {
+      return part(
+        'location',
+        true,
+        1,
+        `Listed in ${reachable.text}${places.length > 1 ? ` (1 of ${places.length} locations)` : ''}`,
+      );
+    }
+    if (!base.uncertain || !placesKnown) return base;
+    const shown = places
+      .slice(0, 3)
+      .map((l) => l.text)
+      .join('; ');
+    hard('location', `Listed only in ${shown}`);
+    return part('location', true, 0, `Listed only in ${shown} · not ${bases.join('/')}`);
+  };
+  const own = locationFromPosting(p, bases, officeOk, reachable ? () => {} : hard);
+  return where(own);
+}
+
+function locationFromPosting(
+  p: PostingExtraction,
+  bases: string[],
+  officeOk: Set<string>,
+  hard: Hard,
+): Part {
   const scopeKnown = p.remoteRegions.length > 0 || p.remoteCountries.length > 0;
   const offices = p.offices.filter((o) => o.country);
   const asRemote = p.workplace === 'remote' || (p.workplace === 'unknown' && scopeKnown);

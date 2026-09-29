@@ -18,7 +18,7 @@ import {
   parseMoney,
   parsePreference,
 } from '../src/domain/scoring/prefs.ts';
-import { type ScoreInput, score } from '../src/domain/scoring/score.ts';
+import { OUT_OF_REACH_CAP, type ScoreInput, score } from '../src/domain/scoring/score.ts';
 import type { ComponentKey, RequirementMatch } from '../src/domain/scoring/types.ts';
 import type { PostingExtraction } from '../src/models/schemas/posting.ts';
 
@@ -300,7 +300,7 @@ describe('score()', () => {
     const us = run(posting({ remoteRegions: ['us'] }), prefs({ dealbreakers: ['location'] }));
     expect(component(us, 'location')).toMatchObject({
       value: 0,
-      note: 'Remote only in US · not GR',
+      note: expect.stringMatching(/^Remote only in US · not GR/),
     });
     expect(us.dealbreakers).toEqual(['Remote only in US']);
     expect(component(run(posting({ remoteRegions: ['worldwide'] })), 'location').value).toBe(1);
@@ -321,6 +321,62 @@ describe('score()', () => {
       note: 'Office in X, CY',
     });
     expect(component(office('DE'), 'location').value).toBe(0);
+  });
+
+  it("out of reach: remote only elsewhere is capped, and says so; the flag stays the candidate's", () => {
+    // The 2026-09-29 check: a strong match, remote only in the US, scored in the 70s.
+    const us = run(posting({ remoteRegions: [], remoteCountries: ['US', 'CA'] }));
+    expect(us.score).toBe(OUT_OF_REACH_CAP);
+    expect(component(us, 'location')).toMatchObject({
+      value: 0,
+      note: `Remote only in US, CA · not GR · out of your reach: score capped at ${OUT_OF_REACH_CAP}`,
+    });
+    expect(us.dealbreakers).toEqual([]);
+    const flagged = run(posting({ remoteRegions: ['us'] }), prefs({ dealbreakers: ['location'] }));
+    expect(flagged.dealbreakers).toEqual(['Remote only in US']);
+    // An office where the candidate won't work is out of reach too; one where they would isn't.
+    const office = (country: string) =>
+      run(
+        posting({ workplace: 'hybrid', remoteRegions: [], offices: [{ city: 'X', country }] }),
+        prefs({ remote: 'preferred' }),
+      );
+    expect(office('DE').score).toBe(OUT_OF_REACH_CAP);
+    expect(office('CY').score).toBeGreaterThan(OUT_OF_REACH_CAP);
+    // A weak match below the cap keeps its own score and note.
+    const weak = run(posting({ remoteRegions: ['us'] }), prefs(), [req('Python', true, 'missing')]);
+    expect(weak.score).toBeLessThan(OUT_OF_REACH_CAP);
+    expect(component(weak, 'location').note).not.toMatch(/capped/);
+  });
+
+  it('a role listed in several places counts its best one', () => {
+    const listed = (p: PostingExtraction, locations: string[]) =>
+      score({ ...input(p), locations }, prefs(), prefs().weights);
+    // The page read was the US copy's; the role is also listed for Greece.
+    const merged = listed(posting({ remoteRegions: ['us'] }), [
+      'US (Remote)',
+      'Canada (Remote)',
+      'Remote - Greece',
+    ]);
+    expect(component(merged, 'location')).toMatchObject({
+      value: 1,
+      note: 'Listed in Remote - Greece (1 of 3 locations)',
+    });
+    expect(merged.score).toBeGreaterThan(OUT_OF_REACH_CAP);
+    // A region covers the candidate too ("Europe" covers GR); cities alone say nothing.
+    expect(
+      component(listed(posting({ remoteRegions: ['us'] }), ['Remote, Europe']), 'location').value,
+    ).toBe(1);
+    // The page doesn't say where; every listing is somewhere else: out of reach.
+    const elsewhere = listed(posting({ remoteRegions: [] }), ['Remote - US', 'Toronto, Canada']);
+    expect(component(elsewhere, 'location')).toMatchObject({
+      value: 0,
+      uncertain: false,
+      note: expect.stringMatching(/^Listed only in Remote - US; Toronto, Canada · not GR/),
+    });
+    expect(elsewhere.score).toBe(OUT_OF_REACH_CAP);
+    expect(
+      component(listed(posting({ remoteRegions: [] }), ['Berlin']), 'location').uncertain,
+    ).toBe(true);
   });
 
   it('remote: required vs preferred, on-site as a dealbreaker', () => {

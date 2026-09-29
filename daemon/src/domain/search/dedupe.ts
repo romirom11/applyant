@@ -9,10 +9,16 @@
 //
 // Guards keep distinct postings apart: two different ATS ids are two jobs, and so are two ids
 // from the same source (a board listing "Sales Specialist" in Munich and in Hesse).
-import { and, isNotNull } from 'drizzle-orm';
+//
+// One exception to the guards: a company's own board (an ATS list, a career page) listing the
+// same role once per country ("Senior Backend Engineer | UK | Remote", "… | Germany | Remote")
+// with essentially the same description is one posting with several locations. Same source,
+// same title once its location parts are taken off, a different location, MinHash ≥ 0.8.
+import { isNotNull } from 'drizzle-orm';
 import type { Conn } from '../../db/client.ts';
 import { postingSources, postings } from '../../db/schema.ts';
 import type { Embedder } from '../../models/embeddings.ts';
+import { countryCode } from '../scoring/structured.ts';
 import { canonicalUrl } from './canonical-url.ts';
 import { atsJobKey } from './readers/ats-embed.ts';
 import type { Listing } from './readers/types.ts';
@@ -50,6 +56,58 @@ export function titleKey(title: string | null | undefined): string | null {
   if (!title) return null;
   const key = words(title).join(' ');
   return key || null;
+}
+
+const PLACE_WORDS =
+  /^(remote|hybrid|on-?site|in-?office|office|anywhere|worldwide|global|europe|emea|eu|apac|latam|americas|north america|us|usa|uk|and|or|only|based|first|friendly|fully|100%|remote first|timezones?|time zones?)$/;
+
+/** Two-letter country codes common enough in titles; others read as words ("AI", "ML", "Go"). */
+const TITLE_CODES = new Set(
+  'us uk gb eu ca de fr es nl ie pl pt gr se au sg nz br mx ch dk fi jp il'.split(' '),
+);
+
+function placeWord(w: string): boolean {
+  if (PLACE_WORDS.test(w)) return true;
+  if (w.length === 2) return TITLE_CODES.has(w);
+  return countryCode(w) !== null;
+}
+
+/** A title piece that only says where ("UK", "Remote", "Remote - Germany", "Berlin, Germany"). */
+function placePiece(piece: string, location: string | null): boolean {
+  const p = fold(piece)
+    .replace(/[^\p{L}\p{N}%]+/gu, ' ')
+    .trim();
+  if (!p) return true;
+  const loc = location ? ` ${fold(location).replace(/[^\p{L}\p{N}%]+/gu, ' ')} ` : '';
+  if (loc.includes(` ${p} `)) return true;
+  if (p.length > 2 && countryCode(p) !== null) return true;
+  return p.split(' ').every((w) => placeWord(w) || loc.includes(` ${w} `));
+}
+
+/**
+ * The title with the pieces that only say where taken off: "Backend Engineer | UK | Remote"
+ * and "Backend Engineer (Remote, Germany)" → "backend engineer". Null when nothing is left.
+ */
+export function roleTitleKey(
+  title: string | null | undefined,
+  location?: string | null,
+): string | null {
+  if (!title) return null;
+  let t = title.replace(/\(([^()]*)\)/g, (m, inner: string) =>
+    placePiece(inner, location ?? null) ? ' ' : m,
+  );
+  const pieces = t.split(/\s+[|–—-]\s+|\s*\|\s*|,\s+/);
+  while (pieces.length > 1 && placePiece(pieces[pieces.length - 1] ?? '', location ?? null))
+    pieces.pop();
+  t = pieces.join(' ');
+  return titleKey(t);
+}
+
+/** A listing's place, folded, for "is this another location of the same role?". */
+function placeKey(l: Pick<Listing, 'title' | 'location'>): string {
+  return `${fold(l.location ?? '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()}\n${titleKey(l.title) ?? ''}`;
 }
 
 /** Word-set Jaccard of two titles, 0–1. */
@@ -164,6 +222,10 @@ interface Entry {
   companyKey: string | null;
   title: string | null;
   titleKey: string | null;
+  /** The title without its location pieces (location variants share it). */
+  roleKey: string | null;
+  /** Where the listings it was made from are ("title\nlocation" per variant). */
+  places: Set<string>;
   minhash: number[] | null;
   /** Description for the embedding tie-break (loaded when needed for known postings). */
   text: string | null;
@@ -175,10 +237,22 @@ export interface Candidate {
   listing: Listing;
   /** The search source that listed it. */
   sourceId: number;
+  /**
+   * The source is the company's own board (an ATS list or a career page): its per-country
+   * copies of one role are one posting (see the header).
+   */
+  companyBoard?: boolean;
 }
 
 /** How a cluster was matched to a posting (for the run's notes and tests). */
-export type MatchedBy = 'url' | 'ats' | 'company_title' | 'minhash' | 'embedding' | 'new';
+export type MatchedBy =
+  | 'url'
+  | 'ats'
+  | 'company_title'
+  | 'location_variant'
+  | 'minhash'
+  | 'embedding'
+  | 'new';
 
 export interface Cluster {
   /** The known posting these listings are, or null: a new posting. */
@@ -189,6 +263,10 @@ export interface Cluster {
   minhash: number[] | null;
   matchedBy: MatchedBy;
   candidates: Candidate[];
+  /** Every location its listings give, in order, without repeats. */
+  locations: string[];
+  /** Set when the cluster joins a role's per-country copies: the title without the place. */
+  roleTitle: string | null;
 }
 
 export class DedupeIndex {
@@ -219,12 +297,15 @@ export class DedupeIndex {
         postingId: postingSources.postingId,
         sourceId: postingSources.searchSourceId,
         externalId: postingSources.externalId,
+        url: postingSources.url,
       })
       .from(postingSources)
-      .where(and(isNotNull(postingSources.searchSourceId), isNotNull(postingSources.externalId)))
+      .where(isNotNull(postingSources.searchSourceId))
       .all();
     const linkMap = new Map<number, Map<number, Set<string>>>();
+    const extraUrls: Array<{ id: number; url: string }> = [];
     for (const l of links) {
+      if (l.url) extraUrls.push({ id: l.postingId, url: l.url });
       if (l.sourceId === null || l.externalId === null) continue;
       const m = linkMap.get(l.postingId) ?? new Map<number, Set<string>>();
       const set = m.get(l.sourceId) ?? new Set<string>();
@@ -240,10 +321,24 @@ export class DedupeIndex {
         companyKey: companyKey(r.company),
         title: r.title,
         titleKey: titleKey(r.title),
+        roleKey: roleTitleKey(r.title),
+        places: new Set(),
         minhash: r.minhash ?? null,
         text: null,
         links: linkMap.get(r.id) ?? new Map(),
       });
+    }
+    // A posting's other listings (a role's per-country copies) lead to it by their URL and
+    // ATS id too, so the next run finds them by the exact keys.
+    for (const { id, url } of extraUrls) {
+      if (!index.entries.has(id)) continue;
+      let canon: string | null = null;
+      try {
+        canon = canonicalUrl(url);
+      } catch {}
+      if (canon && !index.byUrl.has(canon)) index.byUrl.set(canon, id);
+      const ats = atsJobKey(url);
+      if (ats && !index.byAts.has(ats)) index.byAts.set(ats, id);
     }
     return index;
   }
@@ -321,6 +416,8 @@ export class DedupeIndex {
           companyKey: companyKey(c.listing.company),
           title: c.listing.title,
           titleKey: titleKey(c.listing.title),
+          roleKey: roleTitleKey(c.listing.title, c.listing.location),
+          places: new Set(),
           minhash: sig,
           text: c.listing.description,
           links: new Map(),
@@ -330,6 +427,7 @@ export class DedupeIndex {
       if (!this.byUrl.has(url)) this.byUrl.set(url, id);
       if (atsKey && !this.byAts.has(atsKey)) this.byAts.set(atsKey, id);
       this.link(id, c);
+      this.entries.get(id)?.places.add(placeKey(c.listing));
       let cluster = clusters.get(id);
       if (!cluster) {
         cluster = {
@@ -339,6 +437,8 @@ export class DedupeIndex {
           minhash: sig,
           matchedBy,
           candidates: [],
+          locations: [],
+          roleTitle: null,
         };
         clusters.set(id, cluster);
         order.push(id);
@@ -346,8 +446,33 @@ export class DedupeIndex {
       cluster.atsKey ??= atsKey;
       cluster.minhash ??= sig;
       cluster.candidates.push(c);
+      const loc = c.listing.location?.trim();
+      if (loc && !cluster.locations.includes(loc)) cluster.locations.push(loc);
+      if (matchedBy === 'location_variant' && cluster.roleTitle === null) {
+        const first = cluster.candidates[0]?.listing;
+        cluster.roleTitle = first ? roleTitle(first.title, first.location) : null;
+      }
     }
     return order.map((id) => clusters.get(id)).filter((c): c is Cluster => c !== undefined);
+  }
+
+  /**
+   * The same role, listed again by the same company board for another location: the same
+   * title once its place pieces are off, another place, and the same description.
+   */
+  private locationVariant(c: Candidate, company: string, sig: number[]): number | null {
+    if (!c.companyBoard) return null;
+    const role = roleTitleKey(c.listing.title, c.listing.location);
+    if (!role) return null;
+    const place = placeKey(c.listing);
+    for (const id of this.byCompany.get(company) ?? []) {
+      const e = this.entries.get(id);
+      if (!e?.minhash || e.roleKey !== role || !e.links.has(c.sourceId)) continue;
+      if (e.places.has(place) || (e.places.size === 0 && e.titleKey === titleKey(c.listing.title)))
+        continue;
+      if (minhashSimilarity(sig, e.minhash) >= MINHASH_SAME) return id;
+    }
+    return null;
   }
 
   private async match(
@@ -377,6 +502,8 @@ export class DedupeIndex {
       }
     }
     if (!sig) return null;
+    const variant = this.locationVariant(c, company, sig);
+    if (variant !== null) return { id: variant, by: 'location_variant' };
     let best: { e: Entry; sim: number } | null = null;
     for (const id of this.byCompany.get(company) ?? []) {
       const e = this.entries.get(id);
@@ -395,4 +522,17 @@ export class DedupeIndex {
     if (a && b && cosine(a, b) >= EMBEDDING_SAME) return { id: best.e.id, by: 'embedding' };
     return null;
   }
+}
+
+/** The title without its place pieces, as written ("Backend Engineer | UK | Remote" → "Backend Engineer"). */
+export function roleTitle(title: string, location: string | null): string {
+  let t = title.replace(/\s*\(([^()]*)\)/g, (m, inner: string) =>
+    placePiece(inner, location) ? '' : m,
+  );
+  const pieces = t.split(/(\s+[|–—-]\s+|\s*\|\s*|,\s+)/);
+  while (pieces.length > 2 && placePiece(pieces[pieces.length - 1] ?? '', location)) {
+    pieces.splice(-2, 2);
+  }
+  t = pieces.join('').trim();
+  return t || title;
 }

@@ -13,6 +13,7 @@ import {
 } from '../../../db/schema.ts';
 import type { Tx } from '../../../queue/types.ts';
 import { selects } from '../sources.ts';
+import { startSearchRun } from '../strategies.ts';
 import type { ListingRecipe, RecipeListing } from './types.ts';
 
 /** A page no recipe could be built for is tried again after this long. */
@@ -225,7 +226,11 @@ export function saveRecipeFailure(tx: Tx, source: SearchSourceRow, reason: strin
   emitRecipe(tx, source, 'failed', `${source.key}: ${reason}`);
 }
 
-/** Active strategies that read this source run at the scheduler's next tick. */
+/**
+ * Active strategies that read this source read it now, and only it: their other sources were
+ * read by the run that asked for the recipe, and their schedule stays as it is. A strategy
+ * whose run is still going runs at the scheduler's next tick instead.
+ */
 function makeDue(tx: Tx, source: SearchSourceRow): void {
   const due = tx.db
     .select()
@@ -234,7 +239,11 @@ function makeDue(tx: Tx, source: SearchSourceRow): void {
     .all()
     .filter((s) => s.sources.some((sel) => selects(sel, source)));
   for (const s of due) {
-    if (s.nextRunAt.getTime() <= tx.now.getTime()) continue;
+    const run = startSearchRun(tx, s, 'schedule', {
+      sourceIds: [source.id],
+      reason: `reading ${source.label ?? source.key} with its new recipe`,
+    });
+    if (run !== null || s.nextRunAt.getTime() <= tx.now.getTime()) continue;
     tx.db
       .update(searchStrategies)
       .set({ nextRunAt: tx.now })

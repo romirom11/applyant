@@ -22,7 +22,7 @@ import { openFixture } from '../src/domain/search/recipes/page.ts';
 import { runRecipe } from '../src/domain/search/recipes/run.ts';
 import { RECIPE_RETRY_MS, recipeRow, requestRecipe } from '../src/domain/search/recipes/store.ts';
 import { addSource, listSources } from '../src/domain/search/sources.ts';
-import { addStrategy, requireStrategy, startSearchRun } from '../src/domain/search/strategies.ts';
+import { addStrategy, requireStrategy } from '../src/domain/search/strategies.ts';
 import type { ProviderRequest, ProviderResult } from '../src/models/agent-runner.ts';
 import { FakeProvider } from '../src/models/providers/fake.ts';
 import type { RecipeOutput } from '../src/models/schemas/search.ts';
@@ -301,20 +301,18 @@ describe('listing recipes', () => {
     const [build] = builds(src.id);
     expect(build).toMatchObject({ status: 'done', runId });
     expect(recipe(src.id)?.status).toBe('ok');
-    // The strategy is due again at once: its listings were missing from run 1.
+    // Its listings were missing from run 1, so the page alone is read again at once, and the
+    // schedule still counts from run 1 (the other sources were just read).
     const s = requireStrategy(t.db, strategy.id);
-    expect(s.nextRunAt.getTime()).toBeLessThanOrEqual(now().getTime());
-
-    // Run 2 reads the page with its recipe.
-    const second = runInTx(t.db, bus, { now: now() }, (tx) =>
-      startSearchRun(tx, requireStrategy(tx.db, strategy.id), 'schedule'),
-    );
-    await worker.idle();
+    expect(s.nextRunAt.getTime()).toBeGreaterThan(now().getTime());
     const run2 = t.db
       .select()
       .from(searchRuns)
-      .where(eq(searchRuns.id, second ?? 0))
-      .get();
+      .where(eq(searchRuns.strategyId, strategy.id))
+      .all()
+      .find((r) => r.id !== runId);
+    expect(run2).toMatchObject({ trigger: 'schedule', sourceIds: [src.id], status: 'done' });
+    expect(run2?.results).toHaveLength(1);
     expect(run2?.results[0]).toMatchObject({
       listed: 6,
       added: 6,

@@ -303,32 +303,45 @@ function runBusy(conn: Conn, strategyId: number): boolean {
 
 /**
  * Starts a run: a search_runs row and its `search` task. Null when the strategy already has
- * one waiting or running. The next scheduled run counts from now.
+ * one waiting or running. The next scheduled run counts from now: a strategy's first run on
+ * creation is its scheduled run too.
+ *
+ * `sourceIds` limits the run to those sources (a page that just got its recipe) and leaves
+ * the schedule alone: the strategy's other sources were read moments ago.
  */
 export function startSearchRun(
   tx: Tx,
   strategy: SearchStrategyRow,
   trigger: SearchRunTrigger,
+  o: { sourceIds?: number[]; reason?: string } = {},
 ): number | null {
   if (runBusy(tx.db, strategy.id)) return null;
   const run = tx.db
     .insert(searchRuns)
-    .values({ strategyId: strategy.id, trigger, status: 'queued', startedAt: tx.now })
+    .values({
+      strategyId: strategy.id,
+      trigger,
+      status: 'queued',
+      startedAt: tx.now,
+      sourceIds: o.sourceIds ?? null,
+    })
     .returning({ id: searchRuns.id })
     .get();
-  const cadence = cadenceFor(strategy.everyMinutes, statsOf(tx.db, strategy.id));
-  tx.db
-    .update(searchStrategies)
-    .set({ nextRunAt: new Date(tx.now.getTime() + cadence.everyMinutes * 60_000) })
-    .where(eq(searchStrategies.id, strategy.id))
-    .run();
+  if (!o.sourceIds) {
+    const cadence = cadenceFor(strategy.everyMinutes, statsOf(tx.db, strategy.id));
+    tx.db
+      .update(searchStrategies)
+      .set({ nextRunAt: new Date(tx.now.getTime() + cadence.everyMinutes * 60_000) })
+      .where(eq(searchStrategies.id, strategy.id))
+      .run();
+  }
   tx.enqueue('search', strategy.id, { runId: run.id });
   tx.emit({
     kind: 'search.run',
     runId: run.id,
     entityId: strategy.id,
     stage: 'queued',
-    message: `${strategy.name}: ${trigger === 'wake' ? 'missed while asleep, running now' : trigger === 'manual' ? 'running now' : 'scheduled run'}`,
+    message: `${strategy.name}: ${o.reason ?? (trigger === 'wake' ? 'missed while asleep, running now' : trigger === 'manual' ? 'running now' : 'scheduled run')}`,
   });
   return run.id;
 }

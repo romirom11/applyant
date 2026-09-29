@@ -199,7 +199,17 @@ export const searchHandler: Handler<'search'> = async (task, ctx) => {
   // Deleted since the run was queued: its run row went with it.
   if (!strategy) return { kind: 'done', commit: () => {} };
 
-  const sources = sourcesFor(ctx.read, strategy.sources);
+  const run =
+    task.runId !== null
+      ? ctx.read
+          .select({ sourceIds: searchRuns.sourceIds })
+          .from(searchRuns)
+          .where(eq(searchRuns.id, task.runId))
+          .get()
+      : undefined;
+  // A run for one source (a page that just got its recipe) reads only that source.
+  const only = run?.sourceIds ? new Set(run.sourceIds) : null;
+  const sources = sourcesFor(ctx.read, strategy.sources).filter((s) => !only || only.has(s.id));
   const recipes = recipesFor(
     ctx.read,
     sources.filter((s) => s.kind === 'page').map((s) => s.id),
@@ -228,7 +238,11 @@ export const searchHandler: Handler<'search'> = async (task, ctx) => {
   const candidates = reads.flatMap((r) =>
     (r.run?.listings ?? [])
       .filter((l) => matchesStrategy(l, strategy))
-      .map((listing) => ({ listing, sourceId: r.source.id })),
+      .map((listing) => ({
+        listing,
+        sourceId: r.source.id,
+        companyBoard: isAts(r.source.kind) || r.source.kind === 'page',
+      })),
   );
   const index = DedupeIndex.load(ctx.read);
   const clusters = await index.plan(candidates, {
@@ -367,6 +381,8 @@ export function commitSearch(tx: Tx, input: CommitInput): void {
           atsKey: cluster.atsKey,
           minhash: cluster.minhash,
           listingText: l.description,
+          locations: cluster.locations.length ? cluster.locations : null,
+          ...(cluster.roleTitle ? { title: cluster.roleTitle } : {}),
         })
         .returning()
         .get();
@@ -388,6 +404,10 @@ export function commitSearch(tx: Tx, input: CommitInput): void {
         fill.listingText = first.listing.description;
       if (!posting.title) fill.title = first.listing.title;
       if (!posting.company && first.listing.company) fill.company = first.listing.company;
+      const known = posting.locations ?? [];
+      const more = cluster.locations.filter((l) => !known.includes(l));
+      if (more.length) fill.locations = [...known, ...more];
+      if (cluster.roleTitle && posting.title !== cluster.roleTitle) fill.title = cluster.roleTitle;
       if (Object.keys(fill).length) {
         tx.db.update(postings).set(fill).where(eq(postings.id, posting.id)).run();
       }

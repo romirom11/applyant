@@ -77,6 +77,11 @@ export const postings = sqliteTable(
     minhash: text('minhash', { mode: 'json' }).$type<number[]>(),
     /** The description a search source listed it with (before verification reads the page). */
     listingText: text('listing_text'),
+    /**
+     * Where its listings say it is, one entry per location a source gave: a company board's
+     * per-country copies of one role are one posting with all their locations.
+     */
+    locations: text('locations', { mode: 'json' }).$type<string[]>(),
   },
   (t) => [index('postings_ats_key').on(t.atsKey)],
 );
@@ -241,6 +246,8 @@ export const searchRuns = sqliteTable(
       .notNull()
       .default(sql`'[]'`),
     note: text('note'),
+    /** The source ids this run reads; null = every source the strategy selects. */
+    sourceIds: text('source_ids', { mode: 'json' }).$type<number[]>(),
   },
   (t) => [index('search_runs_strategy').on(t.strategyId)],
 );

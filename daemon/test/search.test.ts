@@ -14,6 +14,7 @@ import {
   sourcesFor,
 } from '../src/domain/search/sources.ts';
 import {
+  addStrategy,
   listRuns,
   listStrategies,
   matchesStrategy,
@@ -145,6 +146,20 @@ describe('the scheduler', () => {
     expect(due(at('2026-09-28T14:00:00Z'))).toEqual([]);
     finish();
     expect(due(at('2026-09-28T14:01:00Z'))).toHaveLength(1);
+  });
+
+  it("a new strategy's first run is its scheduled run: the next tick doesn't run it again", () => {
+    const t0 = at('2026-09-28T08:00:00Z');
+    const { strategy, runId } = runInTx(t.db, bus, { now: t0 }, (tx) =>
+      addStrategy(tx, { name: 'New', sources: ['board'], everyMinutes: 360 }),
+    );
+    expect(runId).not.toBeNull();
+    expect(requireStrategy(t.db, strategy.id).nextRunAt).toEqual(at('2026-09-28T14:00:00Z'));
+    finish();
+    // The scheduler's tick seconds later (the planner's strategies ran twice in the check).
+    expect(due(at('2026-09-28T08:00:36Z'))).toEqual([]);
+    expect(due(at('2026-09-28T13:59:00Z'))).toEqual([]);
+    expect(due(at('2026-09-28T14:00:00Z'))).toHaveLength(1);
   });
 
   it('after the Mac slept through several slots, a strategy runs once, then counts from now', () => {
