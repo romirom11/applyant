@@ -793,15 +793,21 @@ async function clearMarks(frames: Frame[]): Promise<void> {
 }
 
 /** Role + name + nth for a marked element, or null when getByRole can't single it out. */
+/** Generous: only a loaded machine gets anywhere near it (see roleRef). */
+const ROLE_REF_MS = 30_000;
+
 async function roleRef(
   frame: Frame,
   mark: string,
   nthCache: Map<string, Array<string | null>>,
 ): Promise<{ role: string; name: string; nth: number } | null> {
-  const snap = await frame
-    .locator(`[${MARK}="${mark}"]`)
-    .ariaSnapshot({ timeout: 3000 })
-    .catch(() => '');
+  // The ref is the field's identity from Read to Deliver, so it mustn't depend on how busy the
+  // machine is. The marked element is either gone (then no role ref, at once) or there, and then
+  // its snapshot only needs CPU: a short timeout here turned role refs into CSS refs under load,
+  // Deliver no longer recognised the fields Read had recorded, and handed them off as missing.
+  const el = frame.locator(`[${MARK}="${mark}"]`);
+  if ((await el.count().catch(() => 0)) === 0) return null;
+  const snap = await el.ariaSnapshot({ timeout: ROLE_REF_MS }).catch(() => '');
   const parsed = parseAriaLine(snap);
   if (!parsed?.name || parsed.role === 'generic' || parsed.role === 'text') return null;
   const key = `${parsed.role}\u0000${parsed.name}`;

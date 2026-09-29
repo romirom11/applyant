@@ -308,6 +308,44 @@ public nonisolated enum Applyant_V1_ApplicationStage: SwiftProtobuf.Enum, Swift.
 
 }
 
+public nonisolated enum Applyant_V1_ApplyForm: SwiftProtobuf.Enum, Swift.CaseIterable {
+  public typealias RawValue = Int
+  case unspecified // = 0
+  case company // = 1
+  case platform // = 2
+  case UNRECOGNIZED(Int)
+
+  public init() {
+    self = .unspecified
+  }
+
+  public init?(rawValue: Int) {
+    switch rawValue {
+    case 0: self = .unspecified
+    case 1: self = .company
+    case 2: self = .platform
+    default: self = .UNRECOGNIZED(rawValue)
+    }
+  }
+
+  public var rawValue: Int {
+    switch self {
+    case .unspecified: return 0
+    case .company: return 1
+    case .platform: return 2
+    case .UNRECOGNIZED(let i): return i
+    }
+  }
+
+  // The compiler won't synthesize support with the UNRECOGNIZED case.
+  public static let allCases: [Applyant_V1_ApplyForm] = [
+    .unspecified,
+    .company,
+    .platform,
+  ]
+
+}
+
 public nonisolated struct Applyant_V1_Posting: @unchecked Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
@@ -3392,11 +3430,58 @@ public nonisolated struct Applyant_V1_Application: @unchecked Sendable {
     set {_uniqueStorage()._emails = newValue}
   }
 
+  /// The form it goes through: the company's own (the default) or the platform's.
+  public var applyForm: Applyant_V1_ApplyForm {
+    get {_storage._applyForm}
+    set {_uniqueStorage()._applyForm = newValue}
+  }
+
+  /// Both forms are known, so the candidate can switch (SetApplyForm) before approval.
+  public var applyFormSwitchable: Bool {
+    get {_storage._applyFormSwitchable}
+    set {_uniqueStorage()._applyFormSwitchable = newValue}
+  }
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
 
   fileprivate var _storage = _StorageClass.defaultInstance
+}
+
+public nonisolated struct Applyant_V1_SetApplyFormRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var applicationID: Int64 = 0
+
+  public var form: Applyant_V1_ApplyForm = .unspecified
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Applyant_V1_SetApplyFormResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var application: Applyant_V1_Application {
+    get {_application ?? Applyant_V1_Application()}
+    set {_application = newValue}
+  }
+  /// Returns true if `application` has been explicitly set.
+  public var hasApplication: Bool {self._application != nil}
+  /// Clears the value of `application`. Subsequent reads from it will return its default value.
+  public mutating func clearApplication() {self._application = nil}
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _application: Applyant_V1_Application? = nil
 }
 
 public nonisolated struct Applyant_V1_CvLine: Sendable {
@@ -6492,6 +6577,10 @@ nonisolated extension Applyant_V1_FactStatus: SwiftProtobuf._ProtoNameProviding 
 
 nonisolated extension Applyant_V1_ApplicationStage: SwiftProtobuf._ProtoNameProviding {
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0APPLICATION_STAGE_UNSPECIFIED\0\u{1}APPLICATION_STAGE_PREPARING\0\u{1}APPLICATION_STAGE_READY_FOR_REVIEW\0\u{1}APPLICATION_STAGE_NEEDS_CANDIDATE\0\u{1}APPLICATION_STAGE_APPROVED\0\u{1}APPLICATION_STAGE_APPLIED\0\u{1}APPLICATION_STAGE_INTERVIEW\0\u{1}APPLICATION_STAGE_REJECTED\0\u{1}APPLICATION_STAGE_OFFER\0")
+}
+
+nonisolated extension Applyant_V1_ApplyForm: SwiftProtobuf._ProtoNameProviding {
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0APPLY_FORM_UNSPECIFIED\0\u{1}APPLY_FORM_COMPANY\0\u{1}APPLY_FORM_PLATFORM\0")
 }
 
 nonisolated extension Applyant_V1_Posting: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
@@ -11261,7 +11350,7 @@ nonisolated extension Applyant_V1_Answer: SwiftProtobuf.Message, SwiftProtobuf._
 
 nonisolated extension Applyant_V1_Application: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Application"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}posting_id\0\u{1}stage\0\u{1}channel\0\u{1}note\0\u{1}title\0\u{1}company\0\u{1}score\0\u{3}posting_url\0\u{3}form_url\0\u{3}created_at\0\u{3}prepared_at\0\u{3}approved_at\0\u{1}blockers\0\u{1}missing\0\u{3}unconfirmed_fact_ids\0\u{1}fields\0\u{1}answers\0\u{3}applied_at\0\u{1}receipt\0\u{3}hand_off\0\u{1}cv\0\u{3}company_research\0\u{1}emails\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}posting_id\0\u{1}stage\0\u{1}channel\0\u{1}note\0\u{1}title\0\u{1}company\0\u{1}score\0\u{3}posting_url\0\u{3}form_url\0\u{3}created_at\0\u{3}prepared_at\0\u{3}approved_at\0\u{1}blockers\0\u{1}missing\0\u{3}unconfirmed_fact_ids\0\u{1}fields\0\u{1}answers\0\u{3}applied_at\0\u{1}receipt\0\u{3}hand_off\0\u{1}cv\0\u{3}company_research\0\u{1}emails\0\u{3}apply_form\0\u{3}apply_form_switchable\0")
 
   fileprivate class _StorageClass {
     var _id: Int64 = 0
@@ -11288,6 +11377,8 @@ nonisolated extension Applyant_V1_Application: SwiftProtobuf.Message, SwiftProto
     var _cv: Applyant_V1_Cv? = nil
     var _companyResearch: Applyant_V1_Company? = nil
     var _emails: [Applyant_V1_Email] = []
+    var _applyForm: Applyant_V1_ApplyForm = .unspecified
+    var _applyFormSwitchable: Bool = false
 
       // This property is used as the initial default value for new instances of the type.
       // The type itself is protecting the reference to its storage via CoW semantics.
@@ -11322,6 +11413,8 @@ nonisolated extension Applyant_V1_Application: SwiftProtobuf.Message, SwiftProto
       _cv = source._cv
       _companyResearch = source._companyResearch
       _emails = source._emails
+      _applyForm = source._applyForm
+      _applyFormSwitchable = source._applyFormSwitchable
     }
   }
 
@@ -11364,6 +11457,8 @@ nonisolated extension Applyant_V1_Application: SwiftProtobuf.Message, SwiftProto
         case 22: try { try decoder.decodeSingularMessageField(value: &_storage._cv) }()
         case 23: try { try decoder.decodeSingularMessageField(value: &_storage._companyResearch) }()
         case 24: try { try decoder.decodeRepeatedMessageField(value: &_storage._emails) }()
+        case 25: try { try decoder.decodeSingularEnumField(value: &_storage._applyForm) }()
+        case 26: try { try decoder.decodeSingularBoolField(value: &_storage._applyFormSwitchable) }()
         default: break
         }
       }
@@ -11448,6 +11543,12 @@ nonisolated extension Applyant_V1_Application: SwiftProtobuf.Message, SwiftProto
       if !_storage._emails.isEmpty {
         try visitor.visitRepeatedMessageField(value: _storage._emails, fieldNumber: 24)
       }
+      if _storage._applyForm != .unspecified {
+        try visitor.visitSingularEnumField(value: _storage._applyForm, fieldNumber: 25)
+      }
+      if _storage._applyFormSwitchable != false {
+        try visitor.visitSingularBoolField(value: _storage._applyFormSwitchable, fieldNumber: 26)
+      }
     }
     try unknownFields.traverse(visitor: &visitor)
   }
@@ -11481,10 +11582,81 @@ nonisolated extension Applyant_V1_Application: SwiftProtobuf.Message, SwiftProto
         if _storage._cv != rhs_storage._cv {return false}
         if _storage._companyResearch != rhs_storage._companyResearch {return false}
         if _storage._emails != rhs_storage._emails {return false}
+        if _storage._applyForm != rhs_storage._applyForm {return false}
+        if _storage._applyFormSwitchable != rhs_storage._applyFormSwitchable {return false}
         return true
       }
       if !storagesAreEqual {return false}
     }
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Applyant_V1_SetApplyFormRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".SetApplyFormRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}application_id\0\u{1}form\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularInt64Field(value: &self.applicationID) }()
+      case 2: try { try decoder.decodeSingularEnumField(value: &self.form) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.applicationID != 0 {
+      try visitor.visitSingularInt64Field(value: self.applicationID, fieldNumber: 1)
+    }
+    if self.form != .unspecified {
+      try visitor.visitSingularEnumField(value: self.form, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Applyant_V1_SetApplyFormRequest, rhs: Applyant_V1_SetApplyFormRequest) -> Bool {
+    if lhs.applicationID != rhs.applicationID {return false}
+    if lhs.form != rhs.form {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Applyant_V1_SetApplyFormResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".SetApplyFormResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}application\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularMessageField(value: &self._application) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if let v = self._application {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Applyant_V1_SetApplyFormResponse, rhs: Applyant_V1_SetApplyFormResponse) -> Bool {
+    if lhs._application != rhs._application {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

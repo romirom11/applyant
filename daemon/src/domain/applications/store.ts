@@ -6,12 +6,14 @@
 // confirming a fact anywhere clears it everywhere.
 import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import { type ElementRef, refKey } from '../../browser/form-types.ts';
+import { platformOf } from '../../browser/guardrails.ts';
 import type { Conn } from '../../db/client.ts';
 import {
   type AnswerRow,
   type AnswerSentenceRow,
   type ApplicationRow,
   type ApplicationStage,
+  type ApplyForm,
   answerSentences,
   answers,
   applications,
@@ -21,6 +23,7 @@ import {
   fieldValues,
   interviewQuestions,
   type PostingRow,
+  postingSources,
   postings,
   projects,
   type ReceiptFieldValue,
@@ -29,6 +32,7 @@ import {
 } from '../../db/schema.ts';
 import type { HandOff, Tx } from '../../queue/types.ts';
 import { type CompanyView, companyForPosting, companyView } from '../companies/store.ts';
+import { atsJobKey } from '../search/readers/ats-embed.ts';
 import { type CvView, cvView } from './cv/store.ts';
 import { activeRefs, type FieldRole, fieldRole } from './standard-fields.ts';
 
@@ -133,6 +137,8 @@ export interface ApplicationView {
   receipt: ReceiptView | null;
   /** The most recent delivery hand-off still waiting on the candidate, if any. */
   handOff: HandOff | null;
+  /** The form it goes through, and whether the posting has both (platform's and company's). */
+  applyForm: { form: ApplyForm; switchable: boolean };
   /** The company's research (phase 12), once asked for (postings left out). */
   company: CompanyView | null;
 }
@@ -262,6 +268,68 @@ export function formReadFor(tx: Tx, postingId: number): void {
   const app = tx.db.select().from(applications).where(eq(applications.postingId, postingId)).get();
   if (!app || app.stage === 'approved') return;
   requestPrepare(tx, app, { rewrite: false, why: 'the application form was read' });
+}
+
+/**
+ * The forms a posting can be applied through: the company's own (its apply URL, or — when that
+ * is on LinkedIn/Xing — the same job on the company's ATS, from another of its source URLs or
+ * its canonical URL) and the platform's (LinkedIn Easy Apply, Xing apply: the apply URL or a
+ * source URL on the platform). Either may be missing.
+ */
+export function applyTargets(
+  read: Conn,
+  posting: Pick<PostingRow, 'id' | 'applyUrl' | 'canonicalUrl'>,
+): { company: string | null; platform: string | null } {
+  const own = posting.applyUrl ?? posting.canonicalUrl;
+  const urls = [
+    own,
+    posting.canonicalUrl,
+    ...read
+      .select({ url: postingSources.url })
+      .from(postingSources)
+      .where(eq(postingSources.postingId, posting.id))
+      .all()
+      .map((r) => r.url),
+  ];
+  const platform = urls.find((u) => platformOf(u) !== null) ?? null;
+  const company = !platformOf(own)
+    ? own
+    : (urls.find((u) => !platformOf(u) && !u.startsWith('mailto:') && atsJobKey(u)) ?? null);
+  return { company, platform };
+}
+
+/**
+ * Where a posting is applied to (Read and Deliver agree on it): the company's own form (PRD:
+ * "the company's own form is the default"), unless the candidate switched its application to
+ * the platform's form (`applications form <id> platform`); the apply URL when there's no other.
+ */
+export function applyTarget(
+  read: Conn,
+  posting: Pick<PostingRow, 'id' | 'applyUrl' | 'canonicalUrl'>,
+): string {
+  const targets = applyTargets(read, posting);
+  const choice = read
+    .select({ form: applications.applyForm })
+    .from(applications)
+    .where(eq(applications.postingId, posting.id))
+    .get()?.form;
+  const picked = choice === 'platform' ? targets.platform : targets.company;
+  return picked ?? targets.company ?? targets.platform ?? posting.applyUrl ?? posting.canonicalUrl;
+}
+
+/** The form an application goes through now, and whether the candidate can switch it. */
+export function applyFormOf(
+  read: Conn,
+  app: Pick<ApplicationRow, 'postingId'>,
+): { form: ApplyForm; switchable: boolean } {
+  const posting = read.select().from(postings).where(eq(postings.id, app.postingId)).get();
+  if (!posting) return { form: 'company', switchable: false };
+  const targets = applyTargets(read, posting);
+  const target = applyTarget(read, posting);
+  return {
+    form: targets.platform !== null && target === targets.platform ? 'platform' : 'company',
+    switchable: targets.company !== null && targets.platform !== null,
+  };
 }
 
 export function getApplicationRow(conn: Conn, id: number): ApplicationRow {
@@ -563,6 +631,7 @@ export function applicationView(conn: Conn, id: number): ApplicationView {
         }
       : null,
     handOff,
+    applyForm: applyFormOf(conn, app),
     company: companyBriefView(conn, posting),
     blockers,
     missing,

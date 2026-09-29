@@ -240,6 +240,16 @@ public enum ReviewRules {
         app.stage == .readyForReview && app.blockers.isEmpty
     }
 
+    /// The posting has both forms and nothing has been approved or sent yet.
+    public static func canSwitchForm(_ app: Application) -> Bool {
+        app.applyFormSwitchable && [.preparing, .readyForReview, .needsCandidate].contains(app.stage)
+    }
+
+    /// "Applying through LinkedIn Easy Apply" / "… the company's own form".
+    public static func formText(_ app: Application) -> String {
+        app.applyForm == .platform ? "Applying through the platform's form (Easy Apply / Xing)" : "Applying through the company's own form"
+    }
+
     /// "11 standard fields ready": fields that need no attention.
     public static func routineFields(_ app: Application) -> [Applyant_V1_ApplicationField] {
         app.fields.filter { $0.active && $0.role != "question" && !$0.missing }

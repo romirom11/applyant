@@ -173,6 +173,13 @@ public protocol Applyant_V1_ApplyantServiceClientInterface: Sendable {
     @available(iOS 13, *)
     func `submitApplication`(request: Applyant_V1_SubmitApplicationRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_SubmitApplicationResponse>
 
+    /// SetApplyForm switches the application between the platform's form (LinkedIn Easy Apply,
+    /// Xing apply) and the company's own form, before approval. The form is read again from the new
+    /// target and the application prepared again for it (FailedPrecondition when the posting has
+    /// no such form, or the application is already approved).
+    @available(iOS 13, *)
+    func `setApplyForm`(request: Applyant_V1_SetApplyFormRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_SetApplyFormResponse>
+
     /// MarkSubmitted records that the candidate finished a hand-off in the browser and pressed
     /// submit themselves: the application becomes APPLIED with a receipt of the prepared values.
     @available(iOS 13, *)
@@ -508,6 +515,11 @@ public final class Applyant_V1_ApplyantServiceClient: Applyant_V1_ApplyantServic
     }
 
     @available(iOS 13, *)
+    public func `setApplyForm`(request: Applyant_V1_SetApplyFormRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_SetApplyFormResponse> {
+        return await self.client.unary(path: "/applyant.v1.ApplyantService/SetApplyForm", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
     public func `markSubmitted`(request: Applyant_V1_MarkSubmittedRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_MarkSubmittedResponse> {
         return await self.client.unary(path: "/applyant.v1.ApplyantService/MarkSubmitted", idempotencyLevel: .unknown, request: request, headers: headers)
     }
@@ -697,6 +709,7 @@ public final class Applyant_V1_ApplyantServiceClient: Applyant_V1_ApplyantServic
             public static let editAnswer = Connect.MethodSpec(name: "EditAnswer", service: "applyant.v1.ApplyantService", type: .unary)
             public static let approveApplication = Connect.MethodSpec(name: "ApproveApplication", service: "applyant.v1.ApplyantService", type: .unary)
             public static let submitApplication = Connect.MethodSpec(name: "SubmitApplication", service: "applyant.v1.ApplyantService", type: .unary)
+            public static let setApplyForm = Connect.MethodSpec(name: "SetApplyForm", service: "applyant.v1.ApplyantService", type: .unary)
             public static let markSubmitted = Connect.MethodSpec(name: "MarkSubmitted", service: "applyant.v1.ApplyantService", type: .unary)
             public static let getHandOff = Connect.MethodSpec(name: "GetHandOff", service: "applyant.v1.ApplyantService", type: .unary)
             public static let setCvMode = Connect.MethodSpec(name: "SetCvMode", service: "applyant.v1.ApplyantService", type: .unary)

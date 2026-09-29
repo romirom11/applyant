@@ -98,6 +98,11 @@ service ApplyantService {
   // SubmitApplication approves the application if it isn't yet (same refusal rules), then
   // (re-)enqueues delivery either way: also how to retry a delivery stuck on a hand-off.
   rpc SubmitApplication(SubmitApplicationRequest) returns (SubmitApplicationResponse);
+  // SetApplyForm switches the application between the platform's form (LinkedIn Easy Apply,
+  // Xing apply) and the company's own form, before approval. The form is read again from the new
+  // target and the application prepared again for it (FailedPrecondition when the posting has
+  // no such form, or the application is already approved).
+  rpc SetApplyForm(SetApplyFormRequest) returns (SetApplyFormResponse);
   // MarkSubmitted records that the candidate finished a hand-off in the browser and pressed
   // submit themselves: the application becomes APPLIED with a receipt of the prepared values.
   rpc MarkSubmitted(MarkSubmittedRequest) returns (MarkSubmittedResponse);
@@ -1065,6 +1070,25 @@ message Application {
   // The replies linked to it (newest first): rejection, interview invites, offer. Only filled
   // by GetApplication.
   repeated Email emails = 24;
+  // The form it goes through: the company's own (the default) or the platform's.
+  ApplyForm apply_form = 25;
+  // Both forms are known, so the candidate can switch (SetApplyForm) before approval.
+  bool apply_form_switchable = 26;
+}
+
+enum ApplyForm {
+  APPLY_FORM_UNSPECIFIED = 0;
+  APPLY_FORM_COMPANY = 1;
+  APPLY_FORM_PLATFORM = 2;
+}
+
+message SetApplyFormRequest {
+  int64 application_id = 1;
+  ApplyForm form = 2;
+}
+
+message SetApplyFormResponse {
+  Application application = 1;
 }
 
 message CvLine {

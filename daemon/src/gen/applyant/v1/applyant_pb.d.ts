@@ -3205,6 +3205,20 @@ export declare type Application = Message<"applyant.v1.Application"> & {
    * @generated from field: repeated applyant.v1.Email emails = 24;
    */
   emails: Email[];
+
+  /**
+   * The form it goes through: the company's own (the default) or the platform's.
+   *
+   * @generated from field: applyant.v1.ApplyForm apply_form = 25;
+   */
+  applyForm: ApplyForm;
+
+  /**
+   * Both forms are known, so the candidate can switch (SetApplyForm) before approval.
+   *
+   * @generated from field: bool apply_form_switchable = 26;
+   */
+  applyFormSwitchable: boolean;
 };
 
 /**
@@ -3212,6 +3226,43 @@ export declare type Application = Message<"applyant.v1.Application"> & {
  * Use `create(ApplicationSchema)` to create a new message.
  */
 export declare const ApplicationSchema: GenMessage<Application>;
+
+/**
+ * @generated from message applyant.v1.SetApplyFormRequest
+ */
+export declare type SetApplyFormRequest = Message<"applyant.v1.SetApplyFormRequest"> & {
+  /**
+   * @generated from field: int64 application_id = 1;
+   */
+  applicationId: bigint;
+
+  /**
+   * @generated from field: applyant.v1.ApplyForm form = 2;
+   */
+  form: ApplyForm;
+};
+
+/**
+ * Describes the message applyant.v1.SetApplyFormRequest.
+ * Use `create(SetApplyFormRequestSchema)` to create a new message.
+ */
+export declare const SetApplyFormRequestSchema: GenMessage<SetApplyFormRequest>;
+
+/**
+ * @generated from message applyant.v1.SetApplyFormResponse
+ */
+export declare type SetApplyFormResponse = Message<"applyant.v1.SetApplyFormResponse"> & {
+  /**
+   * @generated from field: applyant.v1.Application application = 1;
+   */
+  application?: Application | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.SetApplyFormResponse.
+ * Use `create(SetApplyFormResponseSchema)` to create a new message.
+ */
+export declare const SetApplyFormResponseSchema: GenMessage<SetApplyFormResponse>;
 
 /**
  * @generated from message applyant.v1.CvLine
@@ -6565,6 +6616,31 @@ export enum ApplicationStage {
 export declare const ApplicationStageSchema: GenEnum<ApplicationStage>;
 
 /**
+ * @generated from enum applyant.v1.ApplyForm
+ */
+export enum ApplyForm {
+  /**
+   * @generated from enum value: APPLY_FORM_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: APPLY_FORM_COMPANY = 1;
+   */
+  COMPANY = 1,
+
+  /**
+   * @generated from enum value: APPLY_FORM_PLATFORM = 2;
+   */
+  PLATFORM = 2,
+}
+
+/**
+ * Describes the enum applyant.v1.ApplyForm.
+ */
+export declare const ApplyFormSchema: GenEnum<ApplyForm>;
+
+/**
  * ApplyantService is the only contract between applyantd and its clients
  * (the `applyant` CLI now, the macOS app and Share extension later).
  * Every call carries `Authorization: Bearer <token>` from the endpoint file.
@@ -6948,6 +7024,19 @@ export declare const ApplyantService: GenService<{
     methodKind: "unary";
     input: typeof SubmitApplicationRequestSchema;
     output: typeof SubmitApplicationResponseSchema;
+  },
+  /**
+   * SetApplyForm switches the application between the platform's form (LinkedIn Easy Apply,
+   * Xing apply) and the company's own form, before approval. The form is read again from the new
+   * target and the application prepared again for it (FailedPrecondition when the posting has
+   * no such form, or the application is already approved).
+   *
+   * @generated from rpc applyant.v1.ApplyantService.SetApplyForm
+   */
+  setApplyForm: {
+    methodKind: "unary";
+    input: typeof SetApplyFormRequestSchema;
+    output: typeof SetApplyFormResponseSchema;
   },
   /**
    * MarkSubmitted records that the candidate finished a hand-off in the browser and pressed

@@ -577,6 +577,10 @@ export const APPLICATION_STAGES = [
 ] as const;
 export type ApplicationStage = (typeof APPLICATION_STAGES)[number];
 
+/** The two forms a posting found on LinkedIn/Xing can have. */
+export const APPLY_FORMS = ['company', 'platform'] as const;
+export type ApplyForm = (typeof APPLY_FORMS)[number];
+
 export const applications = sqliteTable('applications', {
   id: integer('id').primaryKey(),
   postingId: integer('posting_id')
@@ -594,6 +598,11 @@ export const applications = sqliteTable('applications', {
   refreshFields: integer('refresh_fields', { mode: 'boolean' }).notNull().default(true),
   /** Set by `prepare --rewrite`: redraft every answer, not only missing ones. */
   rewriteAnswers: integer('rewrite_answers', { mode: 'boolean' }).notNull().default(false),
+  /**
+   * Which form it goes through when the posting has both: the platform's (LinkedIn Easy Apply,
+   * Xing apply) or the company's own. Null = the company's form (the default).
+   */
+  applyForm: text('apply_form', { enum: APPLY_FORMS }),
   preparedAt: integer('prepared_at', { mode: 'timestamp_ms' }),
   approvedAt: integer('approved_at', { mode: 'timestamp_ms' }),
   appliedAt: integer('applied_at', { mode: 'timestamp_ms' }),

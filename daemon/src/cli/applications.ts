@@ -5,6 +5,7 @@ import {
   type Application,
   type ApplicationField,
   ApplicationStage,
+  ApplyForm,
   type Cv,
   type CvLine,
   FactStatus,
@@ -28,6 +29,14 @@ const STAGES: Record<string, ApplicationStage> = {
   rejected: ApplicationStage.REJECTED,
   offer: ApplicationStage.OFFER,
 };
+
+/** " (the company's form; `applications form <id> platform` switches)" when both exist. */
+function formChoice(a: Application): string {
+  const platform = a.applyForm === ApplyForm.PLATFORM;
+  const which = platform ? "the platform's form" : "the company's form";
+  if (!a.applyFormSwitchable) return platform ? ` (${which})` : '';
+  return ` (${which}; \`applications form ${a.id} ${platform ? 'company' : 'platform'}\` switches)`;
+}
 
 export function appStageName(stage: ApplicationStage): string {
   return Object.entries(STAGES).find(([, v]) => v === stage)?.[0] ?? 'unknown';
@@ -188,6 +197,8 @@ export function applicationJson(a: Application) {
     score: a.score ?? null,
     postingUrl: a.postingUrl,
     formUrl: a.formUrl ?? null,
+    applyForm: a.applyForm === ApplyForm.PLATFORM ? 'platform' : 'company',
+    applyFormSwitchable: a.applyFormSwitchable,
     createdAt: iso(a.createdAt),
     preparedAt: iso(a.preparedAt),
     approvedAt: iso(a.approvedAt),
@@ -278,7 +289,7 @@ export function previewLines(a: Application, o: { all?: boolean } = {}): string[
     `Application ${id} · ${a.title ?? '(untitled)'}${a.company ? ` · ${a.company}` : ''} · ${appStageName(a.stage).replace(/_/g, ' ')}`,
     `Posting ${a.postingId}${a.score !== undefined ? ` · score ${a.score}` : ''} · ${a.postingUrl}`,
   );
-  if (a.formUrl) lines.push(`Form    ${a.formUrl}`);
+  if (a.formUrl) lines.push(`Form    ${a.formUrl}${formChoice(a)}`);
   if (a.note) lines.push(`Note    ${a.note}`);
   if (a.receipt) {
     lines.push(
@@ -682,6 +693,25 @@ export function registerApplications(program: Command, client: () => ApplyantCli
       const res = await client().markSubmitted({ applicationId: BigInt(positiveInt(idArg)) });
       const a = res.application;
       out(`Application ${a?.id}: applied (submitted by you in the browser).`);
+    });
+
+  apps
+    .command('form <id> <which>')
+    .description(
+      "which form it goes through, before approval: platform (LinkedIn Easy Apply, Xing apply) or company (the company's own form, the default); the form is read again and the application prepared for it",
+    )
+    .action(async (idArg: string, which: string) => {
+      const form =
+        which === 'platform' ? ApplyForm.PLATFORM : which === 'company' ? ApplyForm.COMPANY : null;
+      if (form === null) throw new Error('which form: platform or company');
+      const res = await client().setApplyForm({
+        applicationId: BigInt(positiveInt(idArg)),
+        form,
+      });
+      const a = res.application;
+      out(
+        `Application ${a?.id}: ${which === 'platform' ? "the platform's form" : "the company's own form"}${a?.note ? ` (${a.note})` : ''}. Follow with \`applyant runs show --follow\`.`,
+      );
     });
 
   apps

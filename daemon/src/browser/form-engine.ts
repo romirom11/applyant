@@ -44,7 +44,11 @@ export type FillResult =
     }
   | { ok: false; reason: string };
 
-const ACTION_MS = 4000;
+// Playwright's actionability wait for one action (visible, stable, enabled, receiving events).
+// 4 s was too tight on a busy Mac (load average 20–30): a press of the submit button timed out,
+// the delivery threw and was retried later. A control that never becomes usable costs this long
+// once before the agent or a hand-off takes over.
+const ACTION_MS = 10_000;
 
 async function settle(page: Page, ms = 150): Promise<void> {
   await page.waitForTimeout(ms);

@@ -383,6 +383,15 @@ public final class AppStore {
     }
 
     /// "I submitted it": a hand-off the candidate finished in the browser.
+    public func setApplyForm(application id: Int64, form: Applyant_V1_ApplyForm) async {
+        guard let app = applicationDetails[id] ?? applications[id], ReviewRules.canSwitchForm(app) else {
+            lastError = "This application's form can't be switched."
+            return
+        }
+        guard let api, let switched = await attempt({ try await api.setApplyForm(application: id, form: form) }) else { return }
+        record(switched)
+    }
+
     public func markSubmitted(application id: Int64) async {
         guard let api, let app = await attempt({ try await api.markSubmitted(application: id) }) else { return }
         record(app)

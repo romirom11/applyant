@@ -4,7 +4,7 @@ import { Code, ConnectError, type ServiceImpl } from '@connectrpc/connect';
 import { eq } from 'drizzle-orm';
 import { postings } from '../db/schema.ts';
 import { editCvLine, setCvMode } from '../domain/applications/cv/store.ts';
-import { markSubmittedByHand } from '../domain/applications/deliver.ts';
+import { markSubmittedByHand, setApplyForm } from '../domain/applications/deliver.ts';
 import { emailsFor } from '../domain/applications/mail-status.ts';
 import {
   ApprovalBlocked,
@@ -25,7 +25,7 @@ import {
 } from '../domain/applications/store.ts';
 import { confirmFact, FactError, getFact } from '../domain/knowledge/facts.ts';
 import { getStandardProfile } from '../domain/knowledge/profile.ts';
-import type { ApplyantService, Fact } from '../gen/applyant/v1/applyant_pb.js';
+import { type ApplyantService, ApplyForm, type Fact } from '../gen/applyant/v1/applyant_pb.js';
 import { runInTx } from '../queue/tx.ts';
 import type { Tx } from '../queue/types.ts';
 import { factToPb } from './candidate.ts';
@@ -73,6 +73,7 @@ export function applicationRpcs(
   | 'editAnswer'
   | 'approveApplication'
   | 'submitApplication'
+  | 'setApplyForm'
   | 'markSubmitted'
   | 'getHandOff'
   | 'setCvMode'
@@ -186,6 +187,31 @@ export function applicationRpcs(
         runInTx(c.db, c.bus, { now: c.now() }, (tx) => {
           const appId = id(req.id, 'id');
           submitApplication(tx, appId);
+          return { application: applicationToPb(applicationView(tx.db, appId)) };
+        }),
+      );
+    },
+
+    setApplyForm(req) {
+      return guard(() =>
+        runInTx(c.db, c.bus, { now: c.now() }, (tx) => {
+          const appId = id(req.applicationId, 'application_id');
+          const form =
+            req.form === ApplyForm.PLATFORM
+              ? 'platform'
+              : req.form === ApplyForm.COMPANY
+                ? 'company'
+                : null;
+          if (!form)
+            throw new ConnectError('form must be platform or company', Code.InvalidArgument);
+          try {
+            setApplyForm(tx, getApplicationRow(tx.db, appId), form);
+          } catch (err) {
+            // No such form, or already approved: the request is fine, the state refuses it.
+            if (err instanceof ApplicationError && !/^no application/.test(err.message))
+              throw new ConnectError(err.message, Code.FailedPrecondition);
+            throw err;
+          }
           return { application: applicationToPb(applicationView(tx.db, appId)) };
         }),
       );

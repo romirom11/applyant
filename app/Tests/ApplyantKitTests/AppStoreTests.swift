@@ -76,6 +76,12 @@ final class FakeDaemon: DaemonAPI, @unchecked Sendable {
         return applications[id]!
     }
     func submit(application id: Int64) async throws -> Application { throw APIError("unused") }
+    func setApplyForm(application id: Int64, form: Applyant_V1_ApplyForm) async throws -> Application {
+        log("setApplyForm \(id) \(form)")
+        applications[id]?.applyForm = form
+        applications[id]?.stage = .preparing
+        return applications[id]!
+    }
     func markSubmitted(application id: Int64) async throws -> Application {
         log("markSubmitted \(id)")
         applications[id]?.stage = .applied
@@ -437,6 +443,40 @@ func eventually(_ what: String, timeout: Duration = .seconds(3), _ condition: ()
         #expect(daemon.calls.contains("markSubmitted 9"))
         #expect(store.needsYou.isEmpty)
         #expect(store.items(.applied).first?.chips.first?.text == "Applied")
+    }
+
+    @Test func switchesBetweenThePlatformFormAndTheCompanyForm() async throws {
+        var app = application(9, posting: 5, stage: .readyForReview)
+        app.applyForm = .company
+        app.applyFormSwitchable = true
+        let daemon = FakeDaemon(postings: [posting(5, score: 88, title: "Founding Engineer", appId: 9)], applications: [app])
+        let store = AppStore(connector: FakeConnector([daemon]), backoff: { _ in })
+        let run = Task { await store.run() }
+        defer { run.cancel() }
+        try await eventually("connected") { store.connection == .connected }
+        await store.openApplication(9)
+        let before = try #require(store.applicationDetails[9])
+        #expect(ReviewRules.canSwitchForm(before))
+        #expect(ReviewRules.formText(before) == "Applying through the company's own form")
+
+        await store.setApplyForm(application: 9, form: .platform)
+        #expect(daemon.calls.contains("setApplyForm 9 platform"))
+        #expect(store.applications[9]?.applyForm == .platform)
+        #expect(store.applications[9]?.stage == .preparing)
+
+        // Approved (or a posting with one form only): no switch, and the daemon isn't asked.
+        daemon.calls.removeAll()
+        var approved = app
+        approved.stage = .approved
+        #expect(!ReviewRules.canSwitchForm(approved))
+        var single = app
+        single.applyFormSwitchable = false
+        #expect(!ReviewRules.canSwitchForm(single))
+        daemon.applications[9]?.stage = .approved
+        await store.openApplication(9)
+        await store.setApplyForm(application: 9, form: .company)
+        #expect(!daemon.calls.contains { $0.hasPrefix("setApplyForm") })
+        #expect(store.lastError != nil)
     }
 
     @Test func approveStaysOffWhileAnythingBlocksIt() async throws {

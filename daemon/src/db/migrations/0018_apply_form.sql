@@ -1,0 +1,1 @@
+ALTER TABLE `applications` ADD `apply_form` text;

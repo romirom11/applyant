@@ -19,13 +19,13 @@ import {
   platformOf,
 } from '../../browser/guardrails.ts';
 import type { DeliverContext, DeliverOutcome } from '../../channels/channel.ts';
-import type { ReadDb } from '../../db/client.ts';
 import {
   type ApplicationRow,
+  type ApplicationStage,
+  type ApplyForm,
   applications,
   fieldValues,
   type PostingRow,
-  postingSources,
   postings,
   receipts,
   tasks,
@@ -33,9 +33,17 @@ import {
 import type { MailAccess } from '../../integrations/mail-service.ts';
 import type { Handler, HandlerContext, HandOff, Outcome, Tx } from '../../queue/types.ts';
 import { getStandardProfile } from '../knowledge/profile.ts';
-import { atsJobKey } from '../search/readers/ats-embed.ts';
 import { waitForSecurityCode } from './security-code.ts';
-import { ApplicationError, applicationView, emitStage } from './store.ts';
+import {
+  ApplicationError,
+  applicationView,
+  applyTarget,
+  applyTargets,
+  emitStage,
+  requestPrepare,
+} from './store.ts';
+
+export { applyTarget, applyTargets };
 
 /** Failed delivery attempts (a thrown error, not a hand-off) are retried this many times. */
 export const DELIVER_ATTEMPTS = 3;
@@ -238,28 +246,52 @@ async function guardedDelivery(
   return outcome;
 }
 
+/** Stages whose application can still change form: nothing has been approved or sent. */
+const SWITCHABLE: ApplicationStage[] = ['preparing', 'ready_for_review', 'needs_candidate'];
+
 /**
- * Where a posting is applied to (Read and Deliver agree on it): its apply URL, unless that's on
- * LinkedIn/Xing and the same job is also known on the company's own ATS (another of its source
- * URLs, or its canonical URL) — then the company's form (PRD: "the company's own form is the
- * default").
+ * Switches the application between the platform's form and the company's own. The form is read
+ * again from its new target and the application prepared again for it, as after any form
+ * change: values are keyed by the form's own fields, so what was prepared (and overridden) for
+ * the old form isn't sent to the new one; the old form's values come back if it's switched back.
  */
-export function applyTarget(
-  read: ReadDb,
-  posting: Pick<PostingRow, 'id' | 'applyUrl' | 'canonicalUrl'>,
-): string {
-  const own = posting.applyUrl ?? posting.canonicalUrl;
-  if (!platformOf(own)) return own;
-  const urls = [
-    posting.canonicalUrl,
-    ...read
-      .select({ url: postingSources.url })
-      .from(postingSources)
-      .where(eq(postingSources.postingId, posting.id))
-      .all()
-      .map((r) => r.url),
-  ];
-  return urls.find((u) => !platformOf(u) && atsJobKey(u)) ?? own;
+export function setApplyForm(tx: Tx, app: ApplicationRow, form: ApplyForm): ApplicationRow {
+  if (!SWITCHABLE.includes(app.stage)) {
+    throw new ApplicationError(
+      `application ${app.id} is ${app.stage}: its form can only change before approval`,
+    );
+  }
+  const posting = tx.db.select().from(postings).where(eq(postings.id, app.postingId)).get();
+  if (!posting) throw new ApplicationError(`application ${app.id} has no posting`);
+  const targets = applyTargets(tx.db, posting);
+  if (!targets[form]) {
+    throw new ApplicationError(
+      form === 'platform'
+        ? `posting ${posting.id} isn't on LinkedIn or Xing: there's no platform form`
+        : `posting ${posting.id} has no company form known (only ${targets.platform})`,
+    );
+  }
+  const before = applyTarget(tx.db, posting);
+  tx.db
+    .update(applications)
+    .set({ applyForm: form, updatedAt: tx.now })
+    .where(eq(applications.id, app.id))
+    .run();
+  const row = tx.db.select().from(applications).where(eq(applications.id, app.id)).get() ?? app;
+  if (applyTarget(tx.db, posting) === before) return row;
+  // The old form's read goes; preparing waits for the new one (prepare enqueues read_form).
+  tx.db
+    .update(postings)
+    .set({ form: null, formStatus: null, formNote: null, formReadAt: null })
+    .where(eq(postings.id, posting.id))
+    .run();
+  return requestPrepare(tx, row, {
+    rewrite: false,
+    why:
+      form === 'platform'
+        ? `switched to the ${platformName(platformOf(targets.platform ?? '') ?? 'linkedin')} form`
+        : "switched to the company's own form",
+  });
 }
 
 /** Over a platform's daily cap (or the candidate is using it): the delivery runs again later. */

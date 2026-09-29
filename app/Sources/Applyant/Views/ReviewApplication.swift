@@ -92,6 +92,18 @@ struct ReviewApplication: View {
                 }
                 .font(.callout)
             }
+            if app.applyFormSwitchable {
+                // Found on LinkedIn/Xing and on the company's site: which form it goes through.
+                HStack(spacing: 8) {
+                    Text(ReviewRules.formText(app)).font(.callout).foregroundStyle(.secondary)
+                    if ReviewRules.canSwitchForm(app) {
+                        Button(app.applyForm == .platform ? "Use the company's form" : "Use the platform's form") {
+                            Task { await store.setApplyForm(application: app.id, form: app.applyForm == .platform ? .company : .platform) }
+                        }
+                        .help("The form is read again and the application prepared for it")
+                    }
+                }
+            }
             HStack(spacing: 8) {
                 Spacer()
                 if app.stage == .readyForReview || app.stage == .needsCandidate {

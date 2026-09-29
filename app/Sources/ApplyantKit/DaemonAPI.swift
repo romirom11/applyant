@@ -57,6 +57,9 @@ public protocol DaemonAPI: Sendable {
     func editAnswer(application id: Int64, answer: Int32, sentence: Int32?, text: String?) async throws -> Application
     func setField(application id: Int64, field: String, value: String?) async throws -> Application
     func setCvMode(application id: Int64, mode: String) async throws -> Application
+    /// The platform's form (LinkedIn Easy Apply, Xing apply) or the company's own, before
+    /// approval: the form is read again and the application prepared for it.
+    func setApplyForm(application id: Int64, form: Applyant_V1_ApplyForm) async throws -> Application
     func approve(application id: Int64) async throws -> Application
     /// Approve if needed and deliver, or retry a delivery that got stuck.
     func submit(application id: Int64) async throws -> Application
@@ -272,6 +275,14 @@ public final class ConnectDaemonAPI: DaemonAPI {
 
     public func submit(application id: Int64) async throws -> Application {
         try unwrap(await unary.submitApplication(request: .with { $0.id = id }, headers: headers)).application
+    }
+
+    public func setApplyForm(application id: Int64, form: Applyant_V1_ApplyForm) async throws -> Application {
+        let request = Applyant_V1_SetApplyFormRequest.with {
+            $0.applicationID = id
+            $0.form = form
+        }
+        return try unwrap(await unary.setApplyForm(request: request, headers: headers)).application
     }
 
     public func markSubmitted(application id: Int64) async throws -> Application {
