@@ -114,3 +114,128 @@ public enum MailText {
         }
     }
 }
+
+// MARK: Connecting a mailbox (Settings → Mailbox, setup → Connections)
+
+public typealias MailboxSetup = Applyant_V1_GetMailboxResponse
+public typealias ImapSettings = Applyant_V1_ImapSettings
+
+/// Gmail: the owner's Google Cloud "Desktop app" OAuth client. The secret may stay empty when
+/// the daemon already has one stored.
+public struct GmailForm: Equatable, Sendable {
+    public var clientId = ""
+    public var clientSecret = ""
+
+    public init(clientId: String = "", clientSecret: String = "") {
+        self.clientId = clientId
+        self.clientSecret = clientSecret
+    }
+
+    /// Why Connect can't be pressed yet, or nil.
+    public func problem(secretStored: Bool) -> String? {
+        if clientId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return "Paste the OAuth client ID." }
+        if !secretStored, clientSecret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "Paste the client secret."
+        }
+        return nil
+    }
+}
+
+/// IMAP + SMTP with an app password. Ports are text fields; empty means the default.
+public struct ImapForm: Equatable, Sendable {
+    public var address = ""
+    public var imapHost = ""
+    public var imapPort = "993"
+    public var smtpHost = ""
+    public var smtpPort = "465"
+    public var username = ""
+    public var password = ""
+
+    public init() {}
+
+    /// What the mailbox was connected with (never the password).
+    public init(_ box: Mailbox) {
+        address = box.address
+        if box.hasImapHost { imapHost = box.imapHost }
+        if box.imapPort > 0 { imapPort = String(box.imapPort) }
+        if box.hasSmtpHost { smtpHost = box.smtpHost }
+        if box.smtpPort > 0 { smtpPort = String(box.smtpPort) }
+        if box.hasUsername { username = box.username }
+    }
+
+    /// Fills the servers for a known provider when they're still empty.
+    public mutating func applyPreset() {
+        guard let preset = MailText.imapPreset(for: address) else { return }
+        if imapHost.isEmpty { imapHost = preset.imap; imapPort = String(preset.imapPort) }
+        if smtpHost.isEmpty { smtpHost = preset.smtp; smtpPort = String(preset.smtpPort) }
+    }
+
+    private static func port(_ text: String) -> Int32?? {
+        let t = text.trimmingCharacters(in: .whitespaces)
+        if t.isEmpty { return .some(nil) }
+        guard let n = Int32(t), n > 0, n < 65536 else { return nil }
+        return .some(n)
+    }
+
+    public var problem: String? {
+        let a = address.trimmingCharacters(in: .whitespaces)
+        if a.split(separator: "@").count != 2 || a.contains(" ") { return "Enter the mailbox's address." }
+        if imapHost.trimmingCharacters(in: .whitespaces).isEmpty { return "Enter the IMAP server." }
+        if smtpHost.trimmingCharacters(in: .whitespaces).isEmpty { return "Enter the SMTP server." }
+        if Self.port(imapPort) == nil || Self.port(smtpPort) == nil { return "Ports are numbers (993, 465, 587…)." }
+        if password.isEmpty { return "Enter the app password." }
+        return nil
+    }
+
+    /// The request's settings (TLS follows the ports: 993/465 at once, 143/587 STARTTLS).
+    public var settings: ImapSettings? {
+        guard problem == nil else { return nil }
+        return .with {
+            $0.imapHost = imapHost.trimmingCharacters(in: .whitespaces)
+            $0.imapPort = (Self.port(imapPort) ?? nil) ?? 0
+            $0.smtpHost = smtpHost.trimmingCharacters(in: .whitespaces)
+            $0.smtpPort = (Self.port(smtpPort) ?? nil) ?? 0
+            $0.secure = true
+            let user = username.trimmingCharacters(in: .whitespaces)
+            if !user.isEmpty { $0.username = user }
+            $0.password = password
+        }
+    }
+}
+
+public extension MailText {
+    /// Where to create the Google OAuth client, and Google's own steps.
+    static let googleCredentialsURL = URL(string: "https://console.cloud.google.com/apis/credentials")!
+    static let googleGuideURL = URL(string: "https://developers.google.com/workspace/guides/create-credentials#desktop-app")!
+    static let gmailHint = "In Google Cloud, enable the Gmail, Calendar and Drive APIs, then Credentials → Create credentials → OAuth client ID → Desktop app, and paste its ID and secret here."
+    static let imapHint = "Use an app password, not your account password (iCloud: appleid.apple.com → App-Specific Passwords; Gmail: myaccount.google.com/apppasswords). Ports 993/465 use TLS, 143/587 STARTTLS."
+
+    /// IMAP/SMTP servers for common providers, by the address's domain.
+    static func imapPreset(for address: String) -> (imap: String, imapPort: Int32, smtp: String, smtpPort: Int32)? {
+        guard let domain = address.split(separator: "@").last?.lowercased(), address.contains("@") else { return nil }
+        switch domain {
+        case "icloud.com", "me.com", "mac.com": return ("imap.mail.me.com", 993, "smtp.mail.me.com", 587)
+        case "gmail.com", "googlemail.com": return ("imap.gmail.com", 993, "smtp.gmail.com", 465)
+        case "outlook.com", "hotmail.com", "live.com": return ("outlook.office365.com", 993, "smtp-mail.outlook.com", 587)
+        case "yahoo.com": return ("imap.mail.yahoo.com", 993, "smtp.mail.yahoo.com", 465)
+        case "fastmail.com": return ("imap.fastmail.com", 993, "smtp.fastmail.com", 465)
+        default: return nil
+        }
+    }
+
+    /// The Mailbox section's chip.
+    static func chip(_ box: Mailbox?) -> Chip {
+        switch box?.status {
+        case "connected"?: Chip(text: "Connected", tone: .good)
+        case "connecting"?: Chip(text: "Waiting for Google", tone: .accent)
+        case "failed"?: Chip(text: "Failed", tone: .warning)
+        default: Chip(text: "Not connected", tone: .neutral)
+        }
+    }
+
+    /// "Gmail · me@gmail.com" · "IMAP · me@icloud.com (imap.mail.me.com)".
+    static func account(_ box: Mailbox) -> String {
+        if box.kind == "gmail" { return "Gmail · " + (box.address.isEmpty ? "not signed in yet" : box.address) }
+        return "IMAP · \(box.address)" + (box.hasImapHost ? " (\(box.imapHost))" : "")
+    }
+}

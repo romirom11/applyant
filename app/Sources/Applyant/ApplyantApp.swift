@@ -66,6 +66,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         status.start()
+        // Google's consent (Settings → Mailbox) opens in the default browser.
+        store.onOpenURL = { NSWorkspace.shared.open($0) }
         let notifications = NotificationDelegate(store: store) { [weak self] in self?.showMainWindow() }
         self.notifications = notifications
         notifications.install()

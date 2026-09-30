@@ -67,6 +67,16 @@ public final class AppStore {
     /// The connected mailbox (nil when none is), and the replies waiting for "Which application?".
     public private(set) var mailbox: Mailbox?
     public private(set) var mailQueue: [Email] = []
+    /// Whether a Google client secret is stored (never its value) and the client id to offer.
+    public private(set) var mailboxSecretStored = false
+    public private(set) var googleClientId = ""
+    /// The Google consent URL while the browser is still out (the sheet waits on it).
+    public private(set) var googleConsentURL: URL?
+    /// Opens a URL in the browser (the app sets NSWorkspace; tests record it).
+    public var onOpenURL: (@MainActor (URL) -> Void)?
+    /// How often the connecting mailbox is asked about while Google's consent is open.
+    public var consentPollInterval: Duration = .seconds(1)
+    private var consentWatch: Task<Void, Never>?
     /// LinkedIn/Xing (caps, pauses, sign-in) and the captcha solver's key status: Settings.
     public private(set) var platforms: PlatformList?
     /// The candidate's Telegram account (Settings → Telegram).
@@ -143,11 +153,11 @@ public final class AppStore {
         async let searchList = api.listSearch()
         async let runList = api.listSearchRuns(limit: 50)
         async let companyList = api.listCompanies()
-        async let box = api.mailbox()
+        async let box = api.mailboxSetup()
         async let queue = api.mailQueue()
         let (p, a, i, s, r, c) = try await (postingList, applicationList, interviewList, searchList, runList, companyList)
         // An older daemon without the mailbox RPCs still loads everything else.
-        mailbox = (try? await box) ?? nil
+        applyMailbox(try? await box)
         mailQueue = (try? await queue) ?? []
         platforms = try? await api.listPlatforms()
         if let status = try? await api.setupStatus(refresh: false) { applySetup(status) }
@@ -210,6 +220,7 @@ public final class AppStore {
             // Syncs, new questions and answers (status moves also arrive as application
             // events); a calendar event changes what an open application shows.
             await refreshMail(api)
+            if ["connected", "failed", "disconnected"].contains(m.status) { await refreshSetup() }
             if m.status == "calendar" || m.status == "assigned" {
                 for id in applicationDetails.keys { await refreshApplication(id, api) }
             }
@@ -504,8 +515,91 @@ public final class AppStore {
     // MARK: The mailbox
 
     private func refreshMail(_ api: DaemonAPI) async {
-        if let box = try? await api.mailbox() { mailbox = box } else { mailbox = nil }
+        applyMailbox(try? await api.mailboxSetup())
         if let queue = try? await api.mailQueue() { mailQueue = queue }
+    }
+
+    private func applyMailbox(_ setup: MailboxSetup?) {
+        mailbox = setup?.hasMailbox == true ? setup?.mailbox : nil
+        mailboxSecretStored = setup?.googleClientSecretStored ?? false
+        googleClientId = setup?.hasGoogleClientID == true ? setup?.googleClientID ?? "" : ""
+        if mailbox?.status != "connecting" {
+            googleConsentURL = nil
+            consentWatch?.cancel()
+            consentWatch = nil
+        }
+    }
+
+    /// Gmail: stores the client (the secret goes to the daemon's Secrets and is never read back),
+    /// opens Google's consent in the browser, and follows the mailbox until the browser comes
+    /// back (a mail event, or asking every `consentPollInterval`). False when it couldn't start.
+    @discardableResult
+    public func connectGmail(_ form: GmailForm) async -> Bool {
+        guard let api, form.problem(secretStored: mailboxSecretStored) == nil else { return false }
+        let id = form.clientId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let secret = form.clientSecret.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let started = await attempt({ try await api.connectGmail(clientId: id, clientSecret: secret.isEmpty ? nil : secret) }),
+              let url = URL(string: started.authURL)
+        else { return false }
+        mailbox = started.mailbox
+        mailboxSecretStored = true
+        googleClientId = id
+        googleConsentURL = url
+        onOpenURL?(url)
+        watchConsent(api)
+        return true
+    }
+
+    /// Until the consent lands or fails (the daemon's listener gives up after 10 minutes).
+    private func watchConsent(_ api: DaemonAPI) {
+        consentWatch?.cancel()
+        let interval = consentPollInterval
+        consentWatch = Task { [weak self] in
+            let deadline = ContinuousClock.now + .seconds(11 * 60)
+            while !Task.isCancelled, ContinuousClock.now < deadline {
+                try? await Task.sleep(for: interval)
+                guard let self, !Task.isCancelled else { return }
+                let setup = try? await api.mailboxSetup()
+                if Task.isCancelled { return }
+                if let setup {
+                    let settled = setup.mailbox.status != "connecting"
+                    self.applyMailbox(setup)
+                    if settled {
+                        await self.refreshSetup()
+                        return
+                    }
+                }
+            }
+        }
+    }
+
+    /// Opens the consent again (the candidate closed the browser tab).
+    public func reopenGoogleConsent() {
+        if let url = googleConsentURL { onOpenURL?(url) }
+    }
+
+    /// IMAP + SMTP: the daemon checks the login with a first sync, then keeps the password.
+    @discardableResult
+    public func connectImap(_ form: ImapForm) async -> Bool {
+        guard let api, let settings = form.settings else { return false }
+        let address = form.address.trimmingCharacters(in: .whitespaces).lowercased()
+        guard let box = await attempt({ try await api.connectImap(address: address, settings: settings) }) else {
+            return false
+        }
+        mailbox = box
+        await refreshMail(api)
+        await refreshSetup()
+        return true
+    }
+
+    /// Forgets the mailbox (and its tokens or password); the Google client secret stays.
+    public func disconnectMailbox() async {
+        guard let api, await attempt({ try await api.disconnectMailbox() }) != nil else { return }
+        googleConsentURL = nil
+        consentWatch?.cancel()
+        consentWatch = nil
+        await refreshMail(api)
+        await refreshSetup()
     }
 
     /// Fresh mailbox state and queue (the Which application? screen opens with this).
@@ -543,6 +637,7 @@ public final class AppStore {
     public func openSettings() async {
         guard let api else { return }
         await refreshPlatforms(api)
+        await refreshMail(api)
         if let t = try? await api.telegram() { telegram = t }
     }
 

@@ -109,6 +109,16 @@ public protocol DaemonAPI: Sendable {
     func assignEmail(_ id: Int64, application: Int64?, label: String?) async throws -> Email
     /// Reads the mailbox now; false when a sync was already waiting or running.
     func syncMailbox() async throws -> Bool
+    /// The mailbox with what connecting needs: whether a Google client secret is stored (never
+    /// its value) and the client id to offer.
+    func mailboxSetup() async throws -> MailboxSetup
+    /// Starts Google's consent (Gmail, Calendar, Drive); the secret goes to the daemon's Secrets.
+    /// The mailbox is `connecting` until the browser comes back; open the URL returned.
+    func connectGmail(clientId: String?, clientSecret: String?) async throws -> (mailbox: Mailbox, authURL: String)
+    /// Checks the login with a first sync, then keeps the password in the daemon's Secrets.
+    func connectImap(address: String, settings: ImapSettings) async throws -> Mailbox
+    /// Forgets the mailbox and its tokens or password; false when none was connected.
+    func disconnectMailbox() async throws -> Bool
 
     // LinkedIn/Xing and the captcha solver (phase 14): Settings.
     /// The guarded platforms, whether a CapMonster key is stored, and an open sign-in window.
@@ -147,6 +157,18 @@ public protocol DaemonAPI: Sendable {
 
 /// Older fakes and daemons: the setup RPCs answer "not available" unless implemented.
 public extension DaemonAPI {
+    func mailboxSetup() async throws -> MailboxSetup {
+        var setup = MailboxSetup()
+        if let box = try await mailbox() { setup.mailbox = box }
+        return setup
+    }
+    func connectGmail(clientId: String?, clientSecret: String?) async throws -> (mailbox: Mailbox, authURL: String) {
+        throw APIError("connecting a mailbox isn't available")
+    }
+    func connectImap(address: String, settings: ImapSettings) async throws -> Mailbox {
+        throw APIError("connecting a mailbox isn't available")
+    }
+    func disconnectMailbox() async throws -> Bool { throw APIError("disconnecting a mailbox isn't available") }
     func setupStatus(refresh: Bool) async throws -> OnboardingStatus { throw APIError("setup isn't available") }
     func setSetupStep(_ step: String, state: String) async throws -> OnboardingStatus { throw APIError("setup isn't available") }
     func preferencesDraft() async throws -> [PreferenceSuggestion] { [] }
@@ -452,6 +474,34 @@ extension ConnectDaemonAPI {
 
     public func syncMailbox() async throws -> Bool {
         try unwrap(await unary.syncMailbox(request: .init(), headers: headers)).queued
+    }
+
+    public func mailboxSetup() async throws -> MailboxSetup {
+        try unwrap(await unary.getMailbox(request: .init(), headers: headers))
+    }
+
+    public func connectGmail(clientId: String?, clientSecret: String?) async throws -> (mailbox: Mailbox, authURL: String) {
+        let request = Applyant_V1_ConnectMailboxRequest.with {
+            $0.gmail = .with {
+                if let clientId { $0.clientID = clientId }
+                if let clientSecret { $0.clientSecret = clientSecret }
+            }
+        }
+        let response = try unwrap(await unary.connectMailbox(request: request, headers: headers))
+        guard response.hasAuthURL else { throw APIError("the daemon gave no Google sign-in URL") }
+        return (response.mailbox, response.authURL)
+    }
+
+    public func connectImap(address: String, settings: ImapSettings) async throws -> Mailbox {
+        let request = Applyant_V1_ConnectMailboxRequest.with {
+            $0.address = address
+            $0.imap = settings
+        }
+        return try unwrap(await unary.connectMailbox(request: request, headers: headers)).mailbox
+    }
+
+    public func disconnectMailbox() async throws -> Bool {
+        try unwrap(await unary.disconnectMailbox(request: .init(), headers: headers)).disconnected
     }
 
     public func listPlatforms() async throws -> PlatformList {

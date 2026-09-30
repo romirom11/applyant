@@ -1552,7 +1552,8 @@ public nonisolated struct Applyant_V1_MailEvent: Sendable {
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  /// synced (entity = mailbox) · ask · assigned · calendar (entity = email)
+  /// synced · connected · failed · disconnected (entity = mailbox) · ask · assigned · calendar
+  /// (entity = email)
   public var status: String = String()
 
   public var entityID: Int64 = 0
@@ -6153,12 +6154,61 @@ public nonisolated struct Applyant_V1_Mailbox: Sendable {
   /// Emails waiting in the ask queue.
   public var asking: Int32 = 0
 
+  /// What it was connected with, never a password or secret (to reconnect with the same).
+  /// Gmail: the OAuth client id.
+  public var clientID: String {
+    get {_clientID ?? String()}
+    set {_clientID = newValue}
+  }
+  /// Returns true if `clientID` has been explicitly set.
+  public var hasClientID: Bool {self._clientID != nil}
+  /// Clears the value of `clientID`. Subsequent reads from it will return its default value.
+  public mutating func clearClientID() {self._clientID = nil}
+
+  /// IMAP: the servers, TLS and the login when it isn't the address.
+  public var imapHost: String {
+    get {_imapHost ?? String()}
+    set {_imapHost = newValue}
+  }
+  /// Returns true if `imapHost` has been explicitly set.
+  public var hasImapHost: Bool {self._imapHost != nil}
+  /// Clears the value of `imapHost`. Subsequent reads from it will return its default value.
+  public mutating func clearImapHost() {self._imapHost = nil}
+
+  public var imapPort: Int32 = 0
+
+  public var smtpHost: String {
+    get {_smtpHost ?? String()}
+    set {_smtpHost = newValue}
+  }
+  /// Returns true if `smtpHost` has been explicitly set.
+  public var hasSmtpHost: Bool {self._smtpHost != nil}
+  /// Clears the value of `smtpHost`. Subsequent reads from it will return its default value.
+  public mutating func clearSmtpHost() {self._smtpHost = nil}
+
+  public var smtpPort: Int32 = 0
+
+  public var secure: Bool = false
+
+  public var username: String {
+    get {_username ?? String()}
+    set {_username = newValue}
+  }
+  /// Returns true if `username` has been explicitly set.
+  public var hasUsername: Bool {self._username != nil}
+  /// Clears the value of `username`. Subsequent reads from it will return its default value.
+  public mutating func clearUsername() {self._username = nil}
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
 
   fileprivate var _syncedAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
   fileprivate var _note: String? = nil
+  fileprivate var _clientID: String? = nil
+  fileprivate var _imapHost: String? = nil
+  fileprivate var _smtpHost: String? = nil
+  fileprivate var _username: String? = nil
 }
 
 public nonisolated struct Applyant_V1_ImapSettings: Sendable {
@@ -6168,15 +6218,17 @@ public nonisolated struct Applyant_V1_ImapSettings: Sendable {
 
   public var imapHost: String = String()
 
-  /// 0 means 993.
+  /// 0 means 993 (143 when not secure).
   public var imapPort: Int32 = 0
 
   public var smtpHost: String = String()
 
-  /// 0 means 465.
+  /// 0 means 465 (587 when not secure).
   public var smtpPort: Int32 = 0
 
-  /// TLS from the start (993 / 465); false uses STARTTLS where offered.
+  /// TLS from the start; false uses STARTTLS where offered. Ports 993/465 always start with TLS
+  /// and 143/587/25 always use STARTTLS; this decides for other ports and the default ports
+  /// (993 + 465, or 143 + 587).
   public var secure: Bool = false
 
   /// When the login isn't the address.
@@ -6325,11 +6377,48 @@ public nonisolated struct Applyant_V1_GetMailboxResponse: Sendable {
   /// Clears the value of `mailbox`. Subsequent reads from it will return its default value.
   public mutating func clearMailbox() {self._mailbox = nil}
 
+  /// A Google client secret is stored (the value never leaves the daemon).
+  public var googleClientSecretStored: Bool = false
+
+  /// The client id to offer: the mailbox's, else config's (APPLYANT_GOOGLE_CLIENT_ID).
+  public var googleClientID: String {
+    get {_googleClientID ?? String()}
+    set {_googleClientID = newValue}
+  }
+  /// Returns true if `googleClientID` has been explicitly set.
+  public var hasGoogleClientID: Bool {self._googleClientID != nil}
+  /// Clears the value of `googleClientID`. Subsequent reads from it will return its default value.
+  public mutating func clearGoogleClientID() {self._googleClientID = nil}
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
 
   fileprivate var _mailbox: Applyant_V1_Mailbox? = nil
+  fileprivate var _googleClientID: String? = nil
+}
+
+public nonisolated struct Applyant_V1_DisconnectMailboxRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Applyant_V1_DisconnectMailboxResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// False when no mailbox was connected.
+  public var disconnected: Bool = false
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
 }
 
 public nonisolated struct Applyant_V1_SyncMailboxRequest: Sendable {
@@ -16204,7 +16293,7 @@ nonisolated extension Applyant_V1_ResearchCompanyResponse: SwiftProtobuf.Message
 
 nonisolated extension Applyant_V1_Mailbox: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Mailbox"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}kind\0\u{1}address\0\u{1}status\0\u{3}synced_at\0\u{1}note\0\u{1}asking\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}kind\0\u{1}address\0\u{1}status\0\u{3}synced_at\0\u{1}note\0\u{1}asking\0\u{3}client_id\0\u{3}imap_host\0\u{3}imap_port\0\u{3}smtp_host\0\u{3}smtp_port\0\u{1}secure\0\u{1}username\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -16218,6 +16307,13 @@ nonisolated extension Applyant_V1_Mailbox: SwiftProtobuf.Message, SwiftProtobuf.
       case 4: try { try decoder.decodeSingularMessageField(value: &self._syncedAt) }()
       case 5: try { try decoder.decodeSingularStringField(value: &self._note) }()
       case 6: try { try decoder.decodeSingularInt32Field(value: &self.asking) }()
+      case 7: try { try decoder.decodeSingularStringField(value: &self._clientID) }()
+      case 8: try { try decoder.decodeSingularStringField(value: &self._imapHost) }()
+      case 9: try { try decoder.decodeSingularInt32Field(value: &self.imapPort) }()
+      case 10: try { try decoder.decodeSingularStringField(value: &self._smtpHost) }()
+      case 11: try { try decoder.decodeSingularInt32Field(value: &self.smtpPort) }()
+      case 12: try { try decoder.decodeSingularBoolField(value: &self.secure) }()
+      case 13: try { try decoder.decodeSingularStringField(value: &self._username) }()
       default: break
       }
     }
@@ -16246,6 +16342,27 @@ nonisolated extension Applyant_V1_Mailbox: SwiftProtobuf.Message, SwiftProtobuf.
     if self.asking != 0 {
       try visitor.visitSingularInt32Field(value: self.asking, fieldNumber: 6)
     }
+    try { if let v = self._clientID {
+      try visitor.visitSingularStringField(value: v, fieldNumber: 7)
+    } }()
+    try { if let v = self._imapHost {
+      try visitor.visitSingularStringField(value: v, fieldNumber: 8)
+    } }()
+    if self.imapPort != 0 {
+      try visitor.visitSingularInt32Field(value: self.imapPort, fieldNumber: 9)
+    }
+    try { if let v = self._smtpHost {
+      try visitor.visitSingularStringField(value: v, fieldNumber: 10)
+    } }()
+    if self.smtpPort != 0 {
+      try visitor.visitSingularInt32Field(value: self.smtpPort, fieldNumber: 11)
+    }
+    if self.secure != false {
+      try visitor.visitSingularBoolField(value: self.secure, fieldNumber: 12)
+    }
+    try { if let v = self._username {
+      try visitor.visitSingularStringField(value: v, fieldNumber: 13)
+    } }()
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -16256,6 +16373,13 @@ nonisolated extension Applyant_V1_Mailbox: SwiftProtobuf.Message, SwiftProtobuf.
     if lhs._syncedAt != rhs._syncedAt {return false}
     if lhs._note != rhs._note {return false}
     if lhs.asking != rhs.asking {return false}
+    if lhs._clientID != rhs._clientID {return false}
+    if lhs._imapHost != rhs._imapHost {return false}
+    if lhs.imapPort != rhs.imapPort {return false}
+    if lhs._smtpHost != rhs._smtpHost {return false}
+    if lhs.smtpPort != rhs.smtpPort {return false}
+    if lhs.secure != rhs.secure {return false}
+    if lhs._username != rhs._username {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -16496,7 +16620,7 @@ nonisolated extension Applyant_V1_GetMailboxRequest: SwiftProtobuf.Message, Swif
 
 nonisolated extension Applyant_V1_GetMailboxResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".GetMailboxResponse"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}mailbox\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}mailbox\0\u{3}google_client_secret_stored\0\u{3}google_client_id\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -16505,6 +16629,8 @@ nonisolated extension Applyant_V1_GetMailboxResponse: SwiftProtobuf.Message, Swi
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularMessageField(value: &self._mailbox) }()
+      case 2: try { try decoder.decodeSingularBoolField(value: &self.googleClientSecretStored) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self._googleClientID) }()
       default: break
       }
     }
@@ -16518,11 +16644,68 @@ nonisolated extension Applyant_V1_GetMailboxResponse: SwiftProtobuf.Message, Swi
     try { if let v = self._mailbox {
       try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
     } }()
+    if self.googleClientSecretStored != false {
+      try visitor.visitSingularBoolField(value: self.googleClientSecretStored, fieldNumber: 2)
+    }
+    try { if let v = self._googleClientID {
+      try visitor.visitSingularStringField(value: v, fieldNumber: 3)
+    } }()
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Applyant_V1_GetMailboxResponse, rhs: Applyant_V1_GetMailboxResponse) -> Bool {
     if lhs._mailbox != rhs._mailbox {return false}
+    if lhs.googleClientSecretStored != rhs.googleClientSecretStored {return false}
+    if lhs._googleClientID != rhs._googleClientID {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Applyant_V1_DisconnectMailboxRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".DisconnectMailboxRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Applyant_V1_DisconnectMailboxRequest, rhs: Applyant_V1_DisconnectMailboxRequest) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Applyant_V1_DisconnectMailboxResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".DisconnectMailboxResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}disconnected\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularBoolField(value: &self.disconnected) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.disconnected != false {
+      try visitor.visitSingularBoolField(value: self.disconnected, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Applyant_V1_DisconnectMailboxResponse, rhs: Applyant_V1_DisconnectMailboxResponse) -> Bool {
+    if lhs.disconnected != rhs.disconnected {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

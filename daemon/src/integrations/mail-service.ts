@@ -12,6 +12,7 @@ import {
   type Consent,
   GOOGLE_CLIENT_SECRET_SECRET,
   GOOGLE_ENDPOINTS,
+  GOOGLE_TOKENS_SECRET,
   GoogleAuth,
   type GoogleClient,
   type GoogleEndpoints,
@@ -83,6 +84,10 @@ export class MailService implements MailAccess {
   readonly codePollMs: number;
   private readonly o: MailServiceOptions;
   readonly google: GoogleConfig;
+  /** The Google consent still waiting for the browser, if any (one at a time). */
+  private pending: Consent | null = null;
+  /** Consents closed on purpose (a new Connect, Disconnect): their rejection changes nothing. */
+  private readonly cancelled = new WeakSet<Consent>();
 
   constructor(o: MailServiceOptions) {
     this.o = o;
@@ -108,6 +113,33 @@ export class MailService implements MailAccess {
       authUrl: this.google.authUrl,
       tokenUrl: this.google.tokenUrl,
     };
+  }
+
+  private cancelPending(): void {
+    if (!this.pending) return;
+    this.cancelled.add(this.pending);
+    this.pending.cancel();
+    this.pending = null;
+  }
+
+  /** Whether a Google client secret is stored (by name: the value is never read here). */
+  async hasGoogleClientSecret(): Promise<boolean> {
+    if (this.google.clientSecret) return true;
+    return (await this.o.secrets.list()).includes(GOOGLE_CLIENT_SECRET_SECRET);
+  }
+
+  /**
+   * Forgets the mailbox: an open consent is cancelled, the row goes (its stored emails with
+   * it), and so do the Google tokens and the IMAP password. The Google client secret stays: it
+   * belongs to the owner's OAuth client, not to the account. False when there was none.
+   */
+  async disconnect(db: Db): Promise<boolean> {
+    this.cancelPending();
+    const existing = db.select().from(mailboxes).all();
+    db.delete(mailboxes).run();
+    await this.o.secrets.delete(GOOGLE_TOKENS_SECRET);
+    await this.o.secrets.delete(MAIL_PASSWORD_SECRET);
+    return existing.length > 0;
   }
 
   async open(): Promise<Mailbox | null> {
@@ -192,6 +224,7 @@ export class MailService implements MailAccess {
       ...(this.o.allowSelfSigned ? { allowSelfSigned: true } : {}),
     });
     await box.sync(null, { since: o.now, limit: 1 });
+    this.cancelPending();
     await this.o.secrets.set(MAIL_PASSWORD_SECRET, o.password);
     return replaceMailbox(db, {
       kind: 'imap',
@@ -208,10 +241,19 @@ export class MailService implements MailAccess {
    */
   async connectGmail(
     db: Db,
-    o: { clientId?: string | null; clientSecret?: string | null; now: () => Date; log: Logger },
+    o: {
+      clientId?: string | null;
+      clientSecret?: string | null;
+      now: () => Date;
+      log: Logger;
+      /** Called once the browser came back: connected, or failed (not when cancelled). */
+      onSettled?: (row: MailboxRow) => void;
+    },
   ): Promise<{ row: MailboxRow; consent: Consent }> {
     if (o.clientSecret) await this.o.secrets.set(GOOGLE_CLIENT_SECRET_SECRET, o.clientSecret);
     const client = await this.googleClient(o.clientId ?? null);
+    // A consent started earlier (another click on Connect) is closed first.
+    this.cancelPending();
     const consent = await startGoogleConsent({
       client,
       secrets: this.o.secrets,
@@ -224,6 +266,12 @@ export class MailService implements MailAccess {
       status: 'connecting',
       now: o.now(),
     });
+    this.pending = consent;
+    consent.done
+      .finally(() => {
+        if (this.pending === consent) this.pending = null;
+      })
+      .catch(() => {});
     consent.done
       .then(async () => {
         const gmail = (await this.mailboxFor({
@@ -242,14 +290,22 @@ export class MailService implements MailAccess {
           .where(eq(mailboxes.id, row.id))
           .run();
         o.log.info('gmail connected', { address: profile.emailAddress });
+        settled();
       })
       .catch((err: Error) => {
+        if (this.cancelled.has(consent)) return;
         db.update(mailboxes)
           .set({ status: 'failed', note: err.message.slice(0, 500), updatedAt: o.now() })
           .where(eq(mailboxes.id, row.id))
           .run();
         o.log.warn('gmail connect failed', { err: err.message });
+        settled();
       });
+    const settled = () => {
+      // Still this mailbox (not replaced or disconnected meanwhile)?
+      const now = db.select().from(mailboxes).where(eq(mailboxes.id, row.id)).get();
+      if (now && now.status !== 'connecting') o.onSettled?.(now);
+    };
     return { row, consent };
   }
 }

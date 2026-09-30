@@ -154,6 +154,14 @@ export function registerMail(
     );
 
   mail
+    .command('disconnect')
+    .description('forget the mailbox, its stored emails and its tokens or password')
+    .action(async () => {
+      const res = await client().disconnectMailbox({});
+      out(res.disconnected ? 'mailbox disconnected' : 'no mailbox was connected');
+    });
+
+  mail
     .command('sync')
     .description('read new mail now')
     .action(async () => {

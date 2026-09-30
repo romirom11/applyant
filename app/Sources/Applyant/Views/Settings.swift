@@ -1,6 +1,7 @@
 // Settings (phase 14): the captcha solver's key (set or not, never shown), and LinkedIn/Xing:
 // sign-in, a pause and Resume, the daily caps against today's use. Phase 15: Telegram connect
-// (phone → code → the 2FA password), for private channels and Telegram applications.
+// (phone → code → the 2FA password), for private channels and Telegram applications. Mailbox:
+// connect Gmail or IMAP/SMTP (MailboxConnect.swift), reconnect, disconnect.
 import ApplyantAPI
 import ApplyantKit
 import SwiftUI
@@ -17,6 +18,14 @@ struct SettingsView: View {
                     Spacer()
                     Button("Open the setup…") { Task { await store.openOnboarding() } }
                 }
+            }
+            SwiftUI.Section {
+                MailboxRows(store: store)
+            } header: {
+                Text("Mailbox")
+            } footer: {
+                Text("Replies move applications on, security codes are read during delivery, and approved email applications are sent from it. Passwords and secrets stay in Applyant's secrets (the Keychain).")
+                    .font(.caption).foregroundStyle(.secondary)
             }
             SwiftUI.Section("Captcha solver") {
                 Text(PlatformText.captcha(store.platforms)).font(.callout)

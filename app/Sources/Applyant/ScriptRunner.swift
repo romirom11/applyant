@@ -20,7 +20,8 @@ struct ScriptStep: Decodable {
     /// skip · interested · prepare · confirmAll · confirmFacts · editAnswer · setField · approve · submit · setCvMode ·
     /// startInterview · answerInterview · dismissInterview · pauseStrategy · resumeStrategy · runStrategy ·
     /// sourceOff · sourceOn (value: a source key or kind) · planSearch · rebuildRecipe (value: a source
-    /// key) · researchCompany (the posting on screen, or `company`; value "refresh" researches again) · wait
+    /// key) · researchCompany (the posting on screen, or `company`; value "refresh" researches again) ·
+    /// connectGmail (value: client id, text: secret) · disconnectMail · wait
     var action: String?
     var application: Int64?
     var facts: [Int64]?
@@ -212,6 +213,14 @@ final class ScriptRunner {
             note("assignEmail: queue now \(store.mailQueue.count)")
         case "syncMail":
             note("syncMail: queued \(await store.syncMailbox())")
+        case "connectGmail":
+            // `value` = the OAuth client id, `text` = its secret (a test one: the browser isn't
+            // opened in script mode, so no consent happens).
+            let ok = await store.connectGmail(GmailForm(clientId: s.value ?? "", clientSecret: s.text ?? ""))
+            note("connectGmail: \(ok ? "consent open at \(store.googleConsentURL?.host ?? "?")" : "not started")")
+        case "disconnectMail":
+            await store.disconnectMailbox()
+            note("disconnectMail: \(MailText.connection(store.mailbox))")
         case "researchCompany":
             let target: CompanyTarget? = s.company.map { .id($0) } ?? store.navigation.postingId.map { .posting($0) }
             if let target {

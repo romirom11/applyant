@@ -118,11 +118,11 @@ private struct ConnectionsStep: View {
                 }
             }
             SwiftUI.Section("Mailbox and Google") {
-                Row(ok: s?.mailbox.connected == true, text: s.map { OnboardingText.connection($0.mailbox) } ?? "")
+                MailboxRows(store: store)
                 Row(ok: s?.calendar.connected == true, text: "Calendar: " + (s.map { OnboardingText.connection($0.calendar) } ?? ""))
                 Row(ok: s?.drive.connected == true, text: "Drive: " + (s.map { OnboardingText.connection($0.drive) } ?? ""))
-                Text("Connect with `applyant mail connect gmail --client-id <id> --client-secret` (one Google consent covers Gmail, Calendar and Drive) or `applyant mail connect imap …`.")
-                    .font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                Text("Gmail: one Google consent covers Gmail, Calendar and Drive. Any other mailbox: IMAP + SMTP with an app password.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
             SwiftUI.Section("Optional") {
                 Row(ok: s?.telegram.connected == true, text: "Telegram: " + (s.map { OnboardingText.connection($0.telegram) } ?? ""))

@@ -101,7 +101,7 @@ func mailbox(_ status: String = "connected", address: String = "me@gmail.com", a
         let run = Task { await store.run() }
         defer { run.cancel() }
         try await eventually("connected") { store.connection == .connected }
-        #expect(daemon.calls.contains("mailbox") && daemon.calls.contains("mailQueue"))
+        #expect(daemon.calls.contains("mailboxSetup") && daemon.calls.contains("mailQueue"))
         #expect(store.mailQueue.map(\.id) == [10, 11])
         #expect(store.count(.whichApplication) == 2)
         #expect(MailText.isConnected(store.mailbox))
@@ -130,5 +130,123 @@ func mailbox(_ status: String = "connected", address: String = "me@gmail.com", a
         #expect(await store.syncMailbox() == true)
         #expect(await store.syncMailbox() == false)
         #expect(store.lastError == nil)
+    }
+
+    @Test func connectFormsCheckWhatTheyNeed() {
+        #expect(GmailForm().problem(secretStored: false) == "Paste the OAuth client ID.")
+        #expect(GmailForm(clientId: "id.apps.googleusercontent.com").problem(secretStored: false) == "Paste the client secret.")
+        #expect(GmailForm(clientId: "id.apps.googleusercontent.com").problem(secretStored: true) == nil)
+        #expect(GmailForm(clientId: " x ", clientSecret: "s").problem(secretStored: false) == nil)
+
+        var imap = ImapForm()
+        #expect(imap.problem == "Enter the mailbox's address.")
+        imap.address = "me@icloud.com"
+        imap.applyPreset()
+        #expect(imap.imapHost == "imap.mail.me.com" && imap.imapPort == "993")
+        #expect(imap.smtpHost == "smtp.mail.me.com" && imap.smtpPort == "587")
+        #expect(imap.problem == "Enter the app password.")
+        #expect(imap.settings == nil)
+        imap.password = "abcd-efgh-ijkl-mnop"
+        imap.smtpPort = "x"
+        #expect(imap.problem == "Ports are numbers (993, 465, 587…).")
+        imap.smtpPort = ""
+        let settings = imap.settings
+        #expect(settings?.imapPort == 993 && settings?.smtpPort == 0 && settings?.password == "abcd-efgh-ijkl-mnop")
+        #expect(settings?.hasUsername == false)
+        // A preset never overwrites servers the candidate typed.
+        var custom = ImapForm()
+        custom.imapHost = "mail.example.org"
+        custom.address = "me@gmail.com"
+        custom.applyPreset()
+        #expect(custom.imapHost == "mail.example.org" && custom.smtpHost == "smtp.gmail.com")
+        #expect(MailText.imapPreset(for: "me@example.org") == nil)
+
+        // Reconnecting starts from what it was connected with, never the password.
+        let box = Mailbox.with {
+            $0.kind = "imap"; $0.address = "me@icloud.com"; $0.imapHost = "imap.mail.me.com"; $0.imapPort = 993
+            $0.smtpHost = "smtp.mail.me.com"; $0.smtpPort = 587; $0.username = "me"
+        }
+        let again = ImapForm(box)
+        #expect(again.smtpPort == "587" && again.username == "me" && again.password.isEmpty)
+        #expect(MailText.account(box) == "IMAP · me@icloud.com (imap.mail.me.com)")
+        #expect(MailText.chip(nil).text == "Not connected")
+        #expect(MailText.chip(mailbox("connecting", address: "")).text == "Waiting for Google")
+    }
+
+    @Test func gmailConnectsThroughTheBrowserAndDisconnects() async throws {
+        let daemon = FakeDaemon()
+        let store = AppStore(connector: FakeConnector([daemon]), backoff: { _ in })
+        store.consentPollInterval = .milliseconds(20)
+        var opened: [URL] = []
+        store.onOpenURL = { opened.append($0) }
+        let run = Task { await store.run() }
+        defer { run.cancel() }
+        try await eventually("connected") { store.connection == .connected }
+        #expect(store.mailbox == nil && !store.mailboxSecretStored)
+
+        // Without a secret (none stored yet) nothing is sent.
+        #expect(await store.connectGmail(GmailForm(clientId: "desktop.apps.googleusercontent.com")) == false)
+        #expect(!daemon.calls.contains { $0.hasPrefix("connectGmail") })
+
+        #expect(await store.connectGmail(GmailForm(clientId: " desktop.apps.googleusercontent.com ", clientSecret: "GOCSPX-test")))
+        #expect(daemon.calls.contains("connectGmail desktop.apps.googleusercontent.com secret:given"))
+        #expect(opened.map(\.host) == ["accounts.google.test"])
+        #expect(store.googleConsentURL != nil)
+        #expect(MailText.connection(store.mailbox) == "Mailbox: waiting for Google consent")
+        #expect(store.mailboxSecretStored)
+        store.reopenGoogleConsent()
+        #expect(opened.count == 2)
+
+        // The browser comes back: polling sees it (no event needed), the wait ends.
+        daemon.finishConsent(address: "me@gmail.com")
+        try await eventually("connected mailbox") { MailText.isConnected(store.mailbox) }
+        #expect(store.googleConsentURL == nil)
+        #expect(MailText.account(store.mailbox!) == "Gmail · me@gmail.com")
+        #expect(store.googleClientId == "desktop.apps.googleusercontent.com")
+
+        // Reconnect with the stored secret: none is sent again.
+        #expect(await store.connectGmail(GmailForm(clientId: "desktop.apps.googleusercontent.com")))
+        #expect(daemon.calls.contains("connectGmail desktop.apps.googleusercontent.com secret:none"))
+        daemon.finishConsent(address: nil)
+        try await eventually("failed") { store.mailbox?.status == "failed" }
+        #expect(MailText.connection(store.mailbox) == "Mailbox failed: Google sign-in was not completed (access_denied)")
+        #expect(store.googleConsentURL == nil)
+
+        await store.disconnectMailbox()
+        #expect(daemon.calls.contains("disconnectMailbox"))
+        #expect(store.mailbox == nil)
+        #expect(store.mailboxSecretStored)
+        #expect(store.lastError == nil)
+    }
+
+    @Test func imapConnectsWithAnAppPasswordOrSaysWhyNot() async throws {
+        let daemon = FakeDaemon()
+        daemon.imapRefusal = "IMAP login failed: AUTHENTICATIONFAILED"
+        let store = AppStore(connector: FakeConnector([daemon]), backoff: { _ in })
+        let run = Task { await store.run() }
+        defer { run.cancel() }
+        try await eventually("connected") { store.connection == .connected }
+
+        var form = ImapForm()
+        form.address = "Me@iCloud.com"
+        form.applyPreset()
+        #expect(await store.connectImap(form) == false)  // no password: nothing sent
+        #expect(!daemon.calls.contains { $0.hasPrefix("connectImap") })
+        form.password = "wrong"
+        #expect(await store.connectImap(form) == false)
+        #expect(store.lastError == "IMAP login failed: AUTHENTICATIONFAILED")
+        #expect(store.mailbox == nil)
+        store.lastError = nil
+
+        daemon.imapRefusal = nil
+        form.password = "abcd-efgh-ijkl-mnop"
+        #expect(await store.connectImap(form))
+        #expect(daemon.calls.contains("connectImap me@icloud.com imap.mail.me.com:993 smtp.mail.me.com:587"))
+        #expect(daemon.mailSecrets["mail.password"] == "abcd-efgh-ijkl-mnop")
+        #expect(MailText.isConnected(store.mailbox))
+        #expect(MailText.account(store.mailbox!) == "IMAP · me@icloud.com (imap.mail.me.com)")
+
+        await store.disconnectMailbox()
+        #expect(store.mailbox == nil && daemon.mailSecrets["mail.password"] == nil)
     }
 }

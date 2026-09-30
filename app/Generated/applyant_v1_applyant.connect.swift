@@ -295,6 +295,12 @@ public protocol Applyant_V1_ApplyantServiceClientInterface: Sendable {
     @available(iOS 13, *)
     func `getMailbox`(request: Applyant_V1_GetMailboxRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_GetMailboxResponse>
 
+    /// DisconnectMailbox forgets the mailbox: an open Google consent is cancelled, the row and its
+    /// stored emails go, and so do its credentials (the Google tokens, the IMAP password). The
+    /// Google client secret stays, so connecting again needs only the consent.
+    @available(iOS 13, *)
+    func `disconnectMailbox`(request: Applyant_V1_DisconnectMailboxRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_DisconnectMailboxResponse>
+
     /// SyncMailbox reads new mail now instead of at the next interval.
     @available(iOS 13, *)
     func `syncMailbox`(request: Applyant_V1_SyncMailboxRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_SyncMailboxResponse>
@@ -668,6 +674,11 @@ public final class Applyant_V1_ApplyantServiceClient: Applyant_V1_ApplyantServic
     }
 
     @available(iOS 13, *)
+    public func `disconnectMailbox`(request: Applyant_V1_DisconnectMailboxRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_DisconnectMailboxResponse> {
+        return await self.client.unary(path: "/applyant.v1.ApplyantService/DisconnectMailbox", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
     public func `syncMailbox`(request: Applyant_V1_SyncMailboxRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_SyncMailboxResponse> {
         return await self.client.unary(path: "/applyant.v1.ApplyantService/SyncMailbox", idempotencyLevel: .unknown, request: request, headers: headers)
     }
@@ -783,6 +794,7 @@ public final class Applyant_V1_ApplyantServiceClient: Applyant_V1_ApplyantServic
             public static let researchCompany = Connect.MethodSpec(name: "ResearchCompany", service: "applyant.v1.ApplyantService", type: .unary)
             public static let connectMailbox = Connect.MethodSpec(name: "ConnectMailbox", service: "applyant.v1.ApplyantService", type: .unary)
             public static let getMailbox = Connect.MethodSpec(name: "GetMailbox", service: "applyant.v1.ApplyantService", type: .unary)
+            public static let disconnectMailbox = Connect.MethodSpec(name: "DisconnectMailbox", service: "applyant.v1.ApplyantService", type: .unary)
             public static let syncMailbox = Connect.MethodSpec(name: "SyncMailbox", service: "applyant.v1.ApplyantService", type: .unary)
             public static let listMailQueue = Connect.MethodSpec(name: "ListMailQueue", service: "applyant.v1.ApplyantService", type: .unary)
             public static let assignEmail = Connect.MethodSpec(name: "AssignEmail", service: "applyant.v1.ApplyantService", type: .unary)

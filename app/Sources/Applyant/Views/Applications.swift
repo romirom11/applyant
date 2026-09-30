@@ -9,6 +9,7 @@ import SwiftUI
 
 struct MailboxStatus: View {
     let store: AppStore
+    @State private var connecting = false
 
     var body: some View {
         HStack(spacing: 8) {
@@ -22,12 +23,18 @@ struct MailboxStatus: View {
             if MailText.isConnected(store.mailbox) {
                 Button("Sync now") { Task { await store.syncMailbox() } }
                     .controlSize(.small)
+            } else {
+                Button(store.mailbox == nil ? "Connect mailbox…" : "Reconnect…") { connecting = true }
+                    .controlSize(.small)
             }
+        }
+        .sheet(isPresented: $connecting) {
+            MailboxConnectSheet(store: store) { connecting = false }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .help(store.mailbox == nil
-            ? "Connect one with `applyant mail connect gmail` or `applyant mail connect imap …`."
+            ? "Connect Gmail or any IMAP mailbox here or in Settings → Mailbox."
             : "Replies move applications on their own; the ones it can't place are asked about here.")
     }
 }

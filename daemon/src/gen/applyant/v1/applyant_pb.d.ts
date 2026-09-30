@@ -1243,7 +1243,8 @@ export declare const CompanyEventSchema: GenMessage<CompanyEvent>;
  */
 export declare type MailEvent = Message<"applyant.v1.MailEvent"> & {
   /**
-   * synced (entity = mailbox) · ask · assigned · calendar (entity = email)
+   * synced · connected · failed · disconnected (entity = mailbox) · ask · assigned · calendar
+   * (entity = email)
    *
    * @generated from field: string status = 1;
    */
@@ -5985,6 +5986,46 @@ export declare type Mailbox = Message<"applyant.v1.Mailbox"> & {
    * @generated from field: int32 asking = 6;
    */
   asking: number;
+
+  /**
+   * What it was connected with, never a password or secret (to reconnect with the same).
+   * Gmail: the OAuth client id.
+   *
+   * @generated from field: optional string client_id = 7;
+   */
+  clientId?: string | undefined;
+
+  /**
+   * IMAP: the servers, TLS and the login when it isn't the address.
+   *
+   * @generated from field: optional string imap_host = 8;
+   */
+  imapHost?: string | undefined;
+
+  /**
+   * @generated from field: int32 imap_port = 9;
+   */
+  imapPort: number;
+
+  /**
+   * @generated from field: optional string smtp_host = 10;
+   */
+  smtpHost?: string | undefined;
+
+  /**
+   * @generated from field: int32 smtp_port = 11;
+   */
+  smtpPort: number;
+
+  /**
+   * @generated from field: bool secure = 12;
+   */
+  secure: boolean;
+
+  /**
+   * @generated from field: optional string username = 13;
+   */
+  username?: string | undefined;
 };
 
 /**
@@ -6003,7 +6044,7 @@ export declare type ImapSettings = Message<"applyant.v1.ImapSettings"> & {
   imapHost: string;
 
   /**
-   * 0 means 993.
+   * 0 means 993 (143 when not secure).
    *
    * @generated from field: int32 imap_port = 2;
    */
@@ -6015,14 +6056,16 @@ export declare type ImapSettings = Message<"applyant.v1.ImapSettings"> & {
   smtpHost: string;
 
   /**
-   * 0 means 465.
+   * 0 means 465 (587 when not secure).
    *
    * @generated from field: int32 smtp_port = 4;
    */
   smtpPort: number;
 
   /**
-   * TLS from the start (993 / 465); false uses STARTTLS where offered.
+   * TLS from the start; false uses STARTTLS where offered. Ports 993/465 always start with TLS
+   * and 143/587/25 always use STARTTLS; this decides for other ports and the default ports
+   * (993 + 465, or 143 + 587).
    *
    * @generated from field: bool secure = 5;
    */
@@ -6152,6 +6195,20 @@ export declare type GetMailboxResponse = Message<"applyant.v1.GetMailboxResponse
    * @generated from field: optional applyant.v1.Mailbox mailbox = 1;
    */
   mailbox?: Mailbox | undefined;
+
+  /**
+   * A Google client secret is stored (the value never leaves the daemon).
+   *
+   * @generated from field: bool google_client_secret_stored = 2;
+   */
+  googleClientSecretStored: boolean;
+
+  /**
+   * The client id to offer: the mailbox's, else config's (APPLYANT_GOOGLE_CLIENT_ID).
+   *
+   * @generated from field: optional string google_client_id = 3;
+   */
+  googleClientId?: string | undefined;
 };
 
 /**
@@ -6159,6 +6216,36 @@ export declare type GetMailboxResponse = Message<"applyant.v1.GetMailboxResponse
  * Use `create(GetMailboxResponseSchema)` to create a new message.
  */
 export declare const GetMailboxResponseSchema: GenMessage<GetMailboxResponse>;
+
+/**
+ * @generated from message applyant.v1.DisconnectMailboxRequest
+ */
+export declare type DisconnectMailboxRequest = Message<"applyant.v1.DisconnectMailboxRequest"> & {
+};
+
+/**
+ * Describes the message applyant.v1.DisconnectMailboxRequest.
+ * Use `create(DisconnectMailboxRequestSchema)` to create a new message.
+ */
+export declare const DisconnectMailboxRequestSchema: GenMessage<DisconnectMailboxRequest>;
+
+/**
+ * @generated from message applyant.v1.DisconnectMailboxResponse
+ */
+export declare type DisconnectMailboxResponse = Message<"applyant.v1.DisconnectMailboxResponse"> & {
+  /**
+   * False when no mailbox was connected.
+   *
+   * @generated from field: bool disconnected = 1;
+   */
+  disconnected: boolean;
+};
+
+/**
+ * Describes the message applyant.v1.DisconnectMailboxResponse.
+ * Use `create(DisconnectMailboxResponseSchema)` to create a new message.
+ */
+export declare const DisconnectMailboxResponseSchema: GenMessage<DisconnectMailboxResponse>;
 
 /**
  * @generated from message applyant.v1.SyncMailboxRequest
@@ -7787,6 +7874,18 @@ export declare const ApplyantService: GenService<{
     methodKind: "unary";
     input: typeof GetMailboxRequestSchema;
     output: typeof GetMailboxResponseSchema;
+  },
+  /**
+   * DisconnectMailbox forgets the mailbox: an open Google consent is cancelled, the row and its
+   * stored emails go, and so do its credentials (the Google tokens, the IMAP password). The
+   * Google client secret stays, so connecting again needs only the consent.
+   *
+   * @generated from rpc applyant.v1.ApplyantService.DisconnectMailbox
+   */
+  disconnectMailbox: {
+    methodKind: "unary";
+    input: typeof DisconnectMailboxRequestSchema;
+    output: typeof DisconnectMailboxResponseSchema;
   },
   /**
    * SyncMailbox reads new mail now instead of at the next interval.

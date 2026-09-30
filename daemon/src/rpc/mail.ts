@@ -50,6 +50,14 @@ export function mailboxToPb(conn: Conn, row: MailboxRow): Mailbox {
     syncedAt: row.syncedAt ? timestampFromDate(row.syncedAt) : undefined,
     note: row.note ?? undefined,
     asking,
+    // What it was connected with; passwords and secrets never leave Secrets.
+    clientId: row.settings.clientId ?? undefined,
+    imapHost: row.settings.imap?.host,
+    imapPort: row.settings.imap?.port ?? 0,
+    smtpHost: row.settings.smtp?.host,
+    smtpPort: row.settings.smtp?.port ?? 0,
+    secure: row.settings.imap?.secure ?? false,
+    username: row.settings.user ?? undefined,
   });
 }
 
@@ -103,9 +111,33 @@ async function guard<T>(fn: () => Promise<T> | T): Promise<T> {
 
 const port = (p: number, fallback: number) => (p > 0 && p < 65536 ? p : fallback);
 
+/**
+ * One server's connection: a well-known port says whether TLS starts at once (993, 465) or
+ * after STARTTLS (143, 587, 25), so IMAP on 993 with SMTP on 587 (iCloud, Outlook) works;
+ * `secure` decides for other ports and picks the default ports.
+ */
+export function mailServer(
+  host: string,
+  p: number,
+  secure: boolean,
+  kind: 'imap' | 'smtp',
+): { host: string; port: number; secure: boolean } {
+  const n = port(p, kind === 'imap' ? (secure ? 993 : 143) : secure ? 465 : 587);
+  const tls = n === 993 || n === 465 ? true : n === 143 || n === 587 || n === 25 ? false : secure;
+  return { host: host.trim(), port: n, secure: tls };
+}
+
 export function mailRpcs(
   c: MailRpcContext,
-): Pick<Impl, 'connectMailbox' | 'getMailbox' | 'syncMailbox' | 'listMailQueue' | 'assignEmail'> {
+): Pick<
+  Impl,
+  | 'connectMailbox'
+  | 'getMailbox'
+  | 'disconnectMailbox'
+  | 'syncMailbox'
+  | 'listMailQueue'
+  | 'assignEmail'
+> {
   const service = () => {
     if (!c.mail) throw new ConnectError('the mailbox is not available', Code.Unavailable);
     return c.mail;
@@ -120,6 +152,22 @@ export function mailRpcs(
             clientSecret: req.kind.value.clientSecret ?? null,
             now: c.now,
             log: c.log,
+            // The app waits on this: a mail event says the consent landed (or didn't), and the
+            // first sync starts at once, as it does for IMAP.
+            onSettled: (row) => {
+              runInTx(c.db, c.bus, { now: c.now() }, (tx) =>
+                tx.emit({
+                  kind: 'mail',
+                  entityId: row.id,
+                  stage: row.status,
+                  message:
+                    row.status === 'connected'
+                      ? `mailbox connected: ${row.address}`
+                      : `mailbox failed: ${row.note ?? ''}`,
+                }),
+              );
+              if (row.status === 'connected') requestMailSync(c.db, c.bus, c.now());
+            },
           });
           return { mailbox: mailboxToPb(c.db, row), authUrl: consent.url };
         }
@@ -138,8 +186,8 @@ export function mailRpcs(
           const row = await mail.connectImap(c.db, {
             address,
             settings: {
-              imap: { host: v.imapHost, port: port(v.imapPort, 993), secure: v.secure },
-              smtp: { host: v.smtpHost, port: port(v.smtpPort, 465), secure: v.secure },
+              imap: mailServer(v.imapHost, v.imapPort, v.secure, 'imap'),
+              smtp: mailServer(v.smtpHost, v.smtpPort, v.secure, 'smtp'),
               ...(v.username ? { user: v.username } : {}),
             },
             password: v.password,
@@ -152,9 +200,25 @@ export function mailRpcs(
       });
     },
 
-    getMailbox() {
+    async getMailbox() {
       const row = currentMailbox(c.db);
-      return { mailbox: row ? mailboxToPb(c.db, row) : undefined };
+      const clientId = row?.settings.clientId ?? c.mail?.google.clientId ?? undefined;
+      return {
+        mailbox: row ? mailboxToPb(c.db, row) : undefined,
+        googleClientSecretStored: (await c.mail?.hasGoogleClientSecret()) ?? false,
+        googleClientId: clientId ?? undefined,
+      };
+    },
+
+    async disconnectMailbox() {
+      const disconnected = await service().disconnect(c.db);
+      if (disconnected) {
+        c.log.info('mailbox disconnected');
+        runInTx(c.db, c.bus, { now: c.now() }, (tx) =>
+          tx.emit({ kind: 'mail', stage: 'disconnected', message: 'mailbox disconnected' }),
+        );
+      }
+      return { disconnected };
     },
 
     syncMailbox() {

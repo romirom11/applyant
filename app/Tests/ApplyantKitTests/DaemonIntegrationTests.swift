@@ -133,4 +133,37 @@ struct DaemonIntegrationTests {
         let (status, out) = daemon.cli(["jobs", "list"])
         #expect(status == 0 && out.contains("127.0.0.1:9/jobs/share-1"), "\(out)")
     }
+
+    /// Settings → Mailbox over the wire (13): nothing is opened, so Google is never contacted.
+    @Test func theMailboxConnectsAndDisconnectsOverTheWire() async throws {
+        let daemon = try RunningDaemon(node: try #require(node24()))
+        defer { daemon.stop() }
+        let api = ConnectDaemonAPI(endpoint: try await daemon.waitForEndpoint())
+
+        let empty = try await api.mailboxSetup()
+        #expect(!empty.hasMailbox && !empty.googleClientSecretStored)
+        #expect(try await api.disconnectMailbox() == false)
+
+        // IMAP without a password is refused before any server is contacted.
+        await #expect(throws: APIError.self) {
+            _ = try await api.connectImap(address: "me@example.org", settings: .with {
+                $0.imapHost = "127.0.0.1"
+                $0.smtpHost = "127.0.0.1"
+            })
+        }
+
+        let started = try await api.connectGmail(clientId: "it.apps.googleusercontent.com", clientSecret: "it-secret")
+        let url = try #require(URLComponents(string: started.authURL))
+        #expect(url.host == "accounts.google.com")
+        #expect(url.queryItems?.first { $0.name == "client_id" }?.value == "it.apps.googleusercontent.com")
+        #expect(url.queryItems?.first { $0.name == "redirect_uri" }?.value?.hasPrefix("http://127.0.0.1:") == true)
+        #expect(started.mailbox.status == "connecting" && started.mailbox.clientID == "it.apps.googleusercontent.com")
+        let setup = try await api.mailboxSetup()
+        #expect(setup.googleClientSecretStored && setup.googleClientID == "it.apps.googleusercontent.com")
+        #expect(!(try setup.serializedData()).contains(Data("it-secret".utf8)))
+
+        #expect(try await api.disconnectMailbox())
+        let after = try await api.mailboxSetup()
+        #expect(!after.hasMailbox && after.googleClientSecretStored)
+    }
 }

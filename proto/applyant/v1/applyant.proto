@@ -172,6 +172,10 @@ service ApplyantService {
   // until the browser comes back.
   rpc ConnectMailbox(ConnectMailboxRequest) returns (ConnectMailboxResponse);
   rpc GetMailbox(GetMailboxRequest) returns (GetMailboxResponse);
+  // DisconnectMailbox forgets the mailbox: an open Google consent is cancelled, the row and its
+  // stored emails go, and so do its credentials (the Google tokens, the IMAP password). The
+  // Google client secret stays, so connecting again needs only the consent.
+  rpc DisconnectMailbox(DisconnectMailboxRequest) returns (DisconnectMailboxResponse);
   // SyncMailbox reads new mail now instead of at the next interval.
   rpc SyncMailbox(SyncMailboxRequest) returns (SyncMailboxResponse);
   // ListMailQueue is the "Which application is this?" queue.
@@ -547,7 +551,8 @@ message CompanyEvent {
 }
 
 message MailEvent {
-  // synced (entity = mailbox) · ask · assigned · calendar (entity = email)
+  // synced · connected · failed · disconnected (entity = mailbox) · ask · assigned · calendar
+  // (entity = email)
   string status = 1;
   int64 entity_id = 2;
 }
@@ -1801,16 +1806,28 @@ message Mailbox {
   optional string note = 5;
   // Emails waiting in the ask queue.
   int32 asking = 6;
+  // What it was connected with, never a password or secret (to reconnect with the same).
+  // Gmail: the OAuth client id.
+  optional string client_id = 7;
+  // IMAP: the servers, TLS and the login when it isn't the address.
+  optional string imap_host = 8;
+  int32 imap_port = 9;
+  optional string smtp_host = 10;
+  int32 smtp_port = 11;
+  bool secure = 12;
+  optional string username = 13;
 }
 
 message ImapSettings {
   string imap_host = 1;
-  // 0 means 993.
+  // 0 means 993 (143 when not secure).
   int32 imap_port = 2;
   string smtp_host = 3;
-  // 0 means 465.
+  // 0 means 465 (587 when not secure).
   int32 smtp_port = 4;
-  // TLS from the start (993 / 465); false uses STARTTLS where offered.
+  // TLS from the start; false uses STARTTLS where offered. Ports 993/465 always start with TLS
+  // and 143/587/25 always use STARTTLS; this decides for other ports and the default ports
+  // (993 + 465, or 143 + 587).
   bool secure = 5;
   // When the login isn't the address.
   optional string username = 6;
@@ -1844,6 +1861,17 @@ message GetMailboxRequest {}
 message GetMailboxResponse {
   // Unset when no mailbox is connected.
   optional Mailbox mailbox = 1;
+  // A Google client secret is stored (the value never leaves the daemon).
+  bool google_client_secret_stored = 2;
+  // The client id to offer: the mailbox's, else config's (APPLYANT_GOOGLE_CLIENT_ID).
+  optional string google_client_id = 3;
+}
+
+message DisconnectMailboxRequest {}
+
+message DisconnectMailboxResponse {
+  // False when no mailbox was connected.
+  bool disconnected = 1;
 }
 
 message SyncMailboxRequest {}

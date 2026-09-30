@@ -246,6 +246,60 @@ final class FakeDaemon: DaemonAPI, @unchecked Sendable {
         syncs += 1
         return syncs == 1
     }
+    /// Stored secrets by name (a Google client secret, the IMAP password): values never come back.
+    var mailSecrets: [String: String] = [:]
+    /// What the IMAP check says (nil: the login works).
+    var imapRefusal: String?
+    func mailboxSetup() async throws -> MailboxSetup {
+        log("mailboxSetup")
+        return .with {
+            if let mailboxState { $0.mailbox = mailboxState }
+            $0.googleClientSecretStored = mailSecrets["google.client_secret"] != nil
+            if let id = mailboxState?.clientID, !id.isEmpty { $0.googleClientID = id }
+        }
+    }
+    func connectGmail(clientId: String?, clientSecret: String?) async throws -> (mailbox: Mailbox, authURL: String) {
+        log("connectGmail \(clientId ?? "-") secret:\(clientSecret == nil ? "none" : "given")")
+        if let clientSecret { mailSecrets["google.client_secret"] = clientSecret }
+        guard mailSecrets["google.client_secret"] != nil else { throw APIError("no client secret") }
+        mailboxState = .with {
+            $0.kind = "gmail"
+            $0.status = "connecting"
+            $0.clientID = clientId ?? ""
+        }
+        return (mailboxState!, "https://accounts.google.test/o/oauth2/v2/auth?client_id=\(clientId ?? "")")
+    }
+    func connectImap(address: String, settings: ImapSettings) async throws -> Mailbox {
+        log("connectImap \(address) \(settings.imapHost):\(settings.imapPort) \(settings.smtpHost):\(settings.smtpPort)")
+        if let imapRefusal { throw APIError(imapRefusal) }
+        mailSecrets["mail.password"] = settings.password
+        mailboxState = .with {
+            $0.kind = "imap"
+            $0.address = address
+            $0.status = "connected"
+            $0.imapHost = settings.imapHost
+            $0.imapPort = settings.imapPort
+            $0.smtpHost = settings.smtpHost
+            $0.smtpPort = settings.smtpPort
+        }
+        return mailboxState!
+    }
+    func disconnectMailbox() async throws -> Bool {
+        log("disconnectMailbox")
+        defer { mailboxState = nil }
+        mailSecrets["mail.password"] = nil
+        return mailboxState != nil
+    }
+    /// The browser came back from Google (or the candidate said no).
+    func finishConsent(address: String?) {
+        if let address {
+            mailboxState?.status = "connected"
+            mailboxState?.address = address
+        } else {
+            mailboxState?.status = "failed"
+            mailboxState?.note = "Google sign-in was not completed (access_denied)"
+        }
+    }
 
     // LinkedIn/Xing and the captcha key (Settings).
     var platformList = PlatformList.with {

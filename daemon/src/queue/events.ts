@@ -41,7 +41,8 @@ export type EventKind =
   | 'company'
   // The mailbox (phase 13): a sync stored replies (entity_id = mailbox id, stage = synced), an
   // email waits in the ask queue (entity_id = email id, stage = ask), or the candidate linked
-  // one (stage = assigned).
+  // one (stage = assigned). Connecting and disconnecting (entity_id = mailbox id, stage =
+  // connected | failed | disconnected).
   | 'mail'
   // A guarded platform (phase 14; entity: none, message starts with the platform key): paused
   // after a challenge, resumed, its caps changed, or Applyant's browser signed in there (stage =

@@ -5,7 +5,10 @@ import { createHash } from 'node:crypto';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
+import { create } from '@bufbuild/protobuf';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { tasks } from '../src/db/schema.ts';
+import { ConnectMailboxRequestSchema } from '../src/gen/applyant/v1/applyant_pb.js';
 import { GmailMailbox } from '../src/integrations/gmail.ts';
 import {
   GOOGLE_SCOPES,
@@ -14,8 +17,12 @@ import {
   loadTokens,
   startGoogleConsent,
 } from '../src/integrations/google-oauth.ts';
+import { MailService } from '../src/integrations/mail-service.ts';
+import { EventBus } from '../src/queue/events.ts';
+import { mailRpcs, mailServer } from '../src/rpc/mail.ts';
 import { FileSecrets } from '../src/secrets/file-backend.ts';
 import { type TempDb, tempDb } from './helpers/db.ts';
+import { quietLog } from './helpers/deps.ts';
 
 interface Hit {
   path: string;
@@ -149,6 +156,148 @@ describe('Google OAuth (loopback + PKCE) and Gmail', () => {
     await fetch(`${consent.redirectUri}/?error=access_denied&state=${state}`);
     expect(String(await done)).toMatch(/access_denied/);
     expect(await loadTokens(secrets)).toBeNull();
+  });
+
+  it('the app connects Gmail through the RPCs: secret to Secrets only, consent, disconnect', async () => {
+    const secrets = new FileSecrets(join(t.dir, 'secrets.json'));
+    const mail = new MailService({
+      read: t.read,
+      secrets,
+      google: {
+        authUrl: `${g.origin}/auth`,
+        tokenUrl: `${g.origin}/token`,
+        gmailApi: `${g.origin}/gmail`,
+      },
+    });
+    const bus = new EventBus();
+    const seen: string[] = [];
+    bus.subscribe((e) => {
+      if (e.kind === 'mail') seen.push(e.stage ?? '');
+    });
+    const rpc = mailRpcs({
+      db: t.db,
+      bus,
+      now: () => new Date('2026-09-30T10:00:00Z'),
+      mail,
+      log: quietLog,
+    });
+    const ctx = {} as never;
+    const empty = await rpc.getMailbox({} as never, ctx);
+    expect(empty.mailbox).toBeUndefined();
+    expect(empty.googleClientSecretStored).toBe(false);
+
+    const connect = (secret?: string) =>
+      rpc.connectMailbox(
+        create(ConnectMailboxRequestSchema, {
+          kind: {
+            case: 'gmail',
+            value: { clientId: 'desktop-client', ...(secret ? { clientSecret: secret } : {}) },
+          },
+        }),
+        ctx,
+      );
+    const first = await connect('desktop-secret');
+    // The secret went to Secrets and comes back nowhere.
+    expect(JSON.stringify(first, (_k, v) => (typeof v === 'bigint' ? String(v) : v))).not.toContain(
+      'desktop-secret',
+    );
+    expect(await secrets.get('google.client_secret')).toBe('desktop-secret');
+    expect(first.mailbox).toMatchObject({
+      kind: 'gmail',
+      status: 'connecting',
+      clientId: 'desktop-client',
+    });
+    const firstUrl = new URL(first.authUrl ?? '');
+
+    // Connect again (the candidate clicked twice): the first consent's listener is closed, and
+    // the stored secret is enough.
+    const second = await connect();
+    const url = new URL(second.authUrl ?? '');
+    const status = await rpc.getMailbox({} as never, ctx);
+    expect(status).toMatchObject({
+      googleClientSecretStored: true,
+      googleClientId: 'desktop-client',
+    });
+    expect(
+      JSON.stringify(status, (_k, v) => (typeof v === 'bigint' ? String(v) : v)),
+    ).not.toContain('desktop-secret');
+    await expect(
+      fetch(
+        `${firstUrl.searchParams.get('redirect_uri')}/?code=x&state=${firstUrl.searchParams.get('state')}`,
+      ),
+    ).rejects.toThrow();
+
+    // "The browser" comes back: connected under the account's address.
+    const back = await fetch(
+      `${url.searchParams.get('redirect_uri')}/?code=the-code&state=${url.searchParams.get('state')}`,
+    );
+    expect(back.status).toBe(200);
+    for (let i = 0; i < 50; i++) {
+      if ((await rpc.getMailbox({} as never, ctx)).mailbox?.status === 'connected') break;
+      await new Promise((r) => setTimeout(r, 20));
+    }
+    expect((await rpc.getMailbox({} as never, ctx)).mailbox).toMatchObject({
+      status: 'connected',
+      address: 'me@gmail.com',
+    });
+    expect((await secrets.list()).sort()).toEqual(['google.client_secret', 'google.oauth']);
+    // The app hears it, and the first sync is queued.
+    expect(seen).toEqual(['connected']);
+    expect(
+      t.db
+        .select()
+        .from(tasks)
+        .all()
+        .map((x) => x.kind),
+    ).toEqual(['sync_mail']);
+
+    // Disconnect: the account's tokens go, the owner's client secret stays.
+    expect((await rpc.disconnectMailbox({} as never, ctx)).disconnected).toBe(true);
+    const after = await rpc.getMailbox({} as never, ctx);
+    expect(after.mailbox).toBeUndefined();
+    expect(after.googleClientSecretStored).toBe(true);
+    expect(await secrets.list()).toEqual(['google.client_secret']);
+    expect((await rpc.disconnectMailbox({} as never, ctx)).disconnected).toBe(false);
+    expect(seen).toEqual(['connected', 'disconnected']);
+
+    // A consent still open when disconnecting is cancelled; the mailbox stays gone.
+    const pending = new URL((await connect()).authUrl ?? '');
+    await rpc.disconnectMailbox({} as never, ctx);
+    await expect(
+      fetch(
+        `${pending.searchParams.get('redirect_uri')}/?code=x&state=${pending.searchParams.get('state')}`,
+      ),
+    ).rejects.toThrow();
+    await new Promise((r) => setTimeout(r, 20));
+    expect((await rpc.getMailbox({} as never, ctx)).mailbox).toBeUndefined();
+    // A cancelled consent says nothing more.
+    expect(seen).toEqual(['connected', 'disconnected', 'disconnected']);
+
+    // IMAP without a password is refused before anything is contacted or stored.
+    await expect(
+      rpc.connectMailbox(
+        create(ConnectMailboxRequestSchema, {
+          address: 'me@example.org',
+          kind: {
+            case: 'imap',
+            value: { imapHost: 'imap.example.org', smtpHost: 'smtp.example.org' },
+          },
+        }),
+        ctx,
+      ),
+    ).rejects.toThrow(/password/);
+    expect(await secrets.list()).toEqual(['google.client_secret']);
+
+    // IMAP on 993 with SMTP on 587 (iCloud, Outlook): TLS at once for one, STARTTLS for the other.
+    expect(mailServer('imap.mail.me.com', 993, true, 'imap')).toEqual({
+      host: 'imap.mail.me.com',
+      port: 993,
+      secure: true,
+    });
+    expect(mailServer('smtp.mail.me.com', 587, true, 'smtp').secure).toBe(false);
+    expect(mailServer('smtp.x.org', 0, true, 'smtp')).toMatchObject({ port: 465, secure: true });
+    expect(mailServer('imap.x.org', 0, false, 'imap')).toMatchObject({ port: 143, secure: false });
+    expect(mailServer('imap.x.org', 1993, false, 'imap').secure).toBe(false);
   });
 
   it('refreshes an expired token, and Gmail syncs and sends with it', async () => {
