@@ -37,7 +37,8 @@ struct MainView: View {
         }
         .alert(
             "Applyant",
-            isPresented: Binding(get: { store.lastError != nil }, set: { if !$0 { store.lastError = nil } }),
+            // The setup shows its own errors inline while it's open.
+            isPresented: Binding(get: { store.lastError != nil && !store.showOnboarding }, set: { if !$0 { store.lastError = nil } }),
             actions: { Button("OK") { store.lastError = nil } },
             message: { Text(store.lastError ?? "") }
         )

@@ -42,7 +42,7 @@ struct ScriptStep: Decodable {
     /// "handoff:<app>", "question" (the thread on screen has an open question), "settled",
     /// "run:<strategy>" (its latest run finished), "plan" (the latest planner run finished),
     /// "recipe:<source key>" (its recipe is built or failed), "company:<id>" (its research is done
-    /// or failed).
+    /// or failed), "imported" (the setup's imported sources are all read or failed).
     var until: String?
     /// The Companies section: a company.
     var company: Int64?
@@ -57,6 +57,10 @@ struct ScriptStep: Decodable {
     var interviewQuestion: Int64?
     var width: Double?
     var height: Double?
+    /// The setup window instead of the main one, on this step (connections · import ·
+    /// preferences · interview); "main" goes back. A sheet is its own window, so the setup is
+    /// rendered as the window's content at the sheet's size.
+    var onboarding: String?
 }
 
 @MainActor
@@ -80,7 +84,7 @@ final class ScriptRunner {
 
     func run() async {
         try? FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
-        let window = NSWindow(
+        let window = UnconstrainedWindow(
             contentRect: NSRect(x: 0, y: 0, width: 1440, height: 900),
             styleMask: [.titled, .closable, .resizable],
             backing: .buffered,
@@ -103,13 +107,27 @@ final class ScriptRunner {
             let file = out.appendingPathComponent(String(format: "%02d-%@.png", n + 1, step.name))
             render(to: file)
             note("\(step.name): \(describe())" + (store.lastError.map { " · error: \($0)" } ?? ""))
-            store.lastError = nil
+            // The setup shows its errors inline: they stay for the next render there.
+            if step.onboarding == nil || step.onboarding == "main" { store.lastError = nil }
         }
         try? log.joined(separator: "\n").write(to: out.appendingPathComponent("log.txt"), atomically: true, encoding: .utf8)
         NSApp.terminate(nil)
     }
 
     private func perform(_ s: ScriptStep) async {
+        if let o = s.onboarding, let window {
+            if o == "main" {
+                window.contentView = NSHostingView(rootView: MainView(store: store))
+                window.setContentSize(NSSize(width: 1440, height: 900))
+            } else {
+                store.showOnboarding = false
+                if !(window.contentView is NSHostingView<OnboardingView>) {
+                    window.contentView = NSHostingView(rootView: OnboardingView(store: store))
+                    window.setContentSize(NSSize(width: 980, height: 720))
+                }
+                if let step = OnboardingStep(rawValue: o) { store.onboarding.open(step) }
+            }
+        }
         if let section = s.section.flatMap(Section.init(rawValue:)) {
             store.navigation.section = section
             store.navigation.postingId = nil
@@ -293,6 +311,20 @@ final class ScriptRunner {
             await store.rejectFacts(s.facts ?? [], project: s.interviewProject)
         case "editCv":
             note("editCv: \(await store.editCv(application: app, line: s.field ?? "", text: s.text))")
+        // The setup (phase 16): the calls its steps' buttons make.
+        case "importSource":
+            note("importSource: \(await store.importSource(s.value ?? ""))")
+        case "settleStep":
+            let ok = await store.settleStep(OnboardingStep(rawValue: s.value ?? "") ?? .connections, as: s.text ?? "done")
+            note("settleStep: \(ok) current=\(store.onboarding.current.rawValue)")
+        case "setGithubLogin":
+            note("setGithubLogin: \(await store.setGithubLogin(s.value ?? ""))")
+        case "setJevKey":
+            note("setJevKey: \(await store.setJevKey(s.value ?? ""))")
+        case "setCaptchaKey":
+            await store.setCaptchaKey(s.value ?? "")
+        case "setError":
+            store.lastError = s.value
         case "deleteSecret":
             await store.deleteSecret(s.value ?? "")
             note("deleteSecret: \(store.secretNames.joined(separator: ", "))")
@@ -332,6 +364,9 @@ final class ScriptRunner {
         case "company":
             guard parts.count == 2, let id = Int64(parts[1]), let c = store.companyListing(id) else { return false }
             return !c.researching && (c.hasSummary || c.status == "failed")
+        case "imported":
+            // "imported": every source the setup's Import step lists is read or failed.
+            return !store.importRows.isEmpty && store.importRows.allSatisfy { $0.state != .reading }
         case "settled":
             // "settled": the thread on screen isn't waiting on the interviewer.
             guard let target = store.navigation.interview, let thread = store.interviewThreads[target] else { return false }
@@ -390,6 +425,9 @@ final class ScriptRunner {
         if nav.section == .agentRuns, let run = nav.run {
             parts.append("run=\(run) events=\(store.runEvents[run]?.count ?? 0)")
         }
+        if window?.contentView is NSHostingView<OnboardingView> {
+            parts.append("onboarding=\(store.onboarding.current.rawValue) import=[\(store.importRows.map { "\($0.title): \($0.line)" }.joined(separator: " | "))] so far=\(OnboardingText.importProgress(store.setup))")
+        }
         parts.append("inbox=\(store.count(.inbox)) ready=\(store.count(.readyToReview)) applied=\(store.count(.applied)) interview=\(store.count(.interview))")
         return parts.joined(separator: " ")
     }
@@ -398,4 +436,9 @@ final class ScriptRunner {
         log.append(line)
         FileHandle.standardError.write(Data((line + "\n").utf8))
     }
+}
+
+/// Off screen, a render may be taller than the screen (a whole setup step): no clamping.
+private final class UnconstrainedWindow: NSWindow {
+    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect { frameRect }
 }

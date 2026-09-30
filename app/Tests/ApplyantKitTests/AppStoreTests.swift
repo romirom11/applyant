@@ -397,6 +397,7 @@ final class FakeDaemon: DaemonAPI, @unchecked Sendable {
     }
     func addKnowledgeSource(project: String?, kind: Applyant_V1_SourceKind, locator: String) async throws {
         log("addKnowledgeSource \(project.map { "project \($0) " } ?? "")\(kind) \(locator)")
+        if locator.hasSuffix("/missing.pdf") { throw APIError("no file at \(locator)") }
         knowledgeSources.append(locator)
         setupState?.import.sources += 1
         setupState?.import.syncing += 1

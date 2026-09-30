@@ -136,3 +136,107 @@ func freshSetup(_ states: [String: String] = [:]) -> OnboardingStatus {
         }
     }
 }
+
+/// The Import step shows what was imported and how its reading goes, live from sync events; the
+/// Connections step's Telegram and captcha key update the setup's state.
+@MainActor
+@Suite struct OnboardingImportTests {
+    private func syncEvent(_ id: Int64, source: Int64, _ type: Applyant_V1_TaskEventType, message: String = "") -> DaemonEvent {
+        var e = event(id, .task(.with {
+            $0.taskID = 900 + id
+            $0.taskKind = "sync_source"
+            $0.entityID = source
+            $0.type = type
+        }))
+        e.message = message
+        return e
+    }
+
+    @Test func thePickedFileIsListedAndFollowsItsReadingLive() async throws {
+        let daemon = FakeDaemon()
+        daemon.setupState = freshSetup(["connections": "done"])
+        let store = AppStore(connector: FakeConnector([daemon]), backoff: { _ in })
+        let run = Task { await store.run() }
+        defer { run.cancel() }
+        try await eventually("connected") { store.connection == .connected }
+        #expect(store.importRows.isEmpty)
+
+        // Picked: listed at once, being read.
+        #expect(await store.importSource("/Users/me/Documents/roman_cv.pdf"))
+        let row = try #require(store.importRows.first)
+        #expect(row.title == "roman_cv.pdf" && row.kind == "File" && row.state == .reading)
+        #expect(row.line == "Reading roman_cv.pdf…")
+        #expect(OnboardingText.importProgress(store.setup) == "1 source · 1 reading · 0 facts in 0 projects")
+
+        // The daemon starts it, a transient failure, then it's read: no Refresh needed.
+        daemon.feed.yield(syncEvent(1, source: row.id, .started))
+        try await eventually("reading") { store.sourceSync[row.id] == .reading }
+        daemon.feed.yield(syncEvent(2, source: row.id, .retry, message: "retry at 2026-09-30T12:00:00.000Z: fetch failed"))
+        try await eventually("retrying") { store.importRows.first?.line == "Reading roman_cv.pdf… couldn't yet, trying again (fetch failed)" }
+
+        daemon.profileSources[0].lastSyncedAt = .init(date: Date())
+        daemon.profileSources[0].syncNote = "33 new facts, 0 already known, 0 dropped · 13 projects created · File · roman_cv.pdf · 2 pages"
+        daemon.setupState?.import = .with { $0.sources = 1; $0.facts = 33; $0.projects = 13 }
+        daemon.feed.yield(syncEvent(3, source: row.id, .done))
+        try await eventually("read") { store.importRows.first?.state == .read }
+        #expect(store.importRows.first?.line == "33 new facts · 13 projects created")
+        #expect(store.sourceSync[row.id] == nil)
+        #expect(OnboardingText.importProgress(store.setup) == "1 source · 33 facts in 13 projects")
+
+        // A link that can't be read says why, in the list.
+        #expect(await store.importSource("https://example.dev/case"))
+        let link = try #require(store.importRows.first)
+        #expect(link.title == "example.dev/case" && link.kind == "Page")
+        daemon.profileSources[1].syncNote = "sync failed: HTTP 404"
+        daemon.feed.yield(syncEvent(4, source: link.id, .done))
+        try await eventually("failed") { store.importRows.first?.state == .failed }
+        #expect(store.importRows.first?.line == "Sync failed: HTTP 404")
+
+        // A refused import is the store's error (the step shows it inline), and nothing is listed.
+        #expect(!(await store.importSource("/Users/me/missing.pdf")))
+        #expect(store.lastError == "no file at /Users/me/missing.pdf")
+        #expect(store.importRows.count == 2)
+    }
+
+    @Test func telegramAndTheCaptchaKeyUpdateTheConnections() async throws {
+        let daemon = FakeDaemon()
+        daemon.setupState = freshSetup()
+        let store = AppStore(connector: FakeConnector([daemon]), backoff: { _ in })
+        let run = Task { await store.run() }
+        defer { run.cancel() }
+        try await eventually("connected") { store.connection == .connected }
+        let asked = daemon.calls.filter { $0 == "setupStatus" }.count
+
+        await store.setCaptchaKey(" cm-key ")
+        #expect(daemon.secrets["capmonster"] == "cm-key")
+        #expect(store.platforms?.captchaSolver == true)
+        await store.connectTelegram(.start(.with { $0.phone = "+30 690 000 0000" }))
+        #expect(store.telegram?.state == .waitingCode)
+        // Each asks the setup again, so the step's rows follow.
+        #expect(daemon.calls.filter { $0 == "setupStatus" }.count == asked + 2)
+
+        #expect(await store.setGithubLogin("romirom11, ro-work"))
+        #expect(OnboardingText.githubLogins(store.setup) == "romirom11, ro-work")
+        #expect(!(await store.setGithubLogin("  ")))
+    }
+
+    @Test func textsForTheImportList() {
+        #expect(OnboardingText.readNote("33 new facts, 0 already known, 0 dropped · 13 projects created · File · cv.pdf · 2 pages") == "33 new facts · 13 projects created")
+        #expect(OnboardingText.readNote("1 new facts, 4 already known, 0 dropped · 1 projects created · Page · acme.dev") == "1 new fact, 4 already known · 1 project created")
+        #expect(OnboardingText.readNote("0 new facts, 0 already known, 0 dropped · Page · acme.dev") == "no new facts")
+        #expect(OnboardingText.readNote("unchanged since the last sync · File · cv.pdf") == "Read · unchanged since the last time")
+        #expect(OnboardingText.readNote("") == "Read")
+
+        let denied = KnowledgeSource.with { $0.id = 1; $0.kind = .file; $0.locator = "/Users/me/Downloads/cv.pdf"; $0.syncNote = "sync failed: EPERM: operation not permitted, open '/Users/me/Downloads/cv.pdf'" }
+        let row = OnboardingText.importRow(denied, sync: nil)
+        #expect(row.state == .failed && row.line.contains("Privacy & Security"))
+        #expect(OnboardingText.importRow(denied, sync: .failed("gave up after 3 attempts: boom")).line == "Couldn't read it: gave up after 3 attempts: boom")
+
+        #expect(SourceSync.after(.queued, message: "", before: nil) == .reading)
+        #expect(SourceSync.after(.progress, message: "page 2", before: nil) == .reading)
+        #expect(SourceSync.after(.retry, message: "retry at 2026-09-30T12:00:00.000Z: fetch failed", before: .reading) == .retrying("fetch failed"))
+        #expect(SourceSync.after(.done, message: "", before: .reading) == nil)
+        #expect(SourceSync.after(.failed, message: "gave up", before: .reading) == .failed("gave up"))
+        #expect(OnboardingText.githubLogins(nil) == "")
+    }
+}

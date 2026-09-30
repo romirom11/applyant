@@ -25,8 +25,11 @@ struct OnboardingView: View {
                     .disabled(!flow.canOpen(step))
                 }
                 Spacer()
-                Button("Close") { store.showOnboarding = false }
-                    .keyboardShortcut(.cancelAction)
+                Button("Close") {
+                    store.lastError = nil
+                    store.showOnboarding = false
+                }
+                .keyboardShortcut(.cancelAction)
             }
             .padding(16)
             Divider()
@@ -42,8 +45,21 @@ struct OnboardingView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                // What a step's action was refused for (the main window's alert is behind this sheet).
+                if let error = store.lastError {
+                    HStack(alignment: .firstTextBaseline) {
+                        Label(error, systemImage: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange).font(.callout).textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Spacer()
+                        Button("Dismiss") { store.lastError = nil }.controlSize(.small)
+                    }
+                    .padding(10)
+                    .background(.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+                }
             }
             .padding(20)
+            .onChange(of: flow.current) { store.lastError = nil }
             Divider()
             HStack {
                 Text(OnboardingText.search(flow)).font(.callout).foregroundStyle(flow.searchStarted ? .green : .secondary)
@@ -82,7 +98,6 @@ private struct StepBadge: View {
 
 private struct ConnectionsStep: View {
     @Bindable var store: AppStore
-    @State private var github = ""
     @State private var jev = ""
 
     var body: some View {
@@ -101,7 +116,7 @@ private struct ConnectionsStep: View {
                 Row(ok: s?.jev.connected == true, text: s.map { OnboardingText.connection($0.jev) } ?? "")
                 HStack {
                     SecureField("Jev API key", text: $jev)
-                    Button("Save key") {
+                    Button(s?.jev.connected == true ? "Replace key" : "Save key") {
                         let key = jev
                         jev = ""
                         Task { await store.setJevKey(key) }
@@ -110,12 +125,7 @@ private struct ConnectionsStep: View {
                 }
             }
             SwiftUI.Section("GitHub") {
-                Row(ok: s?.github.connected == true, text: s.map { OnboardingText.connection($0.github) } ?? "")
-                HStack {
-                    TextField("Your GitHub login(s), comma-separated", text: $github)
-                    Button("Save") { Task { await store.setGithubLogin(github) } }
-                        .disabled(github.trimmingCharacters(in: .whitespaces).isEmpty)
-                }
+                GithubLoginField(store: store)
             }
             SwiftUI.Section("Mailbox and Google") {
                 MailboxRows(store: store)
@@ -124,13 +134,46 @@ private struct ConnectionsStep: View {
                 Text("Gmail: one Google consent covers Gmail, Calendar and Drive. Any other mailbox: IMAP + SMTP with an app password.")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            SwiftUI.Section("Optional") {
-                Row(ok: s?.telegram.connected == true, text: "Telegram: " + (s.map { OnboardingText.connection($0.telegram) } ?? ""))
-                Row(ok: s?.captcha.connected == true, text: "Captchas: " + (s.map { OnboardingText.connection($0.captcha) } ?? ""))
-                Text("Both are in Settings.").font(.caption).foregroundStyle(.secondary)
-            }
+            // Optional: the same Telegram sign-in and CapMonster key as Settings.
+            TelegramSection(store: store)
+            CaptchaSection(store: store)
         }
         .formStyle(.grouped)
+        // Telegram's state, the captcha key's and the mailbox's (Settings loads the same).
+        .task { await store.openSettings() }
+    }
+}
+
+/// The GitHub login(s): the saved value is shown in the field and under it, and saving says so.
+private struct GithubLoginField: View {
+    let store: AppStore
+    @State private var logins = ""
+    @State private var edited = false
+    @State private var saving = false
+
+    var body: some View {
+        let saved = OnboardingText.githubLogins(store.setup)
+        HStack {
+            TextField("GitHub login(s)", text: Binding(get: { logins }, set: { logins = $0; edited = true }),
+                      prompt: Text("your-login, work-login"))
+            Button(saved.isEmpty ? "Save" : "Update") {
+                let value = logins
+                saving = true
+                Task {
+                    if await store.setGithubLogin(value) { edited = false }
+                    saving = false
+                }
+            }
+            .disabled(saving || logins.trimmingCharacters(in: .whitespaces).isEmpty
+                || logins.trimmingCharacters(in: .whitespaces) == saved)
+        }
+        Row(ok: !saved.isEmpty, text: saved.isEmpty
+            ? "Not saved yet · without your login, no commit counts as your own work"
+            : "Saved: \(saved) · commits by \(saved.contains(",") ? "these logins" : "this login") count as your own work")
+        Text("Repositories belong to projects (Projects and sources…). Private ones are read with this Mac's git and GitHub CLI sign-in (`gh auth login` in Terminal); Applyant keeps no GitHub token.")
+            .font(.caption).foregroundStyle(.secondary)
+            .onAppear { if !edited { logins = saved } }
+            .onChange(of: saved) { if !edited { logins = saved } }
     }
 }
 
@@ -150,26 +193,50 @@ private struct Row: View {
 private struct ImportStep: View {
     @Bindable var store: AppStore
     @State private var link = ""
-    @State private var github = ""
     @State private var picking = false
+    /// What's being added right now (a file name or link), until the daemon has it.
+    @State private var adding: String?
     @State private var editingProfile = false
     @State private var editingProjects = false
 
     var body: some View {
         Form {
             SwiftUI.Section("Your CV or LinkedIn PDF") {
-                Button("Choose a file…") { picking = true }
+                HStack {
+                    Button("Choose a file…") { picking = true }
+                    Text("PDF, DOCX or text").font(.caption).foregroundStyle(.secondary)
+                }
                 Text("Drafted into projects and facts in the background; you confirm facts before anything is sent.")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            SwiftUI.Section("GitHub") {
-                HStack {
-                    TextField("Your GitHub login", text: $github)
-                    Button("Save") { Task { await store.setGithubLogin(github) } }
-                        .disabled(github.trimmingCharacters(in: .whitespaces).isEmpty)
+            SwiftUI.Section {
+                if let adding {
+                    HStack(spacing: 8) {
+                        ProgressView().controlSize(.small)
+                        Text("Adding \(adding)…").font(.callout)
+                    }
                 }
-                Text("Repositories belong to projects: add them under Projects and sources.")
-                    .font(.caption).foregroundStyle(.secondary)
+                let rows = store.importRows
+                if rows.isEmpty && adding == nil {
+                    Text("Nothing imported yet: choose your CV above.").font(.callout).foregroundStyle(.secondary)
+                }
+                ForEach(rows) { row in ImportRowView(row: row) }
+            } header: {
+                Text("Imported")
+            } footer: {
+                Text("So far: " + OnboardingText.importProgress(store.setup))
+                    .font(.callout).foregroundStyle(.secondary)
+            }
+            SwiftUI.Section("Links and Google Docs") {
+                HStack {
+                    TextField("Link", text: $link, prompt: Text("A portfolio page, a case study, a Docs or Drive link (a Drive folder works too)"))
+                        .onSubmit(addLink)
+                    Button("Add", action: addLink)
+                        .disabled(adding != nil || link.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+            }
+            SwiftUI.Section("GitHub") {
+                GithubLoginField(store: store)
             }
             SwiftUI.Section("Profile and projects") {
                 HStack {
@@ -180,24 +247,15 @@ private struct ImportStep: View {
                     Button("Projects and sources…") { editingProjects = true }
                 }
             }
-            SwiftUI.Section("Links and Google Docs") {
-                HStack {
-                    TextField("A portfolio page, a case study, a Docs or Drive link (a Drive folder works too)", text: $link)
-                    Button("Add") {
-                        let value = link
-                        Task { if await store.importSource(value) { link = "" } }
-                    }
-                    .disabled(link.trimmingCharacters(in: .whitespaces).isEmpty)
-                }
-            }
-            SwiftUI.Section("So far") {
-                Text(OnboardingText.importProgress(store.setup))
-                Button("Refresh") { Task { await store.refreshSetup() } }
-            }
         }
         .formStyle(.grouped)
+        // The list is the profile's sources: load them (sync events keep them current).
+        .task { await store.openProfile() }
         .fileImporter(isPresented: $picking, allowedContentTypes: [.pdf, .plainText, UTType(filenameExtension: "docx") ?? .data]) { result in
-            if case let .success(url) = result { Task { await store.importSource(url.path) } }
+            switch result {
+            case let .success(url): importFile(url)
+            case let .failure(error): store.lastError = "Couldn't open the file: \(error.localizedDescription)"
+            }
         }
         .sheet(isPresented: $editingProfile) { ProfileSheet(store: store) { editingProfile = false } }
         .sheet(isPresented: $editingProjects) {
@@ -207,12 +265,63 @@ private struct ImportStep: View {
             }
         }
     }
+
+    /// The daemon reads the file itself, by path. The app isn't sandboxed, but a picked URL may
+    /// still be security-scoped: hold the access until the daemon has taken the path.
+    private func importFile(_ url: URL) {
+        let scoped = url.startAccessingSecurityScopedResource()
+        adding = url.lastPathComponent
+        Task {
+            await store.importSource(url.path)
+            if scoped { url.stopAccessingSecurityScopedResource() }
+            adding = nil
+        }
+    }
+
+    private func addLink() {
+        let value = link.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty, adding == nil else { return }
+        adding = value
+        Task {
+            if await store.importSource(value) { link = "" }
+            adding = nil
+        }
+    }
+}
+
+/// An imported source: "File · cv.pdf" and "Reading cv.pdf…" / "33 new facts · 13 projects
+/// created" / the reason it failed.
+private struct ImportRowView: View {
+    let row: ImportRow
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Group {
+                switch row.state {
+                case .reading: ProgressView().controlSize(.small)
+                case .read: Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                case .failed: Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                }
+            }
+            .frame(width: 16)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("\(row.kind) · \(row.title)").lineLimit(1).truncationMode(.middle)
+                    .help(row.locator)
+                Text(row.line).font(.caption)
+                    .foregroundStyle(row.state == .failed ? AnyShapeStyle(.orange) : AnyShapeStyle(.secondary))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
+            }
+            Spacer()
+        }
+    }
 }
 
 private struct PreferencesStep: View {
     @Bindable var store: AppStore
     @State private var values: [String: String] = [:]
     @State private var loaded = false
+    @State private var saving = false
 
     /// The keys this step asks about, in order, with how to write them.
     private static let fields: [(key: String, label: String, hint: String)] = [
@@ -242,12 +351,22 @@ private struct PreferencesStep: View {
                 }
             }
             HStack {
+                if saving {
+                    ProgressView().controlSize(.small)
+                    Text("Saving your preferences…").font(.callout).foregroundStyle(.secondary)
+                }
                 Spacer()
                 Button("Start searching") {
                     let pairs = Self.fields.map { (key: $0.key, value: values[$0.key] ?? "") }
-                    Task { await store.confirmPreferences(pairs) }
+                    saving = true
+                    Task {
+                        // A refused value stops here and is shown under the step.
+                        await store.confirmPreferences(pairs)
+                        saving = false
+                    }
                 }
                 .keyboardShortcut(.defaultAction)
+                .disabled(saving)
             }
         }
         .formStyle(.grouped)

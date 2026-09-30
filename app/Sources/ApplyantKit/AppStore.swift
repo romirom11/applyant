@@ -94,6 +94,9 @@ public final class AppStore {
     public private(set) var candidateProfile: CandidateProfile?
     /// Each open project's sources, with their sync state.
     public private(set) var projectSources: [Int64: [KnowledgeSource]] = [:]
+    /// Knowledge sources being read right now (or waiting to try again, or given up on), from
+    /// live `sync_source` task events: source id → where its reading stands.
+    public private(set) var sourceSync: [Int64: SourceSync] = [:]
     /// The scoring preferences (Settings → Preferences).
     public private(set) var searchPreferences: SearchPreferences?
     /// The Overview: the funnel and the success metrics over `overviewWindow` (nil until loaded).
@@ -211,6 +214,10 @@ public final class AppStore {
             if task.taskKind == "sync_source", [.done, .failed, .retry].contains(task.type), candidateProfile != nil {
                 await refreshKnowledge(api)
             }
+            // The setup's Import step counts sources, reading and facts: it follows them live.
+            if task.taskKind == "sync_source", [.queued, .done, .failed, .retry].contains(task.type), setup != nil {
+                await refreshSetup()
+            }
         case let .posting(p)?:
             await refreshPosting(p.postingID, api)
             if navigation.section == .overview { await refreshOverview(api) }
@@ -264,6 +271,7 @@ public final class AppStore {
     }
 
     private func applyTask(_ t: Applyant_V1_TaskEvent, message: String) {
+        if t.taskKind == "sync_source" { sourceSync[t.entityID] = SourceSync.after(t.type, message: message, before: sourceSync[t.entityID]) }
         // A delivery's live progress ("Filling 14/16 fields · solving captcha"), per application.
         if t.taskKind == "deliver_application" {
             switch t.type {
@@ -766,6 +774,7 @@ public final class AppStore {
             return
         }
         await refreshPlatforms(api)
+        await refreshSetup()
     }
 
     /// Opens a site's sign-in window, keeping its login in Secrets first when one is given (the
@@ -844,11 +853,13 @@ public final class AppStore {
         } else if let t = try? await api.telegram() {
             telegram = t
         }
+        await refreshSetup()
     }
 
     public func disconnectTelegram() async {
         guard let api, let t = await attempt({ try await api.disconnectTelegram() }) else { return }
         telegram = t
+        await refreshSetup()
     }
 
     /// Follows a Telegram channel (`@name`, `t.me/name`, `https://t.me/s/name`).
@@ -964,24 +975,38 @@ public final class AppStore {
         guard await attempt({ try await api.addKnowledgeSource(project: nil, kind: kind, locator: s) }) != nil else {
             return false
         }
+        // The step lists what was imported (the profile's sources) with each one's reading.
+        await refreshKnowledge(api)
         await refreshSetup()
         return true
     }
 
+    /// The Import step's list: the profile's sources (what the step imports), each with where its
+    /// reading stands, newest first.
+    public var importRows: [ImportRow] {
+        OnboardingText.importRows(candidateProfile?.profileSources ?? [], sync: sourceSync)
+    }
+
     /// Connections: the GitHub login(s) whose commits are the candidate's own work.
-    public func setGithubLogin(_ login: String) async {
+    /// False when refused (the reason is shown).
+    @discardableResult
+    public func setGithubLogin(_ login: String) async -> Bool {
         let s = login.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let api, !s.isEmpty, await attempt({ try await api.setProfileValue("github_logins", value: s) }) != nil else {
-            return
+            return false
         }
         await refreshSetup()
+        if candidateProfile != nil { await refreshKnowledge(api) }
+        return true
     }
 
     /// Connections: the Jev key (write-only, like the captcha key).
-    public func setJevKey(_ key: String) async {
+    @discardableResult
+    public func setJevKey(_ key: String) async -> Bool {
         let s = key.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let api, !s.isEmpty, await attempt({ try await api.setSecret("jev", value: s) }) != nil else { return }
+        guard let api, !s.isEmpty, await attempt({ try await api.setSecret("jev", value: s) }) != nil else { return false }
         await refreshSetup()
+        return true
     }
 
     // MARK: The profile and projects (app parity with the CLI for setup)

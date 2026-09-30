@@ -9,7 +9,6 @@ import SwiftUI
 
 struct SettingsView: View {
     @Bindable var store: AppStore
-    @State private var captchaKey = ""
     @State private var editingProfile = false
     @State private var editingProjects = false
     @State private var editingPreferences = false
@@ -50,20 +49,7 @@ struct SettingsView: View {
                 Text("Replies move applications on, security codes are read during delivery, and approved email applications are sent from it. Passwords and secrets stay in Applyant's secrets (the Keychain).")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            SwiftUI.Section("Captcha solver") {
-                Text(PlatformText.captcha(store.platforms)).font(.callout)
-                HStack {
-                    SecureField("CapMonster key", text: $captchaKey)
-                    Button(store.platforms?.captchaSolver == true ? "Replace key" : "Save key") {
-                        let key = captchaKey
-                        captchaKey = ""
-                        Task { await store.setCaptchaKey(key) }
-                    }
-                    .disabled(captchaKey.trimmingCharacters(in: .whitespaces).isEmpty)
-                }
-                Text("Stored with Applyant's secrets (the Keychain); it's never shown again.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
+            CaptchaSection(store: store)
             if let open = PlatformText.signInOpen(store.platforms) {
                 Text(open).font(.callout).foregroundStyle(.orange)
             }
@@ -147,6 +133,36 @@ struct PlatformSection: View {
     private func reset() {
         searches = Int(platform.searchesPerDay)
         applications = Int(platform.applicationsPerDay)
+    }
+}
+
+/// The CapMonster key: stored or not (never shown), and Save / Replace (Settings and the setup's
+/// Connections step).
+struct CaptchaSection: View {
+    let store: AppStore
+    @State private var captchaKey = ""
+
+    var body: some View {
+        SwiftUI.Section("Captcha solver") {
+            HStack(alignment: .firstTextBaseline) {
+                Text(PlatformText.captcha(store.platforms)).font(.callout)
+                Spacer()
+                if let solver = store.platforms?.captchaSolver {
+                    ChipView(chip: Chip(text: solver ? "Key stored" : "No key", tone: solver ? .good : .neutral))
+                }
+            }
+            HStack {
+                SecureField("CapMonster key", text: $captchaKey)
+                Button(store.platforms?.captchaSolver == true ? "Replace key" : "Save key") {
+                    let key = captchaKey
+                    captchaKey = ""
+                    Task { await store.setCaptchaKey(key) }
+                }
+                .disabled(captchaKey.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+            Text("Stored with Applyant's secrets (the Keychain); it's never shown again.")
+                .font(.caption).foregroundStyle(.secondary)
+        }
     }
 }
 
