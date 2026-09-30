@@ -67,12 +67,16 @@ const conn = (connected: boolean, detail: string): Connection =>
 
 /** The connections onboarding's first step lists, each with what it is or what it's for. */
 async function connections(db: Conn, secrets: Secrets) {
-  const [jev, telegram, account, captcha] = await Promise.all([
-    secrets.get(JEV_SECRET),
-    secrets.get(TELEGRAM_SESSION_SECRET),
-    secrets.get(TELEGRAM_ACCOUNT_SECRET),
-    secrets.get(CAPTCHA_SECRET),
-  ]);
+  // Which secrets are stored is all this needs: names only, never the values (the Telegram
+  // account's label aside, once a session exists).
+  const stored = new Set(await secrets.list());
+  const jev = stored.has(JEV_SECRET);
+  const telegram = stored.has(TELEGRAM_SESSION_SECRET);
+  const captcha = stored.has(CAPTCHA_SECRET);
+  const account =
+    telegram && stored.has(TELEGRAM_ACCOUNT_SECRET)
+      ? await secrets.get(TELEGRAM_ACCOUNT_SECRET)
+      : null;
   const logins = getIdentities(db).logins;
   const box = currentMailbox(db);
   const google = box?.kind === 'gmail' && box.status === 'connected';

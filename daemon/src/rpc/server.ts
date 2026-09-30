@@ -54,9 +54,29 @@ export function bearerAuth(token: string): Interceptor {
   };
 }
 
+/**
+ * Logs what a handler threw that isn't a ConnectError: the client only sees "internal error",
+ * so without this the cause is lost.
+ */
+export function logInternalErrors(log: Logger): Interceptor {
+  return (next) => async (req) => {
+    try {
+      return await next(req);
+    } catch (err) {
+      if (!(err instanceof ConnectError)) {
+        log.error('rpc failed', {
+          method: req.method.name,
+          error: err instanceof Error ? (err.stack ?? err.message) : String(err),
+        });
+      }
+      throw err;
+    }
+  };
+}
+
 export async function startRpcServer(o: RpcServerOptions): Promise<RpcServer> {
   const handler = connectNodeAdapter({
-    interceptors: [bearerAuth(o.token)],
+    interceptors: [bearerAuth(o.token), logInternalErrors(o.log)],
     routes: (router) =>
       router.service(ApplyantService, {
         ...postingRpcs(o),
