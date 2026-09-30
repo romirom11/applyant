@@ -1103,6 +1103,14 @@ export declare type ApplicationEvent = Message<"applyant.v1.ApplicationEvent"> &
    * @generated from field: applyant.v1.ApplicationStage stage = 3;
    */
   stage: ApplicationStage;
+
+  /**
+   * A reply the mailbox read moved it (a mail sync), not the candidate or the pipeline: the app
+   * notifies for these ("Helix invites you to …").
+   *
+   * @generated from field: bool from_mail = 4;
+   */
+  fromMail: boolean;
 };
 
 /**

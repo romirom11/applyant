@@ -1481,6 +1481,10 @@ public nonisolated struct Applyant_V1_ApplicationEvent: Sendable {
 
   public var stage: Applyant_V1_ApplicationStage = .unspecified
 
+  /// A reply the mailbox read moved it (a mail sync), not the candidate or the pipeline: the app
+  /// notifies for these ("Helix invites you to …").
+  public var fromMail: Bool = false
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -9183,7 +9187,7 @@ nonisolated extension Applyant_V1_PostingEvent: SwiftProtobuf.Message, SwiftProt
 
 nonisolated extension Applyant_V1_ApplicationEvent: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ApplicationEvent"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}application_id\0\u{3}posting_id\0\u{1}stage\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}application_id\0\u{3}posting_id\0\u{1}stage\0\u{3}from_mail\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -9194,6 +9198,7 @@ nonisolated extension Applyant_V1_ApplicationEvent: SwiftProtobuf.Message, Swift
       case 1: try { try decoder.decodeSingularInt64Field(value: &self.applicationID) }()
       case 2: try { try decoder.decodeSingularInt64Field(value: &self.postingID) }()
       case 3: try { try decoder.decodeSingularEnumField(value: &self.stage) }()
+      case 4: try { try decoder.decodeSingularBoolField(value: &self.fromMail) }()
       default: break
       }
     }
@@ -9209,6 +9214,9 @@ nonisolated extension Applyant_V1_ApplicationEvent: SwiftProtobuf.Message, Swift
     if self.stage != .unspecified {
       try visitor.visitSingularEnumField(value: self.stage, fieldNumber: 3)
     }
+    if self.fromMail != false {
+      try visitor.visitSingularBoolField(value: self.fromMail, fieldNumber: 4)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -9216,6 +9224,7 @@ nonisolated extension Applyant_V1_ApplicationEvent: SwiftProtobuf.Message, Swift
     if lhs.applicationID != rhs.applicationID {return false}
     if lhs.postingID != rhs.postingID {return false}
     if lhs.stage != rhs.stage {return false}
+    if lhs.fromMail != rhs.fromMail {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

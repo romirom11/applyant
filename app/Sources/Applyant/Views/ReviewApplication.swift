@@ -512,6 +512,7 @@ struct EvidencePanel: View {
 struct CvCard: View {
     let store: AppStore
     let app: Application
+    @State private var editing = false
 
     private func title(_ cv: Applyant_V1_Cv) -> String {
         if cv.mode == "base" { return "CV · your base CV" }
@@ -553,6 +554,9 @@ struct CvCard: View {
                     if cv.hasPdfPath {
                         Button("Preview") { NSWorkspace.shared.open(URL(fileURLWithPath: cv.pdfPath)) }
                     }
+                    if CvText.canEdit(app) {
+                        Button("Edit…") { editing = true }
+                    }
                     if app.stage == .approved || StageRules.isSent(app.stage) {
                         EmptyView()  // already sent or on its way: nothing to change
                     } else if cv.mode == "tailored" && cv.status == "skipped" {
@@ -568,5 +572,78 @@ struct CvCard: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(6)
         }
+        .sheet(isPresented: $editing) { CvEditSheet(store: store, appId: app.id) { editing = false } }
+    }
+}
+
+/// The tailored CV line by line: each line in the candidate's words (saved as a confirmed fact),
+/// removed, or a left-out line put back. The PDF is rendered again; Preview opens the new one.
+struct CvEditSheet: View {
+    let store: AppStore
+    let appId: Int64
+    let close: () -> Void
+    @State private var editingLine: String?
+    @State private var text = ""
+
+    var body: some View {
+        let app = store.applicationDetails[appId] ?? store.applications[appId]
+        let lines = app.map { CvText.lines($0.cv) } ?? []
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text("Edit the tailored CV").font(.title2.bold())
+                Spacer()
+                if let app, app.cv.status == "pending" || app.cv.status == "planned" {
+                    ProgressView().controlSize(.small)
+                    Text("Rendering…").font(.callout).foregroundStyle(.secondary)
+                } else if let app, app.cv.hasPdfPath {
+                    Button("Preview") { NSWorkspace.shared.open(URL(fileURLWithPath: app.cv.pdfPath)) }
+                }
+                Button("Done", action: close).keyboardShortcut(.cancelAction)
+            }
+            .padding(16)
+            List {
+                ForEach(lines) { line in
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(alignment: .firstTextBaseline) {
+                            Text(line.section).font(.caption.weight(.semibold)).foregroundStyle(line.dropped ? .orange : .secondary)
+                            Text(line.handle).font(.caption.monospaced()).foregroundStyle(.tertiary)
+                            Spacer()
+                            if editingLine != line.handle, app.map(CvText.canEdit) == true {
+                                Button(line.dropped ? "Put back…" : "Edit") { text = line.text; editingLine = line.handle }
+                                    .controlSize(.small)
+                                if !line.dropped {
+                                    Button("Remove", role: .destructive) {
+                                        Task { await store.editCv(application: appId, line: line.handle, text: nil) }
+                                    }
+                                    .controlSize(.small)
+                                }
+                            }
+                        }
+                        if editingLine == line.handle {
+                            TextField("The line, in your words", text: $text, axis: .vertical)
+                                .textFieldStyle(.roundedBorder)
+                                .lineLimit(1 ... 5)
+                            HStack {
+                                Spacer()
+                                Button("Cancel") { editingLine = nil }
+                                Button("Save") {
+                                    let (handle, t) = (line.handle, text)
+                                    Task { if await store.editCv(application: appId, line: handle, text: t) { editingLine = nil } }
+                                }
+                                .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                            }
+                        } else {
+                            Text(line.text).foregroundStyle(line.dropped ? .secondary : .primary).textSelection(.enabled)
+                        }
+                    }
+                    .padding(.vertical, 3)
+                }
+            }
+            Text("Your words are saved as a confirmed fact and the CV is rendered again; its handles change after each edit.")
+                .font(.caption).foregroundStyle(.secondary)
+                .padding(16)
+        }
+        .frame(minWidth: 620, idealWidth: 700, minHeight: 480, idealHeight: 620)
+        .task { await store.openApplication(appId) }
     }
 }

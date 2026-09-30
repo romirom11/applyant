@@ -1,12 +1,16 @@
 // Actionable notifications from live daemon events: "Acme AI · Senior AI Engineer · 91" with
-// Review · Skip · Open. Button presses become RPCs (Skip) or navigation (Review, Open).
+// Review · Skip · Open. Button presses become RPCs (Skip) or navigation (Review, Open). A status
+// a reply set ("Helix invites you to an interview") comes with Open, which shows the application.
 import AppKit
 import ApplyantKit
 import UserNotifications
 
 @MainActor
 final class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
-    enum Category: String { case review = "applyant.review", needsYou = "applyant.needs-you", handOff = "applyant.hand-off" }
+    enum Category: String {
+        case review = "applyant.review", needsYou = "applyant.needs-you", handOff = "applyant.hand-off"
+        case statusChange = "applyant.status-change"
+    }
     enum Action: String { case review = "review", skip = "skip", open = "open" }
 
     private let store: AppStore
@@ -27,6 +31,7 @@ final class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
             UNNotificationCategory(identifier: Category.review.rawValue, actions: [review, skip, open], intentIdentifiers: []),
             UNNotificationCategory(identifier: Category.needsYou.rawValue, actions: [review, open], intentIdentifiers: []),
             UNNotificationCategory(identifier: Category.handOff.rawValue, actions: [open], intentIdentifiers: []),
+            UNNotificationCategory(identifier: Category.statusChange.rawValue, actions: [open], intentIdentifiers: []),
         ])
         center.requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
     }
@@ -35,11 +40,12 @@ final class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
         let content = UNMutableNotificationContent()
         content.title = n.title
         content.body = n.body
-        content.sound = n.kind == .handOff ? .default : nil
+        content.sound = n.kind == .handOff || n.kind == .statusChange ? .default : nil
         content.categoryIdentifier = switch n.kind {
         case .readyForReview: Category.review.rawValue
         case .needsYou: Category.needsYou.rawValue
         case .handOff: Category.handOff.rawValue
+        case .statusChange: Category.statusChange.rawValue
         }
         content.userInfo = ["application": n.applicationId, "posting": n.postingId, "kind": n.kind.rawValue]
         let request = UNNotificationRequest(identifier: "\(n.kind.rawValue)-\(n.applicationId)", content: content, trigger: nil)
@@ -75,6 +81,8 @@ final class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
         case Action.open.rawValue where kind == StoreNotification.Kind.handOff.rawValue:
             ChromeWindow.bringForward()
             navigate(application: application, posting: posting, kind: kind)
+        case Action.open.rawValue where kind == StoreNotification.Kind.statusChange.rawValue:
+            navigate(application: application, posting: posting, kind: kind)
         case Action.open.rawValue:
             if let url = store.postings[posting]?.canonicalURL, let link = URL(string: url) {
                 NSWorkspace.shared.open(link)
@@ -88,6 +96,13 @@ final class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
     private func navigate(application: Int64, posting: Int64, kind: String?) {
         store.navigation.showReview(application: application, posting: posting)
         if kind == StoreNotification.Kind.handOff.rawValue { store.navigation.section = .applied }
+        if kind == StoreNotification.Kind.statusChange.rawValue {
+            store.navigation.section = switch store.applications[application]?.stage {
+            case .interview?: .interviews
+            case .offer?: .offers
+            default: .applied
+            }
+        }
         showMainWindow()
     }
 }

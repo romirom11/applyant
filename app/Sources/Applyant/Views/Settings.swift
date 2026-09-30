@@ -1,7 +1,8 @@
 // Settings (phase 14): the captcha solver's key (set or not, never shown), and LinkedIn/Xing:
 // sign-in, a pause and Resume, the daily caps against today's use. Phase 15: Telegram connect
 // (phone → code → the 2FA password), for private channels and Telegram applications. Mailbox:
-// connect Gmail or IMAP/SMTP (MailboxConnect.swift), reconnect, disconnect.
+// connect Gmail or IMAP/SMTP (MailboxConnect.swift), reconnect, disconnect. Models, Sites and
+// Stored keys are in SettingsModels.swift.
 import ApplyantAPI
 import ApplyantKit
 import SwiftUI
@@ -69,7 +70,10 @@ struct SettingsView: View {
             ForEach(store.platforms?.platforms ?? [], id: \.platform) { platform in
                 PlatformSection(store: store, platform: platform)
             }
+            SitesSection(store: store)
             TelegramSection(store: store)
+            ModelsSection(store: store)
+            StoredKeysSection(store: store)
         }
         .formStyle(.grouped)
         .navigationTitle("Settings")

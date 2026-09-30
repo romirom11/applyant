@@ -1,7 +1,8 @@
 // Profile and Projects (phase 16, app parity with the CLI for setup): the profile values
 // application forms ask for and the base CV; projects (add, rename, remove) and the knowledge
 // sources behind them (a GitHub repo, a file, a page or a Docs link), each with its sync state.
-// The same views open as sheets from Settings and the setup's Import step.
+// The same views open as sheets from Settings and the setup's Import step. Each project (and the
+// profile) lists its facts: status, kind, evidence; Confirm, Edit, Reject; to-confirm filter.
 import ApplyantAPI
 import ApplyantKit
 import SwiftUI
@@ -86,6 +87,7 @@ struct ProfileSourcesPane: View {
                 Text("A CV or LinkedIn PDF covers many projects: facts are drafted from it into projects, and \(store.candidateProfile?.profileFactCount ?? 0) facts belong to no single project.")
                     .foregroundStyle(.secondary)
                 KnowledgeSourcesSection(store: store, project: nil, sources: store.candidateProfile?.profileSources ?? [])
+                FactsSection(store: store, project: nil)
             }
             .padding(20)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -172,6 +174,7 @@ private struct ProjectPane: View {
                     Text(project.stack.joined(separator: " · ")).font(.callout).foregroundStyle(.secondary)
                 }
                 KnowledgeSourcesSection(store: store, project: project.id, sources: store.projectSources[project.id] ?? [])
+                FactsSection(store: store, project: project.id)
             }
             .padding(20)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -249,6 +252,111 @@ struct KnowledgeSourcesSection: View {
     private func add() {
         let value = input
         Task { if await store.addKnowledgeSource(to: project, value) { input = "" } }
+    }
+}
+
+// MARK: Facts
+
+/// The facts browser: a project's (or the profile's) facts with their status, kind and evidence;
+/// Confirm, Edit (saved confirmed, in your words) and Reject.
+struct FactsSection: View {
+    let store: AppStore
+    /// nil: the profile's facts.
+    let project: Int64?
+    @State private var filter = FactsText.Filter.toConfirm
+
+    var body: some View {
+        let all = store.facts[FactsText.ref(project)] ?? []
+        let shown = FactsText.shown(all, filter: filter)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("Facts").font(.headline)
+                Text(FactsText.counts(all)).font(.callout).foregroundStyle(.secondary)
+                Spacer()
+                Picker("Show", selection: $filter) {
+                    ForEach(FactsText.Filter.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
+                let open = shown.filter { $0.status == .unconfirmed }.map(\.id)
+                if !open.isEmpty {
+                    Button("Confirm all \(open.count)") { Task { await store.confirmFacts(open, project: project) } }
+                        .help("Every unconfirmed fact shown is true as written")
+                }
+            }
+            if shown.isEmpty {
+                Text(filter == .toConfirm ? "Nothing to confirm." : "No facts yet: add a source, or answer the interview.")
+                    .font(.callout).foregroundStyle(.secondary)
+            }
+            ForEach(shown, id: \.id) { fact in
+                FactRow(store: store, fact: fact, project: project)
+                Divider()
+            }
+            Text("Extracted facts start unconfirmed; drafts may use them, but nothing unconfirmed is sent. An edit is saved in your words, confirmed.")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+        .task(id: project) { await store.openFacts(project: project) }
+        .onChange(of: store.knowledgeProject(project ?? -1)?.factCount) { Task { await store.openFacts(project: project) } }
+    }
+}
+
+private struct FactRow: View {
+    let store: AppStore
+    let fact: Fact
+    let project: Int64?
+    @State private var editing = false
+    @State private var text = ""
+    @State private var confirmingReject = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .firstTextBaseline) {
+                ChipView(chip: FactsText.chip(fact))
+                Text(FactsText.kind(fact)).font(.caption).foregroundStyle(.secondary)
+                if let origin = FactsText.origin(fact) { Text("· " + origin).font(.caption).foregroundStyle(.secondary) }
+                Spacer()
+                if fact.status != .rejected && !editing {
+                    if fact.status == .unconfirmed {
+                        Button("Confirm") { Task { await store.confirmFacts([fact.id], project: project) } }.controlSize(.small)
+                    }
+                    Button("Edit") { text = fact.text; editing = true }.controlSize(.small)
+                    Button("Reject…", role: .destructive) { confirmingReject = true }.controlSize(.small)
+                }
+            }
+            if editing {
+                TextField("The fact, in your words", text: $text, axis: .vertical)
+                    .textFieldStyle(.roundedBorder)
+                    .lineLimit(2 ... 6)
+                HStack {
+                    Spacer()
+                    Button("Cancel") { editing = false }
+                    Button("Save, confirmed") {
+                        let t = text
+                        Task { if await store.editFact(fact.id, text: t, project: project) { editing = false } }
+                    }
+                    .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            } else {
+                Text(fact.text).textSelection(.enabled)
+                    .foregroundStyle(fact.status == .rejected ? .secondary : .primary)
+                    .strikethrough(fact.status == .rejected)
+            }
+            ForEach(Array(fact.evidence.enumerated()), id: \.offset) { _, e in
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(FactsText.evidence(e)).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                    if e.hasExcerpt {
+                        Text("“\(e.excerpt)”").font(.caption).italic().foregroundStyle(.secondary).lineLimit(3)
+                    }
+                }
+            }
+        }
+        .padding(.vertical, 2)
+        .confirmationDialog("Reject this fact?", isPresented: $confirmingReject) {
+            Button("Reject", role: .destructive) { Task { await store.rejectFacts([fact.id], project: project) } }
+        } message: {
+            Text("It won't be used in answers or CVs from now on. Applications already sent keep what they said.")
+        }
     }
 }
 

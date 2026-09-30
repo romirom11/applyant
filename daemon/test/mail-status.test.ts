@@ -8,6 +8,7 @@ import {
   type ApplicationStage,
   applications,
   emails,
+  events,
   mailboxes,
   postings,
 } from '../src/db/schema.ts';
@@ -27,6 +28,7 @@ import { loadRouting, setRoleRoute } from '../src/models/roles.ts';
 import { EventBus } from '../src/queue/events.ts';
 import { runInTx } from '../src/queue/tx.ts';
 import type { Task } from '../src/queue/types.ts';
+import { eventToPb } from '../src/rpc/mapping.ts';
 import { type TempDb, tempDb } from './helpers/db.ts';
 import { testDeps } from './helpers/deps.ts';
 import { FakeMailbox, fakeMail } from './helpers/mail.ts';
@@ -164,6 +166,24 @@ describe('mail status', () => {
     runInTx(t.db, bus, { now: NOW }, (tx) => assignEmail(tx, emailId, orbit.id, 'interview'));
     expect(stageOf(orbit.id)).toBe('interview');
     expect(askQueue(t.read)).toHaveLength(0);
+
+    // The app notifies for moves a mail sync made, not for the candidate's own answer.
+    const moves = t.db
+      .select()
+      .from(events)
+      .where(eq(events.kind, 'application.stage'))
+      .all()
+      .map((row) => {
+        const pb = eventToPb(row);
+        return pb.payload.case === 'application'
+          ? [Number(pb.payload.value.applicationId), row.stage, pb.payload.value.fromMail]
+          : null;
+      });
+    expect(moves).toEqual([
+      [helix.id, 'interview', true],
+      [tally.id, 'rejected', true],
+      [orbit.id, 'interview', false],
+    ]);
 
     // The cursor moved: a second sync reads nothing again.
     await sync([fakeApple()]);

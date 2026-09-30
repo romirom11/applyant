@@ -405,6 +405,7 @@ export function eventToPb(row: EventRow): Event {
           applicationId: BigInt(row.entityId ?? 0),
           postingId: BigInt(row.postingId ?? 0),
           stage: appStageToPb(row.stage),
+          fromMail: row.taskKind === 'sync_mail',
         },
       },
     });

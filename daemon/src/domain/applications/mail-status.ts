@@ -423,7 +423,10 @@ export function storeMail(
         message: `Which application is this? "${msg.subject}" from ${msg.fromAddress}`,
       });
     }
-    if (decision.applicationId && moveApplication(tx, decision.applicationId, cls.label, msg))
+    if (
+      decision.applicationId &&
+      moveApplication(tx, decision.applicationId, cls.label, msg, { byMail: true })
+    )
       moved++;
     // An interview invite linked to its application → a calendar event (interview-event.ts).
     queueInterviewEvent(tx, inserted);
@@ -431,7 +434,17 @@ export function storeMail(
   return { stored, moved, asked };
 }
 
-function moveApplication(tx: Tx, applicationId: number, label: EmailLabel, msg: MailMessage) {
+/**
+ * `byMail`: the sync read it (the event carries task_kind `sync_mail`, so the app notifies);
+ * unset when the candidate linked the email themselves.
+ */
+function moveApplication(
+  tx: Tx,
+  applicationId: number,
+  label: EmailLabel,
+  msg: MailMessage,
+  o: { byMail?: boolean } = {},
+) {
   const app = tx.db.select().from(applications).where(eq(applications.id, applicationId)).get();
   if (!app) return false;
   const to = nextStage(app.stage, label);
@@ -447,7 +460,13 @@ function moveApplication(tx: Tx, applicationId: number, label: EmailLabel, msg: 
     .where(eq(applications.id, app.id))
     .returning()
     .get();
-  emitStage(tx, row, to, `application ${app.id}: ${to} ("${msg.subject}" from ${msg.fromAddress})`);
+  emitStage(
+    tx,
+    row,
+    to,
+    `application ${app.id}: ${to} ("${msg.subject}" from ${msg.fromAddress})`,
+    o.byMail ? 'sync_mail' : null,
+  );
   return true;
 }
 

@@ -150,6 +150,8 @@ function emitStage(
   app: Pick<ApplicationRow, 'id' | 'postingId'>,
   stage: string,
   message: string,
+  /** `sync_mail` when a reply the mailbox read moved it (ApplicationEvent.from_mail). */
+  taskKind: string | null = null,
 ) {
   tx.emit({
     kind: 'application.stage',
@@ -157,6 +159,7 @@ function emitStage(
     postingId: app.postingId,
     stage,
     message,
+    taskKind,
   });
 }
 

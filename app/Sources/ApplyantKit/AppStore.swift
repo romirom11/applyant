@@ -7,7 +7,8 @@ import Observation
 
 /// Something worth a notification (only from live events, never from a reload).
 public struct StoreNotification: Equatable, Sendable {
-    public enum Kind: String, Sendable { case readyForReview, needsYou, handOff }
+    /// `statusChange`: a reply the mailbox read moved an application (interview, offer, rejected).
+    public enum Kind: String, Sendable { case readyForReview, needsYou, handOff, statusChange }
     public let kind: Kind
     public let applicationId: Int64
     public let postingId: Int64
@@ -97,6 +98,12 @@ public final class AppStore {
     public private(set) var overview: OverviewReport?
     /// The Overview's window; the screen loads again when it changes.
     public var overviewWindow: OverviewWindow = .overviewWindow30Days
+    /// Model roles (Settings → Models).
+    public private(set) var roles: [RoleRoute] = []
+    /// Facts per project ref (FactsText.ref: a project id, or "profile"), for the facts browser.
+    public private(set) var facts: [String: [Fact]] = [:]
+    /// The names of the stored secrets (Settings → Stored keys; values are never read).
+    public private(set) var secretNames: [String] = []
     private var onboardingOffered = false
     /// The last failed action, for an alert.
     public var lastError: String?
@@ -209,7 +216,7 @@ public final class AppStore {
             await refreshApplication(a.applicationID, api)
             await refreshPosting(a.postingID, api)
             if live, before != a.stage, let app = applications[a.applicationID] {
-                notifyStage(app)
+                if a.fromMail { notifyMail(app) } else { notifyStage(app) }
             }
             // The Overview on screen follows the funnel as postings and applications move.
             if navigation.section == .overview { await refreshOverview(api) }
@@ -287,6 +294,19 @@ public final class AppStore {
         default:
             break
         }
+    }
+
+    /// A reply moved the application: "Helix invites you to an interview" (only from a mail sync,
+    /// never the candidate's own answer to "Which application is this?").
+    private func notifyMail(_ app: Application) {
+        guard let title = MailText.statusNotification(app) else { return }
+        onNotify?(StoreNotification(
+            kind: .statusChange,
+            applicationId: app.id,
+            postingId: app.postingID,
+            title: title.title,
+            body: title.body
+        ))
     }
 
     // MARK: Refreshes
@@ -726,6 +746,72 @@ public final class AppStore {
         await refreshPlatforms(api)
     }
 
+    /// Opens a site's sign-in window, keeping its login in Secrets first when one is given (the
+    /// CLI's `--save-login`). The URL it opened; nil when refused (the reason is shown).
+    @discardableResult
+    public func signIn(site input: String, username: String, password: String) async -> String? {
+        guard let target = SiteLogin.target(input) else {
+            lastError = "Give a site's address (https://…), or linkedin or xing."
+            return nil
+        }
+        let user = username.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let api, !user.isEmpty {
+            guard !password.isEmpty else {
+                lastError = "Give the password too, or leave the username empty to only sign in."
+                return nil
+            }
+            let value = SiteLogin.secretValue(username: user, password: password)
+            guard await attempt({ try await api.setSecret(SiteLogin.secretName(target), value: value) }) != nil else { return nil }
+            await refreshSecrets(api)
+        }
+        return await signIn(target)
+    }
+
+    // MARK: Settings: model roles
+
+    public func openModels() async {
+        guard let api, let list = await attempt({ try await api.listRoles() }) else { return }
+        roles = list
+    }
+
+    /// Routes a role; false when the daemon refused (the reason is shown).
+    @discardableResult
+    public func setRole(_ role: String, route: String) async -> Bool {
+        guard let api, await attempt({ try await api.setRole(role, route: route) }) != nil else { return false }
+        await openModels()
+        return true
+    }
+
+    /// Puts one role (nil: all) back on its default.
+    public func resetRoles(_ role: String? = nil) async {
+        guard let api, await attempt({ try await api.resetRoles(role) }) != nil else { return }
+        await openModels()
+    }
+
+    /// The opt-in: replies are classified by a cloud model instead of the on-device one.
+    public func setCloudEmail(_ on: Bool) async {
+        if on { await setRole(RolesText.emailRole, route: RolesText.cloudEmailRoute) } else { await resetRoles(RolesText.emailRole) }
+    }
+
+    // MARK: Settings: stored keys
+
+    private func refreshSecrets(_ api: DaemonAPI) async {
+        if let names = try? await api.listSecrets() { secretNames = names.sorted() }
+    }
+
+    public func openSecrets() async {
+        guard let api else { return }
+        await refreshSecrets(api)
+    }
+
+    /// Deletes a stored secret by name (Settings asks first).
+    public func deleteSecret(_ name: String) async {
+        guard let api, await attempt({ try await api.deleteSecret(name) }) != nil else { return }
+        await refreshSecrets(api)
+        await refreshPlatforms(api)
+        await refreshMail(api)
+    }
+
     // MARK: Settings and Search: Telegram
 
     /// One sign-in step; the account's state after it (the reason is shown when it fails).
@@ -982,6 +1068,53 @@ public final class AppStore {
         guard let api, let n = await attempt({ try await api.syncSources(target, force: false) }) else { return nil }
         await refreshKnowledge(api)
         return n
+    }
+
+    // MARK: The facts browser
+
+    /// Loads a project's facts (nil: the profile's) for the browser.
+    public func openFacts(project: Int64?) async {
+        guard let api else { return }
+        let ref = FactsText.ref(project)
+        guard let list = await attempt({ try await api.listFacts(project: ref, status: nil) }) else { return }
+        facts[ref] = list
+    }
+
+    private func afterFactChange(_ project: Int64?, _ api: DaemonAPI) async {
+        if let list = try? await api.listFacts(project: FactsText.ref(project), status: nil) { facts[FactsText.ref(project)] = list }
+        await refreshKnowledge(api)
+        // A review open on screen may rely on the fact.
+        for id in applicationDetails.keys { await refreshApplication(id, api) }
+    }
+
+    public func confirmFacts(_ ids: [Int64], project: Int64?) async {
+        guard let api, !ids.isEmpty, await attempt({ try await api.confirmFacts(ids) }) != nil else { return }
+        await afterFactChange(project, api)
+    }
+
+    /// The candidate's words for a fact (saved confirmed); false when refused.
+    @discardableResult
+    public func editFact(_ id: Int64, text: String, project: Int64?) async -> Bool {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let api, !t.isEmpty, await attempt({ try await api.editFact(id, text: t) }) != nil else { return false }
+        await afterFactChange(project, api)
+        return true
+    }
+
+    public func rejectFacts(_ ids: [Int64], project: Int64?) async {
+        guard let api, !ids.isEmpty, await attempt({ try await api.rejectFacts(ids) }) != nil else { return }
+        await afterFactChange(project, api)
+    }
+
+    // MARK: Review: the tailored CV's lines
+
+    /// A CV line in the candidate's words (nil removes it); the CV is rendered again, and the
+    /// preview follows once it's ready. False when refused.
+    @discardableResult
+    public func editCv(application id: Int64, line: String, text: String?) async -> Bool {
+        guard let api, let app = await attempt({ try await api.editCv(application: id, line: line, text: text) }) else { return false }
+        record(app)
+        return true
     }
 
     // MARK: Preferences after setup

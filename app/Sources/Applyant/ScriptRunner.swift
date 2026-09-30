@@ -270,6 +270,26 @@ final class ScriptRunner {
             form[s.field ?? ""] = s.value ?? ""
             note("setPreference: saved \(await store.savePreferences(form))")
         case "showBrowser": note("showBrowser: Applyant's Chrome brought forward = \(ChromeWindow.bringForward())")
+        // Gap audit: model roles, facts, CV lines and stored keys (sign-in isn't scripted: it
+        // opens a real Chrome window).
+        case "setRole":
+            note("setRole: \(await store.setRole(s.field ?? "", route: s.value ?? ""))")
+        case "resetRoles":
+            await store.resetRoles(s.field)
+        case "cloudEmail":
+            await store.setCloudEmail(s.value == "on")
+            note("cloudEmail: \(RolesText.cloudEmail(store.roles))")
+        case "confirmFact":
+            await store.confirmFacts(s.facts ?? [], project: s.interviewProject)
+        case "editFact":
+            note("editFact: \(await store.editFact(s.facts?.first ?? 0, text: s.text ?? "", project: s.interviewProject))")
+        case "rejectFact":
+            await store.rejectFacts(s.facts ?? [], project: s.interviewProject)
+        case "editCv":
+            note("editCv: \(await store.editCv(application: app, line: s.field ?? "", text: s.text))")
+        case "deleteSecret":
+            await store.deleteSecret(s.value ?? "")
+            note("deleteSecret: \(store.secretNames.joined(separator: ", "))")
         default: break
         }
     }

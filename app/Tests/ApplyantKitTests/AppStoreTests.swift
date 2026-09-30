@@ -523,6 +523,82 @@ final class FakeDaemon: DaemonAPI, @unchecked Sendable {
         return report
     }
 
+    // Gap audit: model roles, the facts browser, CV edits and stored keys.
+    var roleList: [RoleRoute] = [
+        .with { $0.role = "field_classify"; $0.route = "jev"; $0.defaultRoute = "jev"; $0.fallback = "claude:haiku"; $0.description_p = "what each form field asks for" },
+        .with { $0.role = "email_classify"; $0.route = "apple"; $0.defaultRoute = "apple"; $0.description_p = "reads replies to applications" },
+    ]
+    var factsByRef: [String: [Fact]] = [:]
+    var cvEdits: [String] = []
+    func listRoles() async throws -> [RoleRoute] { log("listRoles"); return roleList }
+    func setRole(_ role: String, route: String) async throws -> RoleRoute {
+        log("setRole \(role) \(route)")
+        if route == "apple" && role != "email_classify" { throw APIError("the on-device model only reads email (email_classify)") }
+        guard let i = roleList.firstIndex(where: { $0.role == role }) else { throw APIError("unknown role \(role)") }
+        roleList[i].route = route
+        roleList[i].overridden = route != roleList[i].defaultRoute
+        return roleList[i]
+    }
+    func resetRoles(_ role: String?) async throws -> [String] {
+        log("resetRoles \(role ?? "all")")
+        var reset: [String] = []
+        for i in roleList.indices where roleList[i].overridden && (role == nil || roleList[i].role == role) {
+            roleList[i].route = roleList[i].defaultRoute
+            roleList[i].overridden = false
+            reset.append(roleList[i].role)
+        }
+        return reset
+    }
+    func listFacts(project: String, status: FactStatus?) async throws -> [Fact] {
+        log("listFacts \(project)")
+        return factsByRef[project] ?? []
+    }
+    private func changeFacts(_ ids: [Int64], _ change: (inout Fact) -> Void) -> [Fact] {
+        var changed: [Fact] = []
+        for (ref, list) in factsByRef {
+            factsByRef[ref] = list.map { f in
+                var f = f
+                if ids.contains(f.id) { change(&f); changed.append(f) }
+                return f
+            }
+        }
+        return changed
+    }
+    func confirmFacts(_ ids: [Int64]) async throws -> [Fact] {
+        log("confirmFacts \(ids)")
+        return changeFacts(ids) { $0.status = .confirmed }
+    }
+    func editFact(_ id: Int64, text: String) async throws -> Fact {
+        log("editFact \(id) \(text)")
+        guard let f = changeFacts([id], { $0.text = text; $0.status = .confirmed; $0.origin = "review_edit" }).first else {
+            throw APIError("no fact \(id)")
+        }
+        return f
+    }
+    func rejectFacts(_ ids: [Int64]) async throws -> [Fact] {
+        log("rejectFacts \(ids)")
+        return changeFacts(ids) { $0.status = .rejected }
+    }
+    func editCv(application id: Int64, line: String, text: String?) async throws -> Application {
+        log("editCv \(id) \(line) \(text ?? "-")")
+        guard var app = applications[id] else { throw APIError("no application \(id)") }
+        if let text, let i = app.cv.summary.firstIndex(where: { $0.handle == line }) {
+            app.cv.summary[i].text = text
+        } else if text == nil {
+            app.cv.summary.removeAll { $0.handle == line }
+        }
+        app.cv.status = "planned"
+        app.cv.clearPdfPath()
+        applications[id] = app
+        return app
+    }
+    func listSecrets() async throws -> [String] { log("listSecrets"); return Array(secrets.keys) }
+    func deleteSecret(_ name: String) async throws -> Bool {
+        log("deleteSecret \(name)")
+        if name == "capmonster" { platformList.captchaSolver = false }
+        return secrets.removeValue(forKey: name) != nil
+    }
+
     /// Changes a question everywhere it's listed.
     func setQuestion(_ id: Int64, _ change: (inout InterviewQuestion) -> Void) throws -> InterviewQuestion {
         guard let i = questions.firstIndex(where: { $0.id == id }) else { throw APIError("no question \(id)") }

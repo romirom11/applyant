@@ -45,6 +45,22 @@ public enum MailText {
             : date.formatted(.dateTime.day().month(.abbreviated).hour().minute())
     }
 
+    /// The notification for a status a reply set: "Helix invites you to an interview" with the
+    /// role and the email's subject; nil for other stages.
+    public static func statusNotification(_ app: Application) -> (title: String, body: String)? {
+        let company = app.hasCompany && !app.company.isEmpty ? app.company : "The company"
+        let (title, label): (String, String) = switch app.stage {
+        case .interview: ("\(company) invites you to an interview", "interview")
+        case .offer: ("\(company) made you an offer", "offer")
+        case .rejected: ("\(company) isn't moving forward", "rejection")
+        default: ("", "")
+        }
+        guard !title.isEmpty else { return nil }
+        let role = app.hasTitle ? app.title : "Application \(app.id)"
+        let email = app.emails.first { $0.label == label }
+        return (title, email.map { "\(role) · “\($0.subject)”" } ?? role)
+    }
+
     /// Labels the candidate can pick when the classifier couldn't tell.
     public static let pickableLabels = ["rejection", "interview", "offer", "acknowledgement", "other"]
 

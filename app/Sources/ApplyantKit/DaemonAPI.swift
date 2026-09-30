@@ -22,6 +22,9 @@ public typealias SearchSource = Applyant_V1_SearchSource
 public typealias SearchRun = Applyant_V1_SearchRun
 public typealias SearchPlan = Applyant_V1_SearchPlan
 public typealias Company = Applyant_V1_Company
+public typealias RoleRoute = Applyant_V1_RoleRoute
+public typealias Fact = Applyant_V1_Fact
+public typealias FactStatus = Applyant_V1_FactStatus
 
 /// Which company: by id, or a posting's company.
 public enum CompanyTarget: Hashable, Sendable {
@@ -179,6 +182,27 @@ public protocol DaemonAPI: Sendable {
     func scorePostings(_ ids: [Int64], refresh: Bool) async throws -> [Int64]
     /// The funnel and the success metrics over a window.
     func overview(_ window: OverviewWindow) async throws -> OverviewReport
+
+    // Gap audit: model roles, the facts browser, CV edits and stored keys in the app.
+    /// Every model role with its route, default, fallback and what it does.
+    func listRoles() async throws -> [RoleRoute]
+    /// Routes a role (`provider[:model]`); the daemon refuses routes that can't work.
+    func setRole(_ role: String, route: String) async throws -> RoleRoute
+    /// Puts one role (nil: every role) back on its default; the roles that changed.
+    func resetRoles(_ role: String?) async throws -> [String]
+    /// Facts of a project ("profile" for the profile's, "" for all), optionally of one status.
+    func listFacts(project: String, status: FactStatus?) async throws -> [Fact]
+    /// Confirms facts for good (not tied to an application).
+    func confirmFacts(_ ids: [Int64]) async throws -> [Fact]
+    /// The candidate's words for a fact (saved confirmed).
+    func editFact(_ id: Int64, text: String) async throws -> Fact
+    func rejectFacts(_ ids: [Int64]) async throws -> [Fact]
+    /// A tailored CV line (s1 · p2.3 · e1 · d4) in the candidate's words; nil text removes it.
+    func editCv(application id: Int64, line: String, text: String?) async throws -> Application
+    /// The names of the stored secrets (never their values).
+    func listSecrets() async throws -> [String]
+    /// False when there was no such secret.
+    func deleteSecret(_ name: String) async throws -> Bool
 }
 
 /// Older fakes and daemons: the setup RPCs answer "not available" unless implemented.
@@ -189,6 +213,18 @@ public extension DaemonAPI {
     func scorePostings(_ ids: [Int64], refresh: Bool) async throws -> [Int64] {
         throw APIError("re-scoring needs a newer applyantd")
     }
+    func listRoles() async throws -> [RoleRoute] { throw APIError("model roles need a newer applyantd") }
+    func setRole(_ role: String, route: String) async throws -> RoleRoute { throw APIError("model roles need a newer applyantd") }
+    func resetRoles(_ role: String?) async throws -> [String] { throw APIError("model roles need a newer applyantd") }
+    func listFacts(project: String, status: FactStatus?) async throws -> [Fact] { throw APIError("facts aren't available") }
+    func confirmFacts(_ ids: [Int64]) async throws -> [Fact] { throw APIError("facts aren't available") }
+    func editFact(_ id: Int64, text: String) async throws -> Fact { throw APIError("facts aren't available") }
+    func rejectFacts(_ ids: [Int64]) async throws -> [Fact] { throw APIError("facts aren't available") }
+    func editCv(application id: Int64, line: String, text: String?) async throws -> Application {
+        throw APIError("editing the CV isn't available")
+    }
+    func listSecrets() async throws -> [String] { [] }
+    func deleteSecret(_ name: String) async throws -> Bool { throw APIError("deleting a key isn't available") }
     func overview(_ window: OverviewWindow) async throws -> OverviewReport {
         throw APIError("the overview needs a newer applyantd")
     }
@@ -723,6 +759,66 @@ extension ConnectDaemonAPI {
 
     public func overview(_ window: OverviewWindow) async throws -> OverviewReport {
         try unwrap(await unary.getOverview(request: .with { $0.window = window }, headers: headers))
+    }
+}
+
+extension ConnectDaemonAPI {
+    public func listRoles() async throws -> [RoleRoute] {
+        try unwrap(await unary.listRoles(request: .init(), headers: headers)).roles
+    }
+
+    public func setRole(_ role: String, route: String) async throws -> RoleRoute {
+        let request = Applyant_V1_SetRoleRequest.with {
+            $0.role = role
+            $0.route = route
+        }
+        return try unwrap(await unary.setRole(request: request, headers: headers)).role
+    }
+
+    public func resetRoles(_ role: String?) async throws -> [String] {
+        let request = Applyant_V1_ResetRolesRequest.with { if let role { $0.role = role } }
+        return try unwrap(await unary.resetRoles(request: request, headers: headers)).roles
+    }
+
+    public func listFacts(project: String, status: FactStatus?) async throws -> [Fact] {
+        let request = Applyant_V1_ListFactsRequest.with {
+            $0.project = project
+            if let status { $0.status = status }
+        }
+        return try unwrap(await unary.listFacts(request: request, headers: headers)).facts
+    }
+
+    public func confirmFacts(_ ids: [Int64]) async throws -> [Fact] {
+        try unwrap(await unary.confirmFact(request: .with { $0.ids = ids }, headers: headers)).facts
+    }
+
+    public func editFact(_ id: Int64, text: String) async throws -> Fact {
+        let request = Applyant_V1_EditFactRequest.with {
+            $0.id = id
+            $0.text = text
+        }
+        return try unwrap(await unary.editFact(request: request, headers: headers)).fact
+    }
+
+    public func rejectFacts(_ ids: [Int64]) async throws -> [Fact] {
+        try unwrap(await unary.rejectFact(request: .with { $0.ids = ids }, headers: headers)).facts
+    }
+
+    public func editCv(application id: Int64, line: String, text: String?) async throws -> Application {
+        let request = Applyant_V1_EditCvRequest.with {
+            $0.applicationID = id
+            $0.line = line
+            if let text { $0.text = text }
+        }
+        return try unwrap(await unary.editCv(request: request, headers: headers)).application
+    }
+
+    public func listSecrets() async throws -> [String] {
+        try unwrap(await unary.listSecrets(request: .init(), headers: headers)).names
+    }
+
+    public func deleteSecret(_ name: String) async throws -> Bool {
+        try unwrap(await unary.deleteSecret(request: .with { $0.name = name }, headers: headers)).deleted
     }
 }
 

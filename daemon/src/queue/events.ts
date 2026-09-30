@@ -16,7 +16,8 @@ export type EventKind =
   | 'posting.stage'
   // A posting's application form was read (stage unchanged; message says what was found).
   | 'posting.form'
-  // An application moved (entity_id = application id, posting_id set, stage = its stage).
+  // An application moved (entity_id = application id, posting_id set, stage = its stage;
+  // task_kind = `sync_mail` when a reply the mailbox read moved it).
   | 'application.stage'
   // Delivery got stuck and left a browser window open for the candidate to finish (entity_id =
   // application id, posting_id set; message = the hand-off reason).
