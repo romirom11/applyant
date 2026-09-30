@@ -2426,6 +2426,110 @@ export declare type GetProjectResponse = Message<"applyant.v1.GetProjectResponse
 export declare const GetProjectResponseSchema: GenMessage<GetProjectResponse>;
 
 /**
+ * @generated from message applyant.v1.UpdateProjectRequest
+ */
+export declare type UpdateProjectRequest = Message<"applyant.v1.UpdateProjectRequest"> & {
+  /**
+   * Id, slug or name.
+   *
+   * @generated from field: string project = 1;
+   */
+  project: string;
+
+  /**
+   * @generated from field: optional string name = 2;
+   */
+  name?: string | undefined;
+
+  /**
+   * Empty clears it.
+   *
+   * @generated from field: optional string summary = 3;
+   */
+  summary?: string | undefined;
+
+  /**
+   * @generated from field: optional string role = 4;
+   */
+  role?: string | undefined;
+
+  /**
+   * @generated from field: optional string period = 5;
+   */
+  period?: string | undefined;
+
+  /**
+   * Set to replace.
+   *
+   * @generated from field: optional applyant.v1.StringList stack = 6;
+   */
+  stack?: StringList | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.UpdateProjectRequest.
+ * Use `create(UpdateProjectRequestSchema)` to create a new message.
+ */
+export declare const UpdateProjectRequestSchema: GenMessage<UpdateProjectRequest>;
+
+/**
+ * @generated from message applyant.v1.UpdateProjectResponse
+ */
+export declare type UpdateProjectResponse = Message<"applyant.v1.UpdateProjectResponse"> & {
+  /**
+   * @generated from field: applyant.v1.Project project = 1;
+   */
+  project?: Project | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.UpdateProjectResponse.
+ * Use `create(UpdateProjectResponseSchema)` to create a new message.
+ */
+export declare const UpdateProjectResponseSchema: GenMessage<UpdateProjectResponse>;
+
+/**
+ * @generated from message applyant.v1.DeleteProjectRequest
+ */
+export declare type DeleteProjectRequest = Message<"applyant.v1.DeleteProjectRequest"> & {
+  /**
+   * Id, slug or name.
+   *
+   * @generated from field: string project = 1;
+   */
+  project: string;
+};
+
+/**
+ * Describes the message applyant.v1.DeleteProjectRequest.
+ * Use `create(DeleteProjectRequestSchema)` to create a new message.
+ */
+export declare const DeleteProjectRequestSchema: GenMessage<DeleteProjectRequest>;
+
+/**
+ * @generated from message applyant.v1.DeleteProjectResponse
+ */
+export declare type DeleteProjectResponse = Message<"applyant.v1.DeleteProjectResponse"> & {
+  /**
+   * What went with it.
+   *
+   * @generated from field: int32 sources_removed = 1;
+   */
+  sourcesRemoved: number;
+
+  /**
+   * @generated from field: int32 facts_removed = 2;
+   */
+  factsRemoved: number;
+};
+
+/**
+ * Describes the message applyant.v1.DeleteProjectResponse.
+ * Use `create(DeleteProjectResponseSchema)` to create a new message.
+ */
+export declare const DeleteProjectResponseSchema: GenMessage<DeleteProjectResponse>;
+
+/**
  * @generated from message applyant.v1.AddSourceRequest
  */
 export declare type AddSourceRequest = Message<"applyant.v1.AddSourceRequest"> & {
@@ -2481,7 +2585,8 @@ export declare const AddSourceResponseSchema: GenMessage<AddSourceResponse>;
  */
 export declare type SyncSourcesRequest = Message<"applyant.v1.SyncSourcesRequest"> & {
   /**
-   * A project ref, a source kind ("file", "url", "github"), "profile", or empty for all.
+   * A project ref, a source kind ("file", "url", "github"), "profile", "source:<id>" (one
+   * source), or empty for all.
    *
    * @generated from field: string target = 1;
    */
@@ -7428,6 +7533,26 @@ export declare const ApplyantService: GenService<{
     methodKind: "unary";
     input: typeof GetProjectRequestSchema;
     output: typeof GetProjectResponseSchema;
+  },
+  /**
+   * UpdateProject renames a project or changes what it says (summary, role, period, stack).
+   *
+   * @generated from rpc applyant.v1.ApplyantService.UpdateProject
+   */
+  updateProject: {
+    methodKind: "unary";
+    input: typeof UpdateProjectRequestSchema;
+    output: typeof UpdateProjectResponseSchema;
+  },
+  /**
+   * DeleteProject removes a project with its sources, facts and interview questions.
+   *
+   * @generated from rpc applyant.v1.ApplyantService.DeleteProject
+   */
+  deleteProject: {
+    methodKind: "unary";
+    input: typeof DeleteProjectRequestSchema;
+    output: typeof DeleteProjectResponseSchema;
   },
   /**
    * AddSource records a source and enqueues its first sync.

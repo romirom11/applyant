@@ -87,6 +87,12 @@ public final class AppStore {
     public private(set) var preferencesDraft: [PreferenceSuggestion] = []
     /// The setup window is open: on the first launch while setup isn't done, or from the menu.
     public var showOnboarding = false
+    /// The profile's values, projects and profile sources (Profile, Projects, the Import step).
+    public private(set) var candidateProfile: CandidateProfile?
+    /// Each open project's sources, with their sync state.
+    public private(set) var projectSources: [Int64: [KnowledgeSource]] = [:]
+    /// The scoring preferences (Settings → Preferences).
+    public private(set) var searchPreferences: SearchPreferences?
     private var onboardingOffered = false
     /// The last failed action, for an alert.
     public var lastError: String?
@@ -186,6 +192,10 @@ public final class AppStore {
         switch event.payload {
         case let .task(task)?:
             applyTask(task, message: event.message)
+            // A knowledge source finished (or gave up) syncing: its state and counts changed.
+            if task.taskKind == "sync_source", [.done, .failed, .retry].contains(task.type), candidateProfile != nil {
+                await refreshKnowledge(api)
+            }
         case let .posting(p)?:
             await refreshPosting(p.postingID, api)
         case let .application(a)?:
@@ -820,6 +830,178 @@ public final class AppStore {
         let s = key.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let api, !s.isEmpty, await attempt({ try await api.setSecret("jev", value: s) }) != nil else { return }
         await refreshSetup()
+    }
+
+    // MARK: The profile and projects (app parity with the CLI for setup)
+
+    private func refreshKnowledge(_ api: DaemonAPI) async {
+        if let c = try? await api.candidate() { candidateProfile = c }
+        for id in projectSources.keys {
+            if let p = try? await api.project(String(id)) { projectSources[id] = p.sources }
+        }
+    }
+
+    /// Loads the profile, the projects and the profile's sources (Profile and Projects open with it).
+    public func openProfile() async {
+        guard let api, let c = await attempt({ try await api.candidate() }) else { return }
+        candidateProfile = c
+    }
+
+    public var knowledgeProjects: [KnowledgeProject] { candidateProfile?.projects ?? [] }
+
+    public func knowledgeProject(_ id: Int64) -> KnowledgeProject? { knowledgeProjects.first { $0.id == id } }
+
+    /// Saves what changed in the profile form, one value at a time (the first refusal stops it
+    /// and is shown). True when everything was saved.
+    @discardableResult
+    public func saveProfile(_ form: ProfileForm) async -> Bool {
+        guard let api else { return false }
+        for (key, value) in form.changes {
+            guard await attempt({ try await api.setProfileValue(key, value: value) }) != nil else {
+                await refreshKnowledge(api)
+                return false
+            }
+        }
+        await refreshKnowledge(api)
+        await refreshSetup()
+        return true
+    }
+
+    /// The base CV the tailored ones start from (a file on this Mac; empty clears it).
+    @discardableResult
+    public func setBaseCv(_ path: String) async -> Bool {
+        guard let api, await attempt({ try await api.setProfileValue(ProfileForm.baseCvKey, value: path) }) != nil else {
+            return false
+        }
+        await refreshKnowledge(api)
+        return true
+    }
+
+    /// A new project; its id (and it's opened in Projects), nil when refused.
+    @discardableResult
+    public func createProject(_ name: String) async -> Int64? {
+        let n = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let api, !n.isEmpty, let p = await attempt({ try await api.createProject(name: n) }) else { return nil }
+        await refreshKnowledge(api)
+        projectSources[p.id] = []
+        navigation.project = p.id
+        return p.id
+    }
+
+    @discardableResult
+    public func renameProject(_ id: Int64, to name: String) async -> Bool {
+        let n = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let api, !n.isEmpty, await attempt({ try await api.renameProject(String(id), name: n) }) != nil else {
+            return false
+        }
+        await refreshKnowledge(api)
+        return true
+    }
+
+    /// Removes a project with its sources and facts.
+    public func deleteProject(_ id: Int64) async {
+        guard let api, await attempt({ try await api.deleteProject(String(id)) }) != nil else { return }
+        projectSources[id] = nil
+        if navigation.project == id { navigation.project = nil }
+        await refreshKnowledge(api)
+        await refreshInterview(api)
+        await refreshSetup()
+    }
+
+    /// Loads a project's sources for its detail (kept current from then on).
+    public func openProject(_ id: Int64) async {
+        guard let api, let p = await attempt({ try await api.project(String(id)) }) else { return }
+        projectSources[id] = p.sources
+    }
+
+    /// Adds a GitHub repo, a file (a path on this Mac) or a link to a project (nil: the profile);
+    /// its first sync starts in the daemon.
+    @discardableResult
+    public func addKnowledgeSource(to project: Int64?, _ input: String) async -> Bool {
+        var s = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let api, !s.isEmpty else { return false }
+        if s.hasPrefix("~") { s = (s as NSString).expandingTildeInPath }
+        let kind = KnowledgeText.sourceKind(for: s)
+        guard await attempt({ try await api.addKnowledgeSource(project: project.map { String($0) }, kind: kind, locator: s) }) != nil else {
+            return false
+        }
+        if let project, projectSources[project] == nil { projectSources[project] = [] }
+        await refreshKnowledge(api)
+        await refreshSetup()
+        return true
+    }
+
+    /// Reads a project's sources again (nil: the profile's), or one source.
+    @discardableResult
+    public func syncKnowledge(project: Int64? = nil, source: Int64? = nil) async -> Int? {
+        let target = source.map { "source:\($0)" } ?? project.map { String($0) } ?? "profile"
+        guard let api, let n = await attempt({ try await api.syncSources(target, force: false) }) else { return nil }
+        await refreshKnowledge(api)
+        return n
+    }
+
+    // MARK: Preferences after setup
+
+    public func openPreferences() async {
+        guard let api, let p = await attempt({ try await api.getPreferences() }) else { return }
+        searchPreferences = p
+    }
+
+    /// Saves what changed, one key at a time (the first refusal stops it and is shown).
+    @discardableResult
+    public func savePreferences(_ form: PreferencesForm) async -> Bool {
+        guard let api else { return false }
+        var ok = true
+        for (key, value) in form.changes {
+            guard await attempt({ try await api.setPreference(key, value: value) }) != nil else {
+                ok = false
+                break
+            }
+        }
+        if let p = try? await api.getPreferences() { searchPreferences = p }
+        return ok
+    }
+
+    // MARK: Search: strategies and sources
+
+    /// A new strategy (id nil) or the whole strategy replaced; its id, opened in Search.
+    @discardableResult
+    public func saveStrategy(_ form: StrategyForm, id: Int64? = nil) async -> Int64? {
+        if let problem = form.problem {
+            lastError = problem
+            return nil
+        }
+        guard let api else { return nil }
+        let saved: SearchStrategy?
+        if let id {
+            saved = await attempt({ try await api.updateStrategy(form.updateRequest(id)) })
+        } else {
+            saved = await attempt({ try await api.addStrategy(form.addRequest) })
+        }
+        guard let saved else { return nil }
+        await refreshSearch(api)
+        navigation.search = .strategy(saved.id)
+        return saved.id
+    }
+
+    public func deleteStrategy(_ id: Int64) async {
+        guard let api, await attempt({ try await api.deleteStrategy(id) }) != nil else { return }
+        if navigation.search == .strategy(id) { navigation.search = nil }
+        await refreshSearch(api)
+    }
+
+    /// A job board or a career page by URL: the daemon finds its feed or ATS board, or builds a
+    /// listing recipe. The source, opened in Search; nil when refused.
+    @discardableResult
+    public func addBoardOrPage(_ input: String) async -> SearchSource? {
+        guard let url = SourceInput.url(input) else {
+            lastError = "That isn't a web address."
+            return nil
+        }
+        guard let api, let source = await attempt({ try await api.addSearchSource(kind: "", locator: url) }) else { return nil }
+        await refreshSearch(api)
+        navigation.search = .source(source.key)
+        return source
     }
 
     private func attempt<T>(_ call: () async throws -> T) async -> T? {

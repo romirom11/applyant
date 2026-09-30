@@ -160,6 +160,10 @@ export const syncSource: Handler<'sync_source'> = async (task, ctx) => {
   return {
     kind: 'done',
     commit: (tx) => {
+      // The project (and its sources) was removed while this sync read: nothing to store.
+      if (!tx.db.select({ id: sources.id }).from(sources).where(eq(sources.id, source.id)).get()) {
+        return;
+      }
       const summary = applyExtraction(tx, {
         source,
         project,

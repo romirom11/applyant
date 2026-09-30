@@ -153,6 +153,22 @@ public protocol DaemonAPI: Sendable {
     /// A knowledge source (nil project = the profile: a CV that covers many projects); it syncs.
     func addKnowledgeSource(project: String?, kind: Applyant_V1_SourceKind, locator: String) async throws
     func setProfileValue(_ key: String, value: String) async throws
+
+    // App parity with the CLI for setup (phase 16).
+    /// The profile's values, every project and the profile's own sources.
+    func candidate() async throws -> CandidateProfile
+    /// A project with its sources (by id, slug or name).
+    func project(_ ref: String) async throws -> (project: KnowledgeProject, sources: [KnowledgeSource])
+    func createProject(name: String) async throws -> KnowledgeProject
+    func renameProject(_ ref: String, name: String) async throws -> KnowledgeProject
+    /// Removes the project with its sources and facts.
+    func deleteProject(_ ref: String) async throws
+    /// Syncs again: a project ref, "profile", "source:<id>"; `force` re-reads unchanged material.
+    func syncSources(_ target: String, force: Bool) async throws -> Int
+    func getPreferences() async throws -> SearchPreferences
+    func addStrategy(_ request: Applyant_V1_AddStrategyRequest) async throws -> SearchStrategy
+    func updateStrategy(_ request: Applyant_V1_UpdateStrategyRequest) async throws -> SearchStrategy
+    func deleteStrategy(_ id: Int64) async throws
 }
 
 /// Older fakes and daemons: the setup RPCs answer "not available" unless implemented.
@@ -177,6 +193,24 @@ public extension DaemonAPI {
         throw APIError("setup isn't available")
     }
     func setProfileValue(_ key: String, value: String) async throws { throw APIError("setup isn't available") }
+    func candidate() async throws -> CandidateProfile { throw APIError("the profile isn't available") }
+    func project(_ ref: String) async throws -> (project: KnowledgeProject, sources: [KnowledgeSource]) {
+        throw APIError("projects aren't available")
+    }
+    func createProject(name: String) async throws -> KnowledgeProject { throw APIError("projects aren't available") }
+    func renameProject(_ ref: String, name: String) async throws -> KnowledgeProject {
+        throw APIError("renaming a project needs a newer applyantd")
+    }
+    func deleteProject(_ ref: String) async throws { throw APIError("removing a project needs a newer applyantd") }
+    func syncSources(_ target: String, force: Bool) async throws -> Int { throw APIError("syncing isn't available") }
+    func getPreferences() async throws -> SearchPreferences { throw APIError("preferences aren't available") }
+    func addStrategy(_ request: Applyant_V1_AddStrategyRequest) async throws -> SearchStrategy {
+        throw APIError("adding a strategy isn't available")
+    }
+    func updateStrategy(_ request: Applyant_V1_UpdateStrategyRequest) async throws -> SearchStrategy {
+        throw APIError("editing a strategy isn't available")
+    }
+    func deleteStrategy(_ id: Int64) async throws { throw APIError("deleting a strategy isn't available") }
 }
 
 /// Unary answers → value or APIError.
@@ -597,6 +631,57 @@ extension ConnectDaemonAPI {
             $0.locator = locator
         }
         return try unwrap(await unary.addSearchSource(request: request, headers: headers)).source
+    }
+}
+
+extension ConnectDaemonAPI {
+    public func candidate() async throws -> CandidateProfile {
+        try unwrap(await unary.getCandidate(request: .init(), headers: headers))
+    }
+
+    public func project(_ ref: String) async throws -> (project: KnowledgeProject, sources: [KnowledgeSource]) {
+        let response = try unwrap(await unary.getProject(request: .with { $0.ref = ref }, headers: headers))
+        return (response.project, response.sources)
+    }
+
+    public func createProject(name: String) async throws -> KnowledgeProject {
+        try unwrap(await unary.createProject(request: .with { $0.name = name }, headers: headers)).project
+    }
+
+    public func renameProject(_ ref: String, name: String) async throws -> KnowledgeProject {
+        let request = Applyant_V1_UpdateProjectRequest.with {
+            $0.project = ref
+            $0.name = name
+        }
+        return try unwrap(await unary.updateProject(request: request, headers: headers)).project
+    }
+
+    public func deleteProject(_ ref: String) async throws {
+        _ = try unwrap(await unary.deleteProject(request: .with { $0.project = ref }, headers: headers))
+    }
+
+    public func syncSources(_ target: String, force: Bool) async throws -> Int {
+        let request = Applyant_V1_SyncSourcesRequest.with {
+            $0.target = target
+            $0.force = force
+        }
+        return try unwrap(await unary.syncSources(request: request, headers: headers)).enqueuedSourceIds.count
+    }
+
+    public func getPreferences() async throws -> SearchPreferences {
+        try unwrap(await unary.getPreferences(request: .init(), headers: headers)).preferences
+    }
+
+    public func addStrategy(_ request: Applyant_V1_AddStrategyRequest) async throws -> SearchStrategy {
+        try unwrap(await unary.addStrategy(request: request, headers: headers)).strategy
+    }
+
+    public func updateStrategy(_ request: Applyant_V1_UpdateStrategyRequest) async throws -> SearchStrategy {
+        try unwrap(await unary.updateStrategy(request: request, headers: headers)).strategy
+    }
+
+    public func deleteStrategy(_ id: Int64) async throws {
+        _ = try unwrap(await unary.deleteStrategy(request: .with { $0.strategy = String(id) }, headers: headers))
     }
 }
 

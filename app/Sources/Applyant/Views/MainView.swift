@@ -18,6 +18,8 @@ struct MainView: View {
                 case .companies: CompaniesList(store: store)
                 case .whichApplication: WhichApplicationList(store: store)
                 case .settings: SettingsView(store: store)
+                case .profile: ProfileEditor(store: store).navigationTitle("Profile")
+                case .projects: ProjectsList(store: store)
                 default: PostingList(store: store)
                 }
             }
@@ -45,7 +47,11 @@ struct Detail: View {
     let store: AppStore
 
     var body: some View {
-        if store.navigation.section == .search {
+        if store.navigation.section == .profile {
+            ProfileSourcesPane(store: store)
+        } else if store.navigation.section == .projects {
+            ProjectDetail(store: store)
+        } else if store.navigation.section == .search {
             SearchDetail(store: store)
         } else if store.navigation.section == .agentRuns {
             RunDetail(store: store)

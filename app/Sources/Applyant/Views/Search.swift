@@ -7,6 +7,7 @@ import SwiftUI
 
 struct SearchList: View {
     let store: AppStore
+    @State private var creating = false
 
     var body: some View {
         let strategies = store.strategyRows
@@ -21,7 +22,7 @@ struct SearchList: View {
                         .font(.caption).foregroundStyle(.secondary).lineLimit(3)
                 }
                 if strategies.isEmpty {
-                    Text("No strategies yet. Plan searches, or add one with `applyant search strategies add`.")
+                    Text("No strategies yet. Plan searches, or add one with New strategy.")
                         .font(.callout).foregroundStyle(.secondary)
                 }
                 ForEach(strategies) { row in
@@ -32,6 +33,9 @@ struct SearchList: View {
                     Text("Strategies")
                     Spacer()
                     if store.planning { ProgressView().controlSize(.mini) }
+                    Button("New strategy") { creating = true }
+                        .buttonStyle(.link)
+                        .controlSize(.small)
                     Button("Plan searches") { Task { await store.planSearch() } }
                         .buttonStyle(.link)
                         .controlSize(.small)
@@ -40,6 +44,9 @@ struct SearchList: View {
                             ? "The planner is running"
                             : "Let the agent propose strategies from your profile and find new boards with web search")
                 }
+            }
+            SwiftUI.Section("Sources") {
+                AddBoardOrPage(store: store)
             }
             ForEach(groups, id: \.kind.kind) { group in
                 SwiftUI.Section {
@@ -65,6 +72,9 @@ struct SearchList: View {
         }
         .navigationTitle("Search")
         .task { await store.openSearch() }
+        .sheet(isPresented: $creating) {
+            StrategyEditorSheet(store: store, strategy: nil) { creating = false }
+        }
     }
 }
 
@@ -137,6 +147,8 @@ struct SearchDetail: View {
 struct StrategyDetail: View {
     let store: AppStore
     let strategy: SearchStrategy
+    @State private var editing = false
+    @State private var confirmingDelete = false
 
     var body: some View {
         let s = strategy
@@ -156,6 +168,8 @@ struct StrategyDetail: View {
                     Button("Run now") { Task { await store.runStrategy(s.id) } }
                         .disabled(s.running || s.sourceKeys.isEmpty)
                         .help(s.running ? "A run is waiting or running" : "Search now, outside the schedule")
+                    Button("Edit…") { editing = true }
+                    Button("Delete…", role: .destructive) { confirmingDelete = true }
                     if s.running {
                         ProgressView().controlSize(.small)
                         Text("Running…").foregroundStyle(.secondary)
@@ -204,6 +218,14 @@ struct StrategyDetail: View {
             .padding(20)
             .frame(maxWidth: 820, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .sheet(isPresented: $editing) {
+            StrategyEditorSheet(store: store, strategy: s) { editing = false }
+        }
+        .confirmationDialog("Delete \(s.name)?", isPresented: $confirmingDelete) {
+            Button("Delete the strategy", role: .destructive) { Task { await store.deleteStrategy(s.id) } }
+        } message: {
+            Text("It stops searching. The postings it found stay.")
         }
     }
 

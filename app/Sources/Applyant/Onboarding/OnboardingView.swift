@@ -152,6 +152,8 @@ private struct ImportStep: View {
     @State private var link = ""
     @State private var github = ""
     @State private var picking = false
+    @State private var editingProfile = false
+    @State private var editingProjects = false
 
     var body: some View {
         Form {
@@ -166,8 +168,17 @@ private struct ImportStep: View {
                     Button("Save") { Task { await store.setGithubLogin(github) } }
                         .disabled(github.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
-                Text("Repositories belong to projects: add them with `applyant candidate source add <project> github <url>`.")
+                Text("Repositories belong to projects: add them under Projects and sources.")
                     .font(.caption).foregroundStyle(.secondary)
+            }
+            SwiftUI.Section("Profile and projects") {
+                HStack {
+                    Text("Your name, contacts, work authorization and base CV; projects with their repos, files and pages.")
+                        .font(.callout)
+                    Spacer()
+                    Button("Edit profile…") { editingProfile = true }
+                    Button("Projects and sources…") { editingProjects = true }
+                }
             }
             SwiftUI.Section("Links and Google Docs") {
                 HStack {
@@ -187,6 +198,13 @@ private struct ImportStep: View {
         .formStyle(.grouped)
         .fileImporter(isPresented: $picking, allowedContentTypes: [.pdf, .plainText, UTType(filenameExtension: "docx") ?? .data]) { result in
             if case let .success(url) = result { Task { await store.importSource(url.path) } }
+        }
+        .sheet(isPresented: $editingProfile) { ProfileSheet(store: store) { editingProfile = false } }
+        .sheet(isPresented: $editingProjects) {
+            ProjectsSheet(store: store) {
+                editingProjects = false
+                Task { await store.refreshSetup() }
+            }
         }
     }
 }

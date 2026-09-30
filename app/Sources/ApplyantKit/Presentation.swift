@@ -72,7 +72,7 @@ public enum Section: String, CaseIterable, Identifiable, Sendable {
     public var isBuilt: Bool {
         switch self {
         case .inbox, .readyToReview, .preparing, .interested, .skipped, .applied, .interviews, .offers, .whichApplication,
-             .interview, .search, .agentRuns, .companies, .settings: true
+             .interview, .search, .agentRuns, .companies, .settings, .profile, .projects: true
         default: false
         }
     }
@@ -81,7 +81,6 @@ public enum Section: String, CaseIterable, Identifiable, Sendable {
     public var comesWith: String? {
         switch self {
         case .overview: "the funnel view"
-        case .profile, .projects: "onboarding (phase 16); the CLI has them now"
         default: nil
         }
     }
@@ -102,6 +101,8 @@ public struct Navigation: Equatable, Sendable {
     public var company: Int64?
     /// The reply open in Which application?.
     public var email: Int64?
+    /// The project open in Projects.
+    public var project: Int64?
     public init() {}
 
     public mutating func showInterview(_ target: InterviewTarget) {

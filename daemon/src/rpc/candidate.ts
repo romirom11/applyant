@@ -22,10 +22,12 @@ import {
 } from '../domain/knowledge/profile.ts';
 import {
   createProject,
+  deleteProject,
   listProjects,
   ProjectError,
   type ProjectSummary,
   requireProject,
+  updateProject,
 } from '../domain/knowledge/projects.ts';
 import {
   addSource,
@@ -172,6 +174,8 @@ export function candidateRpcs(
   | 'createProject'
   | 'listProjects'
   | 'getProject'
+  | 'updateProject'
+  | 'deleteProject'
   | 'addSource'
   | 'syncSources'
   | 'listFacts'
@@ -234,6 +238,35 @@ export function candidateRpcs(
           project: projectToPb(summary),
           sources: listSources(c.db, row.id).map(sourceToPb),
         };
+      });
+    },
+
+    updateProject(req) {
+      return guard(() => {
+        const row = updateProject(
+          c.db,
+          req.project,
+          {
+            ...(req.name === undefined ? {} : { name: req.name }),
+            ...(req.summary === undefined ? {} : { summary: req.summary }),
+            ...(req.role === undefined ? {} : { role: req.role }),
+            ...(req.period === undefined ? {} : { period: req.period }),
+            ...(req.stack === undefined ? {} : { stack: req.stack.values }),
+          },
+          c.now(),
+        );
+        const summary = listProjects(c.db).find((p) => p.id === row.id);
+        if (!summary) throw new Error('project vanished');
+        return { project: projectToPb(summary) };
+      });
+    },
+
+    deleteProject(req) {
+      return guard(() => {
+        const res = runInTx(c.db, c.bus, { now: c.now() }, (tx) =>
+          deleteProject(tx.db, req.project),
+        );
+        return { sourcesRemoved: res.sources, factsRemoved: res.facts };
       });
     },
 

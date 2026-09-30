@@ -21,7 +21,10 @@ struct ScriptStep: Decodable {
     /// startInterview · answerInterview · dismissInterview · pauseStrategy · resumeStrategy · runStrategy ·
     /// sourceOff · sourceOn (value: a source key or kind) · planSearch · rebuildRecipe (value: a source
     /// key) · researchCompany (the posting on screen, or `company`; value "refresh" researches again) ·
-    /// connectGmail (value: client id, text: secret) · disconnectMail · wait
+    /// connectGmail (value: client id, text: secret) · disconnectMail · setProfile (field, value) ·
+    /// createProject (value: name) · addKnowledgeSource (value: repo/file/link; `interviewProject`:
+    /// the project, absent = the profile) · newStrategy (value: name, text: queries) ·
+    /// deleteStrategy (`searchStrategy`) · addBoardOrPage (value: URL) · setPreference (field, value) · wait
     var action: String?
     var application: Int64?
     var facts: [Int64]?
@@ -227,6 +230,29 @@ final class ScriptRunner {
                 let c = await store.researchCompany(target, refresh: s.value == "refresh")
                 note("researchCompany: \(c.map { "company \($0.id) \($0.name), researching \($0.researching)" } ?? "failed")")
             }
+        case "setProfile":
+            var form = ProfileForm(entries: store.candidateProfile?.profile ?? [])
+            form[s.field ?? ""] = s.value ?? ""
+            note("setProfile: saved \(await store.saveProfile(form))")
+        case "createProject":
+            note("createProject: \(await store.createProject(s.value ?? "").map(String.init) ?? "refused")")
+        case "addKnowledgeSource":
+            note("addKnowledgeSource: \(await store.addKnowledgeSource(to: s.interviewProject, s.value ?? ""))")
+        case "newStrategy":
+            var form = StrategyForm()
+            form.name = s.value ?? ""
+            form.queries = s.text ?? ""
+            form.paused = true
+            note("newStrategy: \(await store.saveStrategy(form).map(String.init) ?? "refused")")
+        case "deleteStrategy":
+            await store.deleteStrategy(s.searchStrategy ?? 0)
+        case "addBoardOrPage":
+            note("addBoardOrPage: \(await store.addBoardOrPage(s.value ?? "")?.key ?? "refused")")
+        case "setPreference":
+            await store.openPreferences()
+            var form = PreferencesForm(store.searchPreferences ?? SearchPreferences())
+            form[s.field ?? ""] = s.value ?? ""
+            note("setPreference: saved \(await store.savePreferences(form))")
         case "showBrowser": note("showBrowser: Applyant's Chrome brought forward = \(ChromeWindow.bringForward())")
         default: break
         }

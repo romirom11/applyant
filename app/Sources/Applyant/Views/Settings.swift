@@ -9,6 +9,9 @@ import SwiftUI
 struct SettingsView: View {
     @Bindable var store: AppStore
     @State private var captchaKey = ""
+    @State private var editingProfile = false
+    @State private var editingProjects = false
+    @State private var editingPreferences = false
 
     var body: some View {
         Form {
@@ -17,6 +20,25 @@ struct SettingsView: View {
                     Text(OnboardingText.search(store.onboarding)).font(.callout)
                     Spacer()
                     Button("Open the setup…") { Task { await store.openOnboarding() } }
+                }
+            }
+            SwiftUI.Section("Profile") {
+                HStack {
+                    Text(profileLine).font(.callout).lineLimit(2)
+                    Spacer()
+                    Button("Edit profile…") { editingProfile = true }
+                }
+                HStack {
+                    Text("\(store.knowledgeProjects.count) projects").font(.callout)
+                    Spacer()
+                    Button("Projects and sources…") { editingProjects = true }
+                }
+            }
+            SwiftUI.Section("Preferences") {
+                HStack {
+                    Text(PreferencesText.summary(store.searchPreferences)).font(.callout).lineLimit(3)
+                    Spacer()
+                    Button("Edit preferences…") { editingPreferences = true }
                 }
             }
             SwiftUI.Section {
@@ -51,8 +73,31 @@ struct SettingsView: View {
         }
         .formStyle(.grouped)
         .navigationTitle("Settings")
-        .task { await store.openSettings() }
+        .task {
+            await store.openSettings()
+            await store.openProfile()
+            await store.openPreferences()
+        }
+        .sheet(isPresented: $editingProfile) { ProfileSheet(store: store) { editingProfile = false } }
+        .sheet(isPresented: $editingProjects) { ProjectsSheet(store: store) { editingProjects = false } }
+        .sheet(isPresented: $editingPreferences) {
+            PreferencesSheet(store: store) {
+                editingPreferences = false
+                Task { await store.openPreferences() }
+            }
+        }
     }
+
+    private var profileLine: String {
+        let entries = store.candidateProfile?.profile ?? []
+        let value = { (key: String) in entries.first { $0.key == key }?.values.first }
+        return [value("full_name"), value("email"), value("location")].compactMap { $0 }.joined(separator: " · ")
+            .nonEmpty ?? "Name, contacts and the base CV that application forms use"
+    }
+}
+
+extension String {
+    var nonEmpty: String? { isEmpty ? nil : self }
 }
 
 struct PlatformSection: View {

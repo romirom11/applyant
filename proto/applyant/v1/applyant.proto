@@ -53,6 +53,10 @@ service ApplyantService {
   rpc CreateProject(CreateProjectRequest) returns (CreateProjectResponse);
   rpc ListProjects(ListProjectsRequest) returns (ListProjectsResponse);
   rpc GetProject(GetProjectRequest) returns (GetProjectResponse);
+  // UpdateProject renames a project or changes what it says (summary, role, period, stack).
+  rpc UpdateProject(UpdateProjectRequest) returns (UpdateProjectResponse);
+  // DeleteProject removes a project with its sources, facts and interview questions.
+  rpc DeleteProject(DeleteProjectRequest) returns (DeleteProjectResponse);
   // AddSource records a source and enqueues its first sync.
   rpc AddSource(AddSourceRequest) returns (AddSourceResponse);
   // SyncSources enqueues a sync of every matching source.
@@ -862,6 +866,33 @@ message GetProjectResponse {
   repeated Source sources = 2;
 }
 
+message UpdateProjectRequest {
+  // Id, slug or name.
+  string project = 1;
+  optional string name = 2;
+  // Empty clears it.
+  optional string summary = 3;
+  optional string role = 4;
+  optional string period = 5;
+  // Set to replace.
+  optional StringList stack = 6;
+}
+
+message UpdateProjectResponse {
+  Project project = 1;
+}
+
+message DeleteProjectRequest {
+  // Id, slug or name.
+  string project = 1;
+}
+
+message DeleteProjectResponse {
+  // What went with it.
+  int32 sources_removed = 1;
+  int32 facts_removed = 2;
+}
+
 message AddSourceRequest {
   // Project id, slug or name; empty for a profile-level source.
   string project = 1;
@@ -876,7 +907,8 @@ message AddSourceResponse {
 }
 
 message SyncSourcesRequest {
-  // A project ref, a source kind ("file", "url", "github"), "profile", or empty for all.
+  // A project ref, a source kind ("file", "url", "github"), "profile", "source:<id>" (one
+  // source), or empty for all.
   string target = 1;
   // Re-extract even when a source hasn't changed since its last sync.
   bool force = 2;

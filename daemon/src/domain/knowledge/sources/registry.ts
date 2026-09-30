@@ -123,7 +123,7 @@ function enqueueSyncTask(tx: Tx, sourceId: number): boolean {
 }
 
 export interface SyncRequest {
-  /** A project ref, or a source kind ("github"), or empty for every source. */
+  /** A project ref, a source kind ("github"), "profile", "source:<id>", or empty for every source. */
   target: string | null;
   /** Re-extract even when the material hasn't changed. */
   force: boolean;
@@ -143,6 +143,12 @@ export function requestSync(
         where.push(eq(sources.kind, target as SourceKind));
       } else if (target === 'profile') {
         where.push(isNull(sources.projectId));
+      } else if (/^source:\d+$/.test(target)) {
+        const id = Number(target.slice('source:'.length));
+        if (!tx.db.select({ id: sources.id }).from(sources).where(eq(sources.id, id)).get()) {
+          throw new SourceError(`no source ${id}`);
+        }
+        where.push(eq(sources.id, id));
       } else {
         where.push(eq(sources.projectId, requireProject(tx.db, target).id));
       }

@@ -98,6 +98,14 @@ public protocol Applyant_V1_ApplyantServiceClientInterface: Sendable {
     @available(iOS 13, *)
     func `getProject`(request: Applyant_V1_GetProjectRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_GetProjectResponse>
 
+    /// UpdateProject renames a project or changes what it says (summary, role, period, stack).
+    @available(iOS 13, *)
+    func `updateProject`(request: Applyant_V1_UpdateProjectRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_UpdateProjectResponse>
+
+    /// DeleteProject removes a project with its sources, facts and interview questions.
+    @available(iOS 13, *)
+    func `deleteProject`(request: Applyant_V1_DeleteProjectRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_DeleteProjectResponse>
+
     /// AddSource records a source and enqueues its first sync.
     @available(iOS 13, *)
     func `addSource`(request: Applyant_V1_AddSourceRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_AddSourceResponse>
@@ -464,6 +472,16 @@ public final class Applyant_V1_ApplyantServiceClient: Applyant_V1_ApplyantServic
     }
 
     @available(iOS 13, *)
+    public func `updateProject`(request: Applyant_V1_UpdateProjectRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_UpdateProjectResponse> {
+        return await self.client.unary(path: "/applyant.v1.ApplyantService/UpdateProject", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
+    public func `deleteProject`(request: Applyant_V1_DeleteProjectRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_DeleteProjectResponse> {
+        return await self.client.unary(path: "/applyant.v1.ApplyantService/DeleteProject", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
     public func `addSource`(request: Applyant_V1_AddSourceRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_AddSourceResponse> {
         return await self.client.unary(path: "/applyant.v1.ApplyantService/AddSource", idempotencyLevel: .unknown, request: request, headers: headers)
     }
@@ -752,6 +770,8 @@ public final class Applyant_V1_ApplyantServiceClient: Applyant_V1_ApplyantServic
             public static let createProject = Connect.MethodSpec(name: "CreateProject", service: "applyant.v1.ApplyantService", type: .unary)
             public static let listProjects = Connect.MethodSpec(name: "ListProjects", service: "applyant.v1.ApplyantService", type: .unary)
             public static let getProject = Connect.MethodSpec(name: "GetProject", service: "applyant.v1.ApplyantService", type: .unary)
+            public static let updateProject = Connect.MethodSpec(name: "UpdateProject", service: "applyant.v1.ApplyantService", type: .unary)
+            public static let deleteProject = Connect.MethodSpec(name: "DeleteProject", service: "applyant.v1.ApplyantService", type: .unary)
             public static let addSource = Connect.MethodSpec(name: "AddSource", service: "applyant.v1.ApplyantService", type: .unary)
             public static let syncSources = Connect.MethodSpec(name: "SyncSources", service: "applyant.v1.ApplyantService", type: .unary)
             public static let listFacts = Connect.MethodSpec(name: "ListFacts", service: "applyant.v1.ApplyantService", type: .unary)

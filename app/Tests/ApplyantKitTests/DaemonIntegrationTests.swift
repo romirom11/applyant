@@ -166,4 +166,46 @@ struct DaemonIntegrationTests {
         let after = try await api.mailboxSetup()
         #expect(!after.hasMailbox && after.googleClientSecretStored)
     }
+
+    /// Profile, projects, preferences and strategies from the app over the wire (16). No source
+    /// is added and the strategy stays paused, so nothing is read or searched.
+    @Test func setupEditsGoOverTheWire() async throws {
+        let daemon = try RunningDaemon(node: try #require(node24()))
+        defer { daemon.stop() }
+        let api = ConnectDaemonAPI(endpoint: try await daemon.waitForEndpoint())
+
+        try await api.setProfileValue("full_name", value: "Roman Kudin")
+        try await api.setProfileValue("commit_emails", value: "me@example.com, me@work.com")
+        await #expect(throws: APIError.self) { try await api.setProfileValue("email", value: "nope") }
+        let profile = try await api.candidate().profile
+        #expect(profile.first { $0.key == "commit_emails" }?.values == ["me@example.com", "me@work.com"])
+
+        let p = try await api.createProject(name: "Solovei")
+        let renamed = try await api.renameProject(String(p.id), name: "Solovei Voice")
+        #expect(renamed.name == "Solovei Voice" && renamed.slug == p.slug)
+        #expect(try await api.project(p.slug).sources.isEmpty)
+        #expect(try await api.syncSources(String(p.id), force: false) == 0)
+        await #expect(throws: APIError.self) { _ = try await api.syncSources("source:999", force: false) }
+        try await api.deleteProject(String(p.id))
+        #expect(try await api.candidate().projects.isEmpty)
+
+        try await api.setPreference("dealbreakers", value: "outstaffing,onsite")
+        try await api.setPreference("weight.salary", value: "20")
+        let prefs = try await api.getPreferences()
+        #expect(prefs.dealbreakers == ["outstaffing", "onsite"] && prefs.weights["salary"] == 20)
+
+        var form = StrategyForm()
+        form.name = "AI Engineer"
+        form.queries = "ai engineer"
+        form.remote = true
+        form.paused = true
+        let added = try await api.addStrategy(form.addRequest)
+        #expect(added.state == "paused" && added.locations == ["remote"])
+        form.name = "AI / LLM Engineer"
+        form.queries = ""
+        let updated = try await api.updateStrategy(form.updateRequest(added.id))
+        #expect(updated.name == "AI / LLM Engineer" && updated.queries.isEmpty && updated.state == "paused")
+        try await api.deleteStrategy(added.id)
+        #expect(try await api.listSearch().strategies.allSatisfy { $0.id != added.id })
+    }
 }

@@ -396,15 +396,105 @@ final class FakeDaemon: DaemonAPI, @unchecked Sendable {
         preferences[key] = value
     }
     func addKnowledgeSource(project: String?, kind: Applyant_V1_SourceKind, locator: String) async throws {
-        log("addKnowledgeSource \(kind) \(locator)")
+        log("addKnowledgeSource \(project.map { "project \($0) " } ?? "")\(kind) \(locator)")
         knowledgeSources.append(locator)
         setupState?.import.sources += 1
         setupState?.import.syncing += 1
+        nextSourceId += 1
+        let source = KnowledgeSource.with {
+            $0.id = nextSourceId
+            $0.kind = kind
+            $0.locator = locator
+            if let project, let id = Int64(project) { $0.projectID = id }
+        }
+        if let project, let id = Int64(project) {
+            guard let i = projects.firstIndex(where: { $0.id == id }) else { throw APIError("no project \"\(project)\"") }
+            projects[i].sourceCount += 1
+            sourcesByProject[id, default: []].append(source)
+        } else {
+            profileSources.append(source)
+        }
     }
     func setProfileValue(_ key: String, value: String) async throws {
         log("setProfileValue \(key)")
+        if key == "email", !value.isEmpty, !value.contains("@") { throw APIError("\"\(value)\" is not an email address") }
         profileValues[key] = value
-        setupState?.github = .with { $0.connected = true; $0.detail = value }
+        if key == "github_logins" { setupState?.github = .with { $0.connected = true; $0.detail = value } }
+    }
+
+    // App parity with the CLI for setup: profile, projects, preferences, strategies.
+    var projects: [KnowledgeProject] = []
+    var sourcesByProject: [Int64: [KnowledgeSource]] = [:]
+    var profileSources: [KnowledgeSource] = []
+    var nextSourceId: Int64 = 0
+    var prefs = SearchPreferences()
+    var strategyRequests: [String] = []
+    func candidate() async throws -> CandidateProfile {
+        log("candidate")
+        return .with {
+            $0.profile = profileValues.filter { !$0.value.isEmpty }.sorted { $0.key < $1.key }.map { kv in
+                .with { $0.key = kv.key; $0.values = kv.value.components(separatedBy: ", ") }
+            }
+            $0.projects = projects
+            $0.profileSources = profileSources
+        }
+    }
+    func project(_ ref: String) async throws -> (project: KnowledgeProject, sources: [KnowledgeSource]) {
+        log("project \(ref)")
+        guard let p = projects.first(where: { String($0.id) == ref }) else { throw APIError("no project \"\(ref)\"") }
+        return (p, sourcesByProject[p.id] ?? [])
+    }
+    func createProject(name: String) async throws -> KnowledgeProject {
+        log("createProject \(name)")
+        let p = KnowledgeProject.with { $0.id = Int64(projects.count + 1); $0.name = name; $0.slug = name.lowercased() }
+        projects.append(p)
+        return p
+    }
+    func renameProject(_ ref: String, name: String) async throws -> KnowledgeProject {
+        log("renameProject \(ref) \(name)")
+        guard let i = projects.firstIndex(where: { String($0.id) == ref }) else { throw APIError("no project") }
+        projects[i].name = name
+        return projects[i]
+    }
+    func deleteProject(_ ref: String) async throws {
+        log("deleteProject \(ref)")
+        projects.removeAll { String($0.id) == ref }
+        if let id = Int64(ref) { sourcesByProject[id] = nil }
+    }
+    func syncSources(_ target: String, force: Bool) async throws -> Int {
+        log("syncSources \(target)")
+        return 1
+    }
+    func getPreferences() async throws -> SearchPreferences { log("getPreferences"); return prefs }
+    func addStrategy(_ request: Applyant_V1_AddStrategyRequest) async throws -> SearchStrategy {
+        log("addStrategy \(request.name)")
+        let s = SearchStrategy.with {
+            $0.id = Int64(searchList.strategies.count + 1)
+            $0.name = request.name
+            $0.queries = request.queries
+            $0.locations = request.locations
+            $0.sources = request.sources
+            $0.everyMinutes = request.everyMinutes
+            $0.state = request.paused ? "paused" : "active"
+        }
+        searchList.strategies.append(s)
+        return s
+    }
+    func updateStrategy(_ request: Applyant_V1_UpdateStrategyRequest) async throws -> SearchStrategy {
+        log("updateStrategy \(request.strategy)")
+        guard let i = searchList.strategies.firstIndex(where: { String($0.id) == request.strategy }) else {
+            throw APIError("no strategy")
+        }
+        if request.hasName { searchList.strategies[i].name = request.name }
+        if request.hasQueries { searchList.strategies[i].queries = request.queries.values }
+        if request.hasLocations { searchList.strategies[i].locations = request.locations.values }
+        if request.hasEveryMinutes { searchList.strategies[i].everyMinutes = request.everyMinutes }
+        if request.hasState { searchList.strategies[i].state = request.state }
+        return searchList.strategies[i]
+    }
+    func deleteStrategy(_ id: Int64) async throws {
+        log("deleteStrategy \(id)")
+        searchList.strategies.removeAll { $0.id == id }
     }
 
     /// Changes a question everywhere it's listed.

@@ -168,3 +168,70 @@ export function listProjects(conn: Conn): ProjectSummary[] {
     };
   });
 }
+
+export interface ProjectChange {
+  name?: string;
+  /** Empty or null clears it. */
+  summary?: string | null;
+  role?: string | null;
+  period?: string | null;
+  stack?: string[];
+}
+
+/** Renames a project or changes what it says; the slug stays (it's the CLI's handle). */
+export function updateProject(
+  conn: Conn,
+  ref: string,
+  change: ProjectChange,
+  now: Date,
+): ProjectRow {
+  const project = requireProject(conn, ref);
+  const set: Partial<ProjectRow> = {};
+  if (change.name !== undefined) {
+    const name = change.name.trim();
+    if (!name) throw new ProjectError('a project needs a name');
+    const other = conn
+      .select({ id: projects.id })
+      .from(projects)
+      .where(
+        sql`lower(${projects.name}) = ${name.toLowerCase()} and ${projects.id} <> ${project.id}`,
+      )
+      .get();
+    if (other) throw new ProjectError(`a project named "${name}" already exists`);
+    set.name = name;
+  }
+  if (change.summary !== undefined) set.summary = change.summary?.trim() || null;
+  if (change.role !== undefined) set.role = change.role?.trim() || null;
+  if (change.period !== undefined) set.period = change.period?.trim() || null;
+  if (change.stack !== undefined) set.stack = cleanStack(change.stack);
+  if (Object.keys(set).length === 0) return project;
+  return conn
+    .update(projects)
+    .set({ ...set, updatedAt: now })
+    .where(eq(projects.id, project.id))
+    .returning()
+    .get();
+}
+
+/**
+ * Removes a project. Its sources, facts (with their evidence, search index and vectors) and
+ * interview questions go with it through the foreign keys; a sync still queued for one of its
+ * sources finds nothing and ends.
+ */
+export function deleteProject(
+  conn: Conn,
+  ref: string,
+): { project: ProjectRow; sources: number; facts: number } {
+  const project = requireProject(conn, ref);
+  const count = (table: typeof sources | typeof facts) =>
+    Number(
+      conn
+        .select({ n: sql<number>`count(*)` })
+        .from(table)
+        .where(eq(table.projectId, project.id))
+        .get()?.n ?? 0,
+    );
+  const removed = { sources: count(sources), facts: count(facts) };
+  conn.delete(projects).where(eq(projects.id, project.id)).run();
+  return { project, ...removed };
+}
