@@ -87,6 +87,8 @@ public struct Navigation: Equatable, Sendable {
     public var search: SearchSelection?
     /// The run open in the Agent runs section.
     public var run: Int64?
+    /// Agent runs lists the model runs instead of the search runs.
+    public var modelRuns = false
     /// The company open in the Companies section.
     public var company: Int64?
     /// The reply open in Which application?.

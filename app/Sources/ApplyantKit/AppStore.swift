@@ -109,6 +109,12 @@ public final class AppStore {
     public private(set) var facts: [String: [Fact]] = [:]
     /// The names of the stored secrets (Settings → Stored keys; values are never read).
     public private(set) var secretNames: [String] = []
+    /// Model runs, newest first (Agent runs, beside the search runs).
+    public private(set) var agentRuns: [AgentRun] = []
+    /// A posting's company id, for interview prep (the profile itself is in `companyDetails`).
+    public private(set) var postingCompany: [Int64: Int64] = [:]
+    /// The CV template in use (Settings → CV template).
+    public private(set) var cvTemplate: CvTemplateInfo?
     private var onboardingOffered = false
     /// The last failed action, for an alert.
     public var lastError: String?
@@ -217,6 +223,10 @@ public final class AppStore {
             // The setup's Import step counts sources, reading and facts: it follows them live.
             if task.taskKind == "sync_source", [.queued, .done, .failed, .retry].contains(task.type), setup != nil {
                 await refreshSetup()
+            }
+            // Agent runs on screen: a finished task may have run a model.
+            if navigation.section == .agentRuns, [.done, .failed, .retry, .providerPaused].contains(task.type) {
+                await refreshAgentRuns(api)
             }
         case let .posting(p)?:
             await refreshPosting(p.postingID, api)
@@ -1242,6 +1252,109 @@ public final class AppStore {
         await refreshSearch(api)
         navigation.search = .source(source.key)
         return source
+    }
+
+    // MARK: Minor gaps: add posting, model runs, notes and contacts, interview prep, CV template
+
+    /// Inbox → Add posting…: AddPosting, then the postings list again. What the sheet says (a
+    /// refusal is said there, not in the alert); nil for an empty field.
+    public func addPosting(_ input: String) async -> AddPostingOutcome? {
+        let s = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !s.isEmpty else { return nil }
+        guard let url = SourceInput.url(s) else { return .refused("That isn't a web address.") }
+        guard let api else { return .refused("applyantd is not reachable") }
+        do {
+            let (posting, created) = try await api.addPosting(url: url)
+            postings[posting.id] = posting
+            if let list = try? await api.listPostings() {
+                postings = Dictionary(list.map { ($0.id, $0) }, uniquingKeysWith: { _, last in last })
+            }
+            return AddPostingOutcome.from(posting, created: created)
+        } catch {
+            return .refused(error.localizedDescription)
+        }
+    }
+
+    private func refreshAgentRuns(_ api: DaemonAPI) async {
+        if let runs = try? await api.listAgentRuns(limit: 100, role: nil) { agentRuns = runs }
+    }
+
+    /// Agent runs: the model runs, newest first (an older daemon: none, quietly).
+    public func openAgentRuns() async {
+        guard let api else { return }
+        await refreshAgentRuns(api)
+    }
+
+    /// The candidate's notes on an application; false when refused.
+    @discardableResult
+    public func setApplicationNotes(application id: Int64, notes: String) async -> Bool {
+        guard let api, let app = await attempt({ try await api.setApplicationNotes(application: id, notes: notes) }) else { return false }
+        record(app)
+        return true
+    }
+
+    /// Adds a contact (recruiter, hiring manager…); false when the form or the daemon refused.
+    @discardableResult
+    public func addApplicationContact(application id: Int64, _ form: ContactForm) async -> Bool {
+        if let problem = form.problem {
+            lastError = problem
+            return false
+        }
+        guard let api, let app = await attempt({ try await api.addApplicationContact(form.request(id)) }) else { return false }
+        record(app)
+        return true
+    }
+
+    @discardableResult
+    public func deleteApplicationContact(_ contact: Int64) async -> Bool {
+        guard let api, let app = await attempt({ try await api.deleteApplicationContact(contact) }) else { return false }
+        record(app)
+        return true
+    }
+
+    /// Loads the company profile of an application's posting for interview prep (kept current by
+    /// company events from then on). Nothing researched: nothing to load, no error.
+    public func openInterviewPrep(posting id: Int64) async {
+        guard let api, let c = try? await api.company(.posting(id)) else { return }
+        postingCompany[id] = c.id
+        companyDetails[c.id] = c
+    }
+
+    public func interviewPrep(_ app: Application) -> InterviewPrep {
+        let company = postingCompany[app.postingID].flatMap { companyDetails[$0] }
+        return InterviewPrep.build(company: company, application: app)
+    }
+
+    public func openCvTemplate() async {
+        guard let api, let t = await attempt({ try await api.cvTemplate() }) else { return }
+        cvTemplate = t
+    }
+
+    /// Sends a template's files (the app read the folder); false when refused (the reason is shown).
+    @discardableResult
+    public func setCvTemplate(files: [CvTemplateFile], name: String?) async -> Bool {
+        guard let api, let t = await attempt({ try await api.setCvTemplate(files: files, name: name) }) else { return false }
+        cvTemplate = t
+        return true
+    }
+
+    /// Settings → Use a custom template…: reads the picked folder (hidden files skipped, 5 MB at
+    /// most) and sends it, named after the folder.
+    @discardableResult
+    public func useCvTemplate(folder: URL) async -> Bool {
+        let files: [CvTemplateFile]
+        do {
+            files = try CvTemplateText.read(folder: folder)
+        } catch {
+            lastError = error.localizedDescription
+            return false
+        }
+        return await setCvTemplate(files: files, name: folder.lastPathComponent)
+    }
+
+    public func resetCvTemplate() async {
+        guard let api, let t = await attempt({ try await api.resetCvTemplate() }) else { return }
+        cvTemplate = t
     }
 
     private func attempt<T>(_ call: () async throws -> T) async -> T? {

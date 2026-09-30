@@ -164,6 +164,31 @@ export function registerJobs(program: Command, client: () => ApplyantClient): vo
     });
 
   jobs
+    .command('search <query...>')
+    .description('postings whose title, company, URL or text hold every word, newest first')
+    .option('--by-score', 'highest score first')
+    .option('--json', 'print JSON')
+    .action(async (words: string[], opts: { byScore?: boolean; json?: boolean }) => {
+      const query = words.join(' ').trim();
+      const res = await client().listPostings({ query, byScore: !!opts.byScore });
+      if (opts.json) return json(res.postings.map(postingJson));
+      if (res.postings.length === 0) return out(`No postings match "${query}".`);
+      out(
+        table(
+          ['ID', 'SCORE', 'STAGE', 'COMPANY', 'TITLE', 'URL'],
+          res.postings.map((p) => [
+            String(p.id),
+            p.score === undefined ? '-' : String(p.score),
+            stageName(p.stage),
+            truncate(p.company ?? '', 24),
+            truncate(p.title ?? '', 44),
+            p.canonicalUrl,
+          ]),
+        ),
+      );
+    });
+
+  jobs
     .command('list')
     .description('list postings, newest first (or by score)')
     .option(

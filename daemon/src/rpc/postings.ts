@@ -70,7 +70,7 @@ export function postingRpcs(
     },
 
     listPostings(req) {
-      const rows = listPostings(c.db, stageFromPb(req.stage), req.byScore);
+      const rows = listPostings(c.db, stageFromPb(req.stage), req.byScore, req.query);
       const apps = applicationsByPosting(c.db);
       return { postings: rows.map((row) => postingToPb(row, [], null, apps.get(row.id) ?? null)) };
     },

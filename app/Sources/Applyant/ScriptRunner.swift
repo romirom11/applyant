@@ -26,7 +26,10 @@ struct ScriptStep: Decodable {
     /// the project, absent = the profile) · deleteSource (value: a source id) · newStrategy (value: name, text: queries) ·
     /// deleteStrategy (`searchStrategy`) · addBoardOrPage (value: URL) · setPreference (field, value) ·
     /// setStage (value: applied | interview | offer | rejected | withdrawn) · rescore (the posting on
-    /// screen, or every one with value "all") · overviewWindow (value: 7 | 30 | all) · wait
+    /// screen, or every one with value "all") · overviewWindow (value: 7 | 30 | all) · addPosting (value:
+    /// URL; renders the Add posting sheet) · openAgentRuns (model runs; value "search": the search
+    /// runs) · setApplicationNotes (text) · addApplicationContact (contact) · deleteApplicationContact
+    /// (value: contact id) · useCvTemplate (value: a folder) · resetCvTemplate · openCvTemplate · wait
     var action: String?
     var application: Int64?
     var facts: [Int64]?
@@ -55,6 +58,8 @@ struct ScriptStep: Decodable {
     /// The Interview section: open a project's thread or a question's.
     var interviewProject: Int64?
     var interviewQuestion: Int64?
+    /// addApplicationContact: name, role, email, linkedin, note.
+    var contact: [String: String]?
     var width: Double?
     var height: Double?
     /// The setup window instead of the main one, on this step (connections · import ·
@@ -328,6 +333,35 @@ final class ScriptRunner {
         case "deleteSecret":
             await store.deleteSecret(s.value ?? "")
             note("deleteSecret: \(store.secretNames.joined(separator: ", "))")
+        // Minor gaps: Add posting (the sheet is rendered as the window's content, like the setup;
+        // `onboarding: "main"` goes back), model runs, notes and contacts, the CV template.
+        case "addPosting":
+            let outcome = await store.addPosting(s.value ?? "")
+            note("addPosting: \(outcome?.line ?? "nothing to add")")
+            window?.contentView = NSHostingView(rootView: AddPostingSheet(store: store, url: s.value ?? "", outcome: outcome) {})
+            window?.setContentSize(NSSize(width: 480, height: 230))
+        case "openAgentRuns":
+            store.navigation.section = .agentRuns
+            store.navigation.modelRuns = s.value != "search"
+            await store.openAgentRuns()
+            note("openAgentRuns: \(store.agentRuns.count) model runs: \(store.agentRuns.prefix(5).map { "\($0.role) \($0.provider) \($0.outcome)" })")
+        case "setApplicationNotes":
+            note("setApplicationNotes: \(await store.setApplicationNotes(application: app, notes: s.text ?? ""))")
+        case "addApplicationContact":
+            let c = s.contact ?? [:]
+            let form = ContactForm(name: c["name"] ?? "", role: c["role"] ?? "", email: c["email"] ?? "", linkedin: c["linkedin"] ?? "", note: c["note"] ?? "")
+            note("addApplicationContact: \(await store.addApplicationContact(application: app, form))")
+        case "deleteApplicationContact":
+            note("deleteApplicationContact: \(await store.deleteApplicationContact(Int64(s.value ?? "") ?? 0))")
+        case "useCvTemplate":
+            let ok = await store.useCvTemplate(folder: URL(fileURLWithPath: s.value ?? ""))
+            note("useCvTemplate: \(ok) \(store.cvTemplate.map { CvTemplateText.title($0) + " · " + CvTemplateText.files($0) } ?? "")")
+        case "resetCvTemplate":
+            await store.resetCvTemplate()
+            note("resetCvTemplate: \(store.cvTemplate.map(CvTemplateText.title) ?? "?")")
+        case "openCvTemplate":
+            await store.openCvTemplate()
+            note("cvTemplate: \(store.cvTemplate.map { CvTemplateText.title($0) + " · " + $0.dir } ?? "?")")
         default: break
         }
     }

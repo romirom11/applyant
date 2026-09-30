@@ -120,7 +120,7 @@ struct MailboxConnectSheet: View {
                     Link("Google Cloud credentials", destination: MailText.googleCredentialsURL)
                     Link("Google's steps", destination: MailText.googleGuideURL)
                 }
-                Text("One consent covers Gmail, Calendar (interview events) and Drive (your Docs). Google warns the client is unverified: choose Advanced → continue.")
+                Text("One consent covers Gmail and Calendar (interview events). Google warns the client is unverified: choose Advanced → continue.")
             }
             .font(.caption).foregroundStyle(.secondary)
         }

@@ -41,6 +41,7 @@ struct SettingsView: View {
                     Button("Edit preferences…") { editingPreferences = true }
                 }
             }
+            CvTemplateSection(store: store)
             SwiftUI.Section {
                 MailboxRows(store: store)
             } header: {

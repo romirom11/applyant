@@ -21,7 +21,12 @@ export interface CvTemplate {
 
 /** The candidate's template when `dir` has one, else the bundled "Clean". */
 export function loadTemplate(dir: string | null): CvTemplate {
-  const root = dir && existsSync(join(dir, 'index.html')) ? dir : BUNDLED_TEMPLATE;
+  // A custom folder without a usable index.html falls back to "Clean" (Settings says why).
+  const usable =
+    dir &&
+    existsSync(join(dir, 'index.html')) &&
+    readFileSync(join(dir, 'index.html'), 'utf8').includes('{{cv}}');
+  const root = usable ? dir : BUNDLED_TEMPLATE;
   const html = readFileSync(join(root, 'index.html'), 'utf8');
   if (!html.includes('{{cv}}')) throw new Error(`${join(root, 'index.html')} has no {{cv}}`);
   const cssPath = join(root, 'style.css');

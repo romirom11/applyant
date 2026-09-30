@@ -9,10 +9,12 @@ import type { TelegramService } from '../integrations/gramjs.ts';
 import type { MailService } from '../integrations/mail-service.ts';
 import type { Secrets } from '../secrets/secrets.ts';
 import type { Logger } from '../util/log.ts';
+import { agentRunRpcs } from './agent-runs.ts';
 import { applicationRpcs } from './applications.ts';
 import { candidateRpcs } from './candidate.ts';
 import { companyRpcs } from './companies.ts';
 import { configRpcs } from './config.ts';
+import { cvTemplateRpcs } from './cv-template.ts';
 import { interviewRpcs } from './interview.ts';
 import { mailRpcs } from './mail.ts';
 import { overviewRpcs } from './overview.ts';
@@ -33,6 +35,8 @@ export interface RpcServerOptions extends RpcContext {
   platforms?: PlatformServices | null;
   /** The candidate's Telegram account (phase 15). */
   telegram?: TelegramService | null;
+  /** $APPLYANT_HOME/cv-template/ (Settings → CV template); null: only the bundled one. */
+  cvTemplateDir?: string | null;
   token: string;
   host: string;
   port: number;
@@ -92,6 +96,8 @@ export async function startRpcServer(o: RpcServerOptions): Promise<RpcServer> {
         ...telegramRpcs(o.telegram ?? null),
         ...configRpcs(o),
         ...overviewRpcs(o),
+        ...agentRunRpcs(o),
+        ...cvTemplateRpcs(o.cvTemplateDir ?? null),
         ...secretRpcs(o.secrets),
         ...setupRpcs({ ...o.setup, db: o.db, bus: o.bus, now: o.now }),
       }),

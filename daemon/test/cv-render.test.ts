@@ -146,6 +146,8 @@ describe('tailored CV rendering', () => {
     // No template there: the bundled one.
     expect(loadTemplate(join(dir, 'nothing-here')).html).toContain('{{cv}}');
     writeFileSync(join(mine, 'index.html'), '<html><body>no slot</body></html>');
-    expect(() => loadTemplate(mine)).toThrow(/has no \{\{cv\}\}/);
+    // A custom one without {{cv}} falls back to the bundled one (Settings → CV template says why).
+    expect(loadTemplate(mine).html).toContain('{{cv}}');
+    expect(loadTemplate(mine).html).not.toContain('no slot');
   });
 });

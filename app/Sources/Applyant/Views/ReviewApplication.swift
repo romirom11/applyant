@@ -33,9 +33,15 @@ struct ReviewApplication: View {
                                 if !app.emails.isEmpty { ApplicationReplies(app: app) }
                                 if app.hasNote && !app.hasHandOff && app.stage != .needsCandidate { note(app.note) }
                                 needsYou(app)
+                                if InterviewPrep.applies(app) { InterviewPrepCard(store: store, app: app) }
+                                // Sent: notes and contacts matter more than the answers; before
+                                // that, they follow the review.
+                                let sent = StageRules.isSent(app.stage)
+                                if sent { notesAndContacts(app) }
                                 standardFields(app)
                                 if app.hasCv { CvCard(store: store, app: app) }
                                 questions(app)
+                                if !sent { notesAndContacts(app) }
                                 if !side {
                                     Divider()
                                     EvidencePanel(store: store, app: app, answer: selected(app), scrolls: false)
@@ -122,6 +128,12 @@ struct ReviewApplication: View {
         } message: {
             Text("Your edits are redrafted too; your per-application values stay.")
         }
+    }
+
+    @ViewBuilder
+    private func notesAndContacts(_ app: Application) -> some View {
+        NotesCard(store: store, app: app)
+        ContactsCard(store: store, app: app)
     }
 
     private func note(_ text: String) -> some View {

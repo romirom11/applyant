@@ -107,7 +107,7 @@ public enum SecretsText {
         case "capmonster": "Captcha solver (CapMonster)"
         case "jev": "Jev key"
         case "google.client_secret": "Google client secret"
-        case "google.oauth": "Google sign-in (mailbox, Calendar, Drive)"
+        case "google.oauth": "Google sign-in (mailbox, Calendar)"
         case "mail.password": "Mailbox password"
         case "telegram.session": "Telegram session"
         case "telegram.account": "Telegram account"

@@ -46,7 +46,7 @@ import Testing
         #expect(KnowledgeText.kindName(drive) == "Drive folder")
         #expect(KnowledgeText.title(drive) == "1AbC")
         #expect(KnowledgeText.kindName(.with { $0.kind = .file; $0.locator = "/Users/me/cv.pdf" }) == "File")
-        #expect(KnowledgeText.kindName(.with { $0.kind = .drive; $0.locator = "https://docs.google.com/document/d/1Ab" }) == "Google Drive")
+        #expect(KnowledgeText.kindName(.with { $0.kind = .drive; $0.locator = "https://docs.google.com/document/d/1Ab" }) == "Google Docs")
         #expect(KnowledgeText.kindName(.drive, folder: true) == "Drive folder")
         #expect(KnowledgeText.kindName(.github, folder: true) == "GitHub")
 

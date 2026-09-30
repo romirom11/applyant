@@ -3,6 +3,7 @@ import { create } from '@bufbuild/protobuf';
 import { timestampFromDate } from '@bufbuild/protobuf/wkt';
 import type { ElementRef, FormRead } from '../browser/form-types.ts';
 import type {
+  ApplicationContactRow,
   ApplicationRow,
   ApplicationStage,
   EventRow,
@@ -15,6 +16,8 @@ import { effectiveExtraction } from '../domain/scoring/structured.ts';
 import type { CitedFact, PostingSourceView } from '../domain/search/postings.ts';
 import {
   type Application,
+  type ApplicationContact,
+  ApplicationContactSchema,
   type ApplicationForm,
   ApplicationFormSchema,
   ApplicationSchema,
@@ -110,6 +113,18 @@ export function appStageFromPb(stage: PbAppStage): ApplicationStage | undefined 
 }
 
 /** `full` adds every field and answer (GetApplication and the review RPCs). */
+export function contactToPb(r: ApplicationContactRow): ApplicationContact {
+  return create(ApplicationContactSchema, {
+    id: BigInt(r.id),
+    name: r.name ?? undefined,
+    role: r.role ?? undefined,
+    email: r.email ?? undefined,
+    linkedin: r.linkedin ?? undefined,
+    note: r.note ?? undefined,
+    createdAt: timestampFromDate(r.createdAt),
+  });
+}
+
 export function applicationToPb(view: ApplicationView, full = true): Application {
   const { app, posting } = view;
   return create(ApplicationSchema, {
@@ -118,6 +133,7 @@ export function applicationToPb(view: ApplicationView, full = true): Application
     stage: appStageToPb(app.stage),
     channel: app.channel,
     note: app.note ?? undefined,
+    notes: app.notes ?? undefined,
     title: posting.title ?? undefined,
     company: posting.company ?? undefined,
     score: posting.score ?? undefined,

@@ -1,6 +1,10 @@
+import { readdirSync, readFileSync } from 'node:fs';
+import { join, relative, resolve } from 'node:path';
 import { timestampDate } from '@bufbuild/protobuf/wkt';
 import {
+  type AgentRun,
   ApplicationStage,
+  type CvTemplateInfo,
   type ElementRef,
   type Event,
   type Posting,
@@ -272,4 +276,71 @@ export function table(header: string[], rows: string[][]): string {
 
 export function truncate(text: string, max: number): string {
   return text.length <= max ? text : `${text.slice(0, max - 1)}…`;
+}
+
+/** One model run: `2026-09-30 10:04 scorer · claude/sonnet · 1.2k in · 300 out · 35 s · ok · Backend at Helix`. */
+export function agentRunLine(r: AgentRun): string {
+  const k = (n: bigint | undefined) =>
+    n === undefined ? '?' : n >= 1000n ? `${(Number(n) / 1000).toFixed(1)}k` : String(n);
+  const ms = Number(r.durationMs);
+  const dur = ms >= 60_000 ? `${(ms / 60_000).toFixed(1)} min` : `${(ms / 1000).toFixed(1)} s`;
+  const when = r.startedAt
+    ? timestampDate(r.startedAt).toISOString().slice(0, 16).replace('T', ' ')
+    : '?';
+  const what =
+    r.entityLabel ??
+    (r.entityKind && r.entityId !== undefined ? `${r.entityKind} ${r.entityId}` : '');
+  return [
+    `${when} ${r.role}`,
+    `${r.provider}${r.model ? `/${r.model}` : ''}`,
+    `${k(r.inputTokens)} in · ${k(r.outputTokens)} out`,
+    dur,
+    r.outcome === 'ok' ? 'ok' : `${r.outcome}${r.error ? ` (${r.error.slice(0, 80)})` : ''}`,
+    what,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+}
+
+export function agentRunJson(r: AgentRun): unknown {
+  return {
+    id: Number(r.id),
+    role: r.role,
+    provider: r.provider,
+    model: r.model ?? null,
+    startedAt: r.startedAt ? timestampDate(r.startedAt).toISOString() : null,
+    durationMs: Number(r.durationMs),
+    inputTokens: r.inputTokens === undefined ? null : Number(r.inputTokens),
+    outputTokens: r.outputTokens === undefined ? null : Number(r.outputTokens),
+    costUsd: r.costUsd ?? null,
+    outcome: r.outcome,
+    error: r.error ?? null,
+    task: r.taskKind ? { id: Number(r.taskId), kind: r.taskKind } : null,
+    entity: r.entityKind
+      ? { kind: r.entityKind, id: Number(r.entityId), label: r.entityLabel ?? null }
+      : null,
+  };
+}
+
+export function cvTemplateText(t: CvTemplateInfo | undefined): string {
+  if (!t) return 'The daemon sent no template.';
+  return [
+    `${t.name} · ${t.custom ? 'custom' : 'default'} · ${t.dir}`,
+    ...t.files.map((f) => `  ${f}`),
+    ...(t.problem ? [t.problem] : []),
+  ].join('\n');
+}
+
+/** A template folder's files (dotfiles left out), for SetCvTemplate. */
+export function readTemplateDir(dir: string): Array<{ path: string; content: Uint8Array }> {
+  const root = resolve(dir);
+  const walk = (d: string): Array<{ path: string; content: Uint8Array }> =>
+    readdirSync(d, { withFileTypes: true })
+      .filter((e) => !e.name.startsWith('.'))
+      .flatMap((e) =>
+        e.isDirectory()
+          ? walk(join(d, e.name))
+          : [{ path: relative(root, join(d, e.name)), content: readFileSync(join(d, e.name)) }],
+      );
+  return walk(root);
 }

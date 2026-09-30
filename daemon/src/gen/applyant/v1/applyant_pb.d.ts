@@ -618,6 +618,14 @@ export declare type ListPostingsRequest = Message<"applyant.v1.ListPostingsReque
    * @generated from field: bool by_score = 2;
    */
   byScore: boolean;
+
+  /**
+   * Only postings whose title, company, URL or text contain every word (case-
+   * insensitive).
+   *
+   * @generated from field: optional string query = 3;
+   */
+  query?: string | undefined;
 };
 
 /**
@@ -3714,6 +3722,21 @@ export declare type Application = Message<"applyant.v1.Application"> & {
    * @generated from field: bool apply_form_switchable = 26;
    */
   applyFormSwitchable: boolean;
+
+  /**
+   * The candidate's own notes (SetApplicationNotes).
+   *
+   * @generated from field: optional string notes = 27;
+   */
+  notes?: string | undefined;
+
+  /**
+   * Company contacts (recruiter, hiring manager…), oldest first. Only filled by GetApplication
+   * (and the notes/contact RPCs).
+   *
+   * @generated from field: repeated applyant.v1.ApplicationContact contacts = 28;
+   */
+  contacts: ApplicationContact[];
 };
 
 /**
@@ -3721,6 +3744,499 @@ export declare type Application = Message<"applyant.v1.Application"> & {
  * Use `create(ApplicationSchema)` to create a new message.
  */
 export declare const ApplicationSchema: GenMessage<Application>;
+
+/**
+ * @generated from message applyant.v1.ApplicationContact
+ */
+export declare type ApplicationContact = Message<"applyant.v1.ApplicationContact"> & {
+  /**
+   * @generated from field: int64 id = 1;
+   */
+  id: bigint;
+
+  /**
+   * @generated from field: optional string name = 2;
+   */
+  name?: string | undefined;
+
+  /**
+   * recruiter · hiring manager · … (free text)
+   *
+   * @generated from field: optional string role = 3;
+   */
+  role?: string | undefined;
+
+  /**
+   * @generated from field: optional string email = 4;
+   */
+  email?: string | undefined;
+
+  /**
+   * @generated from field: optional string linkedin = 5;
+   */
+  linkedin?: string | undefined;
+
+  /**
+   * @generated from field: optional string note = 6;
+   */
+  note?: string | undefined;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp created_at = 7;
+   */
+  createdAt?: Timestamp | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.ApplicationContact.
+ * Use `create(ApplicationContactSchema)` to create a new message.
+ */
+export declare const ApplicationContactSchema: GenMessage<ApplicationContact>;
+
+/**
+ * @generated from message applyant.v1.SetApplicationNotesRequest
+ */
+export declare type SetApplicationNotesRequest = Message<"applyant.v1.SetApplicationNotesRequest"> & {
+  /**
+   * @generated from field: int64 application_id = 1;
+   */
+  applicationId: bigint;
+
+  /**
+   * @generated from field: string notes = 2;
+   */
+  notes: string;
+};
+
+/**
+ * Describes the message applyant.v1.SetApplicationNotesRequest.
+ * Use `create(SetApplicationNotesRequestSchema)` to create a new message.
+ */
+export declare const SetApplicationNotesRequestSchema: GenMessage<SetApplicationNotesRequest>;
+
+/**
+ * @generated from message applyant.v1.SetApplicationNotesResponse
+ */
+export declare type SetApplicationNotesResponse = Message<"applyant.v1.SetApplicationNotesResponse"> & {
+  /**
+   * @generated from field: applyant.v1.Application application = 1;
+   */
+  application?: Application | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.SetApplicationNotesResponse.
+ * Use `create(SetApplicationNotesResponseSchema)` to create a new message.
+ */
+export declare const SetApplicationNotesResponseSchema: GenMessage<SetApplicationNotesResponse>;
+
+/**
+ * @generated from message applyant.v1.AddApplicationContactRequest
+ */
+export declare type AddApplicationContactRequest = Message<"applyant.v1.AddApplicationContactRequest"> & {
+  /**
+   * @generated from field: int64 application_id = 1;
+   */
+  applicationId: bigint;
+
+  /**
+   * @generated from field: optional string name = 2;
+   */
+  name?: string | undefined;
+
+  /**
+   * @generated from field: optional string role = 3;
+   */
+  role?: string | undefined;
+
+  /**
+   * @generated from field: optional string email = 4;
+   */
+  email?: string | undefined;
+
+  /**
+   * @generated from field: optional string linkedin = 5;
+   */
+  linkedin?: string | undefined;
+
+  /**
+   * @generated from field: optional string note = 6;
+   */
+  note?: string | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.AddApplicationContactRequest.
+ * Use `create(AddApplicationContactRequestSchema)` to create a new message.
+ */
+export declare const AddApplicationContactRequestSchema: GenMessage<AddApplicationContactRequest>;
+
+/**
+ * @generated from message applyant.v1.AddApplicationContactResponse
+ */
+export declare type AddApplicationContactResponse = Message<"applyant.v1.AddApplicationContactResponse"> & {
+  /**
+   * @generated from field: applyant.v1.Application application = 1;
+   */
+  application?: Application | undefined;
+
+  /**
+   * @generated from field: applyant.v1.ApplicationContact contact = 2;
+   */
+  contact?: ApplicationContact | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.AddApplicationContactResponse.
+ * Use `create(AddApplicationContactResponseSchema)` to create a new message.
+ */
+export declare const AddApplicationContactResponseSchema: GenMessage<AddApplicationContactResponse>;
+
+/**
+ * @generated from message applyant.v1.DeleteApplicationContactRequest
+ */
+export declare type DeleteApplicationContactRequest = Message<"applyant.v1.DeleteApplicationContactRequest"> & {
+  /**
+   * @generated from field: int64 contact_id = 1;
+   */
+  contactId: bigint;
+};
+
+/**
+ * Describes the message applyant.v1.DeleteApplicationContactRequest.
+ * Use `create(DeleteApplicationContactRequestSchema)` to create a new message.
+ */
+export declare const DeleteApplicationContactRequestSchema: GenMessage<DeleteApplicationContactRequest>;
+
+/**
+ * @generated from message applyant.v1.DeleteApplicationContactResponse
+ */
+export declare type DeleteApplicationContactResponse = Message<"applyant.v1.DeleteApplicationContactResponse"> & {
+  /**
+   * @generated from field: applyant.v1.Application application = 1;
+   */
+  application?: Application | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.DeleteApplicationContactResponse.
+ * Use `create(DeleteApplicationContactResponseSchema)` to create a new message.
+ */
+export declare const DeleteApplicationContactResponseSchema: GenMessage<DeleteApplicationContactResponse>;
+
+/**
+ * @generated from message applyant.v1.AgentRun
+ */
+export declare type AgentRun = Message<"applyant.v1.AgentRun"> & {
+  /**
+   * @generated from field: int64 id = 1;
+   */
+  id: bigint;
+
+  /**
+   * The model role: verifier · scorer · application_writer · researcher · …
+   *
+   * @generated from field: string role = 2;
+   */
+  role: string;
+
+  /**
+   * claude · codex · apple
+   *
+   * @generated from field: string provider = 3;
+   */
+  provider: string;
+
+  /**
+   * @generated from field: optional string model = 4;
+   */
+  model?: string | undefined;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp started_at = 5;
+   */
+  startedAt?: Timestamp | undefined;
+
+  /**
+   * @generated from field: int64 duration_ms = 6;
+   */
+  durationMs: bigint;
+
+  /**
+   * @generated from field: optional int64 input_tokens = 7;
+   */
+  inputTokens?: bigint | undefined;
+
+  /**
+   * @generated from field: optional int64 output_tokens = 8;
+   */
+  outputTokens?: bigint | undefined;
+
+  /**
+   * @generated from field: optional double cost_usd = 9;
+   */
+  costUsd?: number | undefined;
+
+  /**
+   * ok · limit · invalid_output · error · aborted
+   *
+   * @generated from field: string outcome = 10;
+   */
+  outcome: string;
+
+  /**
+   * @generated from field: optional string error = 11;
+   */
+  error?: string | undefined;
+
+  /**
+   * The task it ran in, and the entity that task was for.
+   *
+   * @generated from field: optional int64 task_id = 12;
+   */
+  taskId?: bigint | undefined;
+
+  /**
+   * @generated from field: optional string task_kind = 13;
+   */
+  taskKind?: string | undefined;
+
+  /**
+   * posting · application · company · source · …
+   *
+   * @generated from field: optional string entity_kind = 14;
+   */
+  entityKind?: string | undefined;
+
+  /**
+   * @generated from field: optional int64 entity_id = 15;
+   */
+  entityId?: bigint | undefined;
+
+  /**
+   * What the entity is, when it has a name: "Backend Engineer at Helix", "Helix", "cv.pdf".
+   *
+   * @generated from field: optional string entity_label = 16;
+   */
+  entityLabel?: string | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.AgentRun.
+ * Use `create(AgentRunSchema)` to create a new message.
+ */
+export declare const AgentRunSchema: GenMessage<AgentRun>;
+
+/**
+ * @generated from message applyant.v1.ListAgentRunsRequest
+ */
+export declare type ListAgentRunsRequest = Message<"applyant.v1.ListAgentRunsRequest"> & {
+  /**
+   * Default 100, at most 500.
+   *
+   * @generated from field: int32 limit = 1;
+   */
+  limit: number;
+
+  /**
+   * Only this role.
+   *
+   * @generated from field: optional string role = 2;
+   */
+  role?: string | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.ListAgentRunsRequest.
+ * Use `create(ListAgentRunsRequestSchema)` to create a new message.
+ */
+export declare const ListAgentRunsRequestSchema: GenMessage<ListAgentRunsRequest>;
+
+/**
+ * @generated from message applyant.v1.ListAgentRunsResponse
+ */
+export declare type ListAgentRunsResponse = Message<"applyant.v1.ListAgentRunsResponse"> & {
+  /**
+   * @generated from field: repeated applyant.v1.AgentRun runs = 1;
+   */
+  runs: AgentRun[];
+};
+
+/**
+ * Describes the message applyant.v1.ListAgentRunsResponse.
+ * Use `create(ListAgentRunsResponseSchema)` to create a new message.
+ */
+export declare const ListAgentRunsResponseSchema: GenMessage<ListAgentRunsResponse>;
+
+/**
+ * @generated from message applyant.v1.GetCvTemplateRequest
+ */
+export declare type GetCvTemplateRequest = Message<"applyant.v1.GetCvTemplateRequest"> & {
+};
+
+/**
+ * Describes the message applyant.v1.GetCvTemplateRequest.
+ * Use `create(GetCvTemplateRequestSchema)` to create a new message.
+ */
+export declare const GetCvTemplateRequestSchema: GenMessage<GetCvTemplateRequest>;
+
+/**
+ * @generated from message applyant.v1.CvTemplateInfo
+ */
+export declare type CvTemplateInfo = Message<"applyant.v1.CvTemplateInfo"> & {
+  /**
+   * The candidate's own template is in use (else the bundled "Clean").
+   *
+   * @generated from field: bool custom = 1;
+   */
+  custom: boolean;
+
+  /**
+   * "Clean" for the bundled one, else the folder's name as it was copied in (or "cv-template").
+   *
+   * @generated from field: string name = 2;
+   */
+  name: string;
+
+  /**
+   * Where it lives: $APPLYANT_HOME/cv-template/ or the bundled folder.
+   *
+   * @generated from field: string dir = 3;
+   */
+  dir: string;
+
+  /**
+   * Its files, relative to dir.
+   *
+   * @generated from field: repeated string files = 4;
+   */
+  files: string[];
+
+  /**
+   * Set when a custom folder exists but can't be used (no index.html, no {{cv}}): the bundled
+   * template is used instead and this says why.
+   *
+   * @generated from field: optional string problem = 5;
+   */
+  problem?: string | undefined;
+
+  /**
+   * @generated from field: optional google.protobuf.Timestamp installed_at = 6;
+   */
+  installedAt?: Timestamp | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.CvTemplateInfo.
+ * Use `create(CvTemplateInfoSchema)` to create a new message.
+ */
+export declare const CvTemplateInfoSchema: GenMessage<CvTemplateInfo>;
+
+/**
+ * @generated from message applyant.v1.GetCvTemplateResponse
+ */
+export declare type GetCvTemplateResponse = Message<"applyant.v1.GetCvTemplateResponse"> & {
+  /**
+   * @generated from field: applyant.v1.CvTemplateInfo template = 1;
+   */
+  template?: CvTemplateInfo | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.GetCvTemplateResponse.
+ * Use `create(GetCvTemplateResponseSchema)` to create a new message.
+ */
+export declare const GetCvTemplateResponseSchema: GenMessage<GetCvTemplateResponse>;
+
+/**
+ * @generated from message applyant.v1.CvTemplateFile
+ */
+export declare type CvTemplateFile = Message<"applyant.v1.CvTemplateFile"> & {
+  /**
+   * Relative path, e.g. index.html, style.css, fonts/Inter.woff2 (no .., not absolute).
+   *
+   * @generated from field: string path = 1;
+   */
+  path: string;
+
+  /**
+   * @generated from field: bytes content = 2;
+   */
+  content: Uint8Array;
+};
+
+/**
+ * Describes the message applyant.v1.CvTemplateFile.
+ * Use `create(CvTemplateFileSchema)` to create a new message.
+ */
+export declare const CvTemplateFileSchema: GenMessage<CvTemplateFile>;
+
+/**
+ * @generated from message applyant.v1.SetCvTemplateRequest
+ */
+export declare type SetCvTemplateRequest = Message<"applyant.v1.SetCvTemplateRequest"> & {
+  /**
+   * @generated from field: repeated applyant.v1.CvTemplateFile files = 1;
+   */
+  files: CvTemplateFile[];
+
+  /**
+   * The picked folder's name, shown as the template's name.
+   *
+   * @generated from field: optional string name = 2;
+   */
+  name?: string | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.SetCvTemplateRequest.
+ * Use `create(SetCvTemplateRequestSchema)` to create a new message.
+ */
+export declare const SetCvTemplateRequestSchema: GenMessage<SetCvTemplateRequest>;
+
+/**
+ * @generated from message applyant.v1.SetCvTemplateResponse
+ */
+export declare type SetCvTemplateResponse = Message<"applyant.v1.SetCvTemplateResponse"> & {
+  /**
+   * @generated from field: applyant.v1.CvTemplateInfo template = 1;
+   */
+  template?: CvTemplateInfo | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.SetCvTemplateResponse.
+ * Use `create(SetCvTemplateResponseSchema)` to create a new message.
+ */
+export declare const SetCvTemplateResponseSchema: GenMessage<SetCvTemplateResponse>;
+
+/**
+ * @generated from message applyant.v1.ResetCvTemplateRequest
+ */
+export declare type ResetCvTemplateRequest = Message<"applyant.v1.ResetCvTemplateRequest"> & {
+};
+
+/**
+ * Describes the message applyant.v1.ResetCvTemplateRequest.
+ * Use `create(ResetCvTemplateRequestSchema)` to create a new message.
+ */
+export declare const ResetCvTemplateRequestSchema: GenMessage<ResetCvTemplateRequest>;
+
+/**
+ * @generated from message applyant.v1.ResetCvTemplateResponse
+ */
+export declare type ResetCvTemplateResponse = Message<"applyant.v1.ResetCvTemplateResponse"> & {
+  /**
+   * @generated from field: applyant.v1.CvTemplateInfo template = 1;
+   */
+  template?: CvTemplateInfo | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.ResetCvTemplateResponse.
+ * Use `create(ResetCvTemplateResponseSchema)` to create a new message.
+ */
+export declare const ResetCvTemplateResponseSchema: GenMessage<ResetCvTemplateResponse>;
 
 /**
  * @generated from message applyant.v1.SetApplyFormRequest
@@ -8258,6 +8774,78 @@ export declare const ApplyantService: GenService<{
     methodKind: "unary";
     input: typeof SetApplicationStageRequestSchema;
     output: typeof SetApplicationStageResponseSchema;
+  },
+  /**
+   * The candidate's own notes on an application (free text; empty clears them).
+   *
+   * @generated from rpc applyant.v1.ApplyantService.SetApplicationNotes
+   */
+  setApplicationNotes: {
+    methodKind: "unary";
+    input: typeof SetApplicationNotesRequestSchema;
+    output: typeof SetApplicationNotesResponseSchema;
+  },
+  /**
+   * A company contact on an application: a recruiter, a hiring manager (name, role, email,
+   * LinkedIn, a note). Needs at least a name, an email or a LinkedIn link.
+   *
+   * @generated from rpc applyant.v1.ApplyantService.AddApplicationContact
+   */
+  addApplicationContact: {
+    methodKind: "unary";
+    input: typeof AddApplicationContactRequestSchema;
+    output: typeof AddApplicationContactResponseSchema;
+  },
+  /**
+   * @generated from rpc applyant.v1.ApplyantService.DeleteApplicationContact
+   */
+  deleteApplicationContact: {
+    methodKind: "unary";
+    input: typeof DeleteApplicationContactRequestSchema;
+    output: typeof DeleteApplicationContactResponseSchema;
+  },
+  /**
+   * Model runs (agent_runs), newest first: role, provider/model, tokens, duration, outcome and
+   * the task and entity each was for.
+   *
+   * @generated from rpc applyant.v1.ApplyantService.ListAgentRuns
+   */
+  listAgentRuns: {
+    methodKind: "unary";
+    input: typeof ListAgentRunsRequestSchema;
+    output: typeof ListAgentRunsResponseSchema;
+  },
+  /**
+   * The CV template the tailored CV is printed with: the bundled "Clean" one, or the candidate's
+   * own in $APPLYANT_HOME/cv-template/.
+   *
+   * @generated from rpc applyant.v1.ApplyantService.GetCvTemplate
+   */
+  getCvTemplate: {
+    methodKind: "unary";
+    input: typeof GetCvTemplateRequestSchema;
+    output: typeof GetCvTemplateResponseSchema;
+  },
+  /**
+   * Replaces the custom template with these files (the client reads the folder, so the daemon
+   * needs no access to it). index.html must hold {{cv}}. InvalidArgument otherwise.
+   *
+   * @generated from rpc applyant.v1.ApplyantService.SetCvTemplate
+   */
+  setCvTemplate: {
+    methodKind: "unary";
+    input: typeof SetCvTemplateRequestSchema;
+    output: typeof SetCvTemplateResponseSchema;
+  },
+  /**
+   * Removes the custom template: the bundled one is used again.
+   *
+   * @generated from rpc applyant.v1.ApplyantService.ResetCvTemplate
+   */
+  resetCvTemplate: {
+    methodKind: "unary";
+    input: typeof ResetCvTemplateRequestSchema;
+    output: typeof ResetCvTemplateResponseSchema;
   },
   /**
    * Search: strategies (which sources, which queries, how often) find postings on their own.

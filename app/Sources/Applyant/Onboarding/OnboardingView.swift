@@ -130,8 +130,7 @@ private struct ConnectionsStep: View {
             SwiftUI.Section("Mailbox and Google") {
                 MailboxRows(store: store)
                 Row(ok: s?.calendar.connected == true, text: "Calendar: " + (s.map { OnboardingText.connection($0.calendar) } ?? ""))
-                Row(ok: s?.drive.connected == true, text: "Drive: " + (s.map { OnboardingText.connection($0.drive) } ?? ""))
-                Text("Gmail: one Google consent covers Gmail, Calendar and Drive. Any other mailbox: IMAP + SMTP with an app password.")
+                Text("Gmail: one Google consent covers Gmail and Calendar. Any other mailbox: IMAP + SMTP with an app password.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             // Optional: the same Telegram sign-in and CapMonster key as Settings.
@@ -229,7 +228,7 @@ private struct ImportStep: View {
             }
             SwiftUI.Section("Links and Google Docs") {
                 HStack {
-                    TextField("Link", text: $link, prompt: Text("A portfolio page, a case study, a Docs or Drive link (a Drive folder works too)"))
+                    TextField("Link", text: $link, prompt: Text("A portfolio page, a case study, a Google Docs link"))
                         .onSubmit(addLink)
                     Button("Add", action: addLink)
                         .disabled(adding != nil || link.trimmingCharacters(in: .whitespaces).isEmpty)

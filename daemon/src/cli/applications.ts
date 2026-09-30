@@ -697,6 +697,81 @@ export function registerApplications(program: Command, client: () => ApplyantCli
     });
 
   apps
+    .command('notes <id> [text...]')
+    .description(
+      'show your notes on an application, or replace them with text (--clear empties them)',
+    )
+    .option('--clear', 'remove the notes')
+    .action(async (idArg: string, words: string[], opts: { clear?: boolean }) => {
+      const applicationId = BigInt(positiveInt(idArg));
+      const text = words.join(' ').trim();
+      if (!text && !opts.clear) {
+        const { application: a } = await client().getApplication({ id: applicationId });
+        return out(a?.notes ?? '(no notes)');
+      }
+      await client().setApplicationNotes({ applicationId, notes: opts.clear ? '' : text });
+      out(
+        opts.clear ? `Application ${idArg}: notes removed.` : `Application ${idArg}: notes saved.`,
+      );
+    });
+
+  const contacts = apps
+    .command('contacts')
+    .description('company contacts on an application (recruiter, hiring manager…)');
+  contacts
+    .command('list <id>')
+    .option('--json', 'print JSON')
+    .action(async (idArg: string, opts: { json?: boolean }) => {
+      const { application: a } = await client().getApplication({ id: BigInt(positiveInt(idArg)) });
+      const list = a?.contacts ?? [];
+      if (opts.json)
+        return out(
+          JSON.stringify(
+            list.map((c) => ({
+              id: Number(c.id),
+              name: c.name ?? null,
+              role: c.role ?? null,
+              email: c.email ?? null,
+              linkedin: c.linkedin ?? null,
+              note: c.note ?? null,
+            })),
+            null,
+            2,
+          ),
+        );
+      if (list.length === 0) return out('No contacts yet.');
+      for (const c of list) {
+        out(
+          `${c.id}  ${[c.name, c.role, c.email, c.linkedin].filter(Boolean).join(' · ')}${c.note ? `\n    ${c.note}` : ''}`,
+        );
+      }
+    });
+  contacts
+    .command('add <id>')
+    .description('add a contact: at least --name, --email or --linkedin')
+    .option('--name <name>')
+    .option('--role <role>', 'e.g. recruiter, hiring manager')
+    .option('--email <email>')
+    .option('--linkedin <url>')
+    .option('--note <text>')
+    .action(
+      async (
+        idArg: string,
+        o: { name?: string; role?: string; email?: string; linkedin?: string; note?: string },
+      ) => {
+        const { contact } = await client().addApplicationContact({
+          applicationId: BigInt(positiveInt(idArg)),
+          ...o,
+        });
+        out(`Contact ${contact?.id} added to application ${idArg}.`);
+      },
+    );
+  contacts.command('remove <contactId>').action(async (idArg: string) => {
+    await client().deleteApplicationContact({ contactId: BigInt(positiveInt(idArg)) });
+    out(`Contact ${idArg} removed.`);
+  });
+
+  apps
     .command('status <id> <stage>')
     .description(
       'correct the status by hand: applied (sent outside Applyant, or a misread reply undone) | interview | offer | rejected | withdrawn; never sends anything',

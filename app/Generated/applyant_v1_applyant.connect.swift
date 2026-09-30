@@ -236,6 +236,37 @@ public protocol Applyant_V1_ApplyantServiceClientInterface: Sendable {
     @available(iOS 13, *)
     func `setApplicationStage`(request: Applyant_V1_SetApplicationStageRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_SetApplicationStageResponse>
 
+    /// The candidate's own notes on an application (free text; empty clears them).
+    @available(iOS 13, *)
+    func `setApplicationNotes`(request: Applyant_V1_SetApplicationNotesRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_SetApplicationNotesResponse>
+
+    /// A company contact on an application: a recruiter, a hiring manager (name, role, email,
+    /// LinkedIn, a note). Needs at least a name, an email or a LinkedIn link.
+    @available(iOS 13, *)
+    func `addApplicationContact`(request: Applyant_V1_AddApplicationContactRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_AddApplicationContactResponse>
+
+    @available(iOS 13, *)
+    func `deleteApplicationContact`(request: Applyant_V1_DeleteApplicationContactRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_DeleteApplicationContactResponse>
+
+    /// Model runs (agent_runs), newest first: role, provider/model, tokens, duration, outcome and
+    /// the task and entity each was for.
+    @available(iOS 13, *)
+    func `listAgentRuns`(request: Applyant_V1_ListAgentRunsRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_ListAgentRunsResponse>
+
+    /// The CV template the tailored CV is printed with: the bundled "Clean" one, or the candidate's
+    /// own in $APPLYANT_HOME/cv-template/.
+    @available(iOS 13, *)
+    func `getCvTemplate`(request: Applyant_V1_GetCvTemplateRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_GetCvTemplateResponse>
+
+    /// Replaces the custom template with these files (the client reads the folder, so the daemon
+    /// needs no access to it). index.html must hold {{cv}}. InvalidArgument otherwise.
+    @available(iOS 13, *)
+    func `setCvTemplate`(request: Applyant_V1_SetCvTemplateRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_SetCvTemplateResponse>
+
+    /// Removes the custom template: the bundled one is used again.
+    @available(iOS 13, *)
+    func `resetCvTemplate`(request: Applyant_V1_ResetCvTemplateRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_ResetCvTemplateResponse>
+
     /// Search: strategies (which sources, which queries, how often) find postings on their own.
     /// Every source can be switched off, one by one or a whole kind; a source that's off is never
     /// queried. ListSearch returns everything the Search screen shows: strategies with their
@@ -637,6 +668,41 @@ public final class Applyant_V1_ApplyantServiceClient: Applyant_V1_ApplyantServic
     }
 
     @available(iOS 13, *)
+    public func `setApplicationNotes`(request: Applyant_V1_SetApplicationNotesRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_SetApplicationNotesResponse> {
+        return await self.client.unary(path: "/applyant.v1.ApplyantService/SetApplicationNotes", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
+    public func `addApplicationContact`(request: Applyant_V1_AddApplicationContactRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_AddApplicationContactResponse> {
+        return await self.client.unary(path: "/applyant.v1.ApplyantService/AddApplicationContact", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
+    public func `deleteApplicationContact`(request: Applyant_V1_DeleteApplicationContactRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_DeleteApplicationContactResponse> {
+        return await self.client.unary(path: "/applyant.v1.ApplyantService/DeleteApplicationContact", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
+    public func `listAgentRuns`(request: Applyant_V1_ListAgentRunsRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_ListAgentRunsResponse> {
+        return await self.client.unary(path: "/applyant.v1.ApplyantService/ListAgentRuns", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
+    public func `getCvTemplate`(request: Applyant_V1_GetCvTemplateRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_GetCvTemplateResponse> {
+        return await self.client.unary(path: "/applyant.v1.ApplyantService/GetCvTemplate", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
+    public func `setCvTemplate`(request: Applyant_V1_SetCvTemplateRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_SetCvTemplateResponse> {
+        return await self.client.unary(path: "/applyant.v1.ApplyantService/SetCvTemplate", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
+    public func `resetCvTemplate`(request: Applyant_V1_ResetCvTemplateRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_ResetCvTemplateResponse> {
+        return await self.client.unary(path: "/applyant.v1.ApplyantService/ResetCvTemplate", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
     public func `listSearch`(request: Applyant_V1_ListSearchRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_ListSearchResponse> {
         return await self.client.unary(path: "/applyant.v1.ApplyantService/ListSearch", idempotencyLevel: .unknown, request: request, headers: headers)
     }
@@ -843,6 +909,13 @@ public final class Applyant_V1_ApplyantServiceClient: Applyant_V1_ApplyantServic
             public static let setCvMode = Connect.MethodSpec(name: "SetCvMode", service: "applyant.v1.ApplyantService", type: .unary)
             public static let editCv = Connect.MethodSpec(name: "EditCv", service: "applyant.v1.ApplyantService", type: .unary)
             public static let setApplicationStage = Connect.MethodSpec(name: "SetApplicationStage", service: "applyant.v1.ApplyantService", type: .unary)
+            public static let setApplicationNotes = Connect.MethodSpec(name: "SetApplicationNotes", service: "applyant.v1.ApplyantService", type: .unary)
+            public static let addApplicationContact = Connect.MethodSpec(name: "AddApplicationContact", service: "applyant.v1.ApplyantService", type: .unary)
+            public static let deleteApplicationContact = Connect.MethodSpec(name: "DeleteApplicationContact", service: "applyant.v1.ApplyantService", type: .unary)
+            public static let listAgentRuns = Connect.MethodSpec(name: "ListAgentRuns", service: "applyant.v1.ApplyantService", type: .unary)
+            public static let getCvTemplate = Connect.MethodSpec(name: "GetCvTemplate", service: "applyant.v1.ApplyantService", type: .unary)
+            public static let setCvTemplate = Connect.MethodSpec(name: "SetCvTemplate", service: "applyant.v1.ApplyantService", type: .unary)
+            public static let resetCvTemplate = Connect.MethodSpec(name: "ResetCvTemplate", service: "applyant.v1.ApplyantService", type: .unary)
             public static let listSearch = Connect.MethodSpec(name: "ListSearch", service: "applyant.v1.ApplyantService", type: .unary)
             public static let addStrategy = Connect.MethodSpec(name: "AddStrategy", service: "applyant.v1.ApplyantService", type: .unary)
             public static let updateStrategy = Connect.MethodSpec(name: "UpdateStrategy", service: "applyant.v1.ApplyantService", type: .unary)

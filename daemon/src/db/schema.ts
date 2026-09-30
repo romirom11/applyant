@@ -646,9 +646,29 @@ export const applications = sqliteTable('applications', {
   /** When it first reached interview / offer (kept when a later reply rejects it). */
   interviewAt: integer('interview_at', { mode: 'timestamp_ms' }),
   offerAt: integer('offer_at', { mode: 'timestamp_ms' }),
+  /** The candidate's own notes (free text). */
+  notes: text('notes'),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull().default(now),
   updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull().default(now),
 });
+
+/** Company contacts on an application: a recruiter, a hiring manager (the candidate adds them). */
+export const applicationContacts = sqliteTable(
+  'application_contacts',
+  {
+    id: integer('id').primaryKey(),
+    applicationId: integer('application_id')
+      .notNull()
+      .references(() => applications.id, { onDelete: 'cascade' }),
+    name: text('name'),
+    role: text('role'),
+    email: text('email'),
+    linkedin: text('linkedin'),
+    note: text('note'),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull().default(now),
+  },
+  (t) => [index('application_contacts_app').on(t.applicationId)],
+);
 
 /**
  * Where a field's value comes from.
@@ -1123,6 +1143,7 @@ export type SourceRow = typeof sources.$inferSelect;
 export type FactRow = typeof facts.$inferSelect;
 export type EvidenceRow = typeof evidence.$inferSelect;
 export type AgentRunRow = typeof agentRuns.$inferSelect;
+export type ApplicationContactRow = typeof applicationContacts.$inferSelect;
 export type NewAgentRunRow = typeof agentRuns.$inferInsert;
 export type NewEventRow = typeof events.$inferInsert;
 export type PostingFeedbackRow = typeof postingFeedback.$inferSelect;

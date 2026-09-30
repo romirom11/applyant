@@ -61,9 +61,26 @@ export function addPosting(
   });
 }
 
-export function listPostings(db: Db, stage?: PostingStage, byScore = false): PostingRow[] {
-  const q = db.select().from(postings);
-  return (stage ? q.where(eq(postings.stage, stage)) : q)
+/**
+ * Postings, newest first (or by score). `query`: only those whose title, company, URL or text
+ * hold every word of it, case-insensitively (`applyant jobs search`).
+ */
+export function listPostings(
+  db: Db,
+  stage?: PostingStage,
+  byScore = false,
+  query?: string | null,
+): PostingRow[] {
+  const words = (query ?? '').toLowerCase().split(/\s+/).filter(Boolean);
+  const haystack = sql`lower(coalesce(${postings.title}, '') || ' ' || coalesce(${postings.company}, '') || ' ' || ${postings.canonicalUrl} || ' ' || coalesce(${postings.text}, ''))`;
+  const conds: SQL[] = [
+    ...(stage ? [eq(postings.stage, stage)] : []),
+    ...words.map((w) => sql`instr(${haystack}, ${w}) > 0`),
+  ];
+  return db
+    .select()
+    .from(postings)
+    .where(conds.length ? and(...conds) : undefined)
     .orderBy(
       ...(byScore ? [sql`${postings.score} is null`, desc(postings.score)] : []),
       desc(postings.id),

@@ -1,6 +1,6 @@
 // Profile and Projects (phase 16, app parity with the CLI for setup): the profile values
 // application forms ask for and the base CV; projects (add, rename, remove) and the knowledge
-// sources behind them (a GitHub repo, a file or folder, a page or a Docs/Drive link), each with
+// sources behind them (a GitHub repo, a file or folder, a page or a Docs link), each with
 // its sync state; a source can be removed with the facts only it supported.
 // The same views open as sheets from Settings and the setup's Import step. Each project (and the
 // profile) lists its facts: status, kind, evidence; Confirm, Edit, Reject; to-confirm filter.
@@ -247,8 +247,8 @@ struct KnowledgeSourcesSection: View {
                 Label(removedNote, systemImage: "checkmark.circle").font(.callout).foregroundStyle(.secondary)
             }
             HStack {
-                TextField("Add a GitHub repo, a page, a Docs link or a Drive folder link", text: $input,
-                          prompt: Text("https://github.com/you/repo · https://… · a Docs or Drive folder link"))
+                TextField("Add a GitHub repo, a page or a Docs link", text: $input,
+                          prompt: Text("https://github.com/you/repo · https://… · a Google Docs link"))
                     .textFieldStyle(.roundedBorder)
                     .onSubmit(add)
                 Button("Add", action: add).disabled(input.trimmingCharacters(in: .whitespaces).isEmpty)

@@ -8,6 +8,12 @@ import { markSubmittedByHand, setApplyForm } from '../domain/applications/delive
 import { emailsFor } from '../domain/applications/mail-status.ts';
 import { StageRefused, setApplicationStage } from '../domain/applications/manual-stage.ts';
 import {
+  addApplicationContact,
+  contactsFor,
+  deleteApplicationContact,
+  setApplicationNotes,
+} from '../domain/applications/notes.ts';
+import {
   ApprovalBlocked,
   approveApplication,
   confirmApplicationFacts,
@@ -32,7 +38,13 @@ import { runInTx } from '../queue/tx.ts';
 import type { Tx } from '../queue/types.ts';
 import { factToPb } from './candidate.ts';
 import { emailToPb } from './mail.ts';
-import { answerToPb, applicationToPb, appStageFromPb, handOffToPb } from './mapping.ts';
+import {
+  answerToPb,
+  applicationToPb,
+  appStageFromPb,
+  contactToPb,
+  handOffToPb,
+} from './mapping.ts';
 import type { RpcContext } from './postings.ts';
 
 type Impl = ServiceImpl<typeof ApplyantService>;
@@ -53,7 +65,7 @@ function guard<T>(fn: () => T): T {
     if (err instanceof ApprovalBlocked || err instanceof StageRefused)
       throw new ConnectError(err.message, Code.FailedPrecondition);
     if (err instanceof ApplicationError || err instanceof FactError) {
-      const code = /^no (application|fact|posting)/.test(err.message)
+      const code = /^no (application|fact|posting|contact)/.test(err.message)
         ? Code.NotFound
         : /already (approved|applied)/.test(err.message)
           ? Code.FailedPrecondition
@@ -62,6 +74,13 @@ function guard<T>(fn: () => T): T {
     }
     throw err;
   }
+}
+
+/** The full application with its contacts (GetApplication and the notes/contact RPCs). */
+function withContacts(c: RpcContext, appId: number) {
+  const application = applicationToPb(applicationView(c.db, appId));
+  application.contacts = contactsFor(c.db, appId).map(contactToPb);
+  return application;
 }
 
 export function applicationRpcs(
@@ -79,6 +98,9 @@ export function applicationRpcs(
   | 'setApplyForm'
   | 'markSubmitted'
   | 'setApplicationStage'
+  | 'setApplicationNotes'
+  | 'addApplicationContact'
+  | 'deleteApplicationContact'
   | 'getHandOff'
   | 'setCvMode'
   | 'editCv'
@@ -97,7 +119,7 @@ export function applicationRpcs(
         const appId = id(req.id, 'id');
         // Opening it while it waits for the candidate starts the review clock (metric 3).
         markReviewStarted(c, appId);
-        const application = applicationToPb(applicationView(c.db, appId));
+        const application = withContacts(c, appId);
         application.emails = emailsFor(c.db, appId).map((e) => emailToPb(e));
         return { application };
       });
@@ -291,6 +313,29 @@ export function applicationRpcs(
           return { application: applicationToPb(applicationView(tx.db, appId)) };
         }),
       );
+    },
+
+    setApplicationNotes(req) {
+      return guard(() => {
+        const appId = id(req.applicationId, 'application_id');
+        setApplicationNotes(c.db, appId, req.notes, c.now());
+        return { application: withContacts(c, appId) };
+      });
+    },
+
+    addApplicationContact(req) {
+      return guard(() => {
+        const appId = id(req.applicationId, 'application_id');
+        const row = addApplicationContact(c.db, appId, req, c.now());
+        return { application: withContacts(c, appId), contact: contactToPb(row) };
+      });
+    },
+
+    deleteApplicationContact(req) {
+      return guard(() => {
+        const appId = deleteApplicationContact(c.db, id(req.contactId, 'contact_id'));
+        return { application: withContacts(c, appId) };
+      });
     },
 
     // Replaces candidate.ts's ConfirmFact: plain ids as before, or an application's facts.

@@ -188,7 +188,7 @@ public struct ImportRow: Equatable, Sendable, Identifiable {
     public let id: Int64
     /// "roman_kudin_cv.pdf", "acme.dev/case-study".
     public let title: String
-    /// "File", "Page", "Google Drive".
+    /// "File", "Page", "Google Docs".
     public let kind: String
     public let state: State
     /// "Reading roman_kudin_cv.pdf…", "33 new facts · 13 projects created", "Sync failed: …".

@@ -92,7 +92,7 @@ public enum KnowledgeText {
         case .file: folder ? "Folder" : "File"
         case .url: "Page"
         case .github: "GitHub"
-        case .drive: folder ? "Drive folder" : "Google Drive"
+        case .drive: folder ? "Drive folder" : "Google Docs"
         case .manual: "Typed in"
         default: "Source"
         }

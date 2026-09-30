@@ -533,6 +533,69 @@ final class FakeDaemon: DaemonAPI, @unchecked Sendable {
         return report
     }
 
+    // Minor gaps: add posting, model runs, notes and contacts, the CV template.
+    var modelRuns: [AgentRun] = []
+    var nextContact: Int64 = 0
+    var template = CvTemplateInfo.with { $0.name = "Clean"; $0.dir = "/bundle/cv-template"; $0.files = ["index.html", "style.css"] }
+    func addPosting(url: String) async throws -> (posting: Posting, created: Bool) {
+        log("addPosting \(url)")
+        if url.contains("not-a-job") { throw APIError("that page isn't a job posting") }
+        if let known = postings.values.first(where: { $0.canonicalURL == url }) { return (known, false) }
+        var p = Posting()
+        p.id = (postings.keys.max() ?? 0) + 1
+        p.stage = .found
+        p.canonicalURL = url
+        postings[p.id] = p
+        return (p, true)
+    }
+    func listAgentRuns(limit: Int32, role: String?) async throws -> [AgentRun] {
+        log("listAgentRuns \(limit)")
+        return modelRuns
+    }
+    func setApplicationNotes(application id: Int64, notes: String) async throws -> Application {
+        log("setApplicationNotes \(id) \(notes)")
+        guard applications[id] != nil else { throw APIError("no application \(id)") }
+        if notes.isEmpty { applications[id]?.clearNotes() } else { applications[id]?.notes = notes }
+        return applications[id]!
+    }
+    func addApplicationContact(_ request: Applyant_V1_AddApplicationContactRequest) async throws -> Application {
+        log("addApplicationContact \(request.applicationID) \(request.name) \(request.hasRole ? request.role : "-") \(request.hasEmail ? request.email : "-")")
+        guard applications[request.applicationID] != nil else { throw APIError("no application \(request.applicationID)") }
+        nextContact += 1
+        let contact = ApplicationContact.with {
+            $0.id = nextContact
+            if request.hasName { $0.name = request.name }
+            if request.hasRole { $0.role = request.role }
+            if request.hasEmail { $0.email = request.email }
+            if request.hasLinkedin { $0.linkedin = request.linkedin }
+            if request.hasNote { $0.note = request.note }
+        }
+        applications[request.applicationID]?.contacts.append(contact)
+        return applications[request.applicationID]!
+    }
+    func deleteApplicationContact(_ id: Int64) async throws -> Application {
+        log("deleteApplicationContact \(id)")
+        guard let appId = applications.values.first(where: { $0.contacts.contains { $0.id == id } })?.id else {
+            throw APIError("no contact \(id)")
+        }
+        applications[appId]?.contacts.removeAll { $0.id == id }
+        return applications[appId]!
+    }
+    func cvTemplate() async throws -> CvTemplateInfo { log("cvTemplate"); return template }
+    func setCvTemplate(files: [CvTemplateFile], name: String?) async throws -> CvTemplateInfo {
+        log("setCvTemplate \(name ?? "-") \(files.map(\.path))")
+        guard let index = files.first(where: { $0.path == "index.html" }),
+              String(decoding: index.content, as: UTF8.self).contains("{{cv}}")
+        else { throw APIError("index.html has no {{cv}}: that's where the CV goes") }
+        template = .with { $0.custom = true; $0.name = name ?? "cv-template"; $0.dir = "/home/cv-template"; $0.files = files.map(\.path) }
+        return template
+    }
+    func resetCvTemplate() async throws -> CvTemplateInfo {
+        log("resetCvTemplate")
+        template = .with { $0.name = "Clean"; $0.dir = "/bundle/cv-template"; $0.files = ["index.html", "style.css"] }
+        return template
+    }
+
     // Gap audit: model roles, the facts browser, CV edits and stored keys.
     var roleList: [RoleRoute] = [
         .with { $0.role = "field_classify"; $0.route = "jev"; $0.defaultRoute = "jev"; $0.fallback = "claude:haiku"; $0.description_p = "what each form field asks for" },

@@ -224,7 +224,7 @@ public extension MailText {
     /// Where to create the Google OAuth client, and Google's own steps.
     static let googleCredentialsURL = URL(string: "https://console.cloud.google.com/apis/credentials")!
     static let googleGuideURL = URL(string: "https://developers.google.com/workspace/guides/create-credentials#desktop-app")!
-    static let gmailHint = "In Google Cloud, enable the Gmail, Calendar and Drive APIs, then Credentials → Create credentials → OAuth client ID → Desktop app, and paste its ID and secret here."
+    static let gmailHint = "In Google Cloud, enable the Gmail and Calendar APIs, then Credentials → Create credentials → OAuth client ID → Desktop app, and paste its ID and secret here."
     static let imapHint = "Use an app password, not your account password (iCloud: appleid.apple.com → App-Specific Passwords; Gmail: myaccount.google.com/apppasswords). Ports 993/465 use TLS, 143/587 STARTTLS."
 
     /// IMAP/SMTP servers for common providers, by the address's domain.

@@ -1,12 +1,20 @@
 #!/usr/bin/env node
 // applyant: a thin client. Every command is one or two RPCs to applyantd.
+import { basename, resolve } from 'node:path';
 import { Command } from 'commander';
 import { registerApplications } from './applications.ts';
 import { registerCandidate } from './candidate.ts';
 import { type ApplyantClient, connect, describeError } from './client.ts';
 import { registerCompanies } from './companies.ts';
 import { registerConfig } from './config.ts';
-import { eventJson, eventLine } from './format.ts';
+import {
+  agentRunJson,
+  agentRunLine,
+  cvTemplateText,
+  eventJson,
+  eventLine,
+  readTemplateDir,
+} from './format.ts';
 import { registerHandoff } from './handoff.ts';
 import { positiveInt, registerJobs } from './jobs.ts';
 import { registerMail } from './mail.ts';
@@ -119,6 +127,49 @@ export function buildCli(client: () => ApplyantClient): Command {
         }
       },
     );
+
+  runs
+    .command('models')
+    .description(
+      'model runs, newest first: role, provider/model, tokens, duration, outcome, what for',
+    )
+    .option('--role <role>', 'only this role')
+    .option('-n, --limit <n>', 'how many', '30')
+    .option('--json', 'print JSON')
+    .action(async (opts: { role?: string; limit: string; json?: boolean }) => {
+      const { runs: list } = await client().listAgentRuns({
+        limit: positiveInt(opts.limit),
+        ...(opts.role ? { role: opts.role } : {}),
+      });
+      if (opts.json) return out(JSON.stringify(list.map(agentRunJson), null, 2));
+      if (list.length === 0) return out('No model runs yet.');
+      for (const r of list) out(agentRunLine(r));
+    });
+
+  const template = program
+    .command('cv-template')
+    .description('the template the tailored CV is printed with');
+  template.command('show').action(async () => {
+    const { template: t } = await client().getCvTemplate({});
+    out(cvTemplateText(t));
+  });
+  template
+    .command('set <dir>')
+    .description('use the template in <dir> (index.html with {{cv}}, style.css, assets); copied in')
+    .action(async (dir: string) => {
+      const { template: t } = await client().setCvTemplate({
+        files: readTemplateDir(dir),
+        name: basename(resolve(dir)),
+      });
+      out(cvTemplateText(t));
+    });
+  template
+    .command('reset')
+    .description('go back to the bundled "Clean" template')
+    .action(async () => {
+      const { template: t } = await client().resetCvTemplate({});
+      out(cvTemplateText(t));
+    });
 
   const secrets = program
     .command('secrets')

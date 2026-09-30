@@ -293,6 +293,7 @@ export async function runDaemon(config: Config = loadConfig()): Promise<() => Pr
     mail,
     platforms: { guardrails, login, captchaConfigured: () => captcha.configured() },
     telegram,
+    cvTemplateDir: config.cvTemplateDir,
     now: () => new Date(),
     token,
     host: config.host,

@@ -43,15 +43,23 @@ The daemon covers nearly all of the TDD, and the PRD's core loop can be used fro
 
 ## Minor
 
-- [ ] Add a posting by URL in the app (today only the Share extension does it).
-- [ ] "✓ apply form verified" without how long ago.
-- [ ] Agent runs lists only search runs; `agent_runs` (role, model, tokens, duration) is written and never read.
-- [ ] No candidate notes or company contacts on an application.
-- [ ] Company research isn't used for interview prep.
-- [ ] A custom CV template is only a folder (`$APPLYANT_HOME/cv-template/`), with no UI.
+- [x] Add a posting by URL in the app (today only the Share extension does it).
+  - Done (2026-09-30): Inbox toolbar "Add posting…" → a sheet → `AddPosting` (as `jobs add` and the Share extension); it says added / already in Applyant · stage / refused, and the list refreshes.
+- [x] "✓ apply form verified" without how long ago.
+  - Done (2026-09-30): "✓ apply form verified 3 h ago" from `form_read_at`.
+- [x] Agent runs lists only search runs; `agent_runs` (role, model, tokens, duration) is written and never read.
+  - Done (2026-09-30): `ListAgentRuns` (role, provider/model, tokens, duration, cost, outcome/error, the task and the entity it was for, with a name for postings, applications, companies and sources); Agent runs has a Search runs / Model runs switch; CLI `applyant runs models [--role] [-n]`.
+- [x] No candidate notes or company contacts on an application.
+  - Done (2026-09-30): `applications.notes` and `application_contacts` (name, role, email, LinkedIn, note; `0022_notes_contacts`); `SetApplicationNotes`, `AddApplicationContact`, `DeleteApplicationContact`; Notes and Contacts cards on the application screen at every stage; CLI `applications notes <id> [text…] [--clear]`, `applications contacts list|add|remove`.
+- [x] Company research isn't used for interview prep.
+  - Done (2026-09-30): at interview or offer the application's screen shows an "Interview prep" card built in the app from the company profile (summary, product, news, stack, red flags, each with its sources) and the application's own answers ("what you told them"); no model run. The PRD asks for nothing more (research "supplies material for … interview preparation"); generated practice questions would be a new model role.
+- [x] A custom CV template is only a folder (`$APPLYANT_HOME/cv-template/`), with no UI.
+  - Done (2026-09-30): Settings → CV template shows the active one (Clean · default, or the custom one's name, folder and files, and why a broken one isn't used), "Use a custom template…" (the app reads the picked folder and sends its files, so the daemon needs no access to it; `SetCvTemplate` checks `index.html` has `{{cv}}`, writes beside and swaps) and "Reset to default" (`ResetCvTemplate`). A custom folder without `{{cv}}` now falls back to Clean instead of failing the render. CLI `applyant cv-template show|set <dir>|reset`. No preview render (no RPC renders a sample CV).
 - [x] Stored keys can't be deleted in the app.
   - Done (2026-09-30): Settings → Stored keys lists secret names only (`ListSecrets`), each with what it's for, and Delete… after a confirmation that says what stops working (`DeleteSecret`). Settings' captcha and mailbox lines refresh afterwards.
-- [ ] The CLI lacks `jobs search`.
+- [x] The CLI lacks `jobs search`.
+  - Done (2026-09-30): `applyant jobs search <words…> [--by-score]`: `ListPostings.query`, every word in the title, company, URL or text (case-insensitive; postings have no FTS table).
+- Drive hidden from onboarding (2026-09-30, the owner's request: no material in Google Drive): the Connections step has no Drive row and texts say the consent covers Gmail and Calendar. `drive` stays a source kind; a pasted Docs link is still read through a connected Google mailbox.
 
 ## Deviations on purpose (recorded in the plan)
 

@@ -141,6 +141,7 @@ struct PostingList: View {
     let store: AppStore
     /// What Re-score said, under the title for a few seconds.
     @State private var note: String?
+    @State private var addingPosting = false
 
     var body: some View {
         let section = store.navigation.section
@@ -170,6 +171,12 @@ struct PostingList: View {
         .toolbar {
             if section == .inbox {
                 ToolbarItem {
+                    Button { addingPosting = true } label: {
+                        Label("Add posting…", systemImage: "plus")
+                    }
+                    .help("Add a job posting by its URL: it's verified and scored like any other")
+                }
+                ToolbarItem {
                     Button { Task { note = await store.rescore() } } label: {
                         Label("Re-score all", systemImage: "arrow.clockwise")
                     }
@@ -182,6 +189,7 @@ struct PostingList: View {
             guard note != nil, (try? await Task.sleep(for: .seconds(4))) != nil else { return }
             note = nil
         }
+        .sheet(isPresented: $addingPosting) { AddPostingSheet(store: store) { addingPosting = false } }
     }
 
     /// A row's menu: Set status for an application, Re-score in the posting sections.
@@ -274,6 +282,65 @@ struct ChipView: View {
         case .warning: .orange
         case .good: .green
         case .neutral: .secondary
+        }
+    }
+}
+
+/// Inbox → Add posting…: a URL → AddPosting (the same as `applyant jobs add` and the Share
+/// extension), and what happened: added, already known, or refused.
+struct AddPostingSheet: View {
+    let store: AppStore
+    @State var url = ""
+    @State var outcome: AddPostingOutcome?
+    let close: () -> Void
+    @State private var adding = false
+
+    init(store: AppStore, url: String = "", outcome: AddPostingOutcome? = nil, close: @escaping () -> Void) {
+        self.store = store
+        _url = State(initialValue: url)
+        _outcome = State(initialValue: outcome)
+        self.close = close
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Add a posting").font(.headline)
+            Text("Paste a job posting's link. It's verified, read and scored like the ones search finds.")
+                .font(.callout).foregroundStyle(.secondary)
+            TextField("URL", text: $url, prompt: Text("https://jobs.example.com/backend-engineer"))
+                .textFieldStyle(.roundedBorder)
+                .onSubmit(add)
+            if let outcome {
+                VStack(alignment: .leading, spacing: 2) {
+                    Label(outcome.line, systemImage: outcome.ok ? "checkmark.circle" : "exclamationmark.triangle")
+                        .foregroundStyle(outcome.ok ? Color.primary : Color.orange)
+                    if let detail = outcome.detail {
+                        Text(detail).font(.callout).foregroundStyle(.secondary).padding(.leading, 22)
+                    }
+                }
+                .textSelection(.enabled)
+            }
+            HStack {
+                if adding { ProgressView().controlSize(.small) }
+                Spacer()
+                Button(outcome == nil ? "Cancel" : "Done", action: close)
+                Button("Add", action: add)
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(adding || url.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+        }
+        .padding(20)
+        .frame(width: 480)
+    }
+
+    private func add() {
+        let input = url
+        guard !adding, !input.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+        adding = true
+        Task {
+            outcome = await store.addPosting(input)
+            adding = false
+            if outcome?.ok == true { url = "" }
         }
     }
 }

@@ -50,7 +50,7 @@ struct PostingDetail: View {
         if p.hasCompany { parts.append(p.company) }
         if p.hasSalaryText { parts.append(p.salaryText) }
         parts.append("found " + p.firstSeenAt.date.formatted(.relative(presentation: .named)))
-        if p.formStatus == "verified" { parts.append("✓ apply form verified") }
+        if let verified = PostingText.formVerified(p) { parts.append(verified) }
         return parts.joined(separator: " · ")
     }
 

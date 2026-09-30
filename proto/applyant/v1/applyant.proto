@@ -137,6 +137,25 @@ service ApplyantService {
   // a reply stage before the application was sent, a stage only the pipeline sets (preparing,
   // review, approved), or while a delivery is under way.
   rpc SetApplicationStage(SetApplicationStageRequest) returns (SetApplicationStageResponse);
+  // The candidate's own notes on an application (free text; empty clears them).
+  rpc SetApplicationNotes(SetApplicationNotesRequest) returns (SetApplicationNotesResponse);
+  // A company contact on an application: a recruiter, a hiring manager (name, role, email,
+  // LinkedIn, a note). Needs at least a name, an email or a LinkedIn link.
+  rpc AddApplicationContact(AddApplicationContactRequest) returns (AddApplicationContactResponse);
+  rpc DeleteApplicationContact(DeleteApplicationContactRequest) returns (DeleteApplicationContactResponse);
+
+  // Model runs (agent_runs), newest first: role, provider/model, tokens, duration, outcome and
+  // the task and entity each was for.
+  rpc ListAgentRuns(ListAgentRunsRequest) returns (ListAgentRunsResponse);
+
+  // The CV template the tailored CV is printed with: the bundled "Clean" one, or the candidate's
+  // own in $APPLYANT_HOME/cv-template/.
+  rpc GetCvTemplate(GetCvTemplateRequest) returns (GetCvTemplateResponse);
+  // Replaces the custom template with these files (the client reads the folder, so the daemon
+  // needs no access to it). index.html must hold {{cv}}. InvalidArgument otherwise.
+  rpc SetCvTemplate(SetCvTemplateRequest) returns (SetCvTemplateResponse);
+  // Removes the custom template: the bundled one is used again.
+  rpc ResetCvTemplate(ResetCvTemplateRequest) returns (ResetCvTemplateResponse);
 
   // Search: strategies (which sources, which queries, how often) find postings on their own.
   // Every source can be switched off, one by one or a whole kind; a source that's off is never
@@ -396,6 +415,9 @@ message ListPostingsRequest {
   PostingStage stage = 1;
   // Highest score first (unscored last) instead of newest first.
   bool by_score = 2;
+  // Only postings whose title, company, URL or text contain every word (case-
+  // insensitive).
+  optional string query = 3;
 }
 
 message ListPostingsResponse {
@@ -1246,6 +1268,132 @@ message Application {
   ApplyForm apply_form = 25;
   // Both forms are known, so the candidate can switch (SetApplyForm) before approval.
   bool apply_form_switchable = 26;
+  // The candidate's own notes (SetApplicationNotes).
+  optional string notes = 27;
+  // Company contacts (recruiter, hiring manager…), oldest first. Only filled by GetApplication
+  // (and the notes/contact RPCs).
+  repeated ApplicationContact contacts = 28;
+}
+
+message ApplicationContact {
+  int64 id = 1;
+  optional string name = 2;
+  // recruiter · hiring manager · … (free text)
+  optional string role = 3;
+  optional string email = 4;
+  optional string linkedin = 5;
+  optional string note = 6;
+  google.protobuf.Timestamp created_at = 7;
+}
+
+message SetApplicationNotesRequest {
+  int64 application_id = 1;
+  string notes = 2;
+}
+
+message SetApplicationNotesResponse {
+  Application application = 1;
+}
+
+message AddApplicationContactRequest {
+  int64 application_id = 1;
+  optional string name = 2;
+  optional string role = 3;
+  optional string email = 4;
+  optional string linkedin = 5;
+  optional string note = 6;
+}
+
+message AddApplicationContactResponse {
+  Application application = 1;
+  ApplicationContact contact = 2;
+}
+
+message DeleteApplicationContactRequest {
+  int64 contact_id = 1;
+}
+
+message DeleteApplicationContactResponse {
+  Application application = 1;
+}
+
+message AgentRun {
+  int64 id = 1;
+  // The model role: verifier · scorer · application_writer · researcher · …
+  string role = 2;
+  // claude · codex · apple
+  string provider = 3;
+  optional string model = 4;
+  google.protobuf.Timestamp started_at = 5;
+  int64 duration_ms = 6;
+  optional int64 input_tokens = 7;
+  optional int64 output_tokens = 8;
+  optional double cost_usd = 9;
+  // ok · limit · invalid_output · error · aborted
+  string outcome = 10;
+  optional string error = 11;
+  // The task it ran in, and the entity that task was for.
+  optional int64 task_id = 12;
+  optional string task_kind = 13;
+  // posting · application · company · source · …
+  optional string entity_kind = 14;
+  optional int64 entity_id = 15;
+  // What the entity is, when it has a name: "Backend Engineer at Helix", "Helix", "cv.pdf".
+  optional string entity_label = 16;
+}
+
+message ListAgentRunsRequest {
+  // Default 100, at most 500.
+  int32 limit = 1;
+  // Only this role.
+  optional string role = 2;
+}
+
+message ListAgentRunsResponse {
+  repeated AgentRun runs = 1;
+}
+
+message GetCvTemplateRequest {}
+
+message CvTemplateInfo {
+  // The candidate's own template is in use (else the bundled "Clean").
+  bool custom = 1;
+  // "Clean" for the bundled one, else the folder's name as it was copied in (or "cv-template").
+  string name = 2;
+  // Where it lives: $APPLYANT_HOME/cv-template/ or the bundled folder.
+  string dir = 3;
+  // Its files, relative to dir.
+  repeated string files = 4;
+  // Set when a custom folder exists but can't be used (no index.html, no {{cv}}): the bundled
+  // template is used instead and this says why.
+  optional string problem = 5;
+  optional google.protobuf.Timestamp installed_at = 6;
+}
+
+message GetCvTemplateResponse {
+  CvTemplateInfo template = 1;
+}
+
+message CvTemplateFile {
+  // Relative path, e.g. index.html, style.css, fonts/Inter.woff2 (no .., not absolute).
+  string path = 1;
+  bytes content = 2;
+}
+
+message SetCvTemplateRequest {
+  repeated CvTemplateFile files = 1;
+  // The picked folder's name, shown as the template's name.
+  optional string name = 2;
+}
+
+message SetCvTemplateResponse {
+  CvTemplateInfo template = 1;
+}
+
+message ResetCvTemplateRequest {}
+
+message ResetCvTemplateResponse {
+  CvTemplateInfo template = 1;
 }
 
 enum ApplyForm {

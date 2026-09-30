@@ -117,7 +117,7 @@ public protocol DaemonAPI: Sendable {
     /// The mailbox with what connecting needs: whether a Google client secret is stored (never
     /// its value) and the client id to offer.
     func mailboxSetup() async throws -> MailboxSetup
-    /// Starts Google's consent (Gmail, Calendar, Drive); the secret goes to the daemon's Secrets.
+    /// Starts Google's consent (Gmail, Calendar); the secret goes to the daemon's Secrets.
     /// The mailbox is `connecting` until the browser comes back; open the URL returned.
     func connectGmail(clientId: String?, clientSecret: String?) async throws -> (mailbox: Mailbox, authURL: String)
     /// Checks the login with a first sync, then keeps the password in the daemon's Secrets.
@@ -208,10 +208,41 @@ public protocol DaemonAPI: Sendable {
     func listSecrets() async throws -> [String]
     /// False when there was no such secret.
     func deleteSecret(_ name: String) async throws -> Bool
+
+    // Minor gaps: add a posting, model runs, notes and contacts, the CV template.
+    /// AddPosting (the same as `applyant jobs add` and the Share extension): the posting, and
+    /// false when the URL was already known.
+    func addPosting(url: String) async throws -> (posting: Posting, created: Bool)
+    /// Model runs, newest first (nil role: every role).
+    func listAgentRuns(limit: Int32, role: String?) async throws -> [AgentRun]
+    /// The candidate's own notes on an application (empty clears them).
+    func setApplicationNotes(application id: Int64, notes: String) async throws -> Application
+    func addApplicationContact(_ request: Applyant_V1_AddApplicationContactRequest) async throws -> Application
+    func deleteApplicationContact(_ id: Int64) async throws -> Application
+    func cvTemplate() async throws -> CvTemplateInfo
+    /// Replaces the custom template with these files; refused without {{cv}} in index.html.
+    func setCvTemplate(files: [CvTemplateFile], name: String?) async throws -> CvTemplateInfo
+    func resetCvTemplate() async throws -> CvTemplateInfo
 }
 
 /// Older fakes and daemons: the setup RPCs answer "not available" unless implemented.
 public extension DaemonAPI {
+    func addPosting(url: String) async throws -> (posting: Posting, created: Bool) {
+        throw APIError("adding a posting needs a newer applyantd")
+    }
+    func listAgentRuns(limit: Int32, role: String?) async throws -> [AgentRun] { throw APIError("model runs need a newer applyantd") }
+    func setApplicationNotes(application id: Int64, notes: String) async throws -> Application {
+        throw APIError("notes need a newer applyantd")
+    }
+    func addApplicationContact(_ request: Applyant_V1_AddApplicationContactRequest) async throws -> Application {
+        throw APIError("contacts need a newer applyantd")
+    }
+    func deleteApplicationContact(_ id: Int64) async throws -> Application { throw APIError("contacts need a newer applyantd") }
+    func cvTemplate() async throws -> CvTemplateInfo { throw APIError("the CV template needs a newer applyantd") }
+    func setCvTemplate(files: [CvTemplateFile], name: String?) async throws -> CvTemplateInfo {
+        throw APIError("the CV template needs a newer applyantd")
+    }
+    func resetCvTemplate() async throws -> CvTemplateInfo { throw APIError("the CV template needs a newer applyantd") }
     func setStage(application id: Int64, to stage: ApplicationStage) async throws -> Application {
         throw APIError("setting a status by hand needs a newer applyantd")
     }
@@ -842,6 +873,53 @@ extension ConnectDaemonAPI {
 
     public func deleteSecret(_ name: String) async throws -> Bool {
         try unwrap(await unary.deleteSecret(request: .with { $0.name = name }, headers: headers)).deleted
+    }
+}
+
+extension ConnectDaemonAPI {
+    public func addPosting(url: String) async throws -> (posting: Posting, created: Bool) {
+        let response = try unwrap(await unary.addPosting(request: .with { $0.url = url }, headers: headers))
+        return (response.posting, response.created)
+    }
+
+    public func listAgentRuns(limit: Int32, role: String?) async throws -> [AgentRun] {
+        let request = Applyant_V1_ListAgentRunsRequest.with {
+            $0.limit = limit
+            if let role { $0.role = role }
+        }
+        return try unwrap(await unary.listAgentRuns(request: request, headers: headers)).runs
+    }
+
+    public func setApplicationNotes(application id: Int64, notes: String) async throws -> Application {
+        let request = Applyant_V1_SetApplicationNotesRequest.with {
+            $0.applicationID = id
+            $0.notes = notes
+        }
+        return try unwrap(await unary.setApplicationNotes(request: request, headers: headers)).application
+    }
+
+    public func addApplicationContact(_ request: Applyant_V1_AddApplicationContactRequest) async throws -> Application {
+        try unwrap(await unary.addApplicationContact(request: request, headers: headers)).application
+    }
+
+    public func deleteApplicationContact(_ id: Int64) async throws -> Application {
+        try unwrap(await unary.deleteApplicationContact(request: .with { $0.contactID = id }, headers: headers)).application
+    }
+
+    public func cvTemplate() async throws -> CvTemplateInfo {
+        try unwrap(await unary.getCvTemplate(request: .init(), headers: headers)).template
+    }
+
+    public func setCvTemplate(files: [CvTemplateFile], name: String?) async throws -> CvTemplateInfo {
+        let request = Applyant_V1_SetCvTemplateRequest.with {
+            $0.files = files
+            if let name { $0.name = name }
+        }
+        return try unwrap(await unary.setCvTemplate(request: request, headers: headers)).template
+    }
+
+    public func resetCvTemplate() async throws -> CvTemplateInfo {
+        try unwrap(await unary.resetCvTemplate(request: .init(), headers: headers)).template
     }
 }
 
