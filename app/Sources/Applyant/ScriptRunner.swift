@@ -24,7 +24,9 @@ struct ScriptStep: Decodable {
     /// connectGmail (value: client id, text: secret) · disconnectMail · setProfile (field, value) ·
     /// createProject (value: name) · addKnowledgeSource (value: repo/file/link; `interviewProject`:
     /// the project, absent = the profile) · newStrategy (value: name, text: queries) ·
-    /// deleteStrategy (`searchStrategy`) · addBoardOrPage (value: URL) · setPreference (field, value) · wait
+    /// deleteStrategy (`searchStrategy`) · addBoardOrPage (value: URL) · setPreference (field, value) ·
+    /// setStage (value: applied | interview | offer | rejected | withdrawn) · rescore (the posting on
+    /// screen, or every one with value "all") · overviewWindow (value: 7 | 30 | all) · wait
     var action: String?
     var application: Int64?
     var facts: [Int64]?
@@ -154,6 +156,20 @@ final class ScriptRunner {
         case "approve": await store.approve(application: app)
         case "submit": await store.submit(application: app)
         case "markSubmitted": await store.markSubmitted(application: app)
+        case "setStage":
+            let stage = StageRules.manual.first { StageText.name($0).lowercased() == s.value?.lowercased() }
+            if let stage {
+                note("setStage: \(await store.setStage(application: app, to: stage) ? "set" : "refused: \(store.lastError ?? "?")")")
+            } else {
+                note("setStage: unknown stage \(s.value ?? "")")
+            }
+        case "rescore":
+            let ids: [Int64] = s.value == "all" ? [] : [s.posting ?? store.navigation.postingId ?? 0]
+            note("rescore: \(await store.rescore(ids) ?? "refused: \(store.lastError ?? "?")")")
+        case "overviewWindow":
+            let window: OverviewWindow = s.value == "7" ? .overviewWindow7Days : s.value == "all" ? .all : .overviewWindow30Days
+            await store.openOverview(window: window)
+            note("overview: \(store.overview.map { OverviewText.funnel($0.funnel).map { "\($0.id) \($0.count)" }.joined(separator: ", ") } ?? "not loaded")")
         case "menu":
             // The menu bar's menu, drawn as a plain view for the picture.
             let status = StatusModel()

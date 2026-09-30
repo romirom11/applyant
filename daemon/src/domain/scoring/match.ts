@@ -10,8 +10,8 @@
 // So a fact that is added, corrected or rejected changes the key only of the requirements
 // it was retrieved for, and only those are asked again. Confirming a fact doesn't: whether a
 // fact shows a skill doesn't depend on its status, so status is neither shown nor keyed.
-// Matches are recomputed when a posting is next scored, never eagerly for every posting on
-// every knowledge change (that would multiply matcher runs).
+// After a knowledge change, rematch.ts compares these keys for open postings and re-scores
+// only those with a changed key, so a change never re-runs the matcher for every posting.
 import { createHash } from 'node:crypto';
 import type { ReadExec } from '../../db/read-pool.ts';
 import type { Embedder } from '../../models/embeddings.ts';

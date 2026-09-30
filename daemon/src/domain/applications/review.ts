@@ -23,6 +23,7 @@ import {
 import type { Tx } from '../../queue/types.ts';
 import { enqueueEmbedFacts } from '../knowledge/embed-index.ts';
 import { confirmFact } from '../knowledge/facts.ts';
+import { requestRematch } from '../scoring/rematch.ts';
 import { getCv, requestCvPass, updateCv } from './cv/store.ts';
 import { enqueueDelivery } from './deliver.ts';
 import { reviewFact } from './review-fact.ts';
@@ -351,7 +352,10 @@ export function editAnswer(
         .run();
     }
   }
-  if (saved.length) enqueueEmbedFacts(tx);
+  if (saved.length) {
+    enqueueEmbedFacts(tx);
+    requestRematch(tx);
+  }
   settleStage(tx, applicationId);
   const after = findAnswer(applicationView(tx.db, applicationId), `q${a.number}`);
   return { answer: after, factIds: saved };

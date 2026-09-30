@@ -438,7 +438,12 @@ function moveApplication(tx: Tx, applicationId: number, label: EmailLabel, msg: 
   if (!to) return false;
   const row = tx.db
     .update(applications)
-    .set({ stage: to, updatedAt: tx.now })
+    .set({
+      stage: to,
+      ...(to === 'interview' || to === 'offer' ? { interviewAt: app.interviewAt ?? tx.now } : {}),
+      ...(to === 'offer' ? { offerAt: app.offerAt ?? tx.now } : {}),
+      updatedAt: tx.now,
+    })
     .where(eq(applications.id, app.id))
     .returning()
     .get();

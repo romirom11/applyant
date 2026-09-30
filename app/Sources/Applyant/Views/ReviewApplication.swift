@@ -82,7 +82,7 @@ struct ReviewApplication: View {
                 Spacer()
                 ChipView(chip: StageText.chip(app))
             }
-            if !app.blockers.isEmpty && app.stage != .approved && app.stage != .applied {
+            if !app.blockers.isEmpty && app.stage != .approved && !StageRules.isSent(app.stage) {
                 VStack(alignment: .leading, spacing: 2) {
                     ForEach(app.blockers, id: \.self) { blocker in
                         Label(blocker, systemImage: "exclamationmark.circle")
@@ -113,6 +113,7 @@ struct ReviewApplication: View {
                         .disabled(!ReviewRules.canApprove(app))
                         .help(ReviewRules.canApprove(app) ? "Approve: the daemon delivers it on its own" : app.blockers.joined(separator: "\n"))
                 }
+                SetStatusMenu(store: store, app: app).fixedSize()
                 if let url = URL(string: app.postingURL) { Link("Posting ↗", destination: url) }
             }
         }
@@ -552,7 +553,7 @@ struct CvCard: View {
                     if cv.hasPdfPath {
                         Button("Preview") { NSWorkspace.shared.open(URL(fileURLWithPath: cv.pdfPath)) }
                     }
-                    if app.stage == .approved || app.stage == .applied {
+                    if app.stage == .approved || StageRules.isSent(app.stage) {
                         EmptyView()  // already sent or on its way: nothing to change
                     } else if cv.mode == "tailored" && cv.status == "skipped" {
                         Button("Try the tailored CV again") { Task { await store.setCvMode(application: app.id, mode: "tailored") } }

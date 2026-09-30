@@ -23,6 +23,9 @@ export const TASK_ENTITY = {
   interview_turn: 'interview_question',
   // The fact vector index as a whole: entity_id is always 0.
   embed_facts: 'index',
+  // One sweep after knowledge changed: postings whose match keys changed get score_posting
+  // again (entity_id is always 0; a burst of changes shares one sweep).
+  rematch_postings: 'index',
   // One run of a search strategy (phase 10): its sources' lists → found postings. The task's
   // run_id is the search run, and every task it spawns carries it.
   search: 'strategy',

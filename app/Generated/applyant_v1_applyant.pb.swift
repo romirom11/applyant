@@ -257,6 +257,9 @@ public nonisolated enum Applyant_V1_ApplicationStage: SwiftProtobuf.Enum, Swift.
   case interview // = 6
   case rejected // = 7
   case offer // = 8
+
+  /// The candidate withdrew (set by hand only).
+  case withdrawn // = 9
   case UNRECOGNIZED(Int)
 
   public init() {
@@ -274,6 +277,7 @@ public nonisolated enum Applyant_V1_ApplicationStage: SwiftProtobuf.Enum, Swift.
     case 6: self = .interview
     case 7: self = .rejected
     case 8: self = .offer
+    case 9: self = .withdrawn
     default: self = .UNRECOGNIZED(rawValue)
     }
   }
@@ -289,6 +293,7 @@ public nonisolated enum Applyant_V1_ApplicationStage: SwiftProtobuf.Enum, Swift.
     case .interview: return 6
     case .rejected: return 7
     case .offer: return 8
+    case .withdrawn: return 9
     case .UNRECOGNIZED(let i): return i
     }
   }
@@ -304,6 +309,7 @@ public nonisolated enum Applyant_V1_ApplicationStage: SwiftProtobuf.Enum, Swift.
     .interview,
     .rejected,
     .offer,
+    .withdrawn,
   ]
 
 }
@@ -392,6 +398,50 @@ public nonisolated enum Applyant_V1_TelegramState: SwiftProtobuf.Enum, Swift.Cas
     .waitingCode,
     .waitingPassword,
     .connected,
+  ]
+
+}
+
+public nonisolated enum Applyant_V1_OverviewWindow: SwiftProtobuf.Enum, Swift.CaseIterable {
+  public typealias RawValue = Int
+
+  /// Same as OVERVIEW_WINDOW_30_DAYS.
+  case unspecified // = 0
+  case overviewWindow7Days // = 1
+  case overviewWindow30Days // = 2
+  case all // = 3
+  case UNRECOGNIZED(Int)
+
+  public init() {
+    self = .unspecified
+  }
+
+  public init?(rawValue: Int) {
+    switch rawValue {
+    case 0: self = .unspecified
+    case 1: self = .overviewWindow7Days
+    case 2: self = .overviewWindow30Days
+    case 3: self = .all
+    default: self = .UNRECOGNIZED(rawValue)
+    }
+  }
+
+  public var rawValue: Int {
+    switch self {
+    case .unspecified: return 0
+    case .overviewWindow7Days: return 1
+    case .overviewWindow30Days: return 2
+    case .all: return 3
+    case .UNRECOGNIZED(let i): return i
+    }
+  }
+
+  // The compiler won't synthesize support with the UNRECOGNIZED case.
+  public static let allCases: [Applyant_V1_OverviewWindow] = [
+    .unspecified,
+    .overviewWindow7Days,
+    .overviewWindow30Days,
+    .all,
   ]
 
 }
@@ -4511,6 +4561,41 @@ public nonisolated struct Applyant_V1_SubmitApplicationResponse: Sendable {
   fileprivate var _application: Applyant_V1_Application? = nil
 }
 
+public nonisolated struct Applyant_V1_SetApplicationStageRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var applicationID: Int64 = 0
+
+  public var stage: Applyant_V1_ApplicationStage = .unspecified
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Applyant_V1_SetApplicationStageResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var application: Applyant_V1_Application {
+    get {_application ?? Applyant_V1_Application()}
+    set {_application = newValue}
+  }
+  /// Returns true if `application` has been explicitly set.
+  public var hasApplication: Bool {self._application != nil}
+  /// Clears the value of `application`. Subsequent reads from it will return its default value.
+  public mutating func clearApplication() {self._application = nil}
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _application: Applyant_V1_Application? = nil
+}
+
 public nonisolated struct Applyant_V1_MarkSubmittedRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
@@ -7258,6 +7343,148 @@ public nonisolated struct Applyant_V1_DisconnectTelegramResponse: Sendable {
   fileprivate var _telegram: Applyant_V1_Telegram? = nil
 }
 
+public nonisolated struct Applyant_V1_GetOverviewRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var window: Applyant_V1_OverviewWindow = .unspecified
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+/// One funnel step: postings first seen in the window that reached it.
+public nonisolated struct Applyant_V1_FunnelStep: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// found | verified | interested | prepared | approved | applied | interview | offer
+  public var key: String = String()
+
+  public var label: String = String()
+
+  public var count: Int64 = 0
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+/// A share: numerator of denominator (the ratio is unset while the denominator is 0).
+public nonisolated struct Applyant_V1_OverviewRatio: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var numerator: Int64 = 0
+
+  public var denominator: Int64 = 0
+
+  public var ratio: Double {
+    get {_ratio ?? 0}
+    set {_ratio = newValue}
+  }
+  /// Returns true if `ratio` has been explicitly set.
+  public var hasRatio: Bool {self._ratio != nil}
+  /// Clears the value of `ratio`. Subsequent reads from it will return its default value.
+  public mutating func clearRatio() {self._ratio = nil}
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _ratio: Double? = nil
+}
+
+public nonisolated struct Applyant_V1_OverviewMetric: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// live_forms | interested | review_time | unsupported_claims | applications_per_week |
+  /// interview_rate
+  public var key: String = String()
+
+  public var label: String = String()
+
+  /// What it measures, in a sentence.
+  public var definition: String = String()
+
+  /// The target as the PRD states it ("≥ 95%"); empty for the funnel's watched numbers.
+  public var target: String = String()
+
+  /// The value as shown ("96% · 24 of 25", "12 min median · 3 reviews", "—" with no data).
+  public var display: String = String()
+
+  /// Set when there's data: whether the target holds (unset for numbers without a target).
+  public var met: Bool {
+    get {_met ?? false}
+    set {_met = newValue}
+  }
+  /// Returns true if `met` has been explicitly set.
+  public var hasMet: Bool {self._met != nil}
+  /// Clears the value of `met`. Subsequent reads from it will return its default value.
+  public mutating func clearMet() {self._met = nil}
+
+  /// The value itself: a share (0–1), minutes, a count or a rate per week.
+  public var value: Double {
+    get {_value ?? 0}
+    set {_value = newValue}
+  }
+  /// Returns true if `value` has been explicitly set.
+  public var hasValue: Bool {self._value != nil}
+  /// Clears the value of `value`. Subsequent reads from it will return its default value.
+  public mutating func clearValue() {self._value = nil}
+
+  public var ratio: Applyant_V1_OverviewRatio {
+    get {_ratio ?? Applyant_V1_OverviewRatio()}
+    set {_ratio = newValue}
+  }
+  /// Returns true if `ratio` has been explicitly set.
+  public var hasRatio: Bool {self._ratio != nil}
+  /// Clears the value of `ratio`. Subsequent reads from it will return its default value.
+  public mutating func clearRatio() {self._ratio = nil}
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _met: Bool? = nil
+  fileprivate var _value: Double? = nil
+  fileprivate var _ratio: Applyant_V1_OverviewRatio? = nil
+}
+
+public nonisolated struct Applyant_V1_GetOverviewResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var window: Applyant_V1_OverviewWindow = .unspecified
+
+  /// The window's start; unset for all time.
+  public var since: SwiftProtobuf.Google_Protobuf_Timestamp {
+    get {_since ?? SwiftProtobuf.Google_Protobuf_Timestamp()}
+    set {_since = newValue}
+  }
+  /// Returns true if `since` has been explicitly set.
+  public var hasSince: Bool {self._since != nil}
+  /// Clears the value of `since`. Subsequent reads from it will return its default value.
+  public mutating func clearSince() {self._since = nil}
+
+  public var funnel: [Applyant_V1_FunnelStep] = []
+
+  public var metrics: [Applyant_V1_OverviewMetric] = []
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _since: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
+}
+
 // MARK: - Code below here is support for the SwiftProtobuf runtime.
 
 fileprivate nonisolated let _protobuf_package = "applyant.v1"
@@ -7279,7 +7506,7 @@ nonisolated extension Applyant_V1_FactStatus: SwiftProtobuf._ProtoNameProviding 
 }
 
 nonisolated extension Applyant_V1_ApplicationStage: SwiftProtobuf._ProtoNameProviding {
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0APPLICATION_STAGE_UNSPECIFIED\0\u{1}APPLICATION_STAGE_PREPARING\0\u{1}APPLICATION_STAGE_READY_FOR_REVIEW\0\u{1}APPLICATION_STAGE_NEEDS_CANDIDATE\0\u{1}APPLICATION_STAGE_APPROVED\0\u{1}APPLICATION_STAGE_APPLIED\0\u{1}APPLICATION_STAGE_INTERVIEW\0\u{1}APPLICATION_STAGE_REJECTED\0\u{1}APPLICATION_STAGE_OFFER\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0APPLICATION_STAGE_UNSPECIFIED\0\u{1}APPLICATION_STAGE_PREPARING\0\u{1}APPLICATION_STAGE_READY_FOR_REVIEW\0\u{1}APPLICATION_STAGE_NEEDS_CANDIDATE\0\u{1}APPLICATION_STAGE_APPROVED\0\u{1}APPLICATION_STAGE_APPLIED\0\u{1}APPLICATION_STAGE_INTERVIEW\0\u{1}APPLICATION_STAGE_REJECTED\0\u{1}APPLICATION_STAGE_OFFER\0\u{1}APPLICATION_STAGE_WITHDRAWN\0")
 }
 
 nonisolated extension Applyant_V1_ApplyForm: SwiftProtobuf._ProtoNameProviding {
@@ -7288,6 +7515,10 @@ nonisolated extension Applyant_V1_ApplyForm: SwiftProtobuf._ProtoNameProviding {
 
 nonisolated extension Applyant_V1_TelegramState: SwiftProtobuf._ProtoNameProviding {
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0TELEGRAM_STATE_UNSPECIFIED\0\u{1}TELEGRAM_STATE_DISCONNECTED\0\u{1}TELEGRAM_STATE_WAITING_CODE\0\u{1}TELEGRAM_STATE_WAITING_PASSWORD\0\u{1}TELEGRAM_STATE_CONNECTED\0")
+}
+
+nonisolated extension Applyant_V1_OverviewWindow: SwiftProtobuf._ProtoNameProviding {
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0OVERVIEW_WINDOW_UNSPECIFIED\0\u{1}OVERVIEW_WINDOW_7_DAYS\0\u{1}OVERVIEW_WINDOW_30_DAYS\0\u{1}OVERVIEW_WINDOW_ALL\0")
 }
 
 nonisolated extension Applyant_V1_Posting: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
@@ -13822,6 +14053,75 @@ nonisolated extension Applyant_V1_SubmitApplicationResponse: SwiftProtobuf.Messa
   }
 }
 
+nonisolated extension Applyant_V1_SetApplicationStageRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".SetApplicationStageRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}application_id\0\u{1}stage\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularInt64Field(value: &self.applicationID) }()
+      case 2: try { try decoder.decodeSingularEnumField(value: &self.stage) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.applicationID != 0 {
+      try visitor.visitSingularInt64Field(value: self.applicationID, fieldNumber: 1)
+    }
+    if self.stage != .unspecified {
+      try visitor.visitSingularEnumField(value: self.stage, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Applyant_V1_SetApplicationStageRequest, rhs: Applyant_V1_SetApplicationStageRequest) -> Bool {
+    if lhs.applicationID != rhs.applicationID {return false}
+    if lhs.stage != rhs.stage {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Applyant_V1_SetApplicationStageResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".SetApplicationStageResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}application\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularMessageField(value: &self._application) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if let v = self._application {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Applyant_V1_SetApplicationStageResponse, rhs: Applyant_V1_SetApplicationStageResponse) -> Bool {
+    if lhs._application != rhs._application {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
 nonisolated extension Applyant_V1_MarkSubmittedRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".MarkSubmittedRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}application_id\0")
@@ -18066,6 +18366,238 @@ nonisolated extension Applyant_V1_DisconnectTelegramResponse: SwiftProtobuf.Mess
 
   public static func ==(lhs: Applyant_V1_DisconnectTelegramResponse, rhs: Applyant_V1_DisconnectTelegramResponse) -> Bool {
     if lhs._telegram != rhs._telegram {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Applyant_V1_GetOverviewRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".GetOverviewRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}window\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularEnumField(value: &self.window) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.window != .unspecified {
+      try visitor.visitSingularEnumField(value: self.window, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Applyant_V1_GetOverviewRequest, rhs: Applyant_V1_GetOverviewRequest) -> Bool {
+    if lhs.window != rhs.window {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Applyant_V1_FunnelStep: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".FunnelStep"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}key\0\u{1}label\0\u{1}count\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.key) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.label) }()
+      case 3: try { try decoder.decodeSingularInt64Field(value: &self.count) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.key.isEmpty {
+      try visitor.visitSingularStringField(value: self.key, fieldNumber: 1)
+    }
+    if !self.label.isEmpty {
+      try visitor.visitSingularStringField(value: self.label, fieldNumber: 2)
+    }
+    if self.count != 0 {
+      try visitor.visitSingularInt64Field(value: self.count, fieldNumber: 3)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Applyant_V1_FunnelStep, rhs: Applyant_V1_FunnelStep) -> Bool {
+    if lhs.key != rhs.key {return false}
+    if lhs.label != rhs.label {return false}
+    if lhs.count != rhs.count {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Applyant_V1_OverviewRatio: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".OverviewRatio"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}numerator\0\u{1}denominator\0\u{1}ratio\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularInt64Field(value: &self.numerator) }()
+      case 2: try { try decoder.decodeSingularInt64Field(value: &self.denominator) }()
+      case 3: try { try decoder.decodeSingularDoubleField(value: &self._ratio) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    if self.numerator != 0 {
+      try visitor.visitSingularInt64Field(value: self.numerator, fieldNumber: 1)
+    }
+    if self.denominator != 0 {
+      try visitor.visitSingularInt64Field(value: self.denominator, fieldNumber: 2)
+    }
+    try { if let v = self._ratio {
+      try visitor.visitSingularDoubleField(value: v, fieldNumber: 3)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Applyant_V1_OverviewRatio, rhs: Applyant_V1_OverviewRatio) -> Bool {
+    if lhs.numerator != rhs.numerator {return false}
+    if lhs.denominator != rhs.denominator {return false}
+    if lhs._ratio != rhs._ratio {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Applyant_V1_OverviewMetric: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".OverviewMetric"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}key\0\u{1}label\0\u{1}definition\0\u{1}target\0\u{1}display\0\u{1}met\0\u{1}value\0\u{1}ratio\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.key) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.label) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.definition) }()
+      case 4: try { try decoder.decodeSingularStringField(value: &self.target) }()
+      case 5: try { try decoder.decodeSingularStringField(value: &self.display) }()
+      case 6: try { try decoder.decodeSingularBoolField(value: &self._met) }()
+      case 7: try { try decoder.decodeSingularDoubleField(value: &self._value) }()
+      case 8: try { try decoder.decodeSingularMessageField(value: &self._ratio) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    if !self.key.isEmpty {
+      try visitor.visitSingularStringField(value: self.key, fieldNumber: 1)
+    }
+    if !self.label.isEmpty {
+      try visitor.visitSingularStringField(value: self.label, fieldNumber: 2)
+    }
+    if !self.definition.isEmpty {
+      try visitor.visitSingularStringField(value: self.definition, fieldNumber: 3)
+    }
+    if !self.target.isEmpty {
+      try visitor.visitSingularStringField(value: self.target, fieldNumber: 4)
+    }
+    if !self.display.isEmpty {
+      try visitor.visitSingularStringField(value: self.display, fieldNumber: 5)
+    }
+    try { if let v = self._met {
+      try visitor.visitSingularBoolField(value: v, fieldNumber: 6)
+    } }()
+    try { if let v = self._value {
+      try visitor.visitSingularDoubleField(value: v, fieldNumber: 7)
+    } }()
+    try { if let v = self._ratio {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 8)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Applyant_V1_OverviewMetric, rhs: Applyant_V1_OverviewMetric) -> Bool {
+    if lhs.key != rhs.key {return false}
+    if lhs.label != rhs.label {return false}
+    if lhs.definition != rhs.definition {return false}
+    if lhs.target != rhs.target {return false}
+    if lhs.display != rhs.display {return false}
+    if lhs._met != rhs._met {return false}
+    if lhs._value != rhs._value {return false}
+    if lhs._ratio != rhs._ratio {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Applyant_V1_GetOverviewResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".GetOverviewResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}window\0\u{1}since\0\u{1}funnel\0\u{1}metrics\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularEnumField(value: &self.window) }()
+      case 2: try { try decoder.decodeSingularMessageField(value: &self._since) }()
+      case 3: try { try decoder.decodeRepeatedMessageField(value: &self.funnel) }()
+      case 4: try { try decoder.decodeRepeatedMessageField(value: &self.metrics) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    if self.window != .unspecified {
+      try visitor.visitSingularEnumField(value: self.window, fieldNumber: 1)
+    }
+    try { if let v = self._since {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 2)
+    } }()
+    if !self.funnel.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.funnel, fieldNumber: 3)
+    }
+    if !self.metrics.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.metrics, fieldNumber: 4)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Applyant_V1_GetOverviewResponse, rhs: Applyant_V1_GetOverviewResponse) -> Bool {
+    if lhs.window != rhs.window {return false}
+    if lhs._since != rhs._since {return false}
+    if lhs.funnel != rhs.funnel {return false}
+    if lhs.metrics != rhs.metrics {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

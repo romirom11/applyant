@@ -31,6 +31,7 @@ import { NativeTextExtractor, NodeTextExtractor } from './domain/knowledge/text/
 import { EcbFx } from './domain/scoring/fx.ts';
 import { scorePosting } from './domain/scoring/handlers.ts';
 import { getPreferences } from './domain/scoring/prefs.ts';
+import { rematchPostings } from './domain/scoring/rematch.ts';
 import { requestScoring, unscoredPostings } from './domain/scoring/store.ts';
 import { searchHandler } from './domain/search/handlers.ts';
 import { planSearch } from './domain/search/planner.ts';
@@ -214,6 +215,7 @@ export async function runDaemon(config: Config = loadConfig()): Promise<() => Pr
     deliver_application: deliverApplication,
     sync_source: syncSource,
     embed_facts: embedFacts,
+    rematch_postings: rematchPostings,
     interview_open: interviewOpen,
     interview_turn: interviewTurn,
     search: searchHandler,

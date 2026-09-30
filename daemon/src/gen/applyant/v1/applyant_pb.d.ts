@@ -4254,6 +4254,43 @@ export declare type SubmitApplicationResponse = Message<"applyant.v1.SubmitAppli
 export declare const SubmitApplicationResponseSchema: GenMessage<SubmitApplicationResponse>;
 
 /**
+ * @generated from message applyant.v1.SetApplicationStageRequest
+ */
+export declare type SetApplicationStageRequest = Message<"applyant.v1.SetApplicationStageRequest"> & {
+  /**
+   * @generated from field: int64 application_id = 1;
+   */
+  applicationId: bigint;
+
+  /**
+   * @generated from field: applyant.v1.ApplicationStage stage = 2;
+   */
+  stage: ApplicationStage;
+};
+
+/**
+ * Describes the message applyant.v1.SetApplicationStageRequest.
+ * Use `create(SetApplicationStageRequestSchema)` to create a new message.
+ */
+export declare const SetApplicationStageRequestSchema: GenMessage<SetApplicationStageRequest>;
+
+/**
+ * @generated from message applyant.v1.SetApplicationStageResponse
+ */
+export declare type SetApplicationStageResponse = Message<"applyant.v1.SetApplicationStageResponse"> & {
+  /**
+   * @generated from field: applyant.v1.Application application = 1;
+   */
+  application?: Application | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.SetApplicationStageResponse.
+ * Use `create(SetApplicationStageResponseSchema)` to create a new message.
+ */
+export declare const SetApplicationStageResponseSchema: GenMessage<SetApplicationStageResponse>;
+
+/**
  * @generated from message applyant.v1.MarkSubmittedRequest
  */
 export declare type MarkSubmittedRequest = Message<"applyant.v1.MarkSubmittedRequest"> & {
@@ -7011,6 +7048,177 @@ export declare type DisconnectTelegramResponse = Message<"applyant.v1.Disconnect
 export declare const DisconnectTelegramResponseSchema: GenMessage<DisconnectTelegramResponse>;
 
 /**
+ * @generated from message applyant.v1.GetOverviewRequest
+ */
+export declare type GetOverviewRequest = Message<"applyant.v1.GetOverviewRequest"> & {
+  /**
+   * @generated from field: applyant.v1.OverviewWindow window = 1;
+   */
+  window: OverviewWindow;
+};
+
+/**
+ * Describes the message applyant.v1.GetOverviewRequest.
+ * Use `create(GetOverviewRequestSchema)` to create a new message.
+ */
+export declare const GetOverviewRequestSchema: GenMessage<GetOverviewRequest>;
+
+/**
+ * One funnel step: postings first seen in the window that reached it.
+ *
+ * @generated from message applyant.v1.FunnelStep
+ */
+export declare type FunnelStep = Message<"applyant.v1.FunnelStep"> & {
+  /**
+   * found | verified | interested | prepared | approved | applied | interview | offer
+   *
+   * @generated from field: string key = 1;
+   */
+  key: string;
+
+  /**
+   * @generated from field: string label = 2;
+   */
+  label: string;
+
+  /**
+   * @generated from field: int64 count = 3;
+   */
+  count: bigint;
+};
+
+/**
+ * Describes the message applyant.v1.FunnelStep.
+ * Use `create(FunnelStepSchema)` to create a new message.
+ */
+export declare const FunnelStepSchema: GenMessage<FunnelStep>;
+
+/**
+ * A share: numerator of denominator (the ratio is unset while the denominator is 0).
+ *
+ * @generated from message applyant.v1.OverviewRatio
+ */
+export declare type OverviewRatio = Message<"applyant.v1.OverviewRatio"> & {
+  /**
+   * @generated from field: int64 numerator = 1;
+   */
+  numerator: bigint;
+
+  /**
+   * @generated from field: int64 denominator = 2;
+   */
+  denominator: bigint;
+
+  /**
+   * @generated from field: optional double ratio = 3;
+   */
+  ratio?: number | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.OverviewRatio.
+ * Use `create(OverviewRatioSchema)` to create a new message.
+ */
+export declare const OverviewRatioSchema: GenMessage<OverviewRatio>;
+
+/**
+ * @generated from message applyant.v1.OverviewMetric
+ */
+export declare type OverviewMetric = Message<"applyant.v1.OverviewMetric"> & {
+  /**
+   * live_forms | interested | review_time | unsupported_claims | applications_per_week |
+   * interview_rate
+   *
+   * @generated from field: string key = 1;
+   */
+  key: string;
+
+  /**
+   * @generated from field: string label = 2;
+   */
+  label: string;
+
+  /**
+   * What it measures, in a sentence.
+   *
+   * @generated from field: string definition = 3;
+   */
+  definition: string;
+
+  /**
+   * The target as the PRD states it ("≥ 95%"); empty for the funnel's watched numbers.
+   *
+   * @generated from field: string target = 4;
+   */
+  target: string;
+
+  /**
+   * The value as shown ("96% · 24 of 25", "12 min median · 3 reviews", "—" with no data).
+   *
+   * @generated from field: string display = 5;
+   */
+  display: string;
+
+  /**
+   * Set when there's data: whether the target holds (unset for numbers without a target).
+   *
+   * @generated from field: optional bool met = 6;
+   */
+  met?: boolean | undefined;
+
+  /**
+   * The value itself: a share (0–1), minutes, a count or a rate per week.
+   *
+   * @generated from field: optional double value = 7;
+   */
+  value?: number | undefined;
+
+  /**
+   * @generated from field: optional applyant.v1.OverviewRatio ratio = 8;
+   */
+  ratio?: OverviewRatio | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.OverviewMetric.
+ * Use `create(OverviewMetricSchema)` to create a new message.
+ */
+export declare const OverviewMetricSchema: GenMessage<OverviewMetric>;
+
+/**
+ * @generated from message applyant.v1.GetOverviewResponse
+ */
+export declare type GetOverviewResponse = Message<"applyant.v1.GetOverviewResponse"> & {
+  /**
+   * @generated from field: applyant.v1.OverviewWindow window = 1;
+   */
+  window: OverviewWindow;
+
+  /**
+   * The window's start; unset for all time.
+   *
+   * @generated from field: optional google.protobuf.Timestamp since = 2;
+   */
+  since?: Timestamp | undefined;
+
+  /**
+   * @generated from field: repeated applyant.v1.FunnelStep funnel = 3;
+   */
+  funnel: FunnelStep[];
+
+  /**
+   * @generated from field: repeated applyant.v1.OverviewMetric metrics = 4;
+   */
+  metrics: OverviewMetric[];
+};
+
+/**
+ * Describes the message applyant.v1.GetOverviewResponse.
+ * Use `create(GetOverviewResponseSchema)` to create a new message.
+ */
+export declare const GetOverviewResponseSchema: GenMessage<GetOverviewResponse>;
+
+/**
  * @generated from enum applyant.v1.PostingStage
  */
 export enum PostingStage {
@@ -7248,6 +7456,13 @@ export enum ApplicationStage {
    * @generated from enum value: APPLICATION_STAGE_OFFER = 8;
    */
   OFFER = 8,
+
+  /**
+   * The candidate withdrew (set by hand only).
+   *
+   * @generated from enum value: APPLICATION_STAGE_WITHDRAWN = 9;
+   */
+  WITHDRAWN = 9,
 }
 
 /**
@@ -7318,6 +7533,38 @@ export enum TelegramState {
  * Describes the enum applyant.v1.TelegramState.
  */
 export declare const TelegramStateSchema: GenEnum<TelegramState>;
+
+/**
+ * @generated from enum applyant.v1.OverviewWindow
+ */
+export enum OverviewWindow {
+  /**
+   * Same as OVERVIEW_WINDOW_30_DAYS.
+   *
+   * @generated from enum value: OVERVIEW_WINDOW_UNSPECIFIED = 0;
+   */
+  OVERVIEW_WINDOW_UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: OVERVIEW_WINDOW_7_DAYS = 1;
+   */
+  OVERVIEW_WINDOW_7_DAYS = 1,
+
+  /**
+   * @generated from enum value: OVERVIEW_WINDOW_30_DAYS = 2;
+   */
+  OVERVIEW_WINDOW_30_DAYS = 2,
+
+  /**
+   * @generated from enum value: OVERVIEW_WINDOW_ALL = 3;
+   */
+  OVERVIEW_WINDOW_ALL = 3,
+}
+
+/**
+ * Describes the enum applyant.v1.OverviewWindow.
+ */
+export declare const OverviewWindowSchema: GenEnum<OverviewWindow>;
 
 /**
  * ApplyantService is the only contract between applyantd and its clients
@@ -7803,6 +8050,21 @@ export declare const ApplyantService: GenService<{
     output: typeof EditCvResponseSchema;
   },
   /**
+   * SetApplicationStage corrects an application's status by hand (PRD: "every status can be
+   * corrected by hand"): APPLIED (sent outside Applyant, or a wrong reply undone), INTERVIEW,
+   * OFFER, REJECTED or WITHDRAWN. Recorded as a manual `application.stage` event. It never
+   * delivers anything; moves that can't be true are refused (FailedPrecondition, saying why):
+   * a reply stage before the application was sent, a stage only the pipeline sets (preparing,
+   * review, approved), or while a delivery is under way.
+   *
+   * @generated from rpc applyant.v1.ApplyantService.SetApplicationStage
+   */
+  setApplicationStage: {
+    methodKind: "unary";
+    input: typeof SetApplicationStageRequestSchema;
+    output: typeof SetApplicationStageResponseSchema;
+  },
+  /**
    * Search: strategies (which sources, which queries, how often) find postings on their own.
    * Every source can be switched off, one by one or a whole kind; a source that's off is never
    * queried. ListSearch returns everything the Search screen shows: strategies with their
@@ -8112,6 +8374,18 @@ export declare const ApplyantService: GenService<{
     methodKind: "unary";
     input: typeof DisconnectTelegramRequestSchema;
     output: typeof DisconnectTelegramResponseSchema;
+  },
+  /**
+   * Overview: the funnel (found → verified → interested → prepared → approved → applied →
+   * interview → offer) and the PRD's success metrics, computed from the job and application
+   * history over a window.
+   *
+   * @generated from rpc applyant.v1.ApplyantService.GetOverview
+   */
+  getOverview: {
+    methodKind: "unary";
+    input: typeof GetOverviewRequestSchema;
+    output: typeof GetOverviewResponseSchema;
   },
 }>;
 

@@ -28,6 +28,7 @@ const STAGES: Record<string, ApplicationStage> = {
   interview: ApplicationStage.INTERVIEW,
   rejected: ApplicationStage.REJECTED,
   offer: ApplicationStage.OFFER,
+  withdrawn: ApplicationStage.WITHDRAWN,
 };
 
 /** " (the company's form; `applications form <id> platform` switches)" when both exist. */
@@ -693,6 +694,27 @@ export function registerApplications(program: Command, client: () => ApplyantCli
       const res = await client().markSubmitted({ applicationId: BigInt(positiveInt(idArg)) });
       const a = res.application;
       out(`Application ${a?.id}: applied (submitted by you in the browser).`);
+    });
+
+  apps
+    .command('status <id> <stage>')
+    .description(
+      'correct the status by hand: applied (sent outside Applyant, or a misread reply undone) | interview | offer | rejected | withdrawn; never sends anything',
+    )
+    .action(async (idArg: string, stageArg: string) => {
+      const stage = STAGES[stageArg];
+      if (stage === undefined)
+        throw new Error(
+          `unknown stage "${stageArg}" (applied | interview | offer | rejected | withdrawn)`,
+        );
+      const res = await client().setApplicationStage({
+        applicationId: BigInt(positiveInt(idArg)),
+        stage,
+      });
+      const a = res.application;
+      out(
+        `Application ${a?.id}${a?.title ? ` (${a.title}${a.company ? ` · ${a.company}` : ''})` : ''}: ${a ? appStageName(a.stage) : stageArg} (set by hand).`,
+      );
     });
 
   apps

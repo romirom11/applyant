@@ -169,10 +169,29 @@ public protocol DaemonAPI: Sendable {
     func addStrategy(_ request: Applyant_V1_AddStrategyRequest) async throws -> SearchStrategy
     func updateStrategy(_ request: Applyant_V1_UpdateStrategyRequest) async throws -> SearchStrategy
     func deleteStrategy(_ id: Int64) async throws
+
+    // Statuses by hand, re-scoring and the Overview.
+    /// Corrects an application's status by hand (Applied, Interview, Offer, Rejected, Withdrawn);
+    /// moves that can't be true are refused, saying why.
+    func setStage(application id: Int64, to stage: ApplicationStage) async throws -> Application
+    /// Scores postings again (empty: every verified or scored one); the ids enqueued, none when
+    /// they were all being scored already.
+    func scorePostings(_ ids: [Int64], refresh: Bool) async throws -> [Int64]
+    /// The funnel and the success metrics over a window.
+    func overview(_ window: OverviewWindow) async throws -> OverviewReport
 }
 
 /// Older fakes and daemons: the setup RPCs answer "not available" unless implemented.
 public extension DaemonAPI {
+    func setStage(application id: Int64, to stage: ApplicationStage) async throws -> Application {
+        throw APIError("setting a status by hand needs a newer applyantd")
+    }
+    func scorePostings(_ ids: [Int64], refresh: Bool) async throws -> [Int64] {
+        throw APIError("re-scoring needs a newer applyantd")
+    }
+    func overview(_ window: OverviewWindow) async throws -> OverviewReport {
+        throw APIError("the overview needs a newer applyantd")
+    }
     func mailboxSetup() async throws -> MailboxSetup {
         var setup = MailboxSetup()
         if let box = try await mailbox() { setup.mailbox = box }
@@ -682,6 +701,28 @@ extension ConnectDaemonAPI {
 
     public func deleteStrategy(_ id: Int64) async throws {
         _ = try unwrap(await unary.deleteStrategy(request: .with { $0.strategy = String(id) }, headers: headers))
+    }
+}
+
+extension ConnectDaemonAPI {
+    public func setStage(application id: Int64, to stage: ApplicationStage) async throws -> Application {
+        let request = Applyant_V1_SetApplicationStageRequest.with {
+            $0.applicationID = id
+            $0.stage = stage
+        }
+        return try unwrap(await unary.setApplicationStage(request: request, headers: headers)).application
+    }
+
+    public func scorePostings(_ ids: [Int64], refresh: Bool) async throws -> [Int64] {
+        let request = Applyant_V1_ScorePostingsRequest.with {
+            $0.ids = ids
+            $0.refresh = refresh
+        }
+        return try unwrap(await unary.scorePostings(request: request, headers: headers)).enqueuedIds
+    }
+
+    public func overview(_ window: OverviewWindow) async throws -> OverviewReport {
+        try unwrap(await unary.getOverview(request: .with { $0.window = window }, headers: headers))
     }
 }
 

@@ -35,6 +35,7 @@ import {
   requestSync,
   SourceError,
 } from '../domain/knowledge/sources/registry.ts';
+import { requestRematch } from '../domain/scoring/rematch.ts';
 import {
   type ApplyantService,
   EvidenceSchema,
@@ -322,6 +323,7 @@ export function candidateRpcs(
           editFact(tx.db, id as number, req.text, tx.now);
           // The trigger dropped the old vector; embed the new text.
           enqueueEmbedFacts(tx);
+          requestRematch(tx);
           return getFact(tx.db, id as number);
         });
         if (!fact) throw new ConnectError(`no fact ${id}`, Code.NotFound);
@@ -341,6 +343,8 @@ function changeFacts(
       change(tx.db, id, tx.now);
       const view = getFact(tx.db, id);
       if (!view) throw new FactError(`no fact ${id}`);
+      // A rejected fact drops out of retrieval, so matches that saw it may change.
+      requestRematch(tx);
       return view;
     }),
   );

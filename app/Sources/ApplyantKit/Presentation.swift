@@ -68,22 +68,12 @@ public enum Section: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
-    /// Sections with content so far; the rest show an empty state until their phase.
-    public var isBuilt: Bool {
-        switch self {
-        case .inbox, .readyToReview, .preparing, .interested, .skipped, .applied, .interviews, .offers, .whichApplication,
-             .interview, .search, .agentRuns, .companies, .settings, .profile, .projects: true
-        default: false
-        }
-    }
+    /// Sections with content so far (every one, since the Overview); the rest would show an
+    /// empty state until their phase.
+    public var isBuilt: Bool { true }
 
     /// Which phase of the plan fills an empty section.
-    public var comesWith: String? {
-        switch self {
-        case .overview: "the funnel view"
-        default: nil
-        }
-    }
+    public var comesWith: String? { isBuilt ? nil : "a later phase" }
 }
 
 public struct Navigation: Equatable, Sendable {
@@ -181,8 +171,49 @@ public enum StageText {
         case .interview: Chip(text: "Interview", tone: .good)
         case .offer: Chip(text: "Offer", tone: .good)
         case .rejected: Chip(text: "Rejected", tone: .warning)
+        case .withdrawn: Chip(text: "Withdrawn", tone: .neutral)
         default: Chip(text: "Application", tone: .neutral)
         }
+    }
+
+    /// A stage by its name, as Set status offers it.
+    public static func name(_ stage: ApplicationStage) -> String {
+        switch stage {
+        case .preparing: "Preparing"
+        case .readyForReview: "Ready to review"
+        case .needsCandidate: "Needs you"
+        case .approved: "Approved"
+        case .applied: "Applied"
+        case .interview: "Interview"
+        case .offer: "Offer"
+        case .rejected: "Rejected"
+        case .withdrawn: "Withdrawn"
+        default: "Application"
+        }
+    }
+
+    /// Set status's item for a target: Applied before anything was sent means it went out
+    /// some other way.
+    public static func statusItem(_ target: ApplicationStage, from stage: ApplicationStage) -> String {
+        target == .applied && !StageRules.isSent(stage) ? "Applied (sent outside Applyant)" : name(target)
+    }
+}
+
+/// The statuses the candidate can set by hand. The daemon has the final say (it also refuses
+/// Applied while a delivery is queued or running, which the app can't see).
+public enum StageRules {
+    /// Every status that can be set by hand, in the menu's order.
+    public static let manual: [ApplicationStage] = [.applied, .interview, .offer, .rejected, .withdrawn]
+
+    /// Sent: by Applyant or by hand, and what the replies (or the candidate) made of it since.
+    public static func isSent(_ stage: ApplicationStage) -> Bool {
+        [.applied, .interview, .offer, .rejected, .withdrawn].contains(stage)
+    }
+
+    /// Applied from any other status (sent outside Applyant, or a wrong reply undone); the reply
+    /// statuses only once it was sent. Never the status it already has.
+    public static func targets(from stage: ApplicationStage) -> [ApplicationStage] {
+        manual.filter { $0 != stage && ($0 == .applied || isSent(stage)) }
     }
 }
 
@@ -211,6 +242,15 @@ public enum Score {
     }
 
     private static func lost(_ c: Applyant_V1_ScoreComponent) -> Double { c.weight * (1 - c.value) }
+
+    /// The daemon scores verified, scored and skipped postings (not unverified or closed ones).
+    public static func canRescore(_ p: Posting) -> Bool { [.verified, .scored, .skipped].contains(p.stage) }
+
+    /// What Re-score says: "Re-scoring 1 posting", or that there was nothing new to enqueue.
+    public static func rescored(_ enqueued: Int, all: Bool) -> String {
+        if enqueued == 0 { return all ? "Nothing to re-score: already being scored" : "Already being scored" }
+        return "Re-scoring \(enqueued) posting\(enqueued == 1 ? "" : "s")"
+    }
 
     public static func verdictMark(_ verdict: String) -> String {
         switch verdict {

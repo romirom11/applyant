@@ -497,6 +497,32 @@ final class FakeDaemon: DaemonAPI, @unchecked Sendable {
         searchList.strategies.removeAll { $0.id == id }
     }
 
+    // Statuses by hand, re-scoring and the Overview.
+    /// What SetApplicationStage says no with (nil: the move is allowed).
+    var stageRefusal: String?
+    /// Postings with a score task queued or running.
+    var scoring: Set<Int64> = []
+    /// GetOverview's answer per window.
+    var overviews: [OverviewWindow: OverviewReport] = [:]
+    func setStage(application id: Int64, to stage: ApplicationStage) async throws -> Application {
+        log("setStage \(id) \(stage)")
+        if let stageRefusal { throw APIError(stageRefusal) }
+        guard applications[id] != nil else { throw APIError("no application \(id)") }
+        applications[id]?.stage = stage
+        return applications[id]!
+    }
+    func scorePostings(_ ids: [Int64], refresh: Bool) async throws -> [Int64] {
+        log("scorePostings \(ids)")
+        let fresh = (ids.isEmpty ? postings.keys.sorted() : ids).filter { !scoring.contains($0) }
+        scoring.formUnion(fresh)
+        return fresh
+    }
+    func overview(_ window: OverviewWindow) async throws -> OverviewReport {
+        log("overview \(window)")
+        guard let report = overviews[window] else { throw APIError("no overview for \(window)") }
+        return report
+    }
+
     /// Changes a question everywhere it's listed.
     func setQuestion(_ id: Int64, _ change: (inout InterviewQuestion) -> Void) throws -> InterviewQuestion {
         guard let i = questions.firstIndex(where: { $0.id == id }) else { throw APIError("no question \(id)") }

@@ -66,6 +66,7 @@ const APP_STAGE_TO_PB: Record<ApplicationStage, PbAppStage> = {
   interview: PbAppStage.INTERVIEW,
   rejected: PbAppStage.REJECTED,
   offer: PbAppStage.OFFER,
+  withdrawn: PbAppStage.WITHDRAWN,
 };
 
 export function receiptToPb(r: ReceiptView): PbReceipt {

@@ -124,6 +124,13 @@ service ApplyantService {
   // review_edit fact; a left-out line given words goes back in), or removes it. The PDF is
   // rendered again.
   rpc EditCv(EditCvRequest) returns (EditCvResponse);
+  // SetApplicationStage corrects an application's status by hand (PRD: "every status can be
+  // corrected by hand"): APPLIED (sent outside Applyant, or a wrong reply undone), INTERVIEW,
+  // OFFER, REJECTED or WITHDRAWN. Recorded as a manual `application.stage` event. It never
+  // delivers anything; moves that can't be true are refused (FailedPrecondition, saying why):
+  // a reply stage before the application was sent, a stage only the pipeline sets (preparing,
+  // review, approved), or while a delivery is under way.
+  rpc SetApplicationStage(SetApplicationStageRequest) returns (SetApplicationStageResponse);
 
   // Search: strategies (which sources, which queries, how often) find postings on their own.
   // Every source can be switched off, one by one or a whole kind; a source that's off is never
@@ -205,6 +212,11 @@ service ApplyantService {
   rpc GetTelegram(GetTelegramRequest) returns (GetTelegramResponse);
   rpc ConnectTelegram(ConnectTelegramRequest) returns (ConnectTelegramResponse);
   rpc DisconnectTelegram(DisconnectTelegramRequest) returns (DisconnectTelegramResponse);
+
+  // Overview: the funnel (found → verified → interested → prepared → approved → applied →
+  // interview → offer) and the PRD's success metrics, computed from the job and application
+  // history over a window.
+  rpc GetOverview(GetOverviewRequest) returns (GetOverviewResponse);
 }
 
 enum PostingStage {
@@ -1080,6 +1092,8 @@ enum ApplicationStage {
   APPLICATION_STAGE_INTERVIEW = 6;
   APPLICATION_STAGE_REJECTED = 7;
   APPLICATION_STAGE_OFFER = 8;
+  // The candidate withdrew (set by hand only).
+  APPLICATION_STAGE_WITHDRAWN = 9;
 }
 
 message ApplicationField {
@@ -1360,6 +1374,15 @@ message SubmitApplicationRequest {
 }
 
 message SubmitApplicationResponse {
+  Application application = 1;
+}
+
+message SetApplicationStageRequest {
+  int64 application_id = 1;
+  ApplicationStage stage = 2;
+}
+
+message SetApplicationStageResponse {
   Application application = 1;
 }
 
@@ -2077,4 +2100,59 @@ message DisconnectTelegramRequest {}
 
 message DisconnectTelegramResponse {
   Telegram telegram = 1;
+}
+
+// ---- Overview --------------------------------------------------------------------------
+
+enum OverviewWindow {
+  // Same as OVERVIEW_WINDOW_30_DAYS.
+  OVERVIEW_WINDOW_UNSPECIFIED = 0;
+  OVERVIEW_WINDOW_7_DAYS = 1;
+  OVERVIEW_WINDOW_30_DAYS = 2;
+  OVERVIEW_WINDOW_ALL = 3;
+}
+
+message GetOverviewRequest {
+  OverviewWindow window = 1;
+}
+
+// One funnel step: postings first seen in the window that reached it.
+message FunnelStep {
+  // found | verified | interested | prepared | approved | applied | interview | offer
+  string key = 1;
+  string label = 2;
+  int64 count = 3;
+}
+
+// A share: numerator of denominator (the ratio is unset while the denominator is 0).
+message OverviewRatio {
+  int64 numerator = 1;
+  int64 denominator = 2;
+  optional double ratio = 3;
+}
+
+message OverviewMetric {
+  // live_forms | interested | review_time | unsupported_claims | applications_per_week |
+  // interview_rate
+  string key = 1;
+  string label = 2;
+  // What it measures, in a sentence.
+  string definition = 3;
+  // The target as the PRD states it ("≥ 95%"); empty for the funnel's watched numbers.
+  string target = 4;
+  // The value as shown ("96% · 24 of 25", "12 min median · 3 reviews", "—" with no data).
+  string display = 5;
+  // Set when there's data: whether the target holds (unset for numbers without a target).
+  optional bool met = 6;
+  // The value itself: a share (0–1), minutes, a count or a rate per week.
+  optional double value = 7;
+  optional OverviewRatio ratio = 8;
+}
+
+message GetOverviewResponse {
+  OverviewWindow window = 1;
+  // The window's start; unset for all time.
+  optional google.protobuf.Timestamp since = 2;
+  repeated FunnelStep funnel = 3;
+  repeated OverviewMetric metrics = 4;
 }

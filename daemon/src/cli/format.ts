@@ -53,6 +53,7 @@ const APP_STAGE: Record<number, string> = {
   [ApplicationStage.INTERVIEW]: 'interview',
   [ApplicationStage.REJECTED]: 'rejected',
   [ApplicationStage.OFFER]: 'offer',
+  [ApplicationStage.WITHDRAWN]: 'withdrawn',
 };
 
 const TASK_TYPE: Record<number, string> = {

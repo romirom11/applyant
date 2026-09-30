@@ -110,6 +110,7 @@ public enum MailText {
         case .interview: Chip(text: "Interview", tone: .good)
         case .offer: Chip(text: "Offer", tone: .good)
         case .rejected: Chip(text: "Rejected", tone: .warning)
+        case .withdrawn: Chip(text: "Withdrawn", tone: .neutral)
         default: nil
         }
     }

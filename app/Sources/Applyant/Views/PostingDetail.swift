@@ -8,6 +8,8 @@ struct PostingDetail: View {
     let postingId: Int64
     @State private var skipping = false
     @State private var skipReason = ""
+    /// What Re-score said ("Re-scoring 1 posting"), for a few seconds.
+    @State private var rescoreNote: String?
 
     var body: some View {
         Group {
@@ -74,9 +76,21 @@ struct PostingDetail: View {
             if p.stage != .skipped {
                 Button("Skip…") { skipping = true }
             }
+            if Score.canRescore(p) {
+                Button("Re-score") { Task { rescoreNote = await store.rescore([p.id]) } }
+                    .help("Score it again against your current profile and preferences")
+            }
             if let url = URL(string: p.canonicalURL) {
                 Link("Open posting ↗", destination: url)
             }
+            if let rescoreNote {
+                Text(rescoreNote).font(.callout).foregroundStyle(.secondary)
+            }
+        }
+        .task(id: rescoreNote) {
+            // A newer note cancels this wait; only an uninterrupted one clears it.
+            guard rescoreNote != nil, (try? await Task.sleep(for: .seconds(4))) != nil else { return }
+            rescoreNote = nil
         }
     }
 

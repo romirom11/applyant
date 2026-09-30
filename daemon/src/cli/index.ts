@@ -10,6 +10,7 @@ import { eventJson, eventLine } from './format.ts';
 import { registerHandoff } from './handoff.ts';
 import { positiveInt, registerJobs } from './jobs.ts';
 import { registerMail } from './mail.ts';
+import { registerOverview } from './overview.ts';
 import { registerPlatforms } from './platforms.ts';
 import { registerSearch } from './search.ts';
 import { registerStatus } from './status.ts';
@@ -72,6 +73,7 @@ export function buildCli(client: () => ApplyantClient): Command {
   registerApplications(program, client);
   registerHandoff(program, client);
   registerStatus(program, client);
+  registerOverview(program, client);
   registerConfig(program, client);
   registerMail(program, client, readSecretValue);
   registerPlatforms(program, client, readSecretValue);

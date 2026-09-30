@@ -23,6 +23,7 @@ import {
 import type { Deps } from '../../deps.ts';
 import { type SourceExtraction, sourceExtractionSchema } from '../../models/schemas/index.ts';
 import type { Handler, Outcome, Task, Tx } from '../../queue/types.ts';
+import { requestRematch } from '../scoring/rematch.ts';
 import { applyAuthorship } from './authorship.ts';
 import { checkClaims } from './claim-check.ts';
 import { enqueueEmbedFacts } from './embed-index.ts';
@@ -186,6 +187,8 @@ export const syncSource: Handler<'sync_source'> = async (task, ctx) => {
         .run();
       // New facts need vectors for retrieval.
       if (summary.inserted > 0) enqueueEmbedFacts(tx);
+      // New or dropped facts can change what postings match.
+      if (summary.inserted > 0 || summary.removed > 0) requestRematch(tx);
       tx.emit({
         kind: 'source.synced',
         entityId: source.id,

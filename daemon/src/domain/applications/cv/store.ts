@@ -23,6 +23,7 @@ import {
 import type { Tx } from '../../../queue/types.ts';
 import { enqueueEmbedFacts } from '../../knowledge/embed-index.ts';
 import type { StandardProfile } from '../../knowledge/profile.ts';
+import { requestRematch } from '../../scoring/rematch.ts';
 import { reviewFact } from '../review-fact.ts';
 import type { FieldDefault } from '../standard-fields.ts';
 import {
@@ -362,7 +363,10 @@ export function editCvLine(
       break;
     }
   }
-  if (factId !== null) enqueueEmbedFacts(tx);
+  if (factId !== null) {
+    enqueueEmbedFacts(tx);
+    requestRematch(tx);
+  }
   const row = updateCv(tx, cv.id, {
     plan,
     status: 'planned',

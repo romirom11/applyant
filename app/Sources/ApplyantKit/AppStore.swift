@@ -93,6 +93,10 @@ public final class AppStore {
     public private(set) var projectSources: [Int64: [KnowledgeSource]] = [:]
     /// The scoring preferences (Settings → Preferences).
     public private(set) var searchPreferences: SearchPreferences?
+    /// The Overview: the funnel and the success metrics over `overviewWindow` (nil until loaded).
+    public private(set) var overview: OverviewReport?
+    /// The Overview's window; the screen loads again when it changes.
+    public var overviewWindow: OverviewWindow = .overviewWindow30Days
     private var onboardingOffered = false
     /// The last failed action, for an alert.
     public var lastError: String?
@@ -182,6 +186,7 @@ public final class AppStore {
         for target in interviewThreads.keys { await refreshThread(target, api) }
         for run in runEvents.keys { await refreshRunEvents(run, api) }
         for id in companyDetails.keys { await refreshCompany(id, api) }
+        if overview != nil { await refreshOverview(api) }
     }
 
     // MARK: Events
@@ -198,6 +203,7 @@ public final class AppStore {
             }
         case let .posting(p)?:
             await refreshPosting(p.postingID, api)
+            if navigation.section == .overview { await refreshOverview(api) }
         case let .application(a)?:
             let before = applications[a.applicationID]?.stage
             await refreshApplication(a.applicationID, api)
@@ -205,6 +211,8 @@ public final class AppStore {
             if live, before != a.stage, let app = applications[a.applicationID] {
                 notifyStage(app)
             }
+            // The Overview on screen follows the funnel as postings and applications move.
+            if navigation.section == .overview { await refreshOverview(api) }
         case let .handoff(h)?:
             await refreshApplication(h.applicationID, api)
             if live, let app = applications[h.applicationID] {
@@ -426,6 +434,42 @@ public final class AppStore {
     public func markSubmitted(application id: Int64) async {
         guard let api, let app = await attempt({ try await api.markSubmitted(application: id) }) else { return }
         record(app)
+    }
+
+    /// Set status: Applied, Interview, Offer, Rejected or Withdrawn by hand. The daemon says no to
+    /// moves that can't be true (the reason is shown). True when it was set.
+    @discardableResult
+    public func setStage(application id: Int64, to stage: ApplicationStage) async -> Bool {
+        guard let api, let app = await attempt({ try await api.setStage(application: id, to: stage) }) else { return false }
+        record(app)
+        await refreshPosting(app.postingID, api)
+        if overview != nil { await refreshOverview(api) }
+        return true
+    }
+
+    /// Scores postings again (empty: every verified or scored one). What to tell the candidate
+    /// ("Re-scoring 1 posting", "Already being scored"); nil when the daemon refused.
+    @discardableResult
+    public func rescore(_ ids: [Int64] = []) async -> String? {
+        guard let api, let enqueued = await attempt({ try await api.scorePostings(ids, refresh: false) }) else { return nil }
+        return Score.rescored(enqueued.count, all: ids.isEmpty)
+    }
+
+    // MARK: The Overview
+
+    private func refreshOverview(_ api: DaemonAPI) async {
+        let window = overviewWindow
+        guard let report = try? await api.overview(window), window == overviewWindow else { return }
+        overview = report
+    }
+
+    /// Loads the Overview for its window (`window` picks another first). A slow answer for a
+    /// window no longer picked is dropped.
+    public func openOverview(window: OverviewWindow? = nil) async {
+        if let window { overviewWindow = window }
+        let asked = overviewWindow
+        guard let api, let report = await attempt({ try await api.overview(asked) }), asked == overviewWindow else { return }
+        overview = report
     }
 
     // MARK: Search
@@ -1034,8 +1078,9 @@ public final class AppStore {
         case .preparing:
             return applicationItems { $0.stage == .preparing }
         case .applied:
-            // Sent, and where the mail left them: rejections stay here, marked.
-            return applicationItems { $0.stage == .approved || $0.stage == .applied || $0.stage == .rejected }
+            // Sent, and where the mail (or the candidate) left them: rejections and withdrawals
+            // stay here, marked.
+            return applicationItems { [.approved, .applied, .rejected, .withdrawn].contains($0.stage) }
         case .interviews:
             return applicationItems { $0.stage == .interview }
         case .offers:

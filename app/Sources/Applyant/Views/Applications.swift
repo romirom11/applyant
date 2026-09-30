@@ -2,6 +2,7 @@
 // daemon couldn't place on its own, the mailbox's connection state, and the replies each sent
 // application got (with its interview's calendar event). Applied · Interviews · Offers list the
 // applications themselves (PostingList) and open them in the review screen, which shows these.
+// Set status corrects a status by hand (a row's menu, the review screen).
 import AppKit
 import ApplyantAPI
 import ApplyantKit
@@ -167,9 +168,8 @@ struct WhichApplication: View {
     /// Sent applications the email doesn't already offer.
     private var otherApplications: [Application] {
         let offered = Set(email.candidates.map(\.applicationID))
-        let sent: Set<ApplicationStage> = [.approved, .applied, .interview, .offer, .rejected]
         return store.applications.values
-            .filter { sent.contains($0.stage) && !offered.contains($0.id) }
+            .filter { ($0.stage == .approved || StageRules.isSent($0.stage)) && !offered.contains($0.id) }
             .sorted { $0.id > $1.id }
     }
 
@@ -211,6 +211,27 @@ struct ApplicationReplies: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(6)
+        }
+    }
+}
+
+/// Set status: the statuses that make sense from this one, set by hand. The daemon has the
+/// final say; a refusal is shown with its reason.
+struct SetStatusMenu: View {
+    let store: AppStore
+    let app: Application
+
+    var body: some View {
+        let targets = StageRules.targets(from: app.stage)
+        if !targets.isEmpty {
+            Menu("Set status") {
+                ForEach(targets, id: \.self) { stage in
+                    Button(StageText.statusItem(stage, from: app.stage)) {
+                        Task { await store.setStage(application: app.id, to: stage) }
+                    }
+                }
+            }
+            .help("Correct the status by hand: a reply Applyant missed, or one sent outside it")
         }
     }
 }

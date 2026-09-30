@@ -15,6 +15,7 @@ import { companyRpcs } from './companies.ts';
 import { configRpcs } from './config.ts';
 import { interviewRpcs } from './interview.ts';
 import { mailRpcs } from './mail.ts';
+import { overviewRpcs } from './overview.ts';
 import { type PlatformServices, platformRpcs } from './platforms.ts';
 import { postingRpcs, type RpcContext } from './postings.ts';
 import { prefsRpcs } from './prefs.ts';
@@ -90,6 +91,7 @@ export async function startRpcServer(o: RpcServerOptions): Promise<RpcServer> {
         ...platformRpcs(o.platforms ?? null),
         ...telegramRpcs(o.telegram ?? null),
         ...configRpcs(o),
+        ...overviewRpcs(o),
         ...secretRpcs(o.secrets),
         ...setupRpcs({ ...o.setup, db: o.db, bus: o.bus, now: o.now }),
       }),

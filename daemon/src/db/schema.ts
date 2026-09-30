@@ -607,6 +607,8 @@ export const APPLICATION_STAGES = [
   'interview',
   'rejected',
   'offer',
+  /** The candidate withdrew; only ever set by hand (SetApplicationStage). */
+  'withdrawn',
 ] as const;
 export type ApplicationStage = (typeof APPLICATION_STAGES)[number];
 
@@ -639,6 +641,11 @@ export const applications = sqliteTable('applications', {
   preparedAt: integer('prepared_at', { mode: 'timestamp_ms' }),
   approvedAt: integer('approved_at', { mode: 'timestamp_ms' }),
   appliedAt: integer('applied_at', { mode: 'timestamp_ms' }),
+  /** When the candidate first opened it for review (metric 3: review time runs to approval). */
+  reviewStartedAt: integer('review_started_at', { mode: 'timestamp_ms' }),
+  /** When it first reached interview / offer (kept when a later reply rejects it). */
+  interviewAt: integer('interview_at', { mode: 'timestamp_ms' }),
+  offerAt: integer('offer_at', { mode: 'timestamp_ms' }),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull().default(now),
   updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull().default(now),
 });

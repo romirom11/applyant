@@ -132,6 +132,7 @@ export function handlers(partial: Partial<Handlers>): Handlers {
     read_form: never as Handler<'read_form'>,
     sync_source: never as Handler<'sync_source'>,
     embed_facts: never as Handler<'embed_facts'>,
+    rematch_postings: never as Handler<'rematch_postings'>,
     prepare_application: never as Handler<'prepare_application'>,
     deliver_application: never as Handler<'deliver_application'>,
     interview_open: never as Handler<'interview_open'>,

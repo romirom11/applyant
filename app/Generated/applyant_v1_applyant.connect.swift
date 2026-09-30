@@ -217,6 +217,15 @@ public protocol Applyant_V1_ApplyantServiceClientInterface: Sendable {
     @available(iOS 13, *)
     func `editCv`(request: Applyant_V1_EditCvRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_EditCvResponse>
 
+    /// SetApplicationStage corrects an application's status by hand (PRD: "every status can be
+    /// corrected by hand"): APPLIED (sent outside Applyant, or a wrong reply undone), INTERVIEW,
+    /// OFFER, REJECTED or WITHDRAWN. Recorded as a manual `application.stage` event. It never
+    /// delivers anything; moves that can't be true are refused (FailedPrecondition, saying why):
+    /// a reply stage before the application was sent, a stage only the pipeline sets (preparing,
+    /// review, approved), or while a delivery is under way.
+    @available(iOS 13, *)
+    func `setApplicationStage`(request: Applyant_V1_SetApplicationStageRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_SetApplicationStageResponse>
+
     /// Search: strategies (which sources, which queries, how often) find postings on their own.
     /// Every source can be switched off, one by one or a whole kind; a source that's off is never
     /// queried. ListSearch returns everything the Search screen shows: strategies with their
@@ -351,6 +360,12 @@ public protocol Applyant_V1_ApplyantServiceClientInterface: Sendable {
 
     @available(iOS 13, *)
     func `disconnectTelegram`(request: Applyant_V1_DisconnectTelegramRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_DisconnectTelegramResponse>
+
+    /// Overview: the funnel (found → verified → interested → prepared → approved → applied →
+    /// interview → offer) and the PRD's success metrics, computed from the job and application
+    /// history over a window.
+    @available(iOS 13, *)
+    func `getOverview`(request: Applyant_V1_GetOverviewRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_GetOverviewResponse>
 }
 
 /// Concrete implementation of `Applyant_V1_ApplyantServiceClientInterface`.
@@ -597,6 +612,11 @@ public final class Applyant_V1_ApplyantServiceClient: Applyant_V1_ApplyantServic
     }
 
     @available(iOS 13, *)
+    public func `setApplicationStage`(request: Applyant_V1_SetApplicationStageRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_SetApplicationStageResponse> {
+        return await self.client.unary(path: "/applyant.v1.ApplyantService/SetApplicationStage", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
     public func `listSearch`(request: Applyant_V1_ListSearchRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_ListSearchResponse> {
         return await self.client.unary(path: "/applyant.v1.ApplyantService/ListSearch", idempotencyLevel: .unknown, request: request, headers: headers)
     }
@@ -746,6 +766,11 @@ public final class Applyant_V1_ApplyantServiceClient: Applyant_V1_ApplyantServic
         return await self.client.unary(path: "/applyant.v1.ApplyantService/DisconnectTelegram", idempotencyLevel: .unknown, request: request, headers: headers)
     }
 
+    @available(iOS 13, *)
+    public func `getOverview`(request: Applyant_V1_GetOverviewRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_GetOverviewResponse> {
+        return await self.client.unary(path: "/applyant.v1.ApplyantService/GetOverview", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
     public enum Metadata {
         public enum Methods {
             public static let addPosting = Connect.MethodSpec(name: "AddPosting", service: "applyant.v1.ApplyantService", type: .unary)
@@ -795,6 +820,7 @@ public final class Applyant_V1_ApplyantServiceClient: Applyant_V1_ApplyantServic
             public static let getHandOff = Connect.MethodSpec(name: "GetHandOff", service: "applyant.v1.ApplyantService", type: .unary)
             public static let setCvMode = Connect.MethodSpec(name: "SetCvMode", service: "applyant.v1.ApplyantService", type: .unary)
             public static let editCv = Connect.MethodSpec(name: "EditCv", service: "applyant.v1.ApplyantService", type: .unary)
+            public static let setApplicationStage = Connect.MethodSpec(name: "SetApplicationStage", service: "applyant.v1.ApplyantService", type: .unary)
             public static let listSearch = Connect.MethodSpec(name: "ListSearch", service: "applyant.v1.ApplyantService", type: .unary)
             public static let addStrategy = Connect.MethodSpec(name: "AddStrategy", service: "applyant.v1.ApplyantService", type: .unary)
             public static let updateStrategy = Connect.MethodSpec(name: "UpdateStrategy", service: "applyant.v1.ApplyantService", type: .unary)
@@ -825,6 +851,7 @@ public final class Applyant_V1_ApplyantServiceClient: Applyant_V1_ApplyantServic
             public static let getTelegram = Connect.MethodSpec(name: "GetTelegram", service: "applyant.v1.ApplyantService", type: .unary)
             public static let connectTelegram = Connect.MethodSpec(name: "ConnectTelegram", service: "applyant.v1.ApplyantService", type: .unary)
             public static let disconnectTelegram = Connect.MethodSpec(name: "DisconnectTelegram", service: "applyant.v1.ApplyantService", type: .unary)
+            public static let getOverview = Connect.MethodSpec(name: "GetOverview", service: "applyant.v1.ApplyantService", type: .unary)
         }
     }
 }

@@ -24,6 +24,7 @@ import {
 } from '../../db/schema.ts';
 import { type InterviewOutput, interviewSchema } from '../../models/schemas/interview.ts';
 import type { Handler, HandlerContext, Outcome, Task, Tx } from '../../queue/types.ts';
+import { requestRematch } from '../scoring/rematch.ts';
 import { enqueueEmbedFacts } from './embed-index.ts';
 import { factKey, MAX_FACT_LENGTH } from './facts.ts';
 import {
@@ -371,7 +372,10 @@ export const interviewTurn: Handler<'interview_turn'> = async (task, ctx) => {
         .set({ status: 'answered', note })
         .where(eq(interviewQuestions.id, q.id))
         .run();
-      if (saved.length) enqueueEmbedFacts(tx);
+      if (saved.length) {
+        enqueueEmbedFacts(tx);
+        requestRematch(tx);
+      }
       tx.emit({
         kind: 'interview',
         entityId: q.id,

@@ -12,6 +12,7 @@ struct MainView: View {
         } content: {
             Group {
                 switch store.navigation.section {
+                case .overview: OverviewFunnel(store: store)
                 case .interview: InterviewList(store: store)
                 case .search: SearchList(store: store)
                 case .agentRuns: RunsList(store: store)
@@ -47,7 +48,9 @@ struct Detail: View {
     let store: AppStore
 
     var body: some View {
-        if store.navigation.section == .profile {
+        if store.navigation.section == .overview {
+            OverviewMetrics(store: store)
+        } else if store.navigation.section == .profile {
             ProfileSourcesPane(store: store)
         } else if store.navigation.section == .projects {
             ProjectDetail(store: store)
@@ -135,6 +138,8 @@ struct Sidebar: View {
 
 struct PostingList: View {
     let store: AppStore
+    /// What Re-score said, under the title for a few seconds.
+    @State private var note: String?
 
     var body: some View {
         let section = store.navigation.section
@@ -153,11 +158,40 @@ struct PostingList: View {
                     get: { store.navigation.postingId.flatMap { id in items.first { $0.postingId == id }?.id } },
                     set: { select($0, in: items, section: section) }
                 )) { item in
-                    PostingRow(item: item).tag(item.id)
+                    PostingRow(item: item)
+                        .tag(item.id)
+                        .contextMenu { rowMenu(item, section: section) }
                 }
             }
         }
         .navigationTitle(section.title)
+        .navigationSubtitle(note ?? "")
+        .toolbar {
+            if section == .inbox {
+                ToolbarItem {
+                    Button { Task { note = await store.rescore() } } label: {
+                        Label("Re-score all", systemImage: "arrow.clockwise")
+                    }
+                    .help("Score every verified or scored posting again (what was read before is reused)")
+                }
+            }
+        }
+        .task(id: note) {
+            // A newer note cancels this wait; only an uninterrupted one clears it.
+            guard note != nil, (try? await Task.sleep(for: .seconds(4))) != nil else { return }
+            note = nil
+        }
+    }
+
+    /// A row's menu: Set status for an application, Re-score in the posting sections.
+    @ViewBuilder
+    private func rowMenu(_ item: ListItem, section: ApplyantKit.Section) -> some View {
+        if let id = item.applicationId, let app = store.applications[id] {
+            SetStatusMenu(store: store, app: app)
+        }
+        if [.inbox, .interested, .skipped].contains(section), let p = store.postings[item.postingId], Score.canRescore(p) {
+            Button("Re-score") { Task { note = await store.rescore([p.id]) } }
+        }
     }
 
     private func select(_ id: String?, in items: [ListItem], section: ApplyantKit.Section) {

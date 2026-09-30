@@ -1,11 +1,12 @@
 // Application RPCs: validate → domain → proto. Review actions run in one short write
 // transaction each and return the application as it now is.
 import { Code, ConnectError, type ServiceImpl } from '@connectrpc/connect';
-import { eq } from 'drizzle-orm';
-import { postings } from '../db/schema.ts';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
+import { applications, postings } from '../db/schema.ts';
 import { editCvLine, setCvMode } from '../domain/applications/cv/store.ts';
 import { markSubmittedByHand, setApplyForm } from '../domain/applications/deliver.ts';
 import { emailsFor } from '../domain/applications/mail-status.ts';
+import { StageRefused, setApplicationStage } from '../domain/applications/manual-stage.ts';
 import {
   ApprovalBlocked,
   approveApplication,
@@ -48,7 +49,7 @@ function guard<T>(fn: () => T): T {
     return fn();
   } catch (err) {
     if (err instanceof ConnectError) throw err;
-    if (err instanceof ApprovalBlocked)
+    if (err instanceof ApprovalBlocked || err instanceof StageRefused)
       throw new ConnectError(err.message, Code.FailedPrecondition);
     if (err instanceof ApplicationError || err instanceof FactError) {
       const code = /^no (application|fact|posting)/.test(err.message)
@@ -75,6 +76,7 @@ export function applicationRpcs(
   | 'submitApplication'
   | 'setApplyForm'
   | 'markSubmitted'
+  | 'setApplicationStage'
   | 'getHandOff'
   | 'setCvMode'
   | 'editCv'
@@ -91,6 +93,8 @@ export function applicationRpcs(
     getApplication(req) {
       return guard(() => {
         const appId = id(req.id, 'id');
+        // Opening it while it waits for the candidate starts the review clock (metric 3).
+        markReviewStarted(c, appId);
         const application = applicationToPb(applicationView(c.db, appId));
         application.emails = emailsFor(c.db, appId).map((e) => emailToPb(e));
         return { application };
@@ -261,6 +265,18 @@ export function applicationRpcs(
       );
     },
 
+    setApplicationStage(req) {
+      return guard(() =>
+        runInTx(c.db, c.bus, { now: c.now() }, (tx) => {
+          const appId = id(req.applicationId, 'application_id');
+          const to = appStageFromPb(req.stage);
+          if (!to) throw new ConnectError('give a stage', Code.InvalidArgument);
+          setApplicationStage(tx, appId, to);
+          return { application: applicationToPb(applicationView(tx.db, appId)) };
+        }),
+      );
+    },
+
     // Replaces candidate.ts's ConfirmFact: plain ids as before, or an application's facts.
     confirmFact(req) {
       return guard(() => {
@@ -287,6 +303,20 @@ export function applicationRpcs(
       });
     },
   };
+}
+
+function markReviewStarted(c: RpcContext, appId: number): void {
+  c.db
+    .update(applications)
+    .set({ reviewStartedAt: c.now() })
+    .where(
+      and(
+        eq(applications.id, appId),
+        isNull(applications.reviewStartedAt),
+        inArray(applications.stage, ['ready_for_review', 'needs_candidate']),
+      ),
+    )
+    .run();
 }
 
 function confirmApplicationFactsPlain(tx: Tx, ids: number[]): void {
