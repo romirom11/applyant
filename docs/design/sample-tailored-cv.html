@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Jordan Testperson: CV (sample, synthetic data)</title>
+    <style>
+@page { size: A4; margin: 16mm 18mm; }
+* { box-sizing: border-box; }
+body { margin: 0; color: #111; font-family: "Helvetica Neue", Helvetica, Arial, "Liberation Sans", sans-serif; font-size: 10pt; line-height: 1.4; }
+/* Screen only: show the page as a sheet of A4 so the sample reads like the PDF. */
+@media screen {
+  html { background: #e9e9e9; }
+  body { background: #fff; max-width: 210mm; min-height: 297mm; margin: 16px auto; padding: 16mm 18mm; box-shadow: 0 1px 4px rgba(0,0,0,.2); }
+}
+.cv-header { margin-bottom: 10pt; }
+.cv-name { margin: 0; font-size: 20pt; font-weight: 600; letter-spacing: 0.01em; }
+.cv-headline { margin: 2pt 0 0; font-size: 11pt; color: #333; }
+.cv-contact { margin: 4pt 0 0; color: #444; font-size: 9pt; }
+.cv-contact a { color: inherit; text-decoration: none; }
+.cv-section { margin-top: 10pt; }
+.cv-section h2 { margin: 0 0 4pt; padding-bottom: 2pt; border-bottom: 0.75pt solid #999; font-size: 9pt; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #333; }
+.cv-summary p { margin: 0; }
+.cv-project { margin-top: 6pt; break-inside: avoid; }
+.cv-project-head { display: flex; justify-content: space-between; align-items: baseline; }
+.cv-project-head h3 { margin: 0; font-size: 10.5pt; font-weight: 600; }
+.cv-period { color: #555; font-size: 9pt; white-space: nowrap; }
+.cv-bullets { margin: 2pt 0 0; padding-left: 12pt; }
+.cv-bullets li { margin: 1pt 0; }
+.cv-education ul { margin: 0; padding-left: 12pt; }
+.cv-skills p { margin: 0; }
+    </style>
+  </head>
+  <body>
+    <header class="cv-header">
+      <h1 class="cv-name">Jordan Testperson</h1>
+      <p class="cv-headline">Senior Backend &amp; AI Engineer</p>
+      <p class="cv-contact"><a href="mailto:jordan.testperson@example.test">jordan.testperson@example.test</a> · +30 210 555 0100 · Thessaloniki, Greece · <a href="https://github.com/jordan-testperson">github.com/jordan-testperson</a> · <a href="https://jordan.example.test">jordan.example.test</a></p>
+    </header>
+    <section class="cv-section cv-summary">
+      <p>Backend engineer who builds production Python pipelines for speech and call analysis. Maintains an open-source audio library used outside the company.</p>
+    </section>
+    <section class="cv-section cv-experience">
+      <h2>Experience</h2>
+      <article class="cv-project">
+        <div class="cv-project-head"><h3>Harbor</h3><span class="cv-period">2021–2024</span></div>
+        <ul class="cv-bullets">
+          <li>Built the Python call-analysis pipeline that transcribes and scores support calls</li>
+          <li>Wrote the billing export job used by the finance team</li>
+        </ul>
+      </article>
+      <article class="cv-project">
+        <div class="cv-project-head"><h3>audio-chunker (open source)</h3><span class="cv-period">2022–</span></div>
+        <ul class="cv-bullets">
+          <li>Maintains a Python library for audio chunking, with merged outside pull requests</li>
+        </ul>
+      </article>
+    </section>
+    <section class="cv-section cv-education">
+      <h2>Education</h2>
+      <ul><li>BSc in Computer Science, Example University</li></ul>
+    </section>
+    <section class="cv-section cv-skills">
+      <h2>Skills</h2>
+      <p>Python · PostgreSQL · Speech-to-text · Docker</p>
+    </section>
+  </body>
+</html>
