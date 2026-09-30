@@ -27,6 +27,7 @@ import {
   postings,
   projects,
   type ReceiptFieldValue,
+  type Redraft,
   receipts,
   tasks,
 } from '../../db/schema.ts';
@@ -62,6 +63,40 @@ export interface SentenceView {
   facts: CitedFactView[];
 }
 
+export interface AdaptedFromView {
+  answerId: number;
+  applicationId: number;
+  company: string | null;
+  title: string | null;
+  question: string;
+  stage: ApplicationStage;
+  /** When it was sent (applied), or else when that answer was drafted. */
+  at: Date;
+}
+
+/** "answer:<id>" → the earlier answer's application, question and date; null when it's gone. */
+export function adaptedFromView(conn: Conn, ref: string | null): AdaptedFromView | null {
+  const m = ref ? /^answer:(\d+)$/.exec(ref) : null;
+  if (!m) return null;
+  const row = conn
+    .select({ answer: answers, app: applications, posting: postings })
+    .from(answers)
+    .innerJoin(applications, eq(answers.applicationId, applications.id))
+    .innerJoin(postings, eq(applications.postingId, postings.id))
+    .where(eq(answers.id, Number(m[1])))
+    .get();
+  if (!row) return null;
+  return {
+    answerId: row.answer.id,
+    applicationId: row.app.id,
+    company: row.posting.company,
+    title: row.posting.title,
+    question: row.answer.question,
+    stage: row.app.stage,
+    at: row.app.appliedAt ?? row.answer.createdAt,
+  };
+}
+
 export interface AnswerView {
   /** 1-based, in form order: the CLI's q1, q2, … */
   number: number;
@@ -73,6 +108,10 @@ export interface AnswerView {
   choice: string | null;
   missing: string | null;
   adaptedFrom: string | null;
+  /** The earlier answer it was adapted from: which application, which question, and when. */
+  adapted: AdaptedFromView | null;
+  /** A quick action (Shorter, Use another project…) waiting for the next draft. */
+  redraft: Redraft | null;
   edited: boolean;
   /** The form will ask it (its branch applies). */
   active: boolean;
@@ -512,6 +551,8 @@ export function applicationView(conn: Conn, id: number): ApplicationView {
       choice: a.choice,
       missing: a.missing,
       adaptedFrom: a.adaptedFrom,
+      adapted: adaptedFromView(conn, a.adaptedFrom),
+      redraft: a.redraft ?? null,
       edited: a.edited,
       active: field?.active ?? false,
       overridden: field?.source === 'override',

@@ -32,6 +32,8 @@ export interface SourceMaterial {
   locatorRules: string;
   /** GitHub only: who wrote what, for the deterministic authorship rule. */
   authorship: Authorship | null;
+  /** Folders only: the files shown, so every piece of evidence can name its file. */
+  parts?: Array<{ path: string; text: string }>;
 }
 
 /**

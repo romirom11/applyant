@@ -1,14 +1,23 @@
-// Knowledge sources: adding them and asking for a (re-)sync. Both enqueue `sync_source`.
+// Knowledge sources: adding them and asking for a (re-)sync (both enqueue `sync_source`), and
+// removing one.
 import { existsSync, statSync } from 'node:fs';
 import { isAbsolute } from 'node:path';
-import { and, asc, eq, inArray, isNull, type SQL } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, type SQL, sql } from 'drizzle-orm';
 import type { Conn, Db } from '../../../db/client.ts';
-import { type SourceKind, type SourceRow, sources, tasks } from '../../../db/schema.ts';
+import {
+  evidence,
+  facts,
+  type SourceKind,
+  type SourceRow,
+  sources,
+  tasks,
+} from '../../../db/schema.ts';
 import type { EventBus } from '../../../queue/events.ts';
 import { runInTx } from '../../../queue/tx.ts';
 import type { Tx } from '../../../queue/types.ts';
+import { requestRematch } from '../../scoring/rematch.ts';
 import { requireProject } from '../projects.ts';
-import { driveFileId } from './drive.ts';
+import { DRIVE_FOLDER_PREFIX, driveLocator } from './drive.ts';
 import { canonicalRepoLocator } from './github.ts';
 import { SourceReadError } from './material.ts';
 
@@ -22,7 +31,11 @@ export function normaliseLocator(kind: SourceKind, locator: string, hasProject: 
   switch (kind) {
     case 'file': {
       if (!isAbsolute(l)) throw new SourceError(`file sources need an absolute path, got "${l}"`);
-      if (!existsSync(l) || !statSync(l).isFile()) throw new SourceError(`no file at ${l}`);
+      if (!existsSync(l)) throw new SourceError(`no file or folder at ${l}`);
+      const st = statSync(l);
+      // A folder is read file by file; its locator ends in "/".
+      if (st.isDirectory()) return `${l.replace(/\/+$/, '')}/`;
+      if (!st.isFile()) throw new SourceError(`${l} is not a file or folder`);
       return l;
     }
     case 'url': {
@@ -53,7 +66,7 @@ export function normaliseLocator(kind: SourceKind, locator: string, hasProject: 
     }
     case 'drive': {
       try {
-        return driveFileId(l);
+        return driveLocator(l);
       } catch (err) {
         if (err instanceof SourceReadError) throw new SourceError(err.message);
         throw err;
@@ -64,6 +77,14 @@ export function normaliseLocator(kind: SourceKind, locator: string, hasProject: 
         `${kind} sources can't be read yet (supported: ${READABLE_KINDS.join(', ')})`,
       );
   }
+}
+
+/** A local folder or a Drive folder. */
+export function isFolderSource(s: Pick<SourceRow, 'kind' | 'locator'>): boolean {
+  return (
+    (s.kind === 'file' && s.locator.endsWith('/')) ||
+    (s.kind === 'drive' && s.locator.startsWith(DRIVE_FOLDER_PREFIX))
+  );
 }
 
 export interface AddSourceInput {
@@ -177,4 +198,61 @@ export function listSources(conn: Conn, projectId?: number | null): SourceRow[] 
       ? q
       : q.where(projectId === null ? isNull(sources.projectId) : eq(sources.projectId, projectId));
   return filtered.orderBy(asc(sources.id)).all();
+}
+
+/**
+ * Removes one source. Its evidence goes, and so do the facts it alone supported that are not
+ * in the candidate's own words (interview answers and edits stay, and so do facts another
+ * source also gave). Answers and CVs that cited a removed fact keep their text. A sync still
+ * queued for the source finds nothing and ends.
+ */
+export function deleteSource(
+  db: Db,
+  bus: EventBus,
+  id: number,
+  now: Date,
+): { source: SourceRow; factsRemoved: number } {
+  return runInTx(db, bus, { now }, (tx) => {
+    const source = tx.db.select().from(sources).where(eq(sources.id, id)).get();
+    if (!source) throw new SourceError(`no source ${id}`);
+    const supported = [
+      ...new Set(
+        tx.db
+          .select({ factId: evidence.factId })
+          .from(evidence)
+          .where(eq(evidence.sourceId, id))
+          .all()
+          .map((r) => r.factId),
+      ),
+    ];
+    tx.db.delete(evidence).where(eq(evidence.sourceId, id)).run();
+    let factsRemoved = 0;
+    if (supported.length) {
+      const orphans = tx.db
+        .select({ id: facts.id })
+        .from(facts)
+        .where(
+          and(
+            inArray(facts.id, supported),
+            eq(facts.origin, 'extracted'),
+            sql`${facts.editedAt} is null`,
+            sql`not exists (select 1 from ${evidence} where ${evidence.factId} = ${facts.id})`,
+          ),
+        )
+        .all()
+        .map((r) => r.id);
+      if (orphans.length) {
+        factsRemoved = tx.db.delete(facts).where(inArray(facts.id, orphans)).run().changes;
+      }
+    }
+    tx.db.delete(sources).where(eq(sources.id, id)).run();
+    // Fewer facts can change what postings match.
+    if (factsRemoved > 0) requestRematch(tx);
+    tx.emit({
+      kind: 'source.removed',
+      entityId: id,
+      message: `source ${id} removed (${source.kind} ${source.locator}) · ${factsRemoved} facts went with it`,
+    });
+    return { source, factsRemoved };
+  });
 }

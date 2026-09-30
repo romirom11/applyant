@@ -1,6 +1,7 @@
 // Profile and Projects (phase 16, app parity with the CLI for setup): the profile values
 // application forms ask for and the base CV; projects (add, rename, remove) and the knowledge
-// sources behind them (a GitHub repo, a file, a page or a Docs link), each with its sync state.
+// sources behind them (a GitHub repo, a file or folder, a page or a Docs/Drive link), each with
+// its sync state; a source can be removed with the facts only it supported.
 // The same views open as sheets from Settings and the setup's Import step. Each project (and the
 // profile) lists its facts: status, kind, evidence; Confirm, Edit, Reject; to-confirm filter.
 import ApplyantAPI
@@ -9,6 +10,8 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 let knowledgeFileTypes: [UTType] = [.pdf, .plainText, UTType(filenameExtension: "md") ?? .plainText, UTType(filenameExtension: "docx") ?? .data]
+/// A source can also be a folder: the daemon reads the readable files in it.
+let knowledgeFileOrFolderTypes: [UTType] = knowledgeFileTypes + [.folder]
 
 // MARK: Profile
 
@@ -205,6 +208,8 @@ struct KnowledgeSourcesSection: View {
     let sources: [KnowledgeSource]
     @State private var input = ""
     @State private var picking = false
+    @State private var removing: KnowledgeSource?
+    @State private var removedNote: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -223,29 +228,51 @@ struct KnowledgeSourcesSection: View {
             ForEach(sources, id: \.id) { s in
                 HStack(alignment: .firstTextBaseline) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("\(KnowledgeText.kindName(s.kind)) · \(KnowledgeText.title(s))").lineLimit(1).truncationMode(.middle)
+                        HStack(spacing: 4) {
+                            if s.folder { Image(systemName: "folder").foregroundStyle(.secondary) }
+                            Text("\(KnowledgeText.kindName(s)) · \(KnowledgeText.title(s))").lineLimit(1).truncationMode(.middle)
+                        }
+                        .help(s.locator)
                         Text(KnowledgeText.syncLine(s)).font(.caption).foregroundStyle(.secondary).lineLimit(3)
                             .textSelection(.enabled)
                     }
                     Spacer()
                     ChipView(chip: KnowledgeText.chip(s))
                     Button("Sync") { Task { await store.syncKnowledge(source: s.id) } }.controlSize(.small)
+                    Button("Remove…", role: .destructive) { removing = s }.controlSize(.small)
                 }
                 Divider()
             }
+            if let removedNote {
+                Label(removedNote, systemImage: "checkmark.circle").font(.callout).foregroundStyle(.secondary)
+            }
             HStack {
-                TextField("Add a GitHub repo, a page or a Docs link", text: $input,
-                          prompt: Text("https://github.com/you/repo · https://… · a Docs link"))
+                TextField("Add a GitHub repo, a page, a Docs link or a Drive folder link", text: $input,
+                          prompt: Text("https://github.com/you/repo · https://… · a Docs or Drive folder link"))
                     .textFieldStyle(.roundedBorder)
                     .onSubmit(add)
                 Button("Add", action: add).disabled(input.trimmingCharacters(in: .whitespaces).isEmpty)
-                Button("Choose a file…") { picking = true }
+                Button("Choose a file or folder…") { picking = true }
+                    .help("A folder is read file by file, and read again on every sync")
             }
             Text("Each source is read in the background into unconfirmed facts; you confirm facts before anything is sent.")
                 .font(.caption).foregroundStyle(.secondary)
         }
-        .fileImporter(isPresented: $picking, allowedContentTypes: knowledgeFileTypes) { result in
+        .fileImporter(isPresented: $picking, allowedContentTypes: knowledgeFileOrFolderTypes) { result in
             if case let .success(url) = result { Task { await store.addKnowledgeSource(to: project, url.path) } }
+        }
+        .confirmationDialog(
+            "Remove \(removing.map(KnowledgeText.title) ?? "this source")?",
+            isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }),
+            presenting: removing
+        ) { s in
+            Button("Remove the source", role: .destructive) {
+                Task {
+                    if let n = await store.deleteSource(s.id) { removedNote = KnowledgeText.removedLine(factsRemoved: n) }
+                }
+            }
+        } message: { s in
+            Text("What was read from \(s.folder ? "this folder" : "it") goes, with the facts found only in this source. Facts in your own words stay, and applications already sent keep what they said.")
         }
     }
 

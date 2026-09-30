@@ -23,7 +23,7 @@ struct ScriptStep: Decodable {
     /// key) · researchCompany (the posting on screen, or `company`; value "refresh" researches again) ·
     /// connectGmail (value: client id, text: secret) · disconnectMail · setProfile (field, value) ·
     /// createProject (value: name) · addKnowledgeSource (value: repo/file/link; `interviewProject`:
-    /// the project, absent = the profile) · newStrategy (value: name, text: queries) ·
+    /// the project, absent = the profile) · deleteSource (value: a source id) · newStrategy (value: name, text: queries) ·
     /// deleteStrategy (`searchStrategy`) · addBoardOrPage (value: URL) · setPreference (field, value) ·
     /// setStage (value: applied | interview | offer | rejected | withdrawn) · rescore (the posting on
     /// screen, or every one with value "all") · overviewWindow (value: 7 | 30 | all) · wait
@@ -151,6 +151,9 @@ final class ScriptRunner {
         case "confirmAll": await store.confirmFacts(application: app, factIds: [])
         case "confirmFacts": await store.confirmFacts(application: app, factIds: s.facts ?? [])
         case "editAnswer": await store.editAnswer(application: app, answer: s.answer ?? 1, sentence: s.sentence, text: s.text)
+        // Quick actions: "shorter", or "redraft" from the project in `value`.
+        case "shorter": await store.redraftAnswer(application: app, answer: s.answer ?? 1, shorter: true, project: nil)
+        case "redraft": await store.redraftAnswer(application: app, answer: s.answer ?? 1, shorter: false, project: s.value)
         case "setField": await store.setField(application: app, field: s.field ?? "", value: s.value)
         case "setCvMode": await store.setCvMode(application: app, mode: s.value ?? "tailored")
         case "approve": await store.approve(application: app)
@@ -254,6 +257,9 @@ final class ScriptRunner {
             note("createProject: \(await store.createProject(s.value ?? "").map(String.init) ?? "refused")")
         case "addKnowledgeSource":
             note("addKnowledgeSource: \(await store.addKnowledgeSource(to: s.interviewProject, s.value ?? ""))")
+        case "deleteSource":
+            let removed = await store.deleteSource(Int64(s.value ?? "") ?? 0)
+            note("deleteSource: \(removed.map { "\($0) facts removed" } ?? "refused")")
         case "newStrategy":
             var form = StrategyForm()
             form.name = s.value ?? ""

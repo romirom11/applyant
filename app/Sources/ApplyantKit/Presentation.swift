@@ -129,7 +129,7 @@ public struct ListItem: Identifiable, Equatable, Sendable {
     public let subtitle: String
     public let chips: [Chip]
 
-    init(posting: Posting, application: Application?) {
+    init(posting: Posting, application: Application?, delivery: DeliveryProgress? = nil) {
         id = "p\(posting.id)"
         postingId = posting.id
         applicationId = application?.id
@@ -138,7 +138,7 @@ public struct ListItem: Identifiable, Equatable, Sendable {
         subtitle = [posting.hasCompany ? posting.company : nil, posting.hasSalaryText ? posting.salaryText : nil]
             .compactMap { $0 }.joined(separator: " · ")
         var chips: [Chip] = []
-        if let application { chips.append(StageText.chip(application)) }
+        if let application { chips.append(StageText.chip(application, delivery: delivery)) }
         else if posting.stage == .skipped { chips.append(Chip(text: "Skipped", tone: .neutral)) }
         if let deviation = Score.mainDeviation(posting) { chips.append(Chip(text: deviation, tone: .warning)) }
         if let ats = Source.ats(posting.hasApplyURL ? posting.applyURL : posting.canonicalURL) {
@@ -147,26 +147,27 @@ public struct ListItem: Identifiable, Equatable, Sendable {
         self.chips = chips
     }
 
-    init(application: Application) {
+    init(application: Application, delivery: DeliveryProgress? = nil) {
         id = "a\(application.id)"
         postingId = application.postingID
         applicationId = application.id
         score = application.hasScore ? application.score : nil
         title = application.hasTitle ? application.title : application.postingURL
         subtitle = application.hasCompany ? application.company : ""
-        chips = [StageText.chip(application)]
+        chips = [StageText.chip(application, delivery: delivery)]
     }
 }
 
 public enum StageText {
-    public static func chip(_ app: Application) -> Chip {
+    /// `delivery`: what a delivery under way is doing, from live events ("Filling 14/16 fields").
+    public static func chip(_ app: Application, delivery: DeliveryProgress? = nil) -> Chip {
         switch app.stage {
         case .preparing: Chip(text: "Preparing…", tone: .neutral)
         case .readyForReview: Chip(text: "Ready to review", tone: .accent)
         case .needsCandidate: Chip(text: "Needs you", tone: .warning)
         case .approved: app.hasHandOff
             ? Chip(text: "Finish in browser", tone: .warning)
-            : Chip(text: "Approved · delivering", tone: .good)
+            : Chip(text: delivery.map(\.line) ?? "Approved · delivering", tone: .good)
         case .applied: Chip(text: "Applied", tone: .good)
         case .interview: Chip(text: "Interview", tone: .good)
         case .offer: Chip(text: "Offer", tone: .good)

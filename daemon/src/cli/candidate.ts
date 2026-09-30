@@ -97,6 +97,7 @@ export function sourceJson(s: Source) {
     id: Number(s.id),
     projectId: s.projectId === undefined ? null : Number(s.projectId),
     kind: kindName(s.kind),
+    folder: s.folder,
     locator: s.locator,
     lastSyncedAt: iso(s.lastSyncedAt),
     syncNote: s.syncNote ?? null,
@@ -125,7 +126,8 @@ export function factJson(f: Fact) {
 function sourceLines(sources: Source[]): string[] {
   return sources.map((s) => {
     const synced = s.lastSyncedAt ? `synced ${iso(s.lastSyncedAt)}` : 'not synced yet';
-    return `  #${s.id} ${kindName(s.kind).padEnd(6)} ${s.locator}\n         ${synced}${s.syncNote ? ` · ${s.syncNote}` : ''}`;
+    const kind = `${kindName(s.kind)}${s.folder ? ' folder' : ''}`;
+    return `  #${s.id} ${kind.padEnd(6)} ${s.locator}\n         ${synced}${s.syncNote ? ` · ${s.syncNote}` : ''}`;
   });
 }
 
@@ -323,7 +325,7 @@ export function registerCandidate(program: Command, client: () => ApplyantClient
   source
     .command('add <project> <kind> <locator>')
     .description(
-      'add a source and sync it: kind is file | url | github | drive (a Docs or Drive link, read through the Google account connected with `mail connect gmail`); project "profile" (or "-") for a CV that covers many projects',
+      'add a source and sync it: kind is file (a file, or a folder of documents) | url | github | drive (a Docs, Drive file or Drive folder link, read through the Google account connected with `mail connect gmail`); project "profile" (or "-") for a CV that covers many projects',
     )
     .option('--json', 'print JSON')
     .action(
@@ -334,7 +336,7 @@ export function registerCandidate(program: Command, client: () => ApplyantClient
         let value = locator;
         if (kind === SourceKind.FILE) {
           value = resolve(locator);
-          if (!existsSync(value)) throw new Error(`no file at ${value}`);
+          if (!existsSync(value)) throw new Error(`no file or folder at ${value}`);
         }
         const profileLevel = projectRef === '-' || projectRef === 'profile';
         const res = await client().addSource({
@@ -352,6 +354,20 @@ export function registerCandidate(program: Command, client: () => ApplyantClient
         );
       },
     );
+
+  source
+    .command('remove <id>')
+    .description(
+      'remove a source: its evidence goes, with the facts only it gave (facts in your own words stay)',
+    )
+    .option('--json', 'print JSON')
+    .action(async (idArg: string, opts: { json?: boolean }) => {
+      const id = Number(idArg.replace(/^#/, ''));
+      if (!Number.isSafeInteger(id) || id <= 0) throw new Error(`"${idArg}" is not a source id`);
+      const res = await client().deleteSource({ id: BigInt(id) });
+      if (opts.json) return json({ removed: id, factsRemoved: res.factsRemoved });
+      out(`Removed source #${id} · ${res.factsRemoved} facts went with it.`);
+    });
 
   candidate
     .command('sync [target]')

@@ -182,7 +182,7 @@ export const prepareApplication: Handler<'prepare_application'> = async (task, c
       const wctx = await buildWriterContext(ctx.read, ctx.deps, {
         applicationId: app.id,
         posting,
-        questions: writerQuestions(toWrite, fields),
+        questions: writerQuestions(toWrite, fields, stored),
         profile: contextProfile(profile, fields, rows),
         signal: ctx.signal,
         onEmbedError: (err) => ctx.deps.log.warn('question embedding failed', { err: err.message }),
@@ -526,6 +526,8 @@ function questionsToWrite(
     const a = s.stored.get(f.ref);
     if (!a) return true;
     if (s.app.rewriteAnswers) return true;
+    // A review quick action (Shorter, Use another project…) asked for this one.
+    if (a.redraft) return true;
     if (a.edited) return false;
     if (a.question !== f.spec.label) return true;
     return a.status === 'needs_candidate' && s.app.refreshFields;
@@ -535,6 +537,7 @@ function questionsToWrite(
 function writerQuestions(
   toWrite: FormField[],
   fields: FormField[],
+  stored: Map<string, StoredAnswer>,
 ): Array<Omit<WriterQuestion, 'retrieved' | 'pointsBack'>> {
   const ids = new Map(toWrite.map((f, i) => [f.ref, `q${i + 1}`]));
   const byControl = new Map(fields.map((f) => [`${f.step}:${refKey(f.spec.ref)}`, f]));
@@ -553,6 +556,7 @@ function writerQuestions(
         by && rid
           ? `asked only if [${rid}] is answered ${by.value === '*' ? 'at all' : `"${by.value}"`}`
           : null,
+      redraft: stored.get(f.ref)?.redraft ?? null,
     };
   });
 }

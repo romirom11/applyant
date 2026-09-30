@@ -222,6 +222,19 @@ export function answerToPb(a: ApplicationView['answers'][number]) {
     choice: a.choice ?? undefined,
     missing: a.missing ?? undefined,
     adaptedFrom: a.adaptedFrom ?? undefined,
+    adapted: a.adapted
+      ? {
+          answerId: BigInt(a.adapted.answerId),
+          applicationId: BigInt(a.adapted.applicationId),
+          company: a.adapted.company ?? undefined,
+          title: a.adapted.title ?? undefined,
+          question: a.adapted.question,
+          stage: appStageToPb(a.adapted.stage),
+          at: timestampFromDate(a.adapted.at),
+        }
+      : undefined,
+    redraftShorter: a.redraft?.shorter ?? false,
+    redraftProject: a.redraft?.project?.name,
     edited: a.edited,
     active: a.active,
     overridden: a.overridden,

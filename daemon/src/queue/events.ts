@@ -23,6 +23,8 @@ export type EventKind =
   // application id, posting_id set; message = the hand-off reason).
   | 'handoff'
   | 'source.synced'
+  // The candidate removed a knowledge source (entity_id = source id; message = what went with it).
+  | 'source.removed'
   // The agent interview (entity_id = question id, stage = its status, or `done` when the
   // interviewer has nothing more to ask; message = the question or what the answer gave).
   | 'interview'

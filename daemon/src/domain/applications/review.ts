@@ -23,6 +23,7 @@ import {
 import type { Tx } from '../../queue/types.ts';
 import { enqueueEmbedFacts } from '../knowledge/embed-index.ts';
 import { confirmFact } from '../knowledge/facts.ts';
+import { findProject } from '../knowledge/projects.ts';
 import { requestRematch } from '../scoring/rematch.ts';
 import { getCv, requestCvPass, updateCv } from './cv/store.ts';
 import { enqueueDelivery } from './deliver.ts';
@@ -34,6 +35,7 @@ import {
   applicationView,
   emitStage,
   type FieldView,
+  requestPrepare,
   settleStage,
 } from './store.ts';
 
@@ -237,6 +239,44 @@ export interface EditResult {
  * Replaces one sentence (sentence index given) or the whole answer (null) with the candidate's
  * text; or, with `text` null, confirms a sentence as written.
  */
+/**
+ * Review quick actions: draft one written answer again, shorter and/or from a chosen project's
+ * facts. The writer runs under the same citation rules and the verifier checks the new draft;
+ * the other answers stay as they are.
+ */
+export function redraftAnswer(
+  tx: Tx,
+  applicationId: number,
+  input: { answer: string; shorter: boolean; project: string | null },
+): ApplicationRow {
+  const view = applicationView(tx.db, applicationId);
+  if (view.app.stage === 'approved')
+    throw new ApplicationError(`application ${applicationId} is already approved`);
+  const a = findAnswer(view, input.answer);
+  if (a.kind !== 'text') {
+    throw new ApplicationError(`q${a.number} is a choice: pick another option instead`);
+  }
+  if (!input.shorter && !input.project) {
+    throw new ApplicationError('say how to redraft it: shorter, or from another project');
+  }
+  const p = input.project ? findProject(tx.db, input.project) : null;
+  if (input.project && !p) throw new ApplicationError(`no project "${input.project}"`);
+  tx.db
+    .update(answers)
+    .set({
+      redraft: {
+        ...(input.shorter ? { shorter: true } : {}),
+        ...(p ? { project: { id: p.id, name: p.name } } : {}),
+      },
+    })
+    .where(eq(answers.id, a.id))
+    .run();
+  const how = [input.shorter ? 'shorter' : null, p ? `from ${p.name}` : null]
+    .filter(Boolean)
+    .join(', ');
+  return requestPrepare(tx, view.app, { rewrite: false, why: `redrafting q${a.number} (${how})` });
+}
+
 export function editAnswer(
   tx: Tx,
   applicationId: number,

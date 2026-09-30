@@ -2098,7 +2098,8 @@ export declare type Source = Message<"applyant.v1.Source"> & {
   kind: SourceKind;
 
   /**
-   * Absolute path, URL or https://github.com/<owner>/<repo>.
+   * Absolute path (a folder ends in "/"), URL, https://github.com/<owner>/<repo>, or a Drive
+   * file id ("folder:<id>" for a Drive folder).
    *
    * @generated from field: string locator = 4;
    */
@@ -2115,6 +2116,13 @@ export declare type Source = Message<"applyant.v1.Source"> & {
    * @generated from field: optional string sync_note = 6;
    */
   syncNote?: string | undefined;
+
+  /**
+   * A local folder or a Drive folder: every readable file in it is read.
+   *
+   * @generated from field: bool folder = 7;
+   */
+  folder: boolean;
 };
 
 /**
@@ -2636,6 +2644,41 @@ export declare type SyncSourcesResponse = Message<"applyant.v1.SyncSourcesRespon
  * Use `create(SyncSourcesResponseSchema)` to create a new message.
  */
 export declare const SyncSourcesResponseSchema: GenMessage<SyncSourcesResponse>;
+
+/**
+ * @generated from message applyant.v1.DeleteSourceRequest
+ */
+export declare type DeleteSourceRequest = Message<"applyant.v1.DeleteSourceRequest"> & {
+  /**
+   * @generated from field: int64 id = 1;
+   */
+  id: bigint;
+};
+
+/**
+ * Describes the message applyant.v1.DeleteSourceRequest.
+ * Use `create(DeleteSourceRequestSchema)` to create a new message.
+ */
+export declare const DeleteSourceRequestSchema: GenMessage<DeleteSourceRequest>;
+
+/**
+ * @generated from message applyant.v1.DeleteSourceResponse
+ */
+export declare type DeleteSourceResponse = Message<"applyant.v1.DeleteSourceResponse"> & {
+  /**
+   * Facts that had no evidence left and went with the source. Facts in the candidate's own
+   * words (interview answers, edits) stay.
+   *
+   * @generated from field: int32 facts_removed = 1;
+   */
+  factsRemoved: number;
+};
+
+/**
+ * Describes the message applyant.v1.DeleteSourceResponse.
+ * Use `create(DeleteSourceResponseSchema)` to create a new message.
+ */
+export declare const DeleteSourceResponseSchema: GenMessage<DeleteSourceResponse>;
 
 /**
  * @generated from message applyant.v1.ListFactsRequest
@@ -3437,6 +3480,25 @@ export declare type Answer = Message<"applyant.v1.Answer"> & {
    * @generated from field: optional int64 interview_question_id = 14;
    */
   interviewQuestionId?: bigint | undefined;
+
+  /**
+   * The earlier answer it was adapted from: "adapted from the answer sent to Orbit (Sep 12)".
+   *
+   * @generated from field: optional applyant.v1.AdaptedFrom adapted = 15;
+   */
+  adapted?: AdaptedFrom | undefined;
+
+  /**
+   * A quick action waiting for the next draft ("Shorter", "Use another project…").
+   *
+   * @generated from field: bool redraft_shorter = 16;
+   */
+  redraftShorter: boolean;
+
+  /**
+   * @generated from field: optional string redraft_project = 17;
+   */
+  redraftProject?: string | undefined;
 };
 
 /**
@@ -3444,6 +3506,56 @@ export declare type Answer = Message<"applyant.v1.Answer"> & {
  * Use `create(AnswerSchema)` to create a new message.
  */
 export declare const AnswerSchema: GenMessage<Answer>;
+
+/**
+ * @generated from message applyant.v1.AdaptedFrom
+ */
+export declare type AdaptedFrom = Message<"applyant.v1.AdaptedFrom"> & {
+  /**
+   * @generated from field: int64 answer_id = 1;
+   */
+  answerId: bigint;
+
+  /**
+   * @generated from field: int64 application_id = 2;
+   */
+  applicationId: bigint;
+
+  /**
+   * @generated from field: optional string company = 3;
+   */
+  company?: string | undefined;
+
+  /**
+   * @generated from field: optional string title = 4;
+   */
+  title?: string | undefined;
+
+  /**
+   * That application's question.
+   *
+   * @generated from field: string question = 5;
+   */
+  question: string;
+
+  /**
+   * @generated from field: applyant.v1.ApplicationStage stage = 6;
+   */
+  stage: ApplicationStage;
+
+  /**
+   * When it was sent, or else when that answer was drafted.
+   *
+   * @generated from field: google.protobuf.Timestamp at = 7;
+   */
+  at?: Timestamp | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.AdaptedFrom.
+ * Use `create(AdaptedFromSchema)` to create a new message.
+ */
+export declare const AdaptedFromSchema: GenMessage<AdaptedFrom>;
 
 /**
  * @generated from message applyant.v1.Application
@@ -4075,6 +4187,59 @@ export declare type PrepareApplicationResponse = Message<"applyant.v1.PrepareApp
  * Use `create(PrepareApplicationResponseSchema)` to create a new message.
  */
 export declare const PrepareApplicationResponseSchema: GenMessage<PrepareApplicationResponse>;
+
+/**
+ * @generated from message applyant.v1.RedraftAnswerRequest
+ */
+export declare type RedraftAnswerRequest = Message<"applyant.v1.RedraftAnswerRequest"> & {
+  /**
+   * @generated from field: int64 application_id = 1;
+   */
+  applicationId: bigint;
+
+  /**
+   * The answer's number (q3) or its field (#7, label, ref).
+   *
+   * @generated from field: string answer = 2;
+   */
+  answer: string;
+
+  /**
+   * "Shorter": about half as long, same facts and rules.
+   *
+   * @generated from field: bool shorter = 3;
+   */
+  shorter: boolean;
+
+  /**
+   * "Use another project…": the project's slug, name or id.
+   *
+   * @generated from field: optional string project = 4;
+   */
+  project?: string | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.RedraftAnswerRequest.
+ * Use `create(RedraftAnswerRequestSchema)` to create a new message.
+ */
+export declare const RedraftAnswerRequestSchema: GenMessage<RedraftAnswerRequest>;
+
+/**
+ * @generated from message applyant.v1.RedraftAnswerResponse
+ */
+export declare type RedraftAnswerResponse = Message<"applyant.v1.RedraftAnswerResponse"> & {
+  /**
+   * @generated from field: applyant.v1.Application application = 1;
+   */
+  application?: Application | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.RedraftAnswerResponse.
+ * Use `create(RedraftAnswerResponseSchema)` to create a new message.
+ */
+export declare const RedraftAnswerResponseSchema: GenMessage<RedraftAnswerResponse>;
 
 /**
  * @generated from message applyant.v1.SetFieldValueRequest
@@ -7830,6 +7995,16 @@ export declare const ApplyantService: GenService<{
     output: typeof SyncSourcesResponseSchema;
   },
   /**
+   * DeleteSource removes one source with its evidence; facts only it supported go too.
+   *
+   * @generated from rpc applyant.v1.ApplyantService.DeleteSource
+   */
+  deleteSource: {
+    methodKind: "unary";
+    input: typeof DeleteSourceRequestSchema;
+    output: typeof DeleteSourceResponseSchema;
+  },
+  /**
    * @generated from rpc applyant.v1.ApplyantService.ListFacts
    */
   listFacts: {
@@ -7976,6 +8151,18 @@ export declare const ApplyantService: GenService<{
     methodKind: "unary";
     input: typeof EditAnswerRequestSchema;
     output: typeof EditAnswerResponseSchema;
+  },
+  /**
+   * RedraftAnswer is a review quick action: one written answer is drafted again, shorter
+   * and/or from a chosen project's facts, under the same citation rules and checks. The
+   * application prepares again (an `application` event follows); the other answers stay.
+   *
+   * @generated from rpc applyant.v1.ApplyantService.RedraftAnswer
+   */
+  redraftAnswer: {
+    methodKind: "unary";
+    input: typeof RedraftAnswerRequestSchema;
+    output: typeof RedraftAnswerResponseSchema;
   },
   /**
    * ApproveApplication is refused (FailedPrecondition, listing why) while a required value is

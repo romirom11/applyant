@@ -690,6 +690,12 @@ export const fieldValues = sqliteTable(
   (t) => [uniqueIndex('field_values_app_ref').on(t.applicationId, t.fieldRef)],
 );
 
+/** Review quick actions: "Shorter", "Use another project…" (the project's id and name). */
+export interface Redraft {
+  shorter?: boolean;
+  project?: { id: number; name: string };
+}
+
 export const answers = sqliteTable(
   'answers',
   {
@@ -710,6 +716,11 @@ export const answers = sqliteTable(
     adaptedFrom: text('adapted_from'),
     /** The candidate rewrote it (their words; not re-drafted on re-preparation). */
     edited: integer('edited', { mode: 'boolean' }).notNull().default(false),
+    /**
+     * A review quick action waiting for the next preparation: draft this answer again, shorter
+     * and/or from one project's facts. Cleared when the new draft is saved.
+     */
+    redraft: text('redraft', { mode: 'json' }).$type<Redraft>(),
     createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull().default(now),
   },
   (t) => [uniqueIndex('answers_app_question').on(t.applicationId, t.questionRef)],

@@ -43,8 +43,8 @@ struct StatusMenu: View {
         Text(counterLine(ready: ready.count, needs: needs.count, preparing: store.count(.preparing)))
         if let paused = store.activity.paused {
             Text(paused)
-        } else if !store.activity.running.isEmpty {
-            Text(workingLine)
+        } else if !store.activity.running.isEmpty || !store.deliveries.isEmpty {
+            ForEach(workingLine.components(separatedBy: "\n"), id: \.self) { Text($0) }
         }
         if let next = ready.first, let app = next.applicationId {
             Button("Review next: \(next.title)") {
@@ -83,10 +83,9 @@ struct StatusMenu: View {
     }
 
     private var workingLine: String {
-        let kinds = Dictionary(grouping: store.activity.running.values, by: { $0 })
-            .map { $0.value.count > 1 ? "\($0.key) ×\($0.value.count)" : $0.key }
-            .sorted()
-        return "Working: " + kinds.joined(separator: ", ")
+        WorkingLine.text(running: store.activity.running, deliveries: store.deliveries) { id in
+            store.applications[id].map { $0.hasCompany ? $0.company : "application \(id)" } ?? "application \(id)"
+        }
     }
 
     private var registrationNote: String? {

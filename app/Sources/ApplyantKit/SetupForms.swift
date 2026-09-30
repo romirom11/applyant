@@ -86,20 +86,24 @@ public enum KnowledgeText {
         return OnboardingText.sourceKind(for: s)
     }
 
-    public static func kindName(_ kind: Applyant_V1_SourceKind) -> String {
+    /// A folder is a local directory (a file source) or a Drive folder (its files are read).
+    public static func kindName(_ kind: Applyant_V1_SourceKind, folder: Bool = false) -> String {
         switch kind {
-        case .file: "File"
+        case .file: folder ? "Folder" : "File"
         case .url: "Page"
         case .github: "GitHub"
-        case .drive: "Google Drive"
+        case .drive: folder ? "Drive folder" : "Google Drive"
         case .manual: "Typed in"
         default: "Source"
         }
     }
 
-    /// "cv.pdf", "github.com/me/app", "acme.dev/case-study".
+    public static func kindName(_ s: KnowledgeSource) -> String { kindName(s.kind, folder: s.folder) }
+
+    /// "cv.pdf", "Projects" (a folder), "github.com/me/app", "acme.dev/case-study", "1AbC" (a Drive folder).
     public static func title(_ s: KnowledgeSource) -> String {
         if s.kind == .file { return (s.locator as NSString).lastPathComponent }
+        if s.kind == .drive, s.locator.hasPrefix("folder:") { return String(s.locator.dropFirst("folder:".count)) }
         return s.locator
             .replacingOccurrences(of: "https://", with: "")
             .replacingOccurrences(of: "http://", with: "")
@@ -131,6 +135,15 @@ public enum KnowledgeText {
         case .failed: Chip(text: "Failed", tone: .warning)
         case .waiting: Chip(text: "Reading…", tone: .neutral)
         case .synced: Chip(text: "Synced", tone: .good)
+        }
+    }
+
+    /// After removing a source: how many facts went with it.
+    public static func removedLine(factsRemoved n: Int) -> String {
+        switch n {
+        case 0: "Removed the source · no facts went with it"
+        case 1: "Removed the source · 1 fact went with it"
+        default: "Removed the source · \(n) facts went with it"
         }
     }
 

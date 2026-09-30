@@ -80,7 +80,7 @@ struct ReviewApplication: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                ChipView(chip: StageText.chip(app))
+                ChipView(chip: StageText.chip(app, delivery: store.deliveries[app.id]))
             }
             if !app.blockers.isEmpty && app.stage != .approved && !StageRules.isSent(app.stage) {
                 VStack(alignment: .leading, spacing: 2) {
@@ -226,7 +226,13 @@ struct ReviewApplication: View {
                     },
                     confirmFacts: { ids in
                         Task { await store.confirmFacts(application: app.id, factIds: ids) }
-                    }
+                    },
+                    redraft: ReviewActions.canRedraft(answer, app: app)
+                        ? { shorter, project in
+                            Task { await store.redraftAnswer(application: app.id, answer: answer.number, shorter: shorter, project: project) }
+                        }
+                        : nil,
+                    projects: (store.candidateProfile?.projects ?? []).map { (slug: $0.slug, name: $0.name) }
                 )
             }
         }
@@ -354,6 +360,10 @@ struct AnswerCard: View {
     let editSentence: (Sentence) -> Void
     let confirmSentence: (Sentence) -> Void
     let confirmFacts: ([Int64]) -> Void
+    /// Quick actions: "Shorter" (true) and/or "Use another project…" (the project's slug).
+    var redraft: ((Bool, String?) -> Void)?
+    /// The projects "Use another project…" offers (slug, name).
+    var projects: [(slug: String, name: String)] = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -377,8 +387,25 @@ struct AnswerCard: View {
                 if editable { flagged }
                 HStack {
                     Text(basedOn).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                        .help(ReviewActions.adaptedQuestion(answer) ?? "")
                     Spacer()
+                    if let pending = ReviewActions.pending(answer) {
+                        ProgressView().controlSize(.small)
+                        Text(pending).font(.caption).foregroundStyle(.secondary)
+                    }
                     if editable { Button("Edit…", action: write).buttonStyle(.link) }
+                    if editable, let redraft, answer.kind == "text", ReviewActions.pending(answer) == nil {
+                        Button("Shorter") { redraft(true, nil) }.buttonStyle(.link)
+                            .help("Draft this answer again, about half as long, from the same facts")
+                        Menu("Use another project…") {
+                            ForEach(projects, id: \.slug) { p in
+                                Button(p.name) { redraft(false, p.slug) }
+                            }
+                        }
+                        .menuStyle(.borderlessButton)
+                        .fixedSize()
+                        .disabled(projects.isEmpty)
+                    }
                 }
             }
         }
@@ -433,7 +460,7 @@ struct AnswerCard: View {
         var parts = projects.sorted()
         parts.append("\(facts) fact\(facts == 1 ? "" : "s")")
         if answer.edited { parts.append("your edit") }
-        if answer.hasAdaptedFrom { parts.append("adapted from an earlier answer") }
+        if let adapted = ReviewActions.adaptedFrom(answer) { parts.append(adapted) }
         return "Based on: " + parts.joined(separator: " · ")
     }
 }
@@ -443,12 +470,20 @@ struct EvidencePanel: View {
     let app: Application
     let answer: Answer?
     var scrolls = true
+    @State private var editing: EditRequest?
 
     var body: some View {
-        if scrolls {
-            ScrollView { content.padding(14) }
-        } else {
-            content
+        Group {
+            if scrolls {
+                ScrollView { content.padding(14) }
+            } else {
+                content
+            }
+        }
+        .sheet(item: $editing) { request in
+            EditSheet(request: request) { text in
+                Task { await request.save(text) }
+            }
         }
     }
 
@@ -479,6 +514,16 @@ struct EvidencePanel: View {
                                 if fact.status == .unconfirmed {
                                     Button("Confirm") { Task { await store.confirmFacts(application: app.id, factIds: [fact.id]) } }
                                         .controlSize(.small)
+                                }
+                                if app.stage != .approved && !StageRules.isSent(app.stage) {
+                                    // The fact in the candidate's words (confirmed); the answers
+                                    // relying on it re-check as they do after Confirm.
+                                    Button("Edit…") {
+                                        editing = EditRequest(title: "Fact #\(fact.id)", hint: "The fact in your words (saved as confirmed)", text: fact.text) { text in
+                                            _ = await store.editFact(fact.id, text: text, project: nil)
+                                        }
+                                    }
+                                    .controlSize(.small)
                                 }
                             }
                         }

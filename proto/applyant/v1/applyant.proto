@@ -61,6 +61,8 @@ service ApplyantService {
   rpc AddSource(AddSourceRequest) returns (AddSourceResponse);
   // SyncSources enqueues a sync of every matching source.
   rpc SyncSources(SyncSourcesRequest) returns (SyncSourcesResponse);
+  // DeleteSource removes one source with its evidence; facts only it supported go too.
+  rpc DeleteSource(DeleteSourceRequest) returns (DeleteSourceResponse);
   rpc ListFacts(ListFactsRequest) returns (ListFactsResponse);
   // ConfirmFact marks facts as true in the candidate's own judgement.
   rpc ConfirmFact(ConfirmFactRequest) returns (ConfirmFactResponse);
@@ -100,6 +102,10 @@ service ApplyantService {
   // EditAnswer rewrites a sentence or a whole answer in the candidate's words (saved as
   // confirmed review_edit facts), or confirms a flagged sentence as true as written.
   rpc EditAnswer(EditAnswerRequest) returns (EditAnswerResponse);
+  // RedraftAnswer is a review quick action: one written answer is drafted again, shorter
+  // and/or from a chosen project's facts, under the same citation rules and checks. The
+  // application prepares again (an `application` event follows); the other answers stay.
+  rpc RedraftAnswer(RedraftAnswerRequest) returns (RedraftAnswerResponse);
   // ApproveApplication is refused (FailedPrecondition, listing why) while a required value is
   // missing, a sentence is flagged or unchecked, or a relied-on fact is unconfirmed. Approval
   // enqueues delivery through the application's channel; the candidate isn't asked again unless
@@ -793,11 +799,14 @@ message Source {
   // Unset for profile-level sources (a CV covering many projects).
   optional int64 project_id = 2;
   SourceKind kind = 3;
-  // Absolute path, URL or https://github.com/<owner>/<repo>.
+  // Absolute path (a folder ends in "/"), URL, https://github.com/<owner>/<repo>, or a Drive
+  // file id ("folder:<id>" for a Drive folder).
   string locator = 4;
   optional google.protobuf.Timestamp last_synced_at = 5;
   // What the last sync did, or why it failed.
   optional string sync_note = 6;
+  // A local folder or a Drive folder: every readable file in it is read.
+  bool folder = 7;
 }
 
 enum FactStatus {
@@ -933,6 +942,16 @@ message SyncSourcesResponse {
   repeated Source sources = 1;
   // Sources a sync was enqueued for (others already had one queued or running).
   repeated int64 enqueued_source_ids = 2;
+}
+
+message DeleteSourceRequest {
+  int64 id = 1;
+}
+
+message DeleteSourceResponse {
+  // Facts that had no evidence left and went with the source. Facts in the candidate's own
+  // words (interview answers, edits) stay.
+  int32 facts_removed = 1;
 }
 
 message ListFactsRequest {
@@ -1168,6 +1187,23 @@ message Answer {
   repeated AnswerSentence sentences = 13;
   // needs_candidate: the interview question asking the candidate for it (open or being read).
   optional int64 interview_question_id = 14;
+  // The earlier answer it was adapted from: "adapted from the answer sent to Orbit (Sep 12)".
+  optional AdaptedFrom adapted = 15;
+  // A quick action waiting for the next draft ("Shorter", "Use another project…").
+  bool redraft_shorter = 16;
+  optional string redraft_project = 17;
+}
+
+message AdaptedFrom {
+  int64 answer_id = 1;
+  int64 application_id = 2;
+  optional string company = 3;
+  optional string title = 4;
+  // That application's question.
+  string question = 5;
+  ApplicationStage stage = 6;
+  // When it was sent, or else when that answer was drafted.
+  google.protobuf.Timestamp at = 7;
 }
 
 message Application {
@@ -1331,6 +1367,20 @@ message PrepareApplicationRequest {
 message PrepareApplicationResponse {
   Application application = 1;
   bool created = 2;
+}
+
+message RedraftAnswerRequest {
+  int64 application_id = 1;
+  // The answer's number (q3) or its field (#7, label, ref).
+  string answer = 2;
+  // "Shorter": about half as long, same facts and rules.
+  bool shorter = 3;
+  // "Use another project…": the project's slug, name or id.
+  optional string project = 4;
+}
+
+message RedraftAnswerResponse {
+  Application application = 1;
 }
 
 message SetFieldValueRequest {

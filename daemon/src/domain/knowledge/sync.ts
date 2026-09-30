@@ -39,6 +39,7 @@ import { getIdentities, type Identities } from './profile.ts';
 import { createProject, fillProject, slugify } from './projects.ts';
 import { readDriveSource } from './sources/drive.ts';
 import { readFileSource } from './sources/file.ts';
+import { fileLocator, readFolderSource } from './sources/folder.ts';
 import { readGithubSource } from './sources/github.ts';
 import { type SourceMaterial, SourceReadError } from './sources/material.ts';
 import { readUrlSource } from './sources/url.ts';
@@ -206,7 +207,10 @@ async function readSource(
 ): Promise<SourceMaterial> {
   switch (source.kind) {
     case 'file':
-      return readFileSource(source.locator, deps.text);
+      // A folder's locator ends in "/".
+      return source.locator.endsWith('/')
+        ? readFolderSource(source.locator, deps.text)
+        : readFileSource(source.locator, deps.text);
     case 'url':
       return readUrlSource(source.locator, deps.reader, signal);
     case 'github':
@@ -276,10 +280,15 @@ export function prepareFacts(
       text,
       kind: f.kind,
       project: f.project?.trim() || null,
-      evidence: f.evidence.map((e) => ({
-        locator: e.locator.trim() || null,
-        excerpt: e.quote?.trim() || null,
-      })),
+      evidence: f.evidence.map((e) => {
+        const locator = e.locator.trim() || null;
+        const excerpt = e.quote?.trim() || null;
+        // A folder's evidence names the file it is in.
+        return {
+          locator: material.parts ? fileLocator(material.parts, locator, excerpt) : locator,
+          excerpt,
+        };
+      }),
       candidateRefs: [],
     };
     if (material.authorship) {

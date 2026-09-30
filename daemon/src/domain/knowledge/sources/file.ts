@@ -4,7 +4,7 @@ import { basename } from 'node:path';
 import { type TextExtractor, UnsupportedDocumentError } from '../text/extract.ts';
 import { clip, pagesToText, type SourceMaterial, SourceReadError } from './material.ts';
 
-const MAX_FILE_BYTES = 50 * 1024 * 1024;
+export const MAX_FILE_BYTES = 50 * 1024 * 1024;
 
 export async function readFileSource(
   path: string,

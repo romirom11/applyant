@@ -31,6 +31,8 @@ import {
 } from '../domain/knowledge/projects.ts';
 import {
   addSource,
+  deleteSource,
+  isFolderSource,
   listSources,
   requestSync,
   SourceError,
@@ -101,6 +103,7 @@ export function sourceToPb(s: SourceRow): Source {
     locator: s.locator,
     lastSyncedAt: s.lastSyncedAt ? timestampFromDate(s.lastSyncedAt) : undefined,
     syncNote: s.syncNote ?? undefined,
+    folder: isFolderSource(s),
   });
 }
 
@@ -150,6 +153,9 @@ function guard<T>(fn: () => T): T {
       const code = /^no (project|fact)/.test(err.message) ? Code.NotFound : Code.InvalidArgument;
       throw new ConnectError(err.message, code);
     }
+    if (err instanceof SourceError && /^no source /.test(err.message)) {
+      throw new ConnectError(err.message, Code.NotFound);
+    }
     if (err instanceof SourceError || err instanceof ProfileError) {
       throw new ConnectError(err.message, Code.InvalidArgument);
     }
@@ -179,6 +185,7 @@ export function candidateRpcs(
   | 'deleteProject'
   | 'addSource'
   | 'syncSources'
+  | 'deleteSource'
   | 'listFacts'
   | 'editFact'
   | 'rejectFact'
@@ -294,6 +301,17 @@ export function candidateRpcs(
           sources: res.sources.map(sourceToPb),
           enqueuedSourceIds: res.enqueued.map((id) => BigInt(id)),
         };
+      });
+    },
+
+    deleteSource(req) {
+      return guard(() => {
+        const id = Number(req.id);
+        if (!Number.isSafeInteger(id) || id <= 0) {
+          throw new ConnectError(`${req.id} is not a source id`, Code.InvalidArgument);
+        }
+        const res = deleteSource(c.db, c.bus, id, c.now());
+        return { factsRemoved: res.factsRemoved };
       });
     },
 

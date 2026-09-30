@@ -576,7 +576,10 @@ export async function fillStep(page: Page, o: FillStepOptions): Promise<StepResu
       continue;
     }
     if (value.kind === 'skip') continue;
-    o.progress?.(`filling ${field.label || field.kind}`);
+    // "filling 3/16: Email" — the app shows "Filling 3/16 fields" from it.
+    const total = list.filter((f) => f.kind !== 'group' && visible.has(refKey(f.ref))).length;
+    const filled = [...done].filter((f) => f.kind !== 'group').length;
+    o.progress?.(`filling ${filled}/${Math.max(total, filled)}: ${field.label || field.kind}`);
 
     const before = await formSignature(page);
     let res = await fillField(page, field, value);
@@ -593,6 +596,8 @@ export async function fillStep(page: Page, o: FillStepOptions): Promise<StepResu
       res = { ok: true };
     }
     if (res.options !== undefined && res.options !== null) field.options = res.options;
+    if (field.kind === 'file' && o.mode === 'deliver')
+      o.progress?.(`uploaded ${field.label || 'a file'}`);
     const chosen: FillValue =
       value.kind === 'choose'
         ? { kind: 'option', option: (await currentChoice(page, field)) ?? '*' }

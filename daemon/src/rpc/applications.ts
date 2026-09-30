@@ -13,6 +13,7 @@ import {
   confirmApplicationFacts,
   editAnswer,
   findAnswer,
+  redraftAnswer,
   setFieldValue,
   submitApplication,
 } from '../domain/applications/review.ts';
@@ -72,6 +73,7 @@ export function applicationRpcs(
   | 'prepareApplication'
   | 'setFieldValue'
   | 'editAnswer'
+  | 'redraftAnswer'
   | 'approveApplication'
   | 'submitApplication'
   | 'setApplyForm'
@@ -172,6 +174,20 @@ export function applicationRpcs(
             answer: answerToPb(findAnswer(view, `q${res.answer.number}`)),
             factIds: res.factIds.map((n) => BigInt(n)),
           };
+        }),
+      );
+    },
+
+    redraftAnswer(req) {
+      return guard(() =>
+        runInTx(c.db, c.bus, { now: c.now() }, (tx) => {
+          const appId = id(req.applicationId, 'application_id');
+          redraftAnswer(tx, appId, {
+            answer: req.answer,
+            shorter: req.shorter,
+            project: req.project?.trim() || null,
+          });
+          return { application: applicationToPb(applicationView(tx.db, appId)) };
         }),
       );
     },

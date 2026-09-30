@@ -47,6 +47,8 @@ public final class AppStore {
     public private(set) var postingDetails: [Int64: Posting] = [:]
     public private(set) var applicationDetails: [Int64: Application] = [:]
     public private(set) var activity = Activity()
+    /// Deliveries under way: application id → what the delivery is doing now, from live events.
+    public private(set) var deliveries: [Int64: DeliveryProgress] = [:]
     /// Interview questions waiting on the candidate or being read (application ones first).
     public private(set) var interviewQuestions: [InterviewQuestion] = []
     /// Every project with what its facts don't show yet.
@@ -186,6 +188,7 @@ public final class AppStore {
         searchRuns = r
         companies = c
         activity = Activity()
+        deliveries = [:]
         reloads += 1
         // What's open on screen may have changed while we were away.
         for id in postingDetails.keys { await refreshPosting(id, api) }
@@ -261,6 +264,15 @@ public final class AppStore {
     }
 
     private func applyTask(_ t: Applyant_V1_TaskEvent, message: String) {
+        // A delivery's live progress ("Filling 14/16 fields · solving captcha"), per application.
+        if t.taskKind == "deliver_application" {
+            switch t.type {
+            case .started: deliveries[t.entityID] = DeliveryProgress()
+            case .progress: deliveries[t.entityID, default: DeliveryProgress()].apply(message)
+            case .queued, .providerPaused: break
+            default: deliveries[t.entityID] = nil
+            }
+        }
         switch t.type {
         case .started, .progress:
             activity.running[t.taskID] = t.taskKind
@@ -405,6 +417,16 @@ public final class AppStore {
         guard let api else { return }
         guard await attempt({ try await api.confirmFacts(application: id, factIds: factIds) }) != nil else { return }
         await openApplication(id)
+    }
+
+    /// "Shorter" / "Use another project…": the answer is drafted again (the application prepares
+    /// again; its events bring the new draft).
+    public func redraftAnswer(application id: Int64, answer: Int32, shorter: Bool, project: String?) async {
+        guard let api,
+              let app = await attempt({ try await api.redraftAnswer(application: id, answer: answer, shorter: shorter, project: project) })
+        else { return }
+        record(app)
+        await refreshApplication(id, api)
     }
 
     public func editAnswer(application id: Int64, answer: Int32, sentence: Int32?, text: String?) async {
@@ -1061,6 +1083,22 @@ public final class AppStore {
         return true
     }
 
+    /// Removes one source with what was read from it; the facts only it supported go too (facts
+    /// in the candidate's own words stay). The number of facts removed, nil when refused.
+    @discardableResult
+    public func deleteSource(_ id: Int64) async -> Int? {
+        guard let api, let n = await attempt({ try await api.deleteSource(id) }) else { return nil }
+        await refreshKnowledge(api)
+        for ref in facts.keys {
+            if let list = try? await api.listFacts(project: ref, status: nil) { facts[ref] = list }
+        }
+        await refreshInterview(api)
+        await refreshSetup()
+        // A review open on screen may have relied on its facts.
+        for id in applicationDetails.keys { await refreshApplication(id, api) }
+        return n
+    }
+
     /// Reads a project's sources again (nil: the profile's), or one source.
     @discardableResult
     public func syncKnowledge(project: Int64? = nil, source: Int64? = nil) async -> Int? {
@@ -1246,13 +1284,13 @@ public final class AppStore {
             .sorted { ($0.hasScore ? $0.score : -1, $0.id) > ($1.hasScore ? $1.score : -1, $1.id) }
             .map { app in
                 if let posting = postings[app.postingID] { return item(posting, application: app) }
-                return ListItem(application: app)
+                return ListItem(application: app, delivery: deliveries[app.id])
             }
     }
 
     private func item(_ posting: Posting, application: Application? = nil) -> ListItem {
         let app = application ?? (posting.hasApplicationID ? applications[posting.applicationID] : nil)
-        return ListItem(posting: posting, application: app)
+        return ListItem(posting: posting, application: app, delivery: app.flatMap { deliveries[$0.id] })
     }
 
     private func byScore(_ a: Posting, _ b: Posting) -> Bool {

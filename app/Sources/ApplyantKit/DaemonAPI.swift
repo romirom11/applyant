@@ -58,6 +58,8 @@ public protocol DaemonAPI: Sendable {
     /// The candidate's words for an answer (or one sentence); nil text with a sentence confirms
     /// it as written.
     func editAnswer(application id: Int64, answer: Int32, sentence: Int32?, text: String?) async throws -> Application
+    /// Review quick actions: one written answer drafted again, shorter and/or from a project.
+    func redraftAnswer(application id: Int64, answer: Int32, shorter: Bool, project: String?) async throws -> Application
     func setField(application id: Int64, field: String, value: String?) async throws -> Application
     func setCvMode(application id: Int64, mode: String) async throws -> Application
     /// The platform's form (LinkedIn Easy Apply, Xing apply) or the company's own, before
@@ -166,6 +168,9 @@ public protocol DaemonAPI: Sendable {
     func renameProject(_ ref: String, name: String) async throws -> KnowledgeProject
     /// Removes the project with its sources and facts.
     func deleteProject(_ ref: String) async throws
+    /// Removes one source with what was read from it; the facts only it supported go too.
+    /// The number of facts removed.
+    func deleteSource(_ id: Int64) async throws -> Int
     /// Syncs again: a project ref, "profile", "source:<id>"; `force` re-reads unchanged material.
     func syncSources(_ target: String, force: Bool) async throws -> Int
     func getPreferences() async throws -> SearchPreferences
@@ -223,6 +228,9 @@ public extension DaemonAPI {
     func editCv(application id: Int64, line: String, text: String?) async throws -> Application {
         throw APIError("editing the CV isn't available")
     }
+    func redraftAnswer(application id: Int64, answer: Int32, shorter: Bool, project: String?) async throws -> Application {
+        throw APIError("Shorter and Use another project… need a newer applyantd")
+    }
     func listSecrets() async throws -> [String] { [] }
     func deleteSecret(_ name: String) async throws -> Bool { throw APIError("deleting a key isn't available") }
     func overview(_ window: OverviewWindow) async throws -> OverviewReport {
@@ -257,6 +265,7 @@ public extension DaemonAPI {
         throw APIError("renaming a project needs a newer applyantd")
     }
     func deleteProject(_ ref: String) async throws { throw APIError("removing a project needs a newer applyantd") }
+    func deleteSource(_ id: Int64) async throws -> Int { throw APIError("removing a source needs a newer applyantd") }
     func syncSources(_ target: String, force: Bool) async throws -> Int { throw APIError("syncing isn't available") }
     func getPreferences() async throws -> SearchPreferences { throw APIError("preferences aren't available") }
     func addStrategy(_ request: Applyant_V1_AddStrategyRequest) async throws -> SearchStrategy {
@@ -385,6 +394,16 @@ public final class ConnectDaemonAPI: DaemonAPI {
             $0.ids = factIds
         }
         _ = try unwrap(await unary.confirmFact(request: request, headers: headers))
+    }
+
+    public func redraftAnswer(application id: Int64, answer: Int32, shorter: Bool, project: String?) async throws -> Application {
+        let request = Applyant_V1_RedraftAnswerRequest.with {
+            $0.applicationID = id
+            $0.answer = "q\(answer)"
+            $0.shorter = shorter
+            if let project { $0.project = project }
+        }
+        return try unwrap(await unary.redraftAnswer(request: request, headers: headers)).application
     }
 
     public func editAnswer(application id: Int64, answer: Int32, sentence: Int32?, text: String?) async throws -> Application {
@@ -713,6 +732,10 @@ extension ConnectDaemonAPI {
 
     public func deleteProject(_ ref: String) async throws {
         _ = try unwrap(await unary.deleteProject(request: .with { $0.project = ref }, headers: headers))
+    }
+
+    public func deleteSource(_ id: Int64) async throws -> Int {
+        Int(try unwrap(await unary.deleteSource(request: .with { $0.id = id }, headers: headers)).factsRemoved)
     }
 
     public func syncSources(_ target: String, force: Bool) async throws -> Int {

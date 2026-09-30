@@ -94,6 +94,17 @@ export function writerPrompt(ctx: WriterContext): string {
     parts.push(
       `[${q.id}] (${kind}${q.required ? ', required' : ''}${q.condition ? `, ${q.condition}` : ''}) ${q.label}`,
     );
+    if (q.redraft) {
+      const asks = [
+        q.redraft.shorter
+          ? 'make it clearly shorter than before (about half, 2–3 sentences), same facts and rules'
+          : null,
+        q.redraft.project
+          ? `answer it from the project "${q.redraft.project.name}" (its facts are listed below), not another project`
+          : null,
+      ].filter(Boolean);
+      parts.push(`  The candidate asked to draft this answer again: ${asks.join('; ')}.`);
+    }
     if (q.pointsBack) {
       parts.push('  (refers back to the job posting: find the instruction in the posting text)');
     }

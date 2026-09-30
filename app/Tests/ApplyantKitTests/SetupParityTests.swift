@@ -35,6 +35,26 @@ import Testing
         }
     }
 
+    @Test func folderSourcesAreLabelledAsFolders() {
+        #expect(KnowledgeText.sourceKind(for: "/Users/me/Projects/") == .file)
+        #expect(KnowledgeText.sourceKind(for: "https://drive.google.com/drive/folders/1AbC") == .drive)
+
+        let local = KnowledgeSource.with { $0.kind = .file; $0.locator = "/Users/me/Projects/"; $0.folder = true }
+        #expect(KnowledgeText.kindName(local) == "Folder")
+        #expect(KnowledgeText.title(local) == "Projects")
+        let drive = KnowledgeSource.with { $0.kind = .drive; $0.locator = "folder:1AbC"; $0.folder = true }
+        #expect(KnowledgeText.kindName(drive) == "Drive folder")
+        #expect(KnowledgeText.title(drive) == "1AbC")
+        #expect(KnowledgeText.kindName(.with { $0.kind = .file; $0.locator = "/Users/me/cv.pdf" }) == "File")
+        #expect(KnowledgeText.kindName(.with { $0.kind = .drive; $0.locator = "https://docs.google.com/document/d/1Ab" }) == "Google Drive")
+        #expect(KnowledgeText.kindName(.drive, folder: true) == "Drive folder")
+        #expect(KnowledgeText.kindName(.github, folder: true) == "GitHub")
+
+        #expect(KnowledgeText.removedLine(factsRemoved: 0) == "Removed the source · no facts went with it")
+        #expect(KnowledgeText.removedLine(factsRemoved: 1) == "Removed the source · 1 fact went with it")
+        #expect(KnowledgeText.removedLine(factsRemoved: 7) == "Removed the source · 7 facts went with it")
+    }
+
     @Test func knowledgeSourceKindsAndSyncState() {
         #expect(KnowledgeText.sourceKind(for: "/Users/me/cv.pdf") == .file)
         #expect(KnowledgeText.sourceKind(for: "https://github.com/me/solovei") == .github)
@@ -187,6 +207,13 @@ import Testing
         // A profile source (no project).
         #expect(await store.addKnowledgeSource(to: nil, "https://docs.google.com/document/d/1Ab/edit"))
         #expect(store.candidateProfile?.profileSources.map(\.kind) == [.drive])
+
+        // Removing a source: its facts go with it, the views reload.
+        let fileSource = try #require(store.projectSources[id]?.last)
+        #expect(await store.deleteSource(fileSource.id) == 2)
+        #expect(daemon.calls.contains("deleteSource \(fileSource.id)"))
+        #expect(store.projectSources[id]?.map(\.kind) == [.github])
+        #expect(store.knowledgeProject(id)?.sourceCount == 1)
 
         #expect(await store.renameProject(id, to: "Solovei Voice"))
         #expect(store.knowledgeProject(id)?.name == "Solovei Voice")

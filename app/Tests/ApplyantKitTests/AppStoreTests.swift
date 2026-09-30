@@ -461,6 +461,15 @@ final class FakeDaemon: DaemonAPI, @unchecked Sendable {
         projects.removeAll { String($0.id) == ref }
         if let id = Int64(ref) { sourcesByProject[id] = nil }
     }
+    func deleteSource(_ id: Int64) async throws -> Int {
+        log("deleteSource \(id)")
+        for (key, list) in sourcesByProject where list.contains(where: { $0.id == id }) {
+            sourcesByProject[key] = list.filter { $0.id != id }
+            if let i = projects.firstIndex(where: { $0.id == key }) { projects[i].sourceCount -= 1 }
+        }
+        profileSources.removeAll { $0.id == id }
+        return 2
+    }
     func syncSources(_ target: String, force: Bool) async throws -> Int {
         log("syncSources \(target)")
         return 1

@@ -4,10 +4,12 @@
 // retrieved for each question, and prior answers with their facts. It may pull more through
 // search_facts / get_project (≤ 3 calls, capped by the MCP endpoint); whatever those return
 // joins the citable set. Every fact id in the output must be in that set.
+import { and, eq, ne } from 'drizzle-orm';
 import { POINTS_BACK } from '../../browser/form-read.ts';
 import type { Conn, ReadDb } from '../../db/client.ts';
 import type { ReadExec } from '../../db/read-pool.ts';
-import type { PostingRow } from '../../db/schema.ts';
+import type { PostingRow, Redraft } from '../../db/schema.ts';
+import { facts } from '../../db/schema.ts';
 import type { Embedder } from '../../models/embeddings.ts';
 import type { WriterOutput } from '../../models/schemas/application.ts';
 import type { CompanyFinding } from '../../models/schemas/company.ts';
@@ -41,6 +43,8 @@ export interface WriterQuestion {
   condition: string | null;
   /** The label points back at instructions in the posting ("the exact phrase we asked for"). */
   pointsBack: boolean;
+  /** A review quick action: draft it again shorter, and/or from this project's facts. */
+  redraft?: Redraft | null;
   retrieved: FactRef[];
 }
 
@@ -170,10 +174,12 @@ export async function buildWriterContext(
     const told = [
       ...factRefs(read, interviewFactIds(read, input.applicationId, q.fieldRef)).values(),
     ];
-    const retrieved = [
-      ...told,
-      ...hits.map(({ score: _score, ...f }) => f).filter((f) => !told.some((t) => t.id === f.id)),
-    ];
+    // "Use another project…": that project's facts lead, whatever the search found.
+    const steered = q.redraft?.project ? projectFacts(read, q.redraft.project.id) : [];
+    const retrieved = [...told, ...steered];
+    for (const { score: _score, ...f } of hits) {
+      if (!retrieved.some((t) => t.id === f.id)) retrieved.push(f);
+    }
     questions.push({ ...q, pointsBack: POINTS_BACK.test(q.label), retrieved });
   }
 
@@ -207,6 +213,26 @@ export async function buildWriterContext(
     priorAnswers: [...prior.values()],
     citable,
   };
+}
+
+/** Facts a "Use another project…" redraft may cite: the project's, confirmed ones first. */
+export const STEERED_FACTS = 20;
+
+function projectFacts(read: Conn, projectId: number): FactRef[] {
+  const rows = read
+    .select({ id: facts.id, status: facts.status })
+    .from(facts)
+    .where(and(eq(facts.projectId, projectId), ne(facts.status, 'rejected')))
+    .all()
+    .sort(
+      (a, b) => Number(b.status === 'confirmed') - Number(a.status === 'confirmed') || a.id - b.id,
+    )
+    .slice(0, STEERED_FACTS);
+  const refs = factRefs(
+    read,
+    rows.map((r) => r.id),
+  );
+  return rows.map((r) => refs.get(r.id)).filter((f): f is FactRef => !!f);
 }
 
 /** Every cited fact id is in the context (tool-fetched facts included). Null = fine. */

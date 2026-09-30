@@ -114,6 +114,10 @@ public protocol Applyant_V1_ApplyantServiceClientInterface: Sendable {
     @available(iOS 13, *)
     func `syncSources`(request: Applyant_V1_SyncSourcesRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_SyncSourcesResponse>
 
+    /// DeleteSource removes one source with its evidence; facts only it supported go too.
+    @available(iOS 13, *)
+    func `deleteSource`(request: Applyant_V1_DeleteSourceRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_DeleteSourceResponse>
+
     @available(iOS 13, *)
     func `listFacts`(request: Applyant_V1_ListFactsRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_ListFactsResponse>
 
@@ -178,6 +182,12 @@ public protocol Applyant_V1_ApplyantServiceClientInterface: Sendable {
     /// confirmed review_edit facts), or confirms a flagged sentence as true as written.
     @available(iOS 13, *)
     func `editAnswer`(request: Applyant_V1_EditAnswerRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_EditAnswerResponse>
+
+    /// RedraftAnswer is a review quick action: one written answer is drafted again, shorter
+    /// and/or from a chosen project's facts, under the same citation rules and checks. The
+    /// application prepares again (an `application` event follows); the other answers stay.
+    @available(iOS 13, *)
+    func `redraftAnswer`(request: Applyant_V1_RedraftAnswerRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_RedraftAnswerResponse>
 
     /// ApproveApplication is refused (FailedPrecondition, listing why) while a required value is
     /// missing, a sentence is flagged or unchecked, or a relied-on fact is unconfirmed. Approval
@@ -507,6 +517,11 @@ public final class Applyant_V1_ApplyantServiceClient: Applyant_V1_ApplyantServic
     }
 
     @available(iOS 13, *)
+    public func `deleteSource`(request: Applyant_V1_DeleteSourceRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_DeleteSourceResponse> {
+        return await self.client.unary(path: "/applyant.v1.ApplyantService/DeleteSource", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
     public func `listFacts`(request: Applyant_V1_ListFactsRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_ListFactsResponse> {
         return await self.client.unary(path: "/applyant.v1.ApplyantService/ListFacts", idempotencyLevel: .unknown, request: request, headers: headers)
     }
@@ -574,6 +589,11 @@ public final class Applyant_V1_ApplyantServiceClient: Applyant_V1_ApplyantServic
     @available(iOS 13, *)
     public func `editAnswer`(request: Applyant_V1_EditAnswerRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_EditAnswerResponse> {
         return await self.client.unary(path: "/applyant.v1.ApplyantService/EditAnswer", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
+    public func `redraftAnswer`(request: Applyant_V1_RedraftAnswerRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_RedraftAnswerResponse> {
+        return await self.client.unary(path: "/applyant.v1.ApplyantService/RedraftAnswer", idempotencyLevel: .unknown, request: request, headers: headers)
     }
 
     @available(iOS 13, *)
@@ -799,6 +819,7 @@ public final class Applyant_V1_ApplyantServiceClient: Applyant_V1_ApplyantServic
             public static let deleteProject = Connect.MethodSpec(name: "DeleteProject", service: "applyant.v1.ApplyantService", type: .unary)
             public static let addSource = Connect.MethodSpec(name: "AddSource", service: "applyant.v1.ApplyantService", type: .unary)
             public static let syncSources = Connect.MethodSpec(name: "SyncSources", service: "applyant.v1.ApplyantService", type: .unary)
+            public static let deleteSource = Connect.MethodSpec(name: "DeleteSource", service: "applyant.v1.ApplyantService", type: .unary)
             public static let listFacts = Connect.MethodSpec(name: "ListFacts", service: "applyant.v1.ApplyantService", type: .unary)
             public static let confirmFact = Connect.MethodSpec(name: "ConfirmFact", service: "applyant.v1.ApplyantService", type: .unary)
             public static let editFact = Connect.MethodSpec(name: "EditFact", service: "applyant.v1.ApplyantService", type: .unary)
@@ -813,6 +834,7 @@ public final class Applyant_V1_ApplyantServiceClient: Applyant_V1_ApplyantServic
             public static let prepareApplication = Connect.MethodSpec(name: "PrepareApplication", service: "applyant.v1.ApplyantService", type: .unary)
             public static let setFieldValue = Connect.MethodSpec(name: "SetFieldValue", service: "applyant.v1.ApplyantService", type: .unary)
             public static let editAnswer = Connect.MethodSpec(name: "EditAnswer", service: "applyant.v1.ApplyantService", type: .unary)
+            public static let redraftAnswer = Connect.MethodSpec(name: "RedraftAnswer", service: "applyant.v1.ApplyantService", type: .unary)
             public static let approveApplication = Connect.MethodSpec(name: "ApproveApplication", service: "applyant.v1.ApplyantService", type: .unary)
             public static let submitApplication = Connect.MethodSpec(name: "SubmitApplication", service: "applyant.v1.ApplyantService", type: .unary)
             public static let setApplyForm = Connect.MethodSpec(name: "SetApplyForm", service: "applyant.v1.ApplyantService", type: .unary)

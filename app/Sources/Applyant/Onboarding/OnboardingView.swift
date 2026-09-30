@@ -182,7 +182,7 @@ private struct ImportStep: View {
             }
             SwiftUI.Section("Links and Google Docs") {
                 HStack {
-                    TextField("A portfolio page, a case study, a Docs or Drive link", text: $link)
+                    TextField("A portfolio page, a case study, a Docs or Drive link (a Drive folder works too)", text: $link)
                     Button("Add") {
                         let value = link
                         Task { if await store.importSource(value) { link = "" } }

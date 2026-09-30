@@ -404,6 +404,9 @@ describe('applyant candidate', () => {
     const badKind = await cli(['candidate', 'source', 'add', 'nightingale', 'ftp', 'x']);
     expect(badKind.stderr).toMatch(/unknown source kind "ftp"/);
     const missing = await cli(['candidate', 'source', 'add', 'profile', 'file', 'no-such.pdf']);
-    expect(missing.stderr).toMatch(/no file at/);
+    expect(missing.stderr).toMatch(/no file or folder at/);
+    const noSource = await cli(['candidate', 'source', 'remove', '999']);
+    expect(noSource).toMatchObject({ code: 1 });
+    expect(noSource.stderr).toMatch(/no source 999/);
   });
 });
