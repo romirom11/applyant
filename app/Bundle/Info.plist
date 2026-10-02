@@ -10,6 +10,8 @@
 	<string>Applyant</string>
 	<key>CFBundleExecutable</key>
 	<string>Applyant</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -23,6 +25,11 @@
 	<!-- A menu bar app: no Dock icon, no main window (8a). -->
 	<key>LSUIElement</key>
 	<true/>
+	<!-- Dictating an interview answer (Dictation.swift). -->
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Applyant listens while you dictate an answer, and turns it into text.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Applyant turns your dictated answers into text. When your Mac can't do that for the language on its own, the audio goes to Apple for recognition.</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>For its owner's own Mac.</string>
 </dict>

@@ -108,6 +108,7 @@ chmod 755 "$C/Resources/bin/applyant"
 BUILD_NUMBER="$(git -C "$ROOT" rev-list --count HEAD 2>/dev/null || echo 1)"
 sed "s/__BUILD__/$BUILD_NUMBER/" "$ROOT/app/Bundle/Info.plist" > "$C/Info.plist"
 printf 'APPL????' > "$C/PkgInfo"
+cp "$ROOT/app/Bundle/AppIcon.icns" "$C/Resources/AppIcon.icns"
 plutil -lint "$C/Info.plist" >/dev/null
 sed "s/__BUILD__/$BUILD_NUMBER/" "$ROOT/app/Bundle/ShareExtension-Info.plist" > "$APPEX/Contents/Info.plist"
 printf 'XPC!????' > "$APPEX/Contents/PkgInfo"
@@ -154,6 +155,10 @@ else
 fi
 # The daemon launchd runs is still on the old files: restart it on the new ones. (On a first
 # install the app writes the agent and starts it.)
+# Launch Services (and so Notification Center and the Dock) keep the icon they first saw: tell
+# them about this build, so a changed icon shows in notifications too.
+LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
+[ -x "$LSREGISTER" ] && "$LSREGISTER" -f "$DEST" || true
 if launchctl print "gui/$(id -u)/com.applyant.daemon" >/dev/null 2>&1; then
   launchctl kickstart -k "gui/$(id -u)/com.applyant.daemon"
   echo "restarted the running daemon"
