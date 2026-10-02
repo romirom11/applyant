@@ -149,7 +149,7 @@ describe('search planner', () => {
         sources: ['all'],
       }),
     );
-    setPreference(t.db, 'roles', ['ai_ml', 'backend'], now());
+    setPreference(t.db, 'roles', ['AI Engineer', 'Backend Engineer'], now());
     codex.push({ output: PLAN });
     const id = plan();
     expect(id).not.toBeNull();
@@ -161,7 +161,7 @@ describe('search planner', () => {
     const req = codex.requests[0];
     expect(req?.role).toBe('search_planner');
     expect(req?.webSearch).toBe(true);
-    expect(req?.prompt).toContain('"roles":["ai_ml","backend"]');
+    expect(req?.prompt).toContain('"roles":["AI Engineer","Backend Engineer"]');
     expect(req?.prompt).toContain('- "Mine" (candidate, active) queries ["ai engineer"]');
     expect(req?.prompt).toContain('- lever:gitlab · gitlab · candidate');
     expect(req?.prompt).toContain('board:hn (Hacker News · Who is hiring)');

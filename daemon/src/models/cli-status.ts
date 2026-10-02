@@ -1,5 +1,5 @@
-// Whether each agent CLI can actually be used: found (cli-paths.ts), runs (`--version`) and
-// is signed in (`claude auth status` · `codex login status`). Checks spawn processes, so the
+// Whether each CLI can actually be used: found (cli-paths.ts), runs (`--version`) and is
+// signed in (`claude auth status` · `codex login status` · `gh auth status`). Checks spawn processes, so the
 // result is cached for a minute; the menu bar asks often.
 import { type CliPaths, type RunFile, runFile, TOOLS, type Tool } from './cli-paths.ts';
 import { claudeEnv } from './providers/claude.ts';
@@ -13,6 +13,8 @@ export interface ToolCheck {
   via: 'env' | 'dir' | 'shell' | null;
   version: string | null;
   signedIn: boolean;
+  /** gh only: the GitHub account it is signed in as. */
+  account: string | null;
   error: string | null;
 }
 
@@ -24,9 +26,14 @@ export interface ToolChecks {
 const SIGN_IN: Record<Tool, readonly string[]> = {
   claude: ['auth', 'status'],
   codex: ['login', 'status'],
+  gh: ['auth', 'status', '--hostname', 'github.com'],
 };
 
-const LOGIN: Record<Tool, string> = { claude: 'claude auth login', codex: 'codex login' };
+const LOGIN: Record<Tool, string> = {
+  claude: 'claude auth login',
+  codex: 'codex login',
+  gh: 'gh auth login',
+};
 
 const firstLine = (text: string) => text.trim().split('\n')[0]?.slice(0, 300) ?? '';
 
@@ -36,14 +43,22 @@ function errorText(err: unknown): string {
   return firstLine(e.stderr || e.stdout || e.message || String(err));
 }
 
-/** `claude auth status` prints JSON ({"loggedIn": true, …}); `codex login status` exits 0. */
+/**
+ * `claude auth status` prints JSON ({"loggedIn": true, …}); `codex login status` and
+ * `gh auth status` exit 0 when signed in.
+ */
 export function parseSignIn(tool: Tool, stdout: string): boolean {
-  if (tool === 'codex') return true;
+  if (tool === 'codex' || tool === 'gh') return true;
   try {
     return (JSON.parse(stdout) as { loggedIn?: unknown }).loggedIn === true;
   } catch {
     return false;
   }
+}
+
+/** The account in `gh auth status` ("Logged in to github.com account romirom11 (keyring)"). */
+export function parseGhAccount(text: string): string | null {
+  return /Logged in to \S+ (?:account|as) ([A-Za-z0-9-]+)/.exec(text)?.[1] ?? null;
 }
 
 export class CliStatus {
@@ -95,6 +110,7 @@ export class CliStatus {
       via: found.via,
       version: null,
       signedIn: false,
+      account: null,
       error: found.error,
     };
     if (!found.path) return base;
@@ -111,6 +127,18 @@ export class CliStatus {
       const out = await this.run(found.path, SIGN_IN[tool], { env, timeoutMs: 15_000 });
       base.signedIn = parseSignIn(tool, out);
       if (!base.signedIn) base.error = `not signed in: run \`${LOGIN[tool]}\``;
+      if (tool === 'gh' && base.signedIn) {
+        // Older gh versions print the status to stderr: the configured user says the same.
+        base.account =
+          parseGhAccount(out) ??
+          ((
+            await this.run(found.path, ['config', 'get', '--host', 'github.com', 'user'], {
+              env,
+              timeoutMs: 15_000,
+            }).catch(() => '')
+          ).trim() ||
+            null);
+      }
     } catch (err) {
       base.error = `not signed in (${errorText(err)}): run \`${LOGIN[tool]}\``;
     }

@@ -5,7 +5,7 @@
 // returns a commit the queue applies under the lease.
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 import type { Page } from 'playwright';
 import { captchaStep } from '../../browser/captcha.ts';
 import {
@@ -18,7 +18,7 @@ import {
   platformName,
   platformOf,
 } from '../../browser/guardrails.ts';
-import type { DeliverContext, DeliverOutcome } from '../../channels/channel.ts';
+import { type DeliverContext, type DeliverOutcome, DeliveryStale } from '../../channels/channel.ts';
 import {
   type ApplicationRow,
   type ApplicationStage,
@@ -55,6 +55,10 @@ export const deliverApplication: Handler<'deliver_application'> = async (task, c
   if (app?.stage !== 'approved') return noop;
   const posting = ctx.read.select().from(postings).where(eq(postings.id, app.postingId)).get();
   if (!posting) return noop;
+  // An earlier run got as far as pressing submit (or sending) and never saw how it ended: a
+  // crash, a restart, the browser closing. Sending again could apply twice, so the candidate
+  // checks first.
+  if (app.submitAttemptedAt) return needsCandidate(app, interruptedReason(app.submitAttemptedAt));
 
   // An email or Telegram target (phases 13, 15) goes through its channel whatever the row was
   // created with.
@@ -89,6 +93,24 @@ export const deliverApplication: Handler<'deliver_application'> = async (task, c
     taskId: task.id,
     signal: ctx.signal,
     progress,
+    begin: () => {
+      const now = ctx.read
+        .select({ stage: applications.stage, attempted: applications.submitAttemptedAt })
+        .from(applications)
+        .where(eq(applications.id, app.id))
+        .get();
+      if (now?.stage !== 'approved' || now.attempted) throw new DeliveryStale();
+    },
+    submitting: () => {
+      const recorded = ctx.record((tx) => {
+        tx.db
+          .update(applications)
+          .set({ submitAttemptedAt: tx.now })
+          .where(eq(applications.id, app.id))
+          .run();
+      });
+      if (!recorded) throw new Error('the delivery lost its lease before submitting');
+    },
     profile,
     ...(mail ? { securityCode: securityCodeReader(mail, ctx) } : {}),
     ...(platform
@@ -117,13 +139,19 @@ export const deliverApplication: Handler<'deliver_application'> = async (task, c
     outcome =
       guard && platform ? await guardedDelivery(guard, platform, send, task.id, ctx) : await send();
   } catch (err) {
+    if (err instanceof DeliveryStale) return noop;
+    if (submitAttempted(ctx, app.id)) {
+      // It failed (or was interrupted) after submit was pressed: never a silent second try.
+      const at = submitAttempted(ctx, app.id) as Date;
+      return needsCandidate(app, interruptedReason(at, firstLine(err)));
+    }
     ctx.signal.throwIfAborted();
     if (err instanceof PlatformPaused) return needsCandidate(app, err.message);
     if (err instanceof PlatformCapReached) return deferDelivery(app, err.message, err.until);
     if (err instanceof PlatformBusy) {
       return deferDelivery(app, err.message, new Date(ctx.now().getTime() + 15 * 60_000));
     }
-    const reason = ((err as Error).message ?? String(err)).split('\n')[0] ?? 'delivery failed';
+    const reason = firstLine(err);
     if (task.attempts + 1 < DELIVER_ATTEMPTS) {
       return {
         kind: 'retry',
@@ -220,6 +248,25 @@ export const deliverApplication: Handler<'deliver_application'> = async (task, c
 
   return needsCandidate(app, outcome.handOff.reason, outcome.handOff);
 };
+
+function firstLine(err: unknown): string {
+  return ((err as Error).message ?? String(err)).split('\n')[0] || 'delivery failed';
+}
+
+function submitAttempted(ctx: HandlerContext, applicationId: number): Date | null {
+  return (
+    ctx.read
+      .select({ at: applications.submitAttemptedAt })
+      .from(applications)
+      .where(eq(applications.id, applicationId))
+      .get()?.at ?? null
+  );
+}
+
+/** The hand-off for a delivery that pressed submit and never saw the result. */
+function interruptedReason(at: Date, why?: string): string {
+  return `Applyant pressed submit at ${at.toISOString().slice(0, 16).replace('T', ' ')} UTC and was interrupted before it saw the result${why ? ` (${why})` : ''}. The application may already be sent: check your inbox or the site. If it arrived, mark it as submitted; if not, try delivery again`;
+}
 
 /**
  * A delivery on LinkedIn/Xing: in the platform's lane, within its cap, paced. A challenge on the
@@ -392,7 +439,21 @@ export function enqueueDelivery(tx: Tx, applicationId: number): void {
   if (!busy) tx.enqueue('deliver_application', applicationId);
 }
 
-/** Startup catch-up: an approved application with no receipt yet gets delivery enqueued. */
+/** Whether the application's latest delivery ended in a hand-off. */
+function handedOff(tx: Tx, applicationId: number): boolean {
+  const last = tx.db
+    .select({ status: tasks.status })
+    .from(tasks)
+    .where(and(eq(tasks.kind, 'deliver_application'), eq(tasks.entityId, applicationId)))
+    .orderBy(desc(tasks.id))
+    .get();
+  return last?.status === 'needs_candidate';
+}
+
+/**
+ * Startup catch-up: an approved application with no receipt yet, and no hand-off waiting on the
+ * candidate, gets delivery enqueued.
+ */
 export function catchUpDeliveries(tx: Tx): number {
   const rows = tx.db
     .select({ id: applications.id })
@@ -407,6 +468,9 @@ export function catchUpDeliveries(tx: Tx): number {
       .where(eq(receipts.applicationId, r.id))
       .get();
     if (delivered) continue;
+    // A delivery that stopped for the candidate stays with the candidate: they may have finished
+    // the form by hand already. Only they start it again ("Try delivery again").
+    if (handedOff(tx, r.id)) continue;
     enqueueDelivery(tx, r.id);
     n++;
   }

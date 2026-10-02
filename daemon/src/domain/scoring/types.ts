@@ -53,6 +53,18 @@ export interface RequirementMatch {
   factIds: number[];
 }
 
+/** How a posting compares with the roles the candidate is after. */
+export type RoleVerdict = 'same' | 'close' | 'different';
+
+/** The role_fit decision as stored on the posting. */
+export interface RoleFit {
+  /** Hash of the candidate's roles and the extraction it was made for; a new key means ask again. */
+  key: string;
+  verdict: RoleVerdict;
+  /** Who decided: jev · claude:haiku · … */
+  by: string;
+}
+
 /** A match as stored on the posting: with the matcher's note and the cache key it was made for. */
 export interface StoredMatch extends RequirementMatch {
   note: string | null;
@@ -61,7 +73,8 @@ export interface StoredMatch extends RequirementMatch {
 }
 
 export interface ScoreResult {
-  score: number;
+  /** Null when the posting lists nothing to compare with the candidate's experience. */
+  score: number | null;
   /** must-haves × role fit, 0–1; null when neither is known. */
   coreFit: number | null;
   breakdown: Component[];

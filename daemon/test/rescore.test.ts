@@ -15,7 +15,13 @@ import type { FactHit } from '../src/domain/knowledge/retrieve.ts';
 import { scorePosting } from '../src/domain/scoring/handlers.ts';
 import { type Candidates, matchKey, planMatches } from '../src/domain/scoring/match.ts';
 import { getPreferences, parsePreference, setPreference } from '../src/domain/scoring/prefs.ts';
-import { recordDecision, requestScoring, rescoreAll } from '../src/domain/scoring/store.ts';
+import { requestRoleFit } from '../src/domain/scoring/rematch.ts';
+import {
+  recordDecision,
+  requestScoring,
+  rescoreAll,
+  undoDecision,
+} from '../src/domain/scoring/store.ts';
 import type { ProviderRequest, ProviderResult } from '../src/models/agent-runner.ts';
 import { FakeProvider } from '../src/models/providers/fake.ts';
 import type { PostingExtraction } from '../src/models/schemas/posting.ts';
@@ -222,6 +228,65 @@ describe('score_posting and re-scoring', () => {
     expect(roles()).toEqual(['extractor', 'matcher', 'matcher']);
     // A skipped posting stays skipped when it is re-scored.
     expect(row(id)?.stage).toBe('skipped');
+
+    // Taking the skip back: in the Inbox again, undecided, the nudge gone, no model call.
+    const calls = fake.requests.length;
+    const undone = undoDecision(t.db, bus, { id, now });
+    expect(undone.posting).toMatchObject({ stage: 'scored', decision: null, decisionReason: null });
+    expect(undone.posting.breakdown?.find((c) => c.key === 'salary')?.weight).toBe(10);
+    expect(fake.requests).toHaveLength(calls);
+    expect(() => undoDecision(t.db, bus, { id, now })).toThrow(/no skip or interest to undo/);
+  });
+
+  it('judges a posting against the roles wanted once; new roles ask again, without the matcher', async () => {
+    await seedFacts();
+    // The decision falls to claude:haiku here (no Jev): one bounded choice per posting.
+    const decides = (choice: string) => (req: ProviderRequest) => {
+      expect(req.prompt).toContain('Senior AI Engineer');
+      return {
+        kind: 'ok' as const,
+        output: { answers: [{ question: 'role', choice }] },
+        model: 'haiku',
+        usage: null,
+      };
+    };
+    setPref('roles', 'AI Engineer; Backend Engineer');
+    fake.push({ output: EXTRACTION }, decides('same'), matcher);
+    const id = addPosting();
+    requestScoring(t.db, bus, [id], now);
+    await worker.idle();
+    expect(roles()).toEqual(['extractor', 'role_fit', 'matcher']);
+    expect(fake.requests[1]?.prompt).toContain('AI Engineer');
+    expect(row(id)?.roleFit).toMatchObject({ verdict: 'same' });
+    expect(row(id)?.breakdown?.find((c) => c.key === 'role')).toMatchObject({
+      value: 1,
+      note: "One of the roles you're after",
+    });
+    const withRole = row(id)?.score ?? 0;
+
+    // Scoring again with the same roles asks nobody.
+    requestScoring(t.db, bus, [id], now);
+    await worker.idle();
+    expect(fake.requests).toHaveLength(3);
+
+    // Other roles: the stored verdict no longer applies, and each open posting is asked again
+    // (one decision; the matches are reused).
+    fake.push(decides('different'));
+    runInTx(t.db, bus, { now }, (tx) => {
+      const parsed = parsePreference('roles', 'CFO; Finance Director', getPreferences(tx.db));
+      setPreference(tx.db, parsed.key, parsed.value, tx.now);
+      rescoreAll(tx.db, tx.now);
+      expect(row(id)?.breakdown?.find((c) => c.key === 'role')?.uncertain).toBe(true);
+      expect(requestRoleFit(tx)).toBe(1);
+    });
+    await worker.idle();
+    expect(roles()).toEqual(['extractor', 'role_fit', 'matcher', 'role_fit']);
+    expect(fake.requests[3]?.prompt).toContain('Finance Director');
+    expect(row(id)?.breakdown?.find((c) => c.key === 'role')).toMatchObject({
+      value: 0.2,
+      note: "Not a role you're after",
+    });
+    expect(row(id)?.score ?? 100).toBeLessThan(withRole);
   });
 
   it('keeps the extraction when the matcher hits a limit, and resumes without re-extracting', async () => {

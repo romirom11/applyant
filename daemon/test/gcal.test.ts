@@ -190,6 +190,7 @@ describe('interview events', () => {
       read: t.read,
       signal: new AbortController().signal,
       progress: () => {},
+      record: () => true,
       now: () => NOW,
     });
     if (outcome.kind === 'done') runInTx(t.db, bus, { now: NOW }, (tx) => outcome.commit(tx));
@@ -223,6 +224,7 @@ describe('interview events', () => {
       read: t.read,
       signal: new AbortController().signal,
       progress: () => {},
+      record: () => true,
       now: () => NOW,
     });
     if (outcome.kind === 'done') runInTx(t.db, bus, { now: NOW }, (tx) => outcome.commit(tx));

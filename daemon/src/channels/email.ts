@@ -132,6 +132,8 @@ export class EmailChannel implements Channel {
     }
     const fullName = ctx.profile.full_name;
     const filename = `${fullName ? `${fullName} - ` : ''}CV${extname(cvPath) || '.pdf'}`;
+    ctx.begin();
+    ctx.submitting();
     ctx.progress(`sending to ${target.address} from ${box.address}`);
     const sent = await box.send({
       to: target.address,

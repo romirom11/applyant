@@ -22,10 +22,11 @@ import {
 } from '../../db/schema.ts';
 import type { Deps } from '../../deps.ts';
 import { type SourceExtraction, sourceExtractionSchema } from '../../models/schemas/index.ts';
-import type { Handler, Outcome, Task, Tx } from '../../queue/types.ts';
+import type { Handler, HandlerContext, Outcome, Task, Tx } from '../../queue/types.ts';
 import { requestRematch } from '../scoring/rematch.ts';
 import { applyAuthorship } from './authorship.ts';
 import { checkClaims } from './claim-check.ts';
+import { applyCvHeader, markCvHeaderUnread, readCvHeader, wantsCvHeader } from './cv-header.ts';
 import { enqueueEmbedFacts } from './embed-index.ts';
 import { addEvidence } from './evidence.ts';
 import {
@@ -83,14 +84,19 @@ export const syncSource: Handler<'sync_source'> = async (task, ctx) => {
     .update(material.text)
     .digest('hex');
   if (hash === source.contentHash) {
+    // Nothing new to extract; a CV read before its header was may still fill the profile.
+    const header = await cvHeader(source, material, task, ctx);
     return {
       kind: 'done',
       commit: (tx) => {
+        const filled = header ? header(tx) : null;
         tx.db
           .update(sources)
           .set({
             lastSyncedAt: tx.now,
-            syncNote: `unchanged since the last sync · ${material.label}`,
+            syncNote: [`unchanged since the last sync`, filled, material.label]
+              .filter(Boolean)
+              .join(' · '),
           })
           .where(eq(sources.id, source.id))
           .run();
@@ -159,6 +165,9 @@ export const syncSource: Handler<'sync_source'> = async (task, ctx) => {
     }
   }
 
+  // After the facts, so a limit here never costs the extraction above.
+  const header = await cvHeader(source, material, task, ctx);
+
   return {
     kind: 'done',
     commit: (tx) => {
@@ -177,6 +186,7 @@ export const syncSource: Handler<'sync_source'> = async (task, ctx) => {
         summary.projectsCreated ? `${summary.projectsCreated} projects created` : null,
         downgraded ? `${downgraded} attributed to other contributors` : null,
         unsupported ? `${unsupported} left out: the cited commits don't show them` : null,
+        header ? header(tx) : null,
         material.label,
       ]
         .filter(Boolean)
@@ -198,6 +208,41 @@ export const syncSource: Handler<'sync_source'> = async (task, ctx) => {
     },
   };
 };
+
+/**
+ * A CV (a file on the profile, not a project's document or a folder) also gives the
+ * candidate's name, contacts, city, languages and the titles they'd search for. Read once per
+ * CV text. Returns what the commit applies (the header, or that it couldn't
+ * be read), or null when there's nothing to do.
+ */
+async function cvHeader(
+  source: SourceRow,
+  material: SourceMaterial,
+  task: Task<'sync_source'>,
+  ctx: HandlerContext,
+): Promise<((tx: Tx) => string | null) | null> {
+  const isCv = source.projectId === null && source.kind === 'file' && !source.locator.endsWith('/');
+  if (!isCv || !wantsCvHeader(ctx.read, material.text)) return null;
+  ctx.progress({ message: 'reading your name, contacts and target roles from the CV' });
+  const read = await readCvHeader(ctx.deps.models, material.text, {
+    taskId: task.id,
+    signal: ctx.signal,
+    progress: (message) => ctx.progress({ message }),
+  });
+  if (read.kind === 'ok') {
+    return (tx) => profileNote(applyCvHeader(tx, read.header, material.text));
+  }
+  ctx.deps.log.warn('the CV header was not read', { reason: read.reason });
+  if (read.later) return null;
+  return (tx) => {
+    markCvHeaderUnread(tx, material.text);
+    return null;
+  };
+}
+
+function profileNote(filled: string[]): string | null {
+  return filled.length ? `profile filled from the CV: ${filled.join(', ')}` : null;
+}
 
 async function readSource(
   source: SourceRow,
@@ -347,7 +392,14 @@ export function applyExtraction(tx: Tx, input: ApplyInput): ApplySummary {
       } else {
         const created = createProject(
           db,
-          { name, summary: p.summary, role: p.role, period: p.period, stack: p.stack },
+          {
+            name,
+            summary: p.summary,
+            role: p.role,
+            period: p.period,
+            stack: p.stack,
+            kind: p.kind,
+          },
           now,
         );
         projectsCreated++;

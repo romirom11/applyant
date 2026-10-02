@@ -38,6 +38,7 @@ import {
   type InterviewQuestionRow,
   type PostingRow,
   postings,
+  projects,
   tasks,
 } from '../../db/schema.ts';
 import type { Provider } from '../../models/roles.ts';
@@ -78,7 +79,7 @@ import {
   prepareStandardFields,
   profileText,
 } from './standard-fields.ts';
-import { applicationView, emitStage, loadAnswers, loadFieldRows } from './store.ts';
+import { applicationView, emitStage, loadAnswers, loadFieldRows, PREPARABLE } from './store.ts';
 import { runWriter } from './writer.ts';
 import { buildWriterContext, type WriterQuestion } from './writer-context.ts';
 
@@ -108,7 +109,7 @@ export function channelOf(formStatus: PostingRow['formStatus']): 'email' | 'tele
 
 export const prepareApplication: Handler<'prepare_application'> = async (task, ctx) => {
   const app = ctx.read.select().from(applications).where(eq(applications.id, task.entityId)).get();
-  if (!app || app.stage === 'approved') return noop;
+  if (!app || !PREPARABLE.includes(app.stage)) return noop;
   const posting = ctx.read.select().from(postings).where(eq(postings.id, app.postingId)).get();
   if (!posting) return noop;
 
@@ -260,6 +261,14 @@ export const prepareApplication: Handler<'prepare_application'> = async (task, c
     ctx.read,
     allAnswers.flatMap((a) => a.sentences.flatMap((s) => s.factIds)),
   );
+  // The project and the candidate's role there travel with each cited fact.
+  const projectLines = new Map(
+    ctx.read
+      .select({ id: projects.id, name: projects.name, role: projects.role })
+      .from(projects)
+      .all()
+      .map((p) => [p.id, p.role ? `${p.name}; role: ${p.role}` : p.name] as const),
+  );
   for (const a of allAnswers) {
     for (const s of a.sentences) {
       if (s.flag !== 'unchecked') continue;
@@ -268,7 +277,12 @@ export const prepareApplication: Handler<'prepare_application'> = async (task, c
         text: s.text,
         facts: s.factIds.map((id) => {
           const f = cited.get(id);
-          return { id, text: f?.text ?? '(no longer exists)', period: f?.period ?? null };
+          return {
+            id,
+            text: f?.text ?? '(no longer exists)',
+            period: f?.period ?? null,
+            project: f?.projectId ? (projectLines.get(f.projectId) ?? null) : null,
+          };
         }),
       });
     }
@@ -282,6 +296,7 @@ export const prepareApplication: Handler<'prepare_application'> = async (task, c
       signal: ctx.signal,
       progress: (message) => ctx.progress({ message }),
       allowedNumbers: Object.values(ctxProfile),
+      employerText: posting.text,
     });
     if (res.kind === 'limit')
       return { kind: 'pause_provider', provider: res.provider, until: res.until };

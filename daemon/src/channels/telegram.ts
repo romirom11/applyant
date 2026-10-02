@@ -148,6 +148,8 @@ export class TelegramChannel implements Channel {
     const filename = `${fullName ? `${fullName} - ` : ''}CV${extname(cvPath) || '.pdf'}`;
     let sent: { message: number; file: number };
     try {
+      ctx.begin();
+      ctx.submitting();
       ctx.progress(`sending the message to @${user}`);
       const m = await client.sendMessage(user, { message });
       ctx.progress(`sending the CV to @${user}`);

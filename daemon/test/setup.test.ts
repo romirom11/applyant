@@ -2,6 +2,7 @@
 // search starting only once Preferences is done.
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { facts, searchPlans, searchRuns, tasks } from '../src/db/schema.ts';
+import { CV_SUGGESTIONS_KEY } from '../src/domain/knowledge/cv-header.ts';
 import { setProfileValue } from '../src/domain/knowledge/profile.ts';
 import { createProject } from '../src/domain/knowledge/projects.ts';
 import { setPreference } from '../src/domain/scoring/prefs.ts';
@@ -121,19 +122,45 @@ describe('setup', () => {
 
     const draft = preferencesDraft(t.db);
     const by = Object.fromEntries(draft.map((s) => [s.key, s]));
-    expect(by.roles?.value).toBe('backend, ai_ml');
-    expect(by.roles?.reason).toContain('"Senior Backend Engineer"');
+    // Without a CV header read: the titles held, without seniority or employer.
+    expect(by.roles?.value).toBe('Backend Engineer, Tech Lead');
+    expect(by.roles?.reason).toBe('From your CV: the titles you held');
     expect(by.roles?.factIds).toContain(lead);
     expect(by.seniority).toMatchObject({ value: 'senior, lead', factIds: [lead] });
     expect(by.based_in).toMatchObject({
       value: 'GR',
       reason: 'Your profile\'s location: "Athens, Greece"',
     });
+    expect(by.based_city).toMatchObject({ value: 'Athens' });
     expect(by.languages).toMatchObject({ value: 'en:C1, de:A1, el:native', factIds: [langs] });
     expect(by.salary?.value).toBe('4500 EUR/month');
 
+    // What the CV's header read suggested wins: its roles, its place, every language it names.
+    setProfileValue(
+      t.db,
+      CV_SUGGESTIONS_KEY,
+      {
+        city: 'Piraeus',
+        country: 'GR',
+        languages: [
+          { code: 'en', level: 'C1' },
+          { code: 'hi', level: 'native' },
+        ],
+        roles: ['Backend Engineer', 'AI Engineer', 'Tech Lead'],
+        textHashes: ['x'],
+      },
+      now,
+    );
+    const read = Object.fromEntries(preferencesDraft(t.db).map((s) => [s.key, s.value]));
+    expect(read).toMatchObject({
+      roles: 'Backend Engineer, AI Engineer, Tech Lead',
+      based_in: 'GR',
+      based_city: 'Piraeus',
+      languages: 'en:C1, hi:native',
+    });
+
     // What the candidate already set isn't drafted again.
-    setPreference(t.db, 'roles', ['data'], now);
+    setPreference(t.db, 'roles', ['Data Engineer'], now);
     expect(preferencesDraft(t.db).map((s) => s.key)).not.toContain('roles');
   });
 

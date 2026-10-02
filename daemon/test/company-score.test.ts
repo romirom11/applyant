@@ -82,9 +82,9 @@ describe('company red flags in the score', () => {
     const low = run({ name: 'Acme AI', redFlags: [flag('low')] });
     const medium = run({ name: 'Acme AI', redFlags: [flag('medium')] });
     const high = run({ name: 'Acme AI', redFlags: [flag('high')] });
-    expect(low.score).toBeLessThan(base);
-    expect(medium.score).toBeLessThan(low.score);
-    expect(high.score).toBeLessThan(medium.score);
+    expect(low.score).toBeLessThan(base ?? 0);
+    expect(medium.score).toBeLessThan(low.score ?? 0);
+    expect(high.score).toBeLessThan(medium.score ?? 0);
     expect(companyOf(high)).toMatchObject({
       weight: prefs.weights.company,
       value: 1 - RED_FLAG_COST.high,
@@ -110,7 +110,7 @@ describe('company red flags in the score', () => {
         flag('low', 'legal'),
       ],
     });
-    expect(two.score).toBeLessThan(one.score);
+    expect(two.score).toBeLessThan(one.score ?? 0);
     expect(companyOf(many).value).toBe(COMPANY_FLOOR);
     expect(companyOf(many).note).toBe(
       '5 red flags: layoffs (high) · reviews (high) · funding (high) · +2 more',
@@ -122,7 +122,9 @@ describe('company red flags in the score', () => {
       .filter((c) => c.weight > 0 && !c.uncertain)
       .reduce((a, c) => a + c.weight, 0);
     const w = prefs.weights.company;
-    const worst = Math.round((base.score * counted + 100 * w * COMPANY_FLOOR) / (counted + w));
+    const worst = Math.round(
+      ((base.score ?? 0) * counted + 100 * w * COMPANY_FLOOR) / (counted + w),
+    );
     expect(many.score).toBe(worst);
   });
 

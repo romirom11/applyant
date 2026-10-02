@@ -30,7 +30,7 @@ import {
   tasks,
 } from '../../db/schema.ts';
 import type { Tx } from '../../queue/types.ts';
-import { requestPrepare } from '../applications/store.ts';
+import { PREPARABLE, requestPrepare } from '../applications/store.ts';
 import { factKey } from './facts.ts';
 import { requireProject } from './projects.ts';
 
@@ -443,7 +443,7 @@ export function dismissQuestion(tx: Tx, id: number): InterviewQuestionRow {
 export function resumePreparation(tx: Tx, applicationId: number): boolean {
   if (pendingApplicationQuestions(tx.db, applicationId) > 0) return false;
   const app = tx.db.select().from(applications).where(eq(applications.id, applicationId)).get();
-  if (!app || app.stage === 'approved' || app.stage === 'applied') return false;
+  if (!app || !PREPARABLE.includes(app.stage)) return false;
   const unused = tx.db
     .select({ id: interviewQuestions.id })
     .from(interviewQuestions)

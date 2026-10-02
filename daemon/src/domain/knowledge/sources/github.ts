@@ -7,6 +7,7 @@ import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { defaultCliPaths } from '../../../models/cli-paths.ts';
 import { ExecError, run } from '../../../util/exec.ts';
 import { ensurePrivateDir } from '../../../util/fs.ts';
 import type { Logger } from '../../../util/log.ts';
@@ -151,8 +152,10 @@ export async function readGithubSource(
   const ref = parseRepoLocator(locator);
   const dir = join(o.reposDir, ref.dirName);
   await syncClone(ref, dir, o.signal);
+  // File contents are fetched on demand (a blobless clone), so reads need the sign-in too.
+  const auth = await githubCredentials(ref);
   const git = (...args: string[]) =>
-    run('git', ['-C', dir, ...args], { env: GIT_ENV(), signal: o.signal });
+    run('git', [...auth, '-C', dir, ...args], { env: GIT_ENV(), signal: o.signal });
 
   let commits: Commit[];
   try {
@@ -392,8 +395,26 @@ export async function readGithubSource(
   };
 }
 
+/** `gh` by the path the daemon found it at: a launchd agent's PATH has no Homebrew. */
+async function ghPath(): Promise<string> {
+  return (await defaultCliPaths().resolve('gh')).path ?? 'gh';
+}
+
+/**
+ * Git options that let a private github.com repository be read over HTTPS with the GitHub CLI's
+ * sign-in (what `gh auth setup-git` would configure), without touching the candidate's git
+ * config. None when `gh` isn't installed: public repositories need nothing.
+ */
+async function githubCredentials(ref: RepoRef): Promise<string[]> {
+  if (!ref.github) return [];
+  const gh = (await defaultCliPaths().resolve('gh')).path;
+  if (!gh) return [];
+  return ['-c', `credential.https://github.com.helper=!'${gh}' auth git-credential`];
+}
+
 async function syncClone(ref: RepoRef, dir: string, signal: AbortSignal): Promise<void> {
   const env = GIT_ENV();
+  const auth = await githubCredentials(ref);
   const permanent = (err: unknown) =>
     /not found|does not exist|authentication failed|could not read username|terminal prompts disabled|access denied|not a git repository/i.test(
       err instanceof ExecError ? err.stderr : String(err),
@@ -401,17 +422,18 @@ async function syncClone(ref: RepoRef, dir: string, signal: AbortSignal): Promis
   try {
     if (existsSync(join(dir, 'HEAD')) || existsSync(join(dir, '.git'))) {
       await run('git', ['-C', dir, 'remote', 'set-url', 'origin', ref.cloneUrl], { env, signal });
-      await run('git', ['-C', dir, 'fetch', '--quiet', '--prune', '--filter=blob:none', 'origin'], {
-        env,
-        signal,
-      });
+      await run(
+        'git',
+        [...auth, '-C', dir, 'fetch', '--quiet', '--prune', '--filter=blob:none', 'origin'],
+        { env, signal },
+      );
       await run('git', ['-C', dir, 'remote', 'set-head', 'origin', '--auto'], { env, signal });
       return;
     }
     ensurePrivateDir(join(dir, '..'));
     await run(
       'git',
-      ['clone', '--quiet', '--filter=blob:none', '--no-checkout', '--', ref.cloneUrl, dir],
+      [...auth, 'clone', '--quiet', '--filter=blob:none', '--no-checkout', '--', ref.cloneUrl, dir],
       { env, signal, timeoutMs: 900_000 },
     );
   } catch (err) {
@@ -590,7 +612,10 @@ class Gh implements GithubApi {
 
   private async api(args: string[]): Promise<string | null> {
     try {
-      return await run('gh', ['api', ...args], { signal: this.signal, timeoutMs: 120_000 });
+      return await run(await ghPath(), ['api', ...args], {
+        signal: this.signal,
+        timeoutMs: 120_000,
+      });
     } catch (err) {
       this.signal.throwIfAborted();
       this.log.warn('gh api failed', { args: args.join(' '), err: (err as Error).message });

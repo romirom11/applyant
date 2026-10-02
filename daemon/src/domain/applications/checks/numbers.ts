@@ -363,6 +363,11 @@ export interface CheckFact {
   text: string;
   /** The project's period ("2019–2024"): dates in a sentence may come from it. */
   period?: string | null;
+  /**
+   * The project the fact belongs to and the candidate's role there ("Tech Lead at NDA · role:
+   * Tech Lead"): a sentence may say "as Tech Lead" from it.
+   */
+  project?: string | null;
 }
 
 /**
@@ -373,6 +378,12 @@ export function checkNumbers(
   sentence: string,
   facts: CheckFact[],
   extra: string[] = [],
+  /**
+   * Texts about the employer (the posting): their counts, money and percentages may be
+   * repeated ("while you grow past 270 merchants"), never their years or team sizes, which
+   * would read as the candidate's.
+   */
+  about: string[] = [],
 ): NumberCheck {
   const said = extractQuantities(sentence);
   if (said.length === 0) return { kind: 'ok' };
@@ -380,6 +391,7 @@ export function checkNumbers(
     [f.text, f.period ?? ''].flatMap((t) => extractQuantities(t).map((q) => ({ q, id: f.id }))),
   );
   const allowed = extra.flatMap((t) => extractQuantities(t));
+  const employer = about.flatMap((t) => extractQuantities(t));
   const absent: Quantity[] = [];
   for (const q of said) {
     const same = known.filter((k) => sameDimension(q, k.q));
@@ -394,6 +406,13 @@ export function checkNumbers(
       continue;
     }
     if (allowed.some((a) => approx(q.value, a.value))) continue;
+    if (
+      q.kind !== 'years' &&
+      q.kind !== 'people' &&
+      employer.some((a) => a.kind === q.kind && approx(q.value, a.value))
+    ) {
+      continue;
+    }
     absent.push(q);
   }
   return absent.length ? { kind: 'absent', quantities: absent } : { kind: 'ok' };

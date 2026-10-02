@@ -35,6 +35,15 @@ import type { RpcContext } from './postings.ts';
 
 type Impl = ServiceImpl<typeof ApplyantService>;
 
+/** Enough of the reply to decide what it is: whole words, and "…" when there's more. */
+const SNIPPET_CHARS = 1200;
+function snippet(text: string): string {
+  const flat = text.replace(/\s+/g, ' ').trim();
+  if (flat.length <= SNIPPET_CHARS) return flat;
+  const cut = flat.slice(0, SNIPPET_CHARS);
+  return `${cut.slice(0, Math.max(cut.lastIndexOf(' '), SNIPPET_CHARS - 40))}…`;
+}
+
 export interface MailRpcContext extends RpcContext {
   mail: MailService | null;
   log: Logger;
@@ -75,7 +84,7 @@ export function emailToPb(
     fromAddress: row.fromAddress,
     fromName: row.fromName ?? undefined,
     subject: row.subject,
-    snippet: row.text.replace(/\s+/g, ' ').trim().slice(0, 280),
+    snippet: snippet(row.text),
     receivedAt: timestampFromDate(row.receivedAt),
     label: row.label,
     confidence: row.confidence ?? undefined,

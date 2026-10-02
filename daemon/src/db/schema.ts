@@ -3,7 +3,7 @@
 import { sql } from 'drizzle-orm';
 import { index, integer, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 import type { FieldSpec, FormRead } from '../browser/form-types.ts';
-import type { Component, StoredExtraction, StoredMatch } from '../domain/scoring/types.ts';
+import type { Component, RoleFit, StoredExtraction, StoredMatch } from '../domain/scoring/types.ts';
 import {
   type ListingRecipe,
   RECIPE_STATUSES,
@@ -54,6 +54,8 @@ export const postings = sqliteTable(
     extractionKey: text('extraction_key'),
     /** Requirement matches, each with the cache key it was made for. */
     matches: text('matches', { mode: 'json' }).$type<StoredMatch[]>(),
+    /** Whether it's one of the roles the candidate is after (role-fit.ts); null = not judged. */
+    roleFit: text('role_fit', { mode: 'json' }).$type<RoleFit>(),
     /** 0–100, from the pure score() over the cached extraction and matches. */
     score: integer('score'),
     /** must-haves × role fit (0–1) behind the score; logistics count less below 0.7. */
@@ -437,6 +439,8 @@ export const projects = sqliteTable('projects', {
   summary: text('summary'),
   role: text('role'),
   period: text('period'),
+  /** position (a job, a freelance engagement) · project (something built); null: guessed. */
+  kind: text('kind', { enum: ['position', 'project'] }),
   /** JSON array of technologies. */
   stack: text('stack', { mode: 'json' }).$type<string[]>().notNull().default(sql`'[]'`),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull().default(now),
@@ -641,6 +645,12 @@ export const applications = sqliteTable('applications', {
   preparedAt: integer('prepared_at', { mode: 'timestamp_ms' }),
   approvedAt: integer('approved_at', { mode: 'timestamp_ms' }),
   appliedAt: integer('applied_at', { mode: 'timestamp_ms' }),
+  /**
+   * Set, durably, just before delivery presses submit (or sends the email / Telegram message)
+   * and cleared by a new approval or an explicit retry. A delivery that finds it set didn't see
+   * how its last submission ended: it hands off instead of submitting a second time.
+   */
+  submitAttemptedAt: integer('submit_attempted_at', { mode: 'timestamp_ms' }),
   /** When the candidate first opened it for review (metric 3: review time runs to approval). */
   reviewStartedAt: integer('review_started_at', { mode: 'timestamp_ms' }),
   /** When it first reached interview / offer (kept when a later reply rejects it). */
@@ -820,7 +830,16 @@ export interface CvDroppedLine extends CvLine {
  */
 export interface CvPlan {
   summary: CvLine[];
-  projects: Array<{ slug: string; name: string; period: string | null; bullets: CvLine[] }>;
+  projects: Array<{
+    slug: string;
+    name: string;
+    period: string | null;
+    /** Positions are Experience, projects their own section; absent in older plans: guessed. */
+    kind?: 'position' | 'project';
+    /** A position's title, shown with the employer when the name doesn't hold it. */
+    role?: string | null;
+    bullets: CvLine[];
+  }>;
   education: CvLine[];
   skills: string[];
   dropped: CvDroppedLine[];

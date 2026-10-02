@@ -1,0 +1,18 @@
+<!doctype html>
+<!-- Synthetic, for the delivery-safety tests. The only button says "Apply", so it reads as the
+     final control, but pressing it leads to another page with a form of its own (an account
+     sign-in) instead of a confirmation. -->
+<html lang="en"><head><meta charset="utf-8"><title>Apply · Gate Co</title></head><body>
+<h1>Apply to Gate Co</h1>
+<form id="apply" novalidate onsubmit="return false">
+  <div><label for="name">Full Name *</label><input id="name" required></div>
+  <div><label for="email">Email *</label><input id="email" type="email" required></div>
+  <button id="go">Apply</button>
+</form>
+<script>
+  document.getElementById('go').addEventListener('click', () => {
+    fetch('/attempt', { method: 'POST', body: 'pressed' }).catch(() => {});
+    setTimeout(() => { location.href = '/form-deliver-signin-2.html'; }, 50);
+  });
+</script>
+</body></html>

@@ -114,6 +114,12 @@ export interface HandlerContext {
   /** Aborted when the lease is lost or the daemon shuts down. */
   signal: AbortSignal;
   progress(e: ProgressEvent): void;
+  /**
+   * A small write made during the slow phase, applied at once while the lease is still held
+   * (false when it's lost: nothing was written). Only for a marker that has to survive a crash
+   * before the outcome's commit, such as "submit is about to be pressed".
+   */
+  record(write: Commit): boolean;
   now(): Date;
 }
 

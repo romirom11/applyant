@@ -11,11 +11,13 @@
 // The JSON-LD node is returned too, so scoring can let structured fields win (structured.ts).
 import type { Page } from 'playwright';
 import type { ReaderPool } from '../../browser/reader-pool.ts';
-import { htmlToText } from '../knowledge/text/html.ts';
+import { htmlToText, wholePageText } from '../knowledge/text/html.ts';
 
 export const MAX_POSTING_TEXT = 40_000;
 /** Less main-page text than this: the posting probably lives in an embedded frame. */
 const THIN_PAGE = 800;
+/** Readability's text below this share of the whole page's: it dropped part of the posting. */
+const READABLE_SHARE = 0.75;
 /** How much of the page's top the header block keeps. */
 const HEADER_CHARS = 600;
 
@@ -80,6 +82,11 @@ export async function readPostingText(page: Page): Promise<PostingText> {
   const job = jobPostingNode(blocks);
 
   let body = main.text;
+  // Readability picks one block as "the article". On job pages that is often the company's
+  // introduction, and the sections that matter (what you'll do, what we're looking for) are
+  // siblings it drops. When it kept well under the page's text, the whole page is read.
+  const whole = wholePageText(html).text;
+  if (body.length < whole.length * READABLE_SHARE) body = whole;
   const description =
     typeof job?.description === 'string'
       ? htmlToText(`<body>${job.description}</body>`, null).text

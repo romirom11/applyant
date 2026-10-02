@@ -179,6 +179,7 @@ describe('email channel', () => {
       read: t.read,
       signal: new AbortController().signal,
       progress: () => {},
+      record: () => true,
       now: () => new Date(),
     });
     expect(outcome.kind).toBe('done');
@@ -219,7 +220,14 @@ describe('email channel', () => {
       {} as never,
       { applyUrl: 'mailto:jobs@acme.io', canonicalUrl: 'https://acme.io', title: 'X' } as never,
       { fields: [] } as never,
-      { taskId: 1, signal: new AbortController().signal, progress: () => {}, profile: {} as never },
+      {
+        taskId: 1,
+        signal: new AbortController().signal,
+        progress: () => {},
+        begin: () => {},
+        submitting: () => {},
+        profile: {} as never,
+      },
     );
     expect(outcome).toMatchObject({ kind: 'needs_candidate' });
 

@@ -1,0 +1,1 @@
+ALTER TABLE `applications` ADD `submit_attempted_at` integer;

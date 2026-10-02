@@ -268,6 +268,7 @@ describe('the agent interview', () => {
         read: t.read,
         signal: new AbortController().signal,
         progress: () => {},
+        record: () => true,
         now: () => now,
       },
     );

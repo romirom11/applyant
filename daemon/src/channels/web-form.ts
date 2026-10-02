@@ -157,6 +157,7 @@ export class WebFormChannel implements Channel {
           challenge: string | null;
         }
     >(async (page) => {
+      ctx.begin();
       const deps = { models: this.d.models, mcp: this.d.mcp, taskPages: this.d.taskPages };
       const agentCtx = { taskId: ctx.taskId, page, signal: ctx.signal, progress: ctx.progress };
       const outcome = await deliverForm(page, {
@@ -199,6 +200,7 @@ export class WebFormChannel implements Channel {
           agentFixAndAdvance(deps, agentCtx, fields, errors, advance),
         ...(ctx.securityCode ? { securityCode: ctx.securityCode } : {}),
         ...(ctx.captcha ? { captcha: ctx.captcha } : {}),
+        beforeSubmit: () => ctx.submitting(),
         signal: ctx.signal,
         progress: ctx.progress,
       });

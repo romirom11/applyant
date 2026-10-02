@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { type EventRow, postings, tasks } from '../src/db/schema.ts';
 import { EventBus } from '../src/queue/events.ts';
 import { runInTx } from '../src/queue/tx.ts';
-import type { Handler, HandlerContext, Outcome, Task } from '../src/queue/types.ts';
+import type { Handler, HandlerContext, Outcome, Task, Tx } from '../src/queue/types.ts';
 import { Worker, type WorkerOptions } from '../src/queue/worker.ts';
 import { createLogger } from '../src/util/log.ts';
 import { type TempDb, tempDb } from './helpers/db.ts';
@@ -315,6 +315,49 @@ describe('queue worker', () => {
     await Promise.all([a.idle(), b.idle()]);
     expect(calls).toBe(1);
     expect(taskRow(taskId)).toMatchObject({ status: 'done', attempts: 0 });
+  });
+
+  it('keeps its own lease when the renew timer was late (the Mac slept mid-task)', async () => {
+    const { taskId } = addPosting();
+    const release = gate();
+    let runs = 0;
+    const w = worker(async () => {
+      runs++;
+      await release.promise;
+      return { kind: 'done', commit: () => {} };
+    });
+    w.start();
+    await new Promise((r) => setTimeout(r, 40));
+    expect(runs).toBe(1);
+    // The clock jumps past the lease while the handler is still running; a free slot polls.
+    clock.advance(10 * 60_000);
+    await new Promise((r) => setTimeout(r, 80));
+    expect(runs).toBe(1);
+    expect(taskRow(taskId)).toMatchObject({ status: 'running', leaseOwner: w.owner, attempts: 0 });
+    release.open();
+    await w.idle();
+    expect(taskRow(taskId)).toMatchObject({ status: 'done', attempts: 0 });
+    expect(kinds(taskId)).not.toContain('task.requeued');
+  });
+
+  it('records a marker during the handler, only while the lease is held', async () => {
+    const { postingId, taskId } = addPosting();
+    const seen: boolean[] = [];
+    const mark = (note: string) => (tx: Tx) => {
+      tx.db.update(postings).set({ verifyNote: note }).where(eq(postings.id, postingId)).run();
+    };
+    const w = worker(async (_task, ctx: HandlerContext) => {
+      seen.push(ctx.record(mark('marked')));
+      // Written at once, before the outcome's commit.
+      expect(postingRow(postingId)?.verifyNote).toBe('marked');
+      t.db.update(tasks).set({ leaseOwner: 'someone-else' }).where(eq(tasks.id, taskId)).run();
+      seen.push(ctx.record(mark('too late')));
+      return { kind: 'done', commit: () => {} };
+    });
+    w.start();
+    await new Promise((r) => setTimeout(r, 60));
+    expect(seen).toEqual([true, false]);
+    expect(postingRow(postingId)?.verifyNote).toBe('marked');
   });
 
   it('releases in-flight tasks on shutdown without spending an attempt', async () => {

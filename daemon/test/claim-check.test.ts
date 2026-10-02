@@ -87,7 +87,14 @@ describe('sync_source on the laundering fixture', () => {
     const cite = (locator: string, quote: string | null = null) => [{ locator, quote }];
     const extraction: SourceExtraction = {
       projects: [
-        { name: 'Callcenter', summary: null, role: null, period: null, stack: ['Python'] },
+        {
+          kind: 'project',
+          name: 'Callcenter',
+          summary: null,
+          role: null,
+          period: null,
+          stack: ['Python'],
+        },
       ],
       facts: [
         {

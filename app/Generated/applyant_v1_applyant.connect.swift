@@ -33,6 +33,12 @@ public protocol Applyant_V1_ApplyantServiceClientInterface: Sendable {
     @available(iOS 13, *)
     func `markInterested`(request: Applyant_V1_MarkInterestedRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_MarkInterestedResponse>
 
+    /// UndoDecision takes a skip (or an interest) back: the posting returns to the Inbox as if it
+    /// had never been decided on, its feedback is dropped and scores are re-computed. An
+    /// application that was already started stays.
+    @available(iOS 13, *)
+    func `undoDecision`(request: Applyant_V1_UndoDecisionRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_UndoDecisionResponse>
+
     /// ScorePostings enqueues score_posting; cached extractions and matches are reused.
     @available(iOS 13, *)
     func `scorePostings`(request: Applyant_V1_ScorePostingsRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_ScorePostingsResponse>
@@ -117,6 +123,13 @@ public protocol Applyant_V1_ApplyantServiceClientInterface: Sendable {
     /// DeleteSource removes one source with its evidence; facts only it supported go too.
     @available(iOS 13, *)
     func `deleteSource`(request: Applyant_V1_DeleteSourceRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_DeleteSourceResponse>
+
+    /// SuggestRepositories lists the candidate's own GitHub repositories (through the signed-in
+    /// `gh`, their account and its organisations) for a project: the ones that look like it
+    /// first, with why, then the rest, newest push first. Repositories already a source of any
+    /// project are left out. Needs `gh` signed in (FailedPrecondition otherwise).
+    @available(iOS 13, *)
+    func `suggestRepositories`(request: Applyant_V1_SuggestRepositoriesRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_SuggestRepositoriesResponse>
 
     @available(iOS 13, *)
     func `listFacts`(request: Applyant_V1_ListFactsRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_ListFactsResponse>
@@ -232,7 +245,9 @@ public protocol Applyant_V1_ApplyantServiceClientInterface: Sendable {
     /// OFFER, REJECTED or WITHDRAWN. Recorded as a manual `application.stage` event. It never
     /// delivers anything; moves that can't be true are refused (FailedPrecondition, saying why):
     /// a reply stage before the application was sent, a stage only the pipeline sets (preparing,
-    /// review, approved), or while a delivery is under way.
+    /// approved), or while a delivery is under way. READY_FOR_REVIEW takes an approval back: only
+    /// from APPROVED with no delivery under way (after a hand-off); its hand-off closes, and only a
+    /// new approval sends it.
     @available(iOS 13, *)
     func `setApplicationStage`(request: Applyant_V1_SetApplicationStageRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_SetApplicationStageResponse>
 
@@ -443,6 +458,11 @@ public final class Applyant_V1_ApplyantServiceClient: Applyant_V1_ApplyantServic
     }
 
     @available(iOS 13, *)
+    public func `undoDecision`(request: Applyant_V1_UndoDecisionRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_UndoDecisionResponse> {
+        return await self.client.unary(path: "/applyant.v1.ApplyantService/UndoDecision", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
     public func `scorePostings`(request: Applyant_V1_ScorePostingsRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_ScorePostingsResponse> {
         return await self.client.unary(path: "/applyant.v1.ApplyantService/ScorePostings", idempotencyLevel: .unknown, request: request, headers: headers)
     }
@@ -550,6 +570,11 @@ public final class Applyant_V1_ApplyantServiceClient: Applyant_V1_ApplyantServic
     @available(iOS 13, *)
     public func `deleteSource`(request: Applyant_V1_DeleteSourceRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_DeleteSourceResponse> {
         return await self.client.unary(path: "/applyant.v1.ApplyantService/DeleteSource", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
+    public func `suggestRepositories`(request: Applyant_V1_SuggestRepositoriesRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_SuggestRepositoriesResponse> {
+        return await self.client.unary(path: "/applyant.v1.ApplyantService/SuggestRepositories", idempotencyLevel: .unknown, request: request, headers: headers)
     }
 
     @available(iOS 13, *)
@@ -864,6 +889,7 @@ public final class Applyant_V1_ApplyantServiceClient: Applyant_V1_ApplyantServic
             public static let getPosting = Connect.MethodSpec(name: "GetPosting", service: "applyant.v1.ApplyantService", type: .unary)
             public static let skipPosting = Connect.MethodSpec(name: "SkipPosting", service: "applyant.v1.ApplyantService", type: .unary)
             public static let markInterested = Connect.MethodSpec(name: "MarkInterested", service: "applyant.v1.ApplyantService", type: .unary)
+            public static let undoDecision = Connect.MethodSpec(name: "UndoDecision", service: "applyant.v1.ApplyantService", type: .unary)
             public static let scorePostings = Connect.MethodSpec(name: "ScorePostings", service: "applyant.v1.ApplyantService", type: .unary)
             public static let readForms = Connect.MethodSpec(name: "ReadForms", service: "applyant.v1.ApplyantService", type: .unary)
             public static let getPreferences = Connect.MethodSpec(name: "GetPreferences", service: "applyant.v1.ApplyantService", type: .unary)
@@ -886,6 +912,7 @@ public final class Applyant_V1_ApplyantServiceClient: Applyant_V1_ApplyantServic
             public static let addSource = Connect.MethodSpec(name: "AddSource", service: "applyant.v1.ApplyantService", type: .unary)
             public static let syncSources = Connect.MethodSpec(name: "SyncSources", service: "applyant.v1.ApplyantService", type: .unary)
             public static let deleteSource = Connect.MethodSpec(name: "DeleteSource", service: "applyant.v1.ApplyantService", type: .unary)
+            public static let suggestRepositories = Connect.MethodSpec(name: "SuggestRepositories", service: "applyant.v1.ApplyantService", type: .unary)
             public static let listFacts = Connect.MethodSpec(name: "ListFacts", service: "applyant.v1.ApplyantService", type: .unary)
             public static let confirmFact = Connect.MethodSpec(name: "ConfirmFact", service: "applyant.v1.ApplyantService", type: .unary)
             public static let editFact = Connect.MethodSpec(name: "EditFact", service: "applyant.v1.ApplyantService", type: .unary)

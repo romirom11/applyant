@@ -83,7 +83,7 @@ export function registerMail(
     .description('connect a mailbox (replaces the current one)');
   connect
     .command('gmail')
-    .description('Google sign-in in your browser (Gmail, Calendar and Drive in one consent)')
+    .description('Google sign-in in your browser (Gmail and Calendar in one consent)')
     .option('--client-id <id>', 'your Google Cloud "Desktop app" OAuth client id')
     .option('--client-secret', "read the client's secret from stdin (or a prompt)")
     .option('--no-open', 'print the sign-in URL without opening the browser')
@@ -105,6 +105,9 @@ export function registerMail(
         if (!res.authUrl) throw new Error('the daemon gave no sign-in URL');
         out(
           `Sign in with Google (Applyant's client is unverified: choose Advanced → continue):\n${res.authUrl}`,
+        );
+        out(
+          'If Google says "Access blocked … Error 403: access_denied", the client is still in Testing: publish it at https://console.cloud.google.com/auth/audience (or add your address under Test users).',
         );
         if (opts.open) openInBrowser(res.authUrl);
         const deadline = Date.now() + positiveInt(opts.wait) * 1000;

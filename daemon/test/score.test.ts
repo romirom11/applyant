@@ -19,7 +19,7 @@ import {
   parsePreference,
 } from '../src/domain/scoring/prefs.ts';
 import { OUT_OF_REACH_CAP, type ScoreInput, score } from '../src/domain/scoring/score.ts';
-import type { ComponentKey, RequirementMatch } from '../src/domain/scoring/types.ts';
+import type { ComponentKey, RequirementMatch, RoleVerdict } from '../src/domain/scoring/types.ts';
 import type { PostingExtraction } from '../src/models/schemas/posting.ts';
 
 const posting = (over: Partial<PostingExtraction> = {}): PostingExtraction => ({
@@ -67,7 +67,7 @@ const allStrong: RequirementMatch[] = [
 
 const prefs = (over: Partial<Preferences> = {}): Preferences => ({
   ...DEFAULT_PREFERENCES,
-  roles: ['ai_ml', 'founding'],
+  roles: ['AI Engineer', 'Founding Engineer'],
   seniority: ['senior', 'staff'],
   basedIn: 'GR',
   locations: ['GR', 'CY'],
@@ -84,14 +84,21 @@ const input = (
   p: PostingExtraction,
   matches = allStrong,
   fx: FxRates | null = RATES,
+  roleFit: RoleVerdict | null = 'same',
 ): ScoreInput => ({
   posting: p,
   matches,
   fx,
+  roleFit,
 });
 
-const run = (p: PostingExtraction, pr = prefs(), matches = allStrong) =>
-  score(input(p, matches), pr, pr.weights);
+/** `roleFit`: how the posting was judged against the candidate's roles (null = not judged). */
+const run = (
+  p: PostingExtraction,
+  pr = prefs(),
+  matches = allStrong,
+  roleFit: RoleVerdict | null = 'same',
+) => score(input(p, matches, RATES, roleFit), pr, pr.weights);
 
 const component = (res: ReturnType<typeof score>, key: ComponentKey) => {
   const c = res.breakdown.find((x) => x.key === key);
@@ -119,7 +126,7 @@ describe('score()', () => {
     expect(res.breakdown.map((c) => [c.key, c.weight, c.value, c.note])).toEqual([
       ['must', 35, 1, '2 strong of 2'],
       ['nice', 10, 1, '1 strong of 1'],
-      ['role', 15, 1, 'Senior · AI/ML, backend'],
+      ['role', 15, 1, "Senior · One of the roles you're after"],
       ['location', 10, 1, 'Remote (europe)'],
       ['remote', 10, 1, 'Remote'],
       ['salary', 10, 1, 'Salary €3,000/month · at target'],
@@ -161,16 +168,31 @@ describe('score()', () => {
     expect(res.score).toBe(53);
   });
 
+  it('a posting with nothing to match gets no score, not one made of title and logistics', () => {
+    // An empty description: the right title, remote in the right region, nothing else.
+    const res = run(posting(), prefs(), []);
+    expect(component(res, 'must')).toMatchObject({
+      uncertain: true,
+      note: 'no must-haves listed · nothing to compare with your experience, so no score: open the posting and decide yourself',
+    });
+    expect(res.score).toBeNull();
+    // The rest of the breakdown is still there to read.
+    expect(component(res, 'location').value).toBe(1);
+    // Only conditions to ask about (travel, time zones): still nothing to match.
+    const asked = [{ ...req('Travel 20%', true, 'missing'), verdict: 'unknown' as const }];
+    expect(run(posting(), prefs(), asked).score).toBeNull();
+  });
+
   it('perfect logistics cannot lift a poor core fit', () => {
     // iOS role for a backend/AI candidate: must-haves 35%, role fit 20%, logistics all 100%.
-    const ios = posting({ roleFamilies: ['mobile'] });
+    const ios = posting();
     const weak = [
       req('iOS SDK', true, 'missing'),
       req('Swift', true, 'missing'),
       req('Git', true, 'partial'),
       req('CS degree', true, 'strong'),
     ];
-    const res = run(ios, prefs(), weak);
+    const res = run(ios, prefs(), weak, 'different');
     expect(component(res, 'must').value).toBe(0.38);
     expect(component(res, 'role').value).toBe(0.2);
     expect(res.coreFit).toBe(0.08);
@@ -218,8 +240,8 @@ describe('score()', () => {
       note: 'Salary €2,500/month · 17% below target',
     });
     expect(component(forty, 'salary').value).toBe(0);
-    expect(five.score).toBeGreaterThan(seventeen.score);
-    expect(seventeen.score).toBeGreaterThan(forty.score);
+    expect(five.score).toBeGreaterThan(seventeen.score ?? 0);
+    expect(seventeen.score).toBeGreaterThan(forty.score ?? 0);
     // A salary above target never adds more than meeting it.
     expect(component(at(4000), 'salary')).toMatchObject({
       value: 1,
@@ -396,16 +418,51 @@ describe('score()', () => {
     ).toBe(true);
   });
 
-  it('role: seniority distance and role family', () => {
+  it('role: seniority distance and how the job compares with the roles wanted', () => {
     expect(component(run(posting({ seniority: 'mid' })), 'role')).toMatchObject({
       value: 0.6,
-      note: 'Mid · you want senior, staff · AI/ML, backend',
+      note: "Mid · you want senior, staff · One of the roles you're after",
     });
     expect(component(run(posting({ seniority: 'junior' })), 'role').value).toBe(0.3);
-    expect(component(run(posting({ roleFamilies: ['frontend'] })), 'role').value).toBe(0.2);
+    // Any job titles: the verdict is what counts, whatever kind of work it is.
+    const cfo = prefs({ roles: ['CFO', 'Finance Director'], seniority: [] });
+    expect(component(run(posting(), cfo, allStrong, 'same'), 'role').value).toBe(1);
+    expect(component(run(posting(), cfo, allStrong, 'close'), 'role')).toMatchObject({
+      value: 0.6,
+      note: 'Close to the roles you want',
+    });
+    expect(component(run(posting(), cfo, allStrong, 'different'), 'role')).toMatchObject({
+      value: 0.2,
+      note: "Not a role you're after",
+    });
+    // Not judged yet: seniority alone counts; with no seniority wanted either, nothing does.
+    expect(component(run(posting(), prefs(), allStrong, null), 'role')).toMatchObject({
+      value: 1,
+      note: 'Senior · not compared with your roles yet',
+    });
+    expect(component(run(posting(), cfo, allStrong, null), 'role').uncertain).toBe(true);
     expect(
-      component(run(posting({ seniority: 'unknown', roleFamilies: [] })), 'role').uncertain,
+      component(run(posting({ seniority: 'unknown' }), prefs(), allStrong, null), 'role').uncertain,
     ).toBe(true);
+
+    // An office in your country but another city counts for less; your own city in full.
+    const office = (city: string | null) =>
+      posting({
+        workplace: 'onsite',
+        remoteRegions: [],
+        remoteCountries: [],
+        offices: [{ city, country: 'GR' }],
+      });
+    const athens = prefs({ basedCity: 'Athens', remote: 'any' });
+    expect(component(run(office('Thessaloniki'), athens), 'location')).toMatchObject({
+      value: 0.6,
+      note: "Office in Thessaloniki · you're in Athens",
+    });
+    expect(component(run(office('Athens'), athens), 'location').value).toBe(1);
+    expect(component(run(office(null), athens), 'location').value).toBe(1);
+    expect(component(run(office('Thessaloniki'), prefs({ remote: 'any' })), 'location').value).toBe(
+      1,
+    );
     expect(
       run(posting({ seniority: 'junior' }), prefs({ dealbreakers: ['seniority'] })).dealbreakers,
     ).toEqual(['Seniority: junior']);
@@ -432,6 +489,45 @@ describe('score()', () => {
     );
   });
 
+  it("language: the ones you'd rather work in", () => {
+    const rather = prefs({
+      languages: { en: 'C1', de: 'C1', uk: 'native' },
+      workingLanguages: ['de', 'uk'],
+    });
+    // An English-only posting counts for half; a German one in full, and says so.
+    expect(component(run(posting(), rather), 'language')).toMatchObject({
+      value: 0.5,
+      note: "English only · you'd rather work in German, Ukrainian",
+    });
+    const german = posting({ languages: [{ language: 'de', level: 'fluent', required: true }] });
+    expect(component(run(german, rather), 'language')).toMatchObject({
+      value: 1,
+      note: 'German (fluent) · you have C1 · works in German',
+    });
+    // Written in Ukrainian while asking for English: the team's language, said as what it is.
+    expect(component(run(posting({ postingLanguage: 'uk' }), rather), 'language')).toMatchObject({
+      value: 1,
+      note: 'English (professional) · you have C1 · written in Ukrainian',
+    });
+    // A posting that says nothing about languages is left alone; so is a missing language.
+    expect(
+      component(run(posting({ languages: [], postingLanguage: null }), rather), 'language').value,
+    ).toBe(1);
+    expect(
+      component(
+        run(posting({ languages: [{ language: 'fr', level: 'fluent', required: true }] }), rather),
+        'language',
+      ).value,
+    ).toBe(0);
+    expect(parsePreference('working_languages', 'DE, uk', prefs())).toEqual({
+      key: 'working_languages',
+      value: ['de', 'uk'],
+    });
+    expect(() => parsePreference('working_languages', 'german', prefs())).toThrow(
+      /two-letter language code/,
+    );
+  });
+
   it('employment: accepted types, unknown is uncertain', () => {
     expect(component(run(posting({ employment: 'part_time' })), 'employment').value).toBe(0.3);
     expect(component(run(posting({ employment: null })), 'employment').uncertain).toBe(true);
@@ -441,8 +537,9 @@ describe('score()', () => {
     const res = score(input(posting()), DEFAULT_PREFERENCES, DEFAULT_WEIGHTS);
     expect(res.breakdown.filter((c) => c.weight > 0).map((c) => c.key)).toEqual(['must', 'nice']);
     expect(res.score).toBe(100);
+    // Nothing to compare at all: no number, rather than a middling one.
     const none = score(input(posting(), []), DEFAULT_PREFERENCES, DEFAULT_WEIGHTS);
-    expect(none.score).toBe(50);
+    expect(none.score).toBeNull();
   });
 });
 
@@ -522,9 +619,18 @@ describe('preferences', () => {
   });
 
   it('validates each key and resets on an empty value', () => {
+    // Any job titles; the old family keys read as the titles they stood for.
+    expect(parsePreference('roles', 'CFO; Head Chef\n backend engineer, cfo', cur)).toEqual({
+      key: 'roles',
+      value: ['CFO', 'Head Chef', 'backend engineer'],
+    });
     expect(parsePreference('roles', 'ai_ml, backend,founding', cur)).toEqual({
       key: 'roles',
-      value: ['ai_ml', 'backend', 'founding'],
+      value: ['AI / ML Engineer', 'Backend Engineer', 'Founding Engineer'],
+    });
+    expect(parsePreference('based_city', '  Athens ', cur)).toEqual({
+      key: 'based_city',
+      value: 'Athens',
     });
     expect(parsePreference('based_in', 'gr', cur)).toEqual({ key: 'based_in', value: 'GR' });
     expect(parsePreference('languages', 'en:c1,el:native', cur)).toEqual({
@@ -541,7 +647,7 @@ describe('preferences', () => {
     });
     expect(parsePreference('salary', '', cur)).toEqual({ key: 'salary', value: null });
     expect(parsePreference('weights', 'reset', cur)).toEqual({ key: 'weights', value: null });
-    expect(() => parsePreference('roles', 'wizard', cur)).toThrow(PreferenceError);
+    expect(() => parsePreference('roles', 'x'.repeat(61), cur)).toThrow(PreferenceError);
     expect(() => parsePreference('locations', 'Greece', cur)).toThrow(/two-letter country code/);
     expect(() => parsePreference('threshold', '120', cur)).toThrow(/0 to 100/);
     expect(() => parsePreference('colour', 'red', cur)).toThrow(/unknown preference "colour"/);

@@ -8,18 +8,21 @@
 //   pickAdvance  the step's next / submit control and whether it submits (isFinal)
 //   advanceDeterministic  press a non-final advance control and wait for the next step
 //
-// The agent escalations (a field the code can't operate, a step that won't advance) arrive
-// with Deliver in phase 6; in this phase such a field is noted (Read) or handed off (Deliver).
+// In Deliver a field the code can't operate goes to the field agent (`agentField`); a step
+// that won't advance goes to the step agent (form-deliver.ts). Read only notes such a field.
 import type { Locator, Page } from 'playwright';
 import type { ElementRef, FieldSpec, RevealedBy } from './form-types.ts';
 import { refKey } from './form-types.ts';
 import {
+  asksSignIn,
   type FormSnapshot,
   formSignature,
   frameRoot,
   locate,
   type SnapButton,
   type SnapField,
+  signatureHasControls,
+  signatureOf,
   snapshotForm,
 } from './snapshot.ts';
 
@@ -257,6 +260,12 @@ const NEXT =
   /^(next|continue|weiter|suivant|siguiente|avanti|próximo|proximo|volgende|dalej|далі|далее|продовжити|продолжить|proceed|review)\b|save (and|&) continue|next step|continue to/i;
 const FINAL =
   /\b(submit|apply|send|finish|complete)\b|bewerb|absenden|senden|envoyer|postuler|enviar|inviare|invia|verzenden|отправить|надіслати|подати/i;
+/**
+ * Words that say the button sends the form. "Weiter zur Bewerbung" and "Continue to apply" name
+ * the application without sending it, so a "next" button stays next unless one of these is in it.
+ */
+const SENDS =
+  /\b(submit|send|finish|complete)\b|absenden|senden|envoyer|enviar|inviare|invia|verzenden|отправить|надіслати|подати|jetzt bewerben|apply now/i;
 /** Buttons that are never a step's advance control, whatever their words. */
 const NOT_ADVANCE =
   /linkedin|indeed|seek|google|import|autofill|upload|attach|choose file|add (another|more)|^\+|^add\b|save (as|for) (draft|later)|cancel|back|previous|clear|remove|delete|toggle|cookie|accept all|decline/i;
@@ -278,7 +287,7 @@ export function pickAdvance(buttons: SnapButton[]): Advance {
     ...list.filter((b) => b.inRoot),
     ...list.filter((b) => !b.inRoot),
   ];
-  const next = inRootFirst(candidates.filter((b) => NEXT.test(b.text) && !FINAL.test(b.text)));
+  const next = inRootFirst(candidates.filter((b) => NEXT.test(b.text) && !SENDS.test(b.text)));
   if (next[0]) return { ref: next[0].ref, text: next[0].text, isFinal: false };
   const final = inRootFirst(
     candidates.filter((b) => FINAL.test(b.text) || (b.submit && b.inRoot)),
@@ -327,27 +336,73 @@ export async function advanceDeterministic(
 
 export type SubmitResult =
   | { kind: 'confirmed'; url: string; text: string | null }
-  | { kind: 'stuck'; errors: string[] };
+  /**
+   * The press led to another form instead of a confirmation: the control wasn't the final one
+   * after all (or the site asks for a sign-in). Nothing says the application was sent.
+   */
+  | { kind: 'moved'; url: string }
+  /**
+   * `unclear`: the page showed neither a confirmation nor an error by the deadline, so the
+   * submission may or may not have gone through.
+   */
+  | { kind: 'stuck'; errors: string[]; unclear: boolean };
 
 const CONFIRMED_TEXT =
-  /\b(thank you|application (has been |was )?(submitted|received|sent)|we('| ha)ve received|we('ll| will) be in touch|confirmation)\b/i;
+  /\b(thank you|thanks for (applying|your application)|application (has been |was )?(submitted|received|sent)|we('| ha)ve received|we('ll| will) be in touch|confirmation|vielen dank|bewerbung (ist |wurde )?(eingegangen|gesendet|abgeschickt|erhalten)|merci|gracias|grazie)\b|дякуємо|спасибо|заявк[ау] (отримано|надіслано|отправлена|получена)/gi;
+
+/** Confirmation wording the page shows now and didn't show before the press. */
+export function newConfirmation(before: string | null, after: string | null): boolean {
+  if (!after) return false;
+  const found = (text: string) =>
+    new Set((text.match(CONFIRMED_TEXT) ?? []).map((m) => m.toLowerCase()));
+  const was = found(before ?? '');
+  for (const phrase of found(after)) if (!was.has(phrase)) return true;
+  return false;
+}
+
+/** The page's address without its fragment: `#step-2` alone is not a navigation. */
+function place(url: string): string {
+  const at = url.indexOf('#');
+  return at < 0 ? url : url.slice(0, at);
+}
+
+export interface SubmitOptions {
+  signal?: AbortSignal;
+  timeoutMs?: number;
+  /**
+   * Called right before the press, so the caller can record durably that a submission was
+   * attempted (a delivery interrupted after the press must not submit a second time).
+   */
+  beforeSubmit?(): void | Promise<void>;
+}
+
+/** What the page looked like before a press, for `waitForOutcome` to compare against. */
+export interface PageBefore {
+  url: string;
+  signature: string;
+  text: string | null;
+}
+
+export async function pageBefore(page: Page): Promise<PageBefore> {
+  return { url: page.url(), signature: await formSignature(page), text: await bodyText(page) };
+}
 
 /**
  * Presses the step's final (submit) control and waits for a sign the application went through:
- * the page navigated, the form's controls disappeared, or the page now shows confirmation-like
- * text. Anything else by the deadline is a validation error or an unexpected step: `stuck`,
- * with whatever the page shows as an error.
+ * the page left for one without a form, the form's controls disappeared, or confirmation
+ * wording appeared that wasn't there before. Another form showing up is `moved`; anything else
+ * by the deadline is `stuck`, with whatever the page shows as an error.
  */
 export async function submitFinal(
   page: Page,
   advance: Advance,
-  o: { signal?: AbortSignal; timeoutMs?: number } = {},
+  o: SubmitOptions = {},
 ): Promise<SubmitResult> {
   if (!advance.ref) throw new Error('no submit control to press');
-  const before = await formSignature(page);
-  const url = page.url();
+  const before = await pageBefore(page);
+  await o.beforeSubmit?.();
   await locate(page, advance.ref).first().click({ timeout: ACTION_MS });
-  return waitForOutcome(page, url, before, o);
+  return waitForOutcome(page, before, o);
 }
 
 /**
@@ -356,45 +411,51 @@ export async function submitFinal(
  */
 export async function waitForOutcome(
   page: Page,
-  urlBefore: string,
-  signatureBefore: string,
+  before: PageBefore,
   o: { signal?: AbortSignal; timeoutMs?: number } = {},
 ): Promise<SubmitResult> {
-  const url = urlBefore;
-  const before = signatureBefore;
   const deadline = Date.now() + (o.timeoutMs ?? 15_000);
+  let gone = 0;
   while (Date.now() < deadline) {
     o.signal?.throwIfAborted();
     await settle(page, 250);
-    if (page.url() !== url) {
+    if (place(page.url()) !== place(before.url)) {
       await page.waitForLoadState('domcontentloaded').catch(() => {});
+      await settle(page, 500);
       const text = await bodyText(page);
+      if (newConfirmation(before.text, text)) return { kind: 'confirmed', url: page.url(), text };
+      // A new page that is itself a form (the next step, a sign-in) is not a confirmation.
+      const sig = await formSignature(page).catch(() => '');
+      if (signatureHasControls(sig) || (await asksSignIn(page).catch(() => false))) {
+        return { kind: 'moved', url: page.url() };
+      }
       return { kind: 'confirmed', url: page.url(), text };
     }
     const sig = await formSignature(page).catch(() => '');
     const text = await bodyText(page);
-    if (!sig.includes('#') || sig.split('#')[1] === '') {
-      // The form's controls are gone: a confirmation replaced it in place.
-      return { kind: 'confirmed', url: page.url(), text };
+    if (!signatureHasControls(sig)) {
+      // The form's controls are gone: a confirmation replaced it in place. Seen twice in a
+      // row, because a page in the middle of navigating away also reads as "no controls".
+      if (++gone >= 2) return { kind: 'confirmed', url: page.url(), text };
+      continue;
     }
-    if (text && CONFIRMED_TEXT.test(text)) return { kind: 'confirmed', url: page.url(), text };
-    if (sig !== before) {
-      // Something changed but the form is still here: give it a moment to settle, then
-      // treat it as a validation error (or an unexpected extra step) if it's still stuck.
+    gone = 0;
+    if (sig !== before.signature) {
+      // Something changed but a form is still here: give it a moment to settle. With errors
+      // on the page it's a validation failure, whatever else the page says.
       await settle(page, 500);
       const snap = await snapshotForm(page).catch(() => null);
       const alerts = await visibleAlerts(page);
       if (snap?.errors.length || alerts.length) {
-        return { kind: 'stuck', errors: [...(snap?.errors ?? []), ...alerts] };
+        return { kind: 'stuck', errors: [...(snap?.errors ?? []), ...alerts], unclear: false };
       }
     }
+    if (newConfirmation(before.text, text)) return { kind: 'confirmed', url: page.url(), text };
   }
   const snap = await snapshotForm(page).catch(() => null);
   const alerts = await visibleAlerts(page);
-  return {
-    kind: 'stuck',
-    errors: [...(snap?.errors ?? []), ...alerts, ...(snap ? [] : ['no confirmation appeared'])],
-  };
+  const errors = [...(snap?.errors ?? []), ...alerts];
+  return { kind: 'stuck', errors, unclear: errors.length === 0 };
 }
 
 async function bodyText(page: Page): Promise<string | null> {
@@ -433,14 +494,14 @@ export async function waitForForm(page: Page, timeoutMs = 10_000): Promise<boole
   let stable = 0;
   while (Date.now() < deadline) {
     const sig = await formSignature(page).catch(() => '');
-    const hasControls = sig.includes('#') && sig.split('#')[1] !== '';
+    const hasControls = signatureHasControls(sig);
     if (hasControls && sig === last) {
       if (++stable >= 2) return true;
     } else stable = 0;
     last = sig;
     await settle(page, 300);
   }
-  return last.includes('#') && last.split('#')[1] !== '';
+  return signatureHasControls(last);
 }
 
 // ---- one step ---------------------------------------------------------------------------
@@ -485,7 +546,7 @@ async function settledSnapshot(page: Page, timeoutMs = 3000): Promise<FormSnapsh
     const sig = await formSignature(page);
     if (sig === last || Date.now() > deadline) {
       const snap = await snapshotForm(page);
-      if (!snap || `${snap.frame.url()}#${snap.signature}` === sig || Date.now() > deadline) {
+      if (!snap || signatureOf(snap.frame.url(), snap.signature) === sig || Date.now() > deadline) {
         return snap;
       }
       last = await formSignature(page);

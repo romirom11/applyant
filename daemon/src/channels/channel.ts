@@ -46,10 +46,30 @@ export type DeliverOutcome =
   | { kind: 'needs_candidate'; handOff: HandOff; challenge?: string }
   | { kind: 'new_field'; field: NewFieldFound };
 
+/** The application stopped waiting for delivery while this one was queued: nothing to send. */
+export class DeliveryStale extends Error {
+  constructor() {
+    super('the application is no longer waiting to be delivered');
+    this.name = 'DeliveryStale';
+  }
+}
+
 export interface DeliverContext {
   taskId: number;
   signal: AbortSignal;
   progress(message: string): void;
+  /**
+   * Called once the channel is about to start for real (for the web form: inside the one-at-a-
+   * time browser lock). Throws `DeliveryStale` when the application is no longer waiting to be
+   * sent, so a delivery that queued behind another one never sends it a second time.
+   */
+  begin(): void;
+  /**
+   * Called right before the irreversible step (pressing submit, sending the email or the
+   * Telegram message): records durably that a submission was attempted. Throws if it couldn't
+   * be recorded; nothing may be sent then.
+   */
+  submitting(): void;
   /** The candidate's standard-field profile, for a value a control found only at delivery needs. */
   profile: StandardProfile;
   /**

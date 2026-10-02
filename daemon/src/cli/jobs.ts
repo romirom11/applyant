@@ -259,7 +259,9 @@ export function registerJobs(program: Command, client: () => ApplyantClient): vo
       }
       if (p.breakdown.length) {
         out('');
-        out(`Score ${j.score}${j.scoredAt ? `  (scored ${j.scoredAt})` : ''}`);
+        out(
+          `${j.score === null ? 'No score (nothing to compare)' : `Score ${j.score}`}${j.scoredAt ? `  (scored ${j.scoredAt})` : ''}`,
+        );
         if (j.coreFit !== null) {
           const scaled = p.breakdown.find((c) => c.scale < 1)?.scale;
           out(
@@ -354,6 +356,18 @@ export function registerJobs(program: Command, client: () => ApplyantClient): vo
       if (!p) throw new Error('daemon returned no posting');
       if (opts.json) return json({ posting: postingJson(p), rescored: res.rescored });
       out(`Marked posting ${p.id} as interested. ${res.rescored} scores changed.`);
+    });
+
+  jobs
+    .command('unskip <id>')
+    .description('take a skip (or an interest) back: the posting returns to the Inbox undecided')
+    .option('--json', 'print JSON')
+    .action(async (idArg: string, opts: { json?: boolean }) => {
+      const res = await client().undoDecision({ id: BigInt(positiveInt(idArg)) });
+      const p = res.posting;
+      if (!p) throw new Error('daemon returned no posting');
+      if (opts.json) return json({ posting: postingJson(p), rescored: res.rescored });
+      out(`Posting ${p.id} is back in the Inbox. ${res.rescored} scores changed.`);
     });
 
   jobs

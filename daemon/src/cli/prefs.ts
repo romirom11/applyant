@@ -29,6 +29,7 @@ export function prefsJson(p: Preferences) {
     roles: p.roles,
     seniority: p.seniority,
     basedIn: p.basedIn ?? null,
+    basedCity: p.basedCity ?? null,
     locations: p.locations,
     remote: p.remote,
     salary: p.salary
@@ -42,11 +43,13 @@ export function prefsJson(p: Preferences) {
         }
       : null,
     languages: p.languages,
+    workingLanguages: p.workingLanguages,
     employment: p.employment,
     dealbreakers: p.dealbreakers,
     weights: p.weights,
     feedbackMultipliers: p.feedbackMultipliers,
     threshold: p.threshold,
+    dailyCap: p.dailyCap,
   };
 }
 
@@ -55,7 +58,7 @@ function print(p: Preferences): void {
   const rows: Array<[string, string]> = [
     ['roles', list(p.roles)],
     ['seniority', list(p.seniority)],
-    ['based_in', p.basedIn ?? '-'],
+    ['based_in', [p.basedCity, p.basedIn].filter(Boolean).join(', ') || '-'],
     ['locations', p.locations.join(', ') || '-'],
     ['remote', p.remote],
     ['salary', money(p.salary)],
@@ -66,9 +69,16 @@ function print(p: Preferences): void {
         .map(([l, v]) => `${l}:${v}`)
         .join(', ') || '-',
     ],
+    ['working_languages', p.workingLanguages.join(', ') || 'any'],
     ['employment', list(p.employment)],
     ['dealbreakers', p.dealbreakers.join(', ') || 'none'],
     ['threshold', String(p.threshold)],
+    [
+      'daily_cap',
+      p.dailyCap === 0
+        ? '0 (nothing is prepared on its own)'
+        : `${p.dailyCap} applications started on their own per day`,
+    ],
   ];
   for (const [k, v] of rows) out(`${k.padEnd(13)} ${v}`);
   const weights = COMPONENTS.map((c) => {
@@ -99,9 +109,12 @@ export function registerPrefs(candidate: Command, client: () => ApplyantClient):
     .description(
       [
         'set a preference (an empty value resets it):',
-        '  roles ai_ml,backend,founding · seniority senior,staff · based_in GR · locations GR,CY',
+        '  roles "Backend Engineer; CFO; Chef" (any job titles) · seniority senior,staff',
+        '  based_in GR · based_city Athens · locations GR,CY',
         '  remote required|preferred|any · salary "3000 EUR/month" · salary_floor "2000 EUR/month"',
-        '  languages en:C1,el:native · employment full_time,contract · threshold 80',
+        '  languages en:C1,el:native · working_languages de,uk (rather work in these) · employment full_time,contract',
+        '  threshold 80',
+        '  daily_cap 10 (applications started on their own per day; 0 = only the ones you ask for)',
         '  dealbreakers outstaffing,onsite,location,language,employment,seniority',
       ].join('\n'),
     )

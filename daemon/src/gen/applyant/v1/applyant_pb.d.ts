@@ -766,6 +766,43 @@ export declare type MarkInterestedResponse = Message<"applyant.v1.MarkInterested
 export declare const MarkInterestedResponseSchema: GenMessage<MarkInterestedResponse>;
 
 /**
+ * @generated from message applyant.v1.UndoDecisionRequest
+ */
+export declare type UndoDecisionRequest = Message<"applyant.v1.UndoDecisionRequest"> & {
+  /**
+   * @generated from field: int64 id = 1;
+   */
+  id: bigint;
+};
+
+/**
+ * Describes the message applyant.v1.UndoDecisionRequest.
+ * Use `create(UndoDecisionRequestSchema)` to create a new message.
+ */
+export declare const UndoDecisionRequestSchema: GenMessage<UndoDecisionRequest>;
+
+/**
+ * @generated from message applyant.v1.UndoDecisionResponse
+ */
+export declare type UndoDecisionResponse = Message<"applyant.v1.UndoDecisionResponse"> & {
+  /**
+   * @generated from field: applyant.v1.Posting posting = 1;
+   */
+  posting?: Posting | undefined;
+
+  /**
+   * @generated from field: int32 rescored = 2;
+   */
+  rescored: number;
+};
+
+/**
+ * Describes the message applyant.v1.UndoDecisionResponse.
+ * Use `create(UndoDecisionResponseSchema)` to create a new message.
+ */
+export declare const UndoDecisionResponseSchema: GenMessage<UndoDecisionResponse>;
+
+/**
  * @generated from message applyant.v1.ScorePostingsRequest
  */
 export declare type ScorePostingsRequest = Message<"applyant.v1.ScorePostingsRequest"> & {
@@ -875,8 +912,8 @@ export declare const MoneySchema: GenMessage<Money>;
  */
 export declare type Preferences = Message<"applyant.v1.Preferences"> & {
   /**
-   * Role families: ai_ml, backend, fullstack, frontend, data, platform, mobile, security,
-   * founding, management, research, other. Empty = any.
+   * The job titles the candidate is after, in their own words ("CFO", "Chef", "Backend
+   * Engineer"). Empty = any. Each posting is judged against them (the role_fit decision).
    *
    * @generated from field: repeated string roles = 1;
    */
@@ -949,6 +986,31 @@ export declare type Preferences = Message<"applyant.v1.Preferences"> & {
    * @generated from field: int32 threshold = 13;
    */
   threshold: number;
+
+  /**
+   * How many applications may be started on their own per 24 hours (each costs a writer run,
+   * a tailored CV and company research); 0 = none. Set with key `daily_cap`.
+   *
+   * @generated from field: int32 daily_cap = 14;
+   */
+  dailyCap: number;
+
+  /**
+   * The city the candidate lives in (free text): an office elsewhere in their own country
+   * counts for less than one in their city.
+   *
+   * @generated from field: optional string based_city = 15;
+   */
+  basedCity?: string | undefined;
+
+  /**
+   * ISO 639-1 codes of the languages the candidate would rather work in (a German-speaking
+   * team, a Ukrainian one). A posting that works only in other languages counts for less;
+   * empty = no preference. Set with key `working_languages`.
+   *
+   * @generated from field: repeated string working_languages = 16;
+   */
+  workingLanguages: string[];
 };
 
 /**
@@ -991,7 +1053,9 @@ export declare const GetPreferencesResponseSchema: GenMessage<GetPreferencesResp
 export declare type SetPreferenceRequest = Message<"applyant.v1.SetPreferenceRequest"> & {
   /**
    * roles | seniority | based_in | locations | remote | salary | salary_floor | languages |
-   * employment | dealbreakers | threshold | weight.<component> | weights
+   * employment | dealbreakers | threshold | daily_cap | based_city | working_languages |
+   * weight.<component> |
+   * weights. `roles` takes job titles separated by `;`, a new line or a comma.
    *
    * @generated from field: string key = 1;
    */
@@ -1621,6 +1685,13 @@ export declare type ToolStatus = Message<"applyant.v1.ToolStatus"> & {
    * @generated from field: string error = 6;
    */
   error: string;
+
+  /**
+   * gh only: the GitHub account it is signed in as.
+   *
+   * @generated from field: string account = 7;
+   */
+  account: string;
 };
 
 /**
@@ -1745,6 +1816,13 @@ export declare type SetupStatus = Message<"applyant.v1.SetupStatus"> & {
    * @generated from field: bool setup_done = 19;
    */
   setupDone: boolean;
+
+  /**
+   * The GitHub CLI: PRs and private repositories are read through its sign-in.
+   *
+   * @generated from field: applyant.v1.ToolStatus gh = 20;
+   */
+  gh?: ToolStatus | undefined;
 };
 
 /**
@@ -2076,6 +2154,14 @@ export declare type Project = Message<"applyant.v1.Project"> & {
    * @generated from field: int32 confirmed_count = 11;
    */
   confirmedCount: number;
+
+  /**
+   * position (a job, a freelance engagement: a CV's Experience) | project (something built: a
+   * CV's Projects). Guessed from the name and role until the extractor or the candidate says.
+   *
+   * @generated from field: string kind = 12;
+   */
+  kind: string;
 };
 
 /**
@@ -2488,6 +2574,13 @@ export declare type UpdateProjectRequest = Message<"applyant.v1.UpdateProjectReq
    * @generated from field: optional applyant.v1.StringList stack = 6;
    */
   stack?: StringList | undefined;
+
+  /**
+   * position | project
+   *
+   * @generated from field: optional string kind = 7;
+   */
+  kind?: string | undefined;
 };
 
 /**
@@ -2603,6 +2696,104 @@ export declare type AddSourceResponse = Message<"applyant.v1.AddSourceResponse">
  * Use `create(AddSourceResponseSchema)` to create a new message.
  */
 export declare const AddSourceResponseSchema: GenMessage<AddSourceResponse>;
+
+/**
+ * @generated from message applyant.v1.SuggestRepositoriesRequest
+ */
+export declare type SuggestRepositoriesRequest = Message<"applyant.v1.SuggestRepositoriesRequest"> & {
+  /**
+   * Project id, slug or name.
+   *
+   * @generated from field: string project = 1;
+   */
+  project: string;
+};
+
+/**
+ * Describes the message applyant.v1.SuggestRepositoriesRequest.
+ * Use `create(SuggestRepositoriesRequestSchema)` to create a new message.
+ */
+export declare const SuggestRepositoriesRequestSchema: GenMessage<SuggestRepositoriesRequest>;
+
+/**
+ * @generated from message applyant.v1.RepositorySuggestion
+ */
+export declare type RepositorySuggestion = Message<"applyant.v1.RepositorySuggestion"> & {
+  /**
+   * https://github.com/<owner>/<name>
+   *
+   * @generated from field: string url = 1;
+   */
+  url: string;
+
+  /**
+   * "<owner>/<name>"
+   *
+   * @generated from field: string full_name = 2;
+   */
+  fullName: string;
+
+  /**
+   * @generated from field: optional string description = 3;
+   */
+  description?: string | undefined;
+
+  /**
+   * @generated from field: optional google.protobuf.Timestamp pushed_at = 4;
+   */
+  pushedAt?: Timestamp | undefined;
+
+  /**
+   * @generated from field: bool private = 5;
+   */
+  private: boolean;
+
+  /**
+   * It looks like this project: why ("its name is close to Solovei", "its description names
+   * Speechmatics"). Empty for the rest of the list.
+   *
+   * @generated from field: string reason = 6;
+   */
+  reason: string;
+};
+
+/**
+ * Describes the message applyant.v1.RepositorySuggestion.
+ * Use `create(RepositorySuggestionSchema)` to create a new message.
+ */
+export declare const RepositorySuggestionSchema: GenMessage<RepositorySuggestion>;
+
+/**
+ * @generated from message applyant.v1.SuggestRepositoriesResponse
+ */
+export declare type SuggestRepositoriesResponse = Message<"applyant.v1.SuggestRepositoriesResponse"> & {
+  /**
+   * The ones that look like the project, best first.
+   *
+   * @generated from field: repeated applyant.v1.RepositorySuggestion matches = 1;
+   */
+  matches: RepositorySuggestion[];
+
+  /**
+   * Every other repository of the candidate's, newest push first.
+   *
+   * @generated from field: repeated applyant.v1.RepositorySuggestion others = 2;
+   */
+  others: RepositorySuggestion[];
+
+  /**
+   * Which account(s) were listed ("romirom11", "kdn-agency").
+   *
+   * @generated from field: repeated string accounts = 3;
+   */
+  accounts: string[];
+};
+
+/**
+ * Describes the message applyant.v1.SuggestRepositoriesResponse.
+ * Use `create(SuggestRepositoriesResponseSchema)` to create a new message.
+ */
+export declare const SuggestRepositoriesResponseSchema: GenMessage<SuggestRepositoriesResponse>;
 
 /**
  * @generated from message applyant.v1.SyncSourcesRequest
@@ -7164,7 +7355,7 @@ export declare type Email = Message<"applyant.v1.Email"> & {
   subject: string;
 
   /**
-   * The start of the text.
+   * The text, up to about 1200 characters (cut at a word, with "…").
    *
    * @generated from field: string snippet = 5;
    */
@@ -8311,6 +8502,18 @@ export declare const ApplyantService: GenService<{
     output: typeof MarkInterestedResponseSchema;
   },
   /**
+   * UndoDecision takes a skip (or an interest) back: the posting returns to the Inbox as if it
+   * had never been decided on, its feedback is dropped and scores are re-computed. An
+   * application that was already started stays.
+   *
+   * @generated from rpc applyant.v1.ApplyantService.UndoDecision
+   */
+  undoDecision: {
+    methodKind: "unary";
+    input: typeof UndoDecisionRequestSchema;
+    output: typeof UndoDecisionResponseSchema;
+  },
+  /**
    * ScorePostings enqueues score_posting; cached extractions and matches are reused.
    *
    * @generated from rpc applyant.v1.ApplyantService.ScorePostings
@@ -8519,6 +8722,19 @@ export declare const ApplyantService: GenService<{
     methodKind: "unary";
     input: typeof DeleteSourceRequestSchema;
     output: typeof DeleteSourceResponseSchema;
+  },
+  /**
+   * SuggestRepositories lists the candidate's own GitHub repositories (through the signed-in
+   * `gh`, their account and its organisations) for a project: the ones that look like it
+   * first, with why, then the rest, newest push first. Repositories already a source of any
+   * project are left out. Needs `gh` signed in (FailedPrecondition otherwise).
+   *
+   * @generated from rpc applyant.v1.ApplyantService.SuggestRepositories
+   */
+  suggestRepositories: {
+    methodKind: "unary";
+    input: typeof SuggestRepositoriesRequestSchema;
+    output: typeof SuggestRepositoriesResponseSchema;
   },
   /**
    * @generated from rpc applyant.v1.ApplyantService.ListFacts
@@ -8766,7 +8982,9 @@ export declare const ApplyantService: GenService<{
    * OFFER, REJECTED or WITHDRAWN. Recorded as a manual `application.stage` event. It never
    * delivers anything; moves that can't be true are refused (FailedPrecondition, saying why):
    * a reply stage before the application was sent, a stage only the pipeline sets (preparing,
-   * review, approved), or while a delivery is under way.
+   * approved), or while a delivery is under way. READY_FOR_REVIEW takes an approval back: only
+   * from APPROVED with no delivery under way (after a hand-off); its hand-off closes, and only a
+   * new approval sends it.
    *
    * @generated from rpc applyant.v1.ApplyantService.SetApplicationStage
    */

@@ -322,7 +322,13 @@ export const searchHandler: Handler<'search'> = async (task, ctx) => {
     (r.run?.listings ?? [])
       .filter((l) => matchesStrategy(l, strategy))
       .map((listing) => ({
-        listing,
+        // Lever's and Ashby's list APIs don't name the company: the board is one company's, so
+        // its name is the source's. Without it the board's per-city copies of one role can't be
+        // told to be the same posting.
+        listing:
+          listing.company || !isAts(r.source.kind) || !r.source.label
+            ? listing
+            : { ...listing, company: r.source.label },
         sourceId: r.source.id,
         companyBoard: isAts(r.source.kind) || r.source.kind === 'page',
       })),

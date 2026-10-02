@@ -165,6 +165,17 @@ export class Worker {
         .where(and(eq(tasks.status, 'running'), lt(tasks.leaseExpiresAt, now)))
         .all();
       for (const row of expired) {
+        // Our own handler is still running it: the renew timer just didn't get to fire in time
+        // (the Mac slept, the event loop was busy). Keep the lease instead of running the task
+        // a second time next to itself.
+        if (row.leaseOwner === this.owner && this.inFlight.has(row.id)) {
+          tx.db
+            .update(tasks)
+            .set({ leaseExpiresAt: new Date(now.getTime() + this.o.leaseMs), updatedAt: now })
+            .where(eq(tasks.id, row.id))
+            .run();
+          continue;
+        }
         // The previous owner crashed or hung; the lost run counts as an attempt.
         const attempts = row.attempts + 1;
         const failed = attempts >= this.o.maxAttempts;
@@ -296,6 +307,7 @@ export class Worker {
         signal: ac.signal,
         now: this.now,
         progress: (e) => this.progress(row, e.message),
+        record: (write) => this.record(row, write),
       });
     } catch (err) {
       if (ac.signal.reason instanceof ShutdownError) {
@@ -434,6 +446,22 @@ export class Worker {
         and(eq(tasks.id, row.id), eq(tasks.leaseOwner, this.owner), eq(tasks.status, 'running')),
       )
       .run();
+  }
+
+  /** A handler's durable marker: applied now, only while the lease is still ours. */
+  private record(row: TaskRow, write: (tx: Tx) => void): boolean {
+    return runInTx(this.o.db, this.o.bus, { now: this.now(), runId: row.runId }, (tx) => {
+      const current = tx.db
+        .select({ id: tasks.id })
+        .from(tasks)
+        .where(
+          and(eq(tasks.id, row.id), eq(tasks.leaseOwner, this.owner), eq(tasks.status, 'running')),
+        )
+        .get();
+      if (!current) return false;
+      applyCommit(write, tx);
+      return true;
+    });
   }
 
   private progress(row: TaskRow, message: string): void {

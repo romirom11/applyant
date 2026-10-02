@@ -98,7 +98,7 @@ describe('tailored CV content', () => {
     ]);
 
     const prompt = cvPrompt(ctx);
-    expect(prompt).toContain('[harbor] Harbor · 2021–2024');
+    expect(prompt).toContain('[harbor] Harbor · built project · 2021–2024');
     expect(prompt).toContain(`#${f.pipeline} [personal_contribution · confirmed`);
     expect(prompt).not.toContain('Led a team of 4');
     expect(prompt).not.toContain('Kafka');

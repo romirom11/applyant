@@ -100,6 +100,7 @@ beforeAll(async () => {
       projects: [
         {
           name: 'Nightingale',
+          kind: 'position',
           summary: 'Call analytics at Acme Voice',
           role: 'Senior Backend Engineer',
           period: '2021–2024',
@@ -107,6 +108,7 @@ beforeAll(async () => {
         },
         {
           name: 'Ledgerly',
+          kind: 'position',
           summary: null,
           role: 'Backend Engineer',
           period: '2018–2021',
@@ -249,7 +251,7 @@ describe('applyant candidate', () => {
     const projects = await cliJson<
       Array<{ slug: string; facts: number; role: string | null; stack: string[] }>
     >(['candidate', 'project', 'list']);
-    expect(projects.map((p) => p.slug)).toEqual(['ledgerly', 'nightingale']);
+    expect(projects.map((p) => p.slug)).toEqual(['nightingale', 'ledgerly']);
     expect(projects.find((p) => p.slug === 'nightingale')).toMatchObject({
       facts: 2,
       role: 'Senior Backend Engineer',
@@ -322,7 +324,8 @@ describe('applyant candidate', () => {
       return show.profileSources[0]?.syncNote?.startsWith('unchanged') ? true : undefined;
     });
     const starts = readFileSync(join(home, 'fake-claude-argv.jsonl'), 'utf8').trim().split('\n');
-    expect(starts).toHaveLength(1);
+    // The facts and the CV's header, once each; the unchanged sync started nothing.
+    expect(starts).toHaveLength(2);
 
     const events = (await cli(['runs', 'show', '--json', '-n', '200'])).stdout
       .trim()

@@ -1,12 +1,18 @@
 // sync_source on file sources: a CV drafts projects and facts; re-syncs respect what the
 // candidate already confirmed, edited or rejected.
-import { copyFileSync, rmSync } from 'node:fs';
+import { copyFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { projects, sources } from '../src/db/schema.ts';
+import { getCvSuggestions } from '../src/domain/knowledge/cv-header.ts';
 import { confirmFact, editFact, listFacts, rejectFact } from '../src/domain/knowledge/facts.ts';
+import {
+  getIdentities,
+  getStandardProfile,
+  setProfileValue,
+} from '../src/domain/knowledge/profile.ts';
 import { createProject, listProjects } from '../src/domain/knowledge/projects.ts';
 import { addSource, requestSync } from '../src/domain/knowledge/sources/registry.ts';
 import { syncSource } from '../src/domain/knowledge/sync.ts';
@@ -30,6 +36,7 @@ const cvExtraction: SourceExtraction = {
   projects: [
     {
       name: 'Nightingale',
+      kind: 'position',
       summary: 'Call analytics at Acme Voice',
       role: 'Senior Backend Engineer',
       period: '2021–2024',
@@ -37,6 +44,7 @@ const cvExtraction: SourceExtraction = {
     },
     {
       name: 'Ledgerly',
+      kind: 'position',
       summary: null,
       role: 'Backend Engineer',
       period: '2018–2021',
@@ -140,6 +148,117 @@ describe('sync_source on a CV', () => {
     );
   });
 
+  it("reads the CV's header once: the profile's empty fields, and what the draft suggests", async () => {
+    // What the candidate typed is never replaced.
+    setProfileValue(t.db, 'email', 'typed@example.org', now);
+    fake.push(
+      { output: cvExtraction },
+      {
+        output: {
+          fullName: 'Alex Example',
+          email: 'alex@example.com',
+          phone: '+30 690 000 0000',
+          location: 'Athens, Greece',
+          city: 'Athens',
+          country: 'gr',
+          github: 'https://github.com/alex-example',
+          linkedin: 'not a link',
+          website: null,
+          currentTitle: 'Senior Backend Engineer',
+          currentCompany: 'Acme Voice',
+          languages: [
+            { code: 'EN', level: 'C1' },
+            { code: 'el', level: 'native' },
+          ],
+          targetRoles: ['Backend Engineer', ' Platform Engineer ', 'Tech Lead'],
+        },
+      },
+    );
+    const cv = join(t.dir, 'cv.pdf');
+    copyFileSync(CV, cv);
+    const { source } = addSource(t.db, bus, { project: null, kind: 'file', locator: cv, now });
+    await worker.idle();
+
+    expect(fake.requests.map((r) => r.role)).toEqual(['extractor', 'extractor']);
+    expect(getStandardProfile(t.db)).toMatchObject({
+      full_name: 'Alex Example',
+      email: 'typed@example.org',
+      phone: '+30 690 000 0000',
+      location: 'Athens, Greece',
+      'links.github': 'https://github.com/alex-example',
+      // Not a LinkedIn URL: left out rather than stored wrong.
+      'links.linkedin': null,
+      current_title: 'Senior Backend Engineer',
+      current_company: 'Acme Voice',
+    });
+    expect(getIdentities(t.db).logins).toEqual(['alex-example']);
+    expect(getCvSuggestions(t.db)).toMatchObject({
+      city: 'Athens',
+      country: 'GR',
+      languages: [
+        { code: 'en', level: 'C1' },
+        { code: 'el', level: 'native' },
+      ],
+      roles: ['Backend Engineer', 'Platform Engineer', 'Tech Lead'],
+    });
+    expect(note(source.id)).toContain('profile filled from the CV: full_name, phone, location');
+
+    // The same CV text is never read a second time.
+    requestSync(t.db, bus, { target: null, force: false, now });
+    await worker.idle();
+    expect(fake.requests).toHaveLength(2);
+
+    // Another document about the candidate (an assistant's notes) only adds what was missing.
+    const notes = join(t.dir, 'assistant-notes.md');
+    writeFileSync(
+      notes,
+      '# About me\nI live in Piraeus and also speak German. I want to be a CTO.',
+    );
+    fake.push(
+      { output: { projects: [], facts: [] } },
+      {
+        output: {
+          fullName: 'A. Example',
+          email: null,
+          phone: null,
+          location: 'Piraeus',
+          city: 'Piraeus',
+          country: 'GR',
+          github: null,
+          linkedin: 'https://www.linkedin.com/in/alex-example',
+          website: null,
+          currentTitle: null,
+          currentCompany: null,
+          languages: [
+            { code: 'en', level: 'B2' },
+            { code: 'de', level: 'B1' },
+          ],
+          targetRoles: ['CTO', 'tech lead'],
+        },
+      },
+    );
+    addSource(t.db, bus, { project: null, kind: 'file', locator: notes, now });
+    await worker.idle();
+    expect(getStandardProfile(t.db)).toMatchObject({
+      full_name: 'Alex Example',
+      location: 'Athens, Greece',
+      'links.linkedin': 'https://www.linkedin.com/in/alex-example',
+    });
+    expect(getCvSuggestions(t.db)).toMatchObject({
+      city: 'Athens',
+      languages: [
+        { code: 'en', level: 'C1' },
+        { code: 'el', level: 'native' },
+        { code: 'de', level: 'B1' },
+      ],
+      roles: ['Backend Engineer', 'Platform Engineer', 'Tech Lead', 'CTO'],
+    });
+    // Neither text is read again.
+    requestSync(t.db, bus, { target: null, force: false, now });
+    await worker.idle();
+    expect(fake.requests).toHaveLength(4);
+  });
+
   it('does not call the model again for unchanged material, unless forced', async () => {
     fake.push({ output: cvExtraction });
     const cv = join(t.dir, 'cv.pdf');
@@ -147,9 +266,11 @@ describe('sync_source on a CV', () => {
     const { source } = addSource(t.db, bus, { project: null, kind: 'file', locator: cv, now });
     await worker.idle();
 
+    // Two runs so far: the facts, and the CV's header (not scripted here, so it's given up).
+    expect(fake.requests).toHaveLength(2);
     requestSync(t.db, bus, { target: null, force: false, now });
     await worker.idle();
-    expect(fake.requests).toHaveLength(1);
+    expect(fake.requests).toHaveLength(2);
     expect(note(source.id)).toMatch(/^unchanged since the last sync/);
 
     // The candidate works through the draft.
@@ -181,7 +302,8 @@ describe('sync_source on a CV', () => {
     const res = requestSync(t.db, bus, { target: 'profile', force: true, now });
     expect(res.enqueued).toEqual([source.id]);
     await worker.idle();
-    expect(fake.requests).toHaveLength(2);
+    // The facts again; the same CV text's header is not read a second time.
+    expect(fake.requests).toHaveLength(3);
 
     const after = listFacts(t.db);
     const texts = after.map((f) => `${f.status}: ${f.text}`).sort();

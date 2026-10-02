@@ -24,6 +24,8 @@ export const ROLES = [
   'interviewer',
   // Every few days, a sample of a listing recipe's output: "is this a job title with its link?"
   'listing_check',
+  // Is this posting one of the roles the candidate is after? One decision per posting.
+  'role_fit',
   'email_classify',
 ] as const;
 export type Role = (typeof ROLES)[number];
@@ -59,6 +61,7 @@ export const DEFAULT_ROLES: Record<Role, RoleConfig> = {
   claim_verifier: { route: r('claude', 'haiku'), minConfidence: null, timeoutMs: 5 * MIN },
   interviewer: { route: r('claude', 'sonnet'), minConfidence: null, timeoutMs: 5 * MIN },
   listing_check: { route: r('jev'), minConfidence: 0.8, timeoutMs: MIN },
+  role_fit: { route: r('jev'), minConfidence: 0.8, timeoutMs: MIN },
   // On-device; never falls back to a cloud model unless the candidate routes it there.
   email_classify: { route: r('apple'), minConfidence: 0.7, timeoutMs: MIN },
 };
@@ -78,6 +81,7 @@ export const ROLE_INFO: Record<Role, string> = {
   claim_verifier: 'checks each written sentence against its facts',
   interviewer: 'the agent interview',
   listing_check: "spot-checks a listing recipe's output every few days",
+  role_fit: "whether a posting is one of the roles you're after",
   email_classify:
     'reads replies to applications (on-device; a cloud model only if you route it there)',
 };
@@ -88,6 +92,7 @@ export const DECISION_ROLES: readonly Role[] = [
   'option_match',
   'posting_liveness',
   'listing_check',
+  'role_fit',
 ];
 
 /** Used when a provider is off, unavailable, or (Jev) not confident. */
@@ -139,8 +144,9 @@ export const TASK_ROLE: Partial<Record<string, Role>> = {
   read_form: 'field_classify',
   // The writer is the expensive part; standard fields (option_match) and claim_verifier also run.
   prepare_application: 'application_writer',
-  // Deterministic filling handles most of the form; form_agent only escalates for what it can't.
-  deliver_application: 'form_agent',
+  // deliver_application is untagged on purpose: deterministic filling handles most forms, so
+  // an approved delivery doesn't wait out a model limit it may never touch (form_agent only
+  // escalates for what plain filling can't do).
   // The agent interview: the first question about a project, and each answer → facts + next.
   interview_open: 'interviewer',
   interview_turn: 'interviewer',

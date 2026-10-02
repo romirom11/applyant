@@ -11,6 +11,11 @@ export const sourceExtractionSchema = z
         .object({
           name: z.string().describe('Project, product or position name as the source writes it'),
           summary: z.string().nullable().describe('One or two sentences on what it is'),
+          kind: z
+            .enum(['position', 'project'])
+            .describe(
+              'position: a job or engagement at an employer or client (title, company, dates); project: a product, side project, open-source or study project the candidate built',
+            ),
           role: z.string().nullable().describe("The candidate's role, as stated"),
           period: z.string().nullable().describe('e.g. "2021–2023", as stated'),
           stack: z.array(z.string()).describe('Technologies named for this project'),

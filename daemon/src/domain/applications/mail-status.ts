@@ -38,8 +38,17 @@ import { companyKey } from '../companies/store.ts';
 import { queueInterviewEvent } from './interview-event.ts';
 import { ApplicationError, emitStage } from './store.ts';
 
-/** Applications whose mail is followed: sent (or about to be), and not closed. */
-export const TRACKED_STAGES: ApplicationStage[] = ['approved', 'applied', 'interview', 'offer'];
+/**
+ * Applications whose mail is followed: sent (or about to be). A rejected one stays followed,
+ * so a later invite from that company (a misread or withdrawn rejection) isn't thrown away.
+ */
+export const TRACKED_STAGES: ApplicationStage[] = [
+  'approved',
+  'applied',
+  'interview',
+  'offer',
+  'rejected',
+];
 
 /** Senders that are an applicant tracking system, not the company itself. */
 const ATS_SENDER =
@@ -79,6 +88,8 @@ export interface TrackedApplication {
   domains: string[];
   /** Email applications: the sent message's Message-ID. */
   sentMessageId: string | null;
+  /** When it was sent; mail older than this can't be an answer to it. */
+  sentAt?: Date | null;
 }
 
 export function trackedApplications(conn: Conn): TrackedApplication[] {
@@ -110,6 +121,7 @@ export function trackedApplications(conn: Conn): TrackedApplication[] {
       title: posting.title,
       domains: [...new Set(hosts.map(baseDomain))],
       sentMessageId: messageId ?? null,
+      sentAt: app.appliedAt ?? null,
     };
   });
 }
@@ -119,6 +131,13 @@ export interface EmailMatch {
   ids: number[];
   /** Exactly one application stands out. */
   sure: boolean;
+  /**
+   * The match rests on more than the company's name appearing in the text: a reply to the
+   * application email, the company's own sender domain, an ATS sender naming the company, or
+   * the company's name together with the role.
+   * Only a strong match may move an application's status.
+   */
+  strong: boolean;
   why: string | null;
 }
 
@@ -133,12 +152,22 @@ export function matchEmail(msg: MailMessage, apps: TrackedApplication[]): EmailM
   const thread = new Set([msg.inReplyTo, ...msg.references].filter(Boolean));
   const replied = apps.filter((a) => a.sentMessageId && thread.has(a.sentMessageId));
   if (replied.length === 1 && replied[0]) {
-    return { ids: [replied[0].id], sure: true, why: 'a reply to your application email' };
+    return {
+      ids: [replied[0].id],
+      sure: true,
+      strong: true,
+      why: 'a reply to your application email',
+    };
   }
   const senderDomain = baseDomain(msg.fromAddress.split('@')[1] ?? '');
   const text = `${msg.fromName ?? ''}\n${msg.subject}\n${msg.text.slice(0, 4000)}`;
   const normText = companyKey(text);
+  // An email from before the application went out isn't about it (a day's slack for clocks
+  // and time zones).
+  const sentBefore = (a: TrackedApplication) =>
+    !a.sentAt || msg.date.getTime() >= a.sentAt.getTime() - 24 * 3_600_000;
   const scored = apps
+    .filter(sentBefore)
     .map((a) => {
       let score = 0;
       const why: string[] = [];
@@ -159,11 +188,13 @@ export function matchEmail(msg: MailMessage, apps: TrackedApplication[]): EmailM
     .filter((x) => x.score > 0)
     .sort((x, y) => y.score - x.score);
   const top = scored[0];
-  if (!top) return { ids: [], sure: false, why: null };
+  if (!top) return { ids: [], sure: false, strong: false, why: null };
   const tied = scored.filter((x) => x.score === top.score);
   return {
     ids: scored.map((x) => x.a.id),
     sure: tied.length === 1,
+    // An ATS sends on the company's behalf: its sender plus the company's name is enough.
+    strong: top.score >= 2 || ATS_SENDER.test(msg.fromAddress.split('@')[1] ?? ''),
     why: top.why.join(', '),
   };
 }
@@ -233,11 +264,16 @@ const LABEL_STAGE: Partial<Record<EmailLabel, ApplicationStage>> = {
 const RANK: Partial<Record<ApplicationStage, number>> = {
   approved: 0,
   applied: 1,
+  // A later invite or offer moves a rejected application on again.
+  rejected: 1,
   interview: 2,
   offer: 3,
 };
 
-/** Forward only: applied → interview → offer, and rejected from any open stage. */
+/**
+ * Forward only: applied → interview → offer, and rejected from any open stage; a rejected one
+ * moves on again with a later invite or offer.
+ */
 export function nextStage(current: ApplicationStage, label: EmailLabel): ApplicationStage | null {
   const to = LABEL_STAGE[label];
   if (!to || to === current) return null;
@@ -274,7 +310,18 @@ export function decide(
   if (cls.label === 'other') {
     return one ? { status: 'matched', applicationId: one, note: match.why ?? '' } : null;
   }
-  if (one) return { status: 'matched', applicationId: one, note: match.why ?? '' };
+  if (one && (match.strong || !LABEL_STAGE[cls.label])) {
+    return { status: 'matched', applicationId: one, note: match.why ?? '' };
+  }
+  if (one) {
+    // It would change a status on the company's name alone: the candidate says whether it's
+    // about this application.
+    return {
+      status: 'ask',
+      applicationId: null,
+      note: `a ${cls.label.replace('_', ' ')} that only ${match.why ?? 'names the company'}: is it about this application?`,
+    };
+  }
   return {
     status: 'ask',
     applicationId: null,

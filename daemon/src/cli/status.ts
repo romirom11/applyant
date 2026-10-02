@@ -42,6 +42,7 @@ export function statusJson(s: SetupStatus): unknown {
     },
     claude: tool(s.claude),
     codex: tool(s.codex),
+    gh: s.gh && { ...tool(s.gh), account: s.gh.account || null },
     nativeHelper: s.nativeHelper,
     secretsBackend: s.secretsBackend,
     checkedAt: s.checkedAt ? timestampDate(s.checkedAt).toISOString() : null,
@@ -54,6 +55,7 @@ export function statusText(s: SetupStatus): string {
     `applyantd ✓ running (pid ${s.pid}, since ${since}) · ${s.home}`,
     toolLine('claude', s.claude),
     toolLine('codex', s.codex),
+    toolLine('gh', s.gh) + (s.gh?.account ? ` as ${s.gh.account}` : ''),
     `native    ${s.nativeHelper ? '✓ applyant-native answers' : '– applyant-native unavailable (macOS app only)'}`,
     `secrets   ${s.secretsBackend}`,
   ].join('\n');
@@ -62,7 +64,7 @@ export function statusText(s: SetupStatus): string {
 export function registerStatus(program: Command, client: () => ApplyantClient): void {
   program
     .command('status')
-    .description('daemon status, and where the agent CLIs were found')
+    .description('daemon status, and where the agent CLIs and gh were found')
     .option('--refresh', 're-run the CLI checks now (they are cached for a minute)')
     .option('--json', 'print JSON')
     .action(async (opts: { refresh?: boolean; json?: boolean }) => {

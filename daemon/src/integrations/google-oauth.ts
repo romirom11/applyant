@@ -1,8 +1,8 @@
 // Google sign-in for a "Desktop app" OAuth client: the installed-app flow (RFC 8252). The
 // consent opens in the system browser, Google redirects to a one-shot loopback listener on
 // 127.0.0.1, and the code is exchanged with a PKCE verifier. One consent covers Gmail
-// (read + send), Calendar (interview events) and Drive (read-only), so the candidate clicks
-// through Google's "unverified app" screen once. Tokens go to `Secrets` (the Keychain on the Mac).
+// (read + send) and Calendar (interview events), so the candidate clicks through Google's
+// "unverified app" screen once. Drive isn't asked for: a document is added as a downloaded file. Tokens go to `Secrets` (the Keychain on the Mac).
 import { createHash, randomBytes } from 'node:crypto';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -12,7 +12,6 @@ export const GOOGLE_SCOPES = [
   'https://www.googleapis.com/auth/gmail.readonly',
   'https://www.googleapis.com/auth/gmail.send',
   'https://www.googleapis.com/auth/calendar.events',
-  'https://www.googleapis.com/auth/drive.readonly',
 ] as const;
 
 /** Where the tokens are kept in `Secrets`. */

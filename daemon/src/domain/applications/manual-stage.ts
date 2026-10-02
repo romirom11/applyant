@@ -2,7 +2,9 @@
 // by hand, in the app or from the CLI"). Only the statuses the outside world decides can be
 // set: applied (sent outside Applyant, or a wrongly read reply undone), interview, offer,
 // rejected and withdrawn. The pipeline's own stages (preparing, review, approved) are never set
-// here, and nothing is delivered: approving stays the only way to send.
+// here, and nothing is delivered: approving stays the only way to send. The one exception is
+// taking an approval back (approved → ready_for_review) when delivery stopped for the candidate
+// and a value has to change before it's sent.
 import { and, eq, inArray } from 'drizzle-orm';
 import {
   type ApplicationRow,
@@ -39,8 +41,17 @@ export function refuseStage(
   to: ApplicationStage,
   delivering: boolean,
 ): string | null {
+  if (to === 'ready_for_review') {
+    // Taking an approval back: only while it's approved and nothing is being sent right now.
+    if (app.stage !== 'approved') {
+      return `application ${app.id} is ${app.stage.replace(/_/g, ' ')}: only an approved application that hasn't been sent goes back to review`;
+    }
+    return delivering
+      ? `application ${app.id} is being delivered right now; wait until it's applied or handed off`
+      : null;
+  }
   if (!isManualStage(to)) {
-    return `${to} isn't a status you set by hand (only ${MANUAL_STAGES.join(', ')}); preparing, review and approval follow the pipeline`;
+    return `${to} isn't a status you set by hand (only ${MANUAL_STAGES.join(', ')}, or ready_for_review to take an approval back); preparing and approval follow the pipeline`;
   }
   if (app.stage === to) return `application ${app.id} is already ${to}`;
   if (delivering) {
@@ -82,6 +93,7 @@ export function setApplicationStage(
   const app = getApplicationRow(tx.db, applicationId);
   const refused = refuseStage(app, to, deliveryPending(tx, app.id));
   if (refused) throw new StageRefused(refused);
+  if (to === 'ready_for_review') return backToReview(tx, app);
   const reached: Partial<ApplicationRow> = {};
   if (to === 'applied') {
     // Undoing a wrongly read reply: it never got that far.
@@ -102,5 +114,42 @@ export function setApplicationStage(
     .returning()
     .get();
   emitStage(tx, row, to, `application ${app.id}: ${app.stage} → ${to} (set by hand)`);
+  return row;
+}
+
+/**
+ * Takes an approval back before anything was confirmed sent: the hand-off closes, the
+ * application can be changed again, and only a new approval delivers it.
+ */
+function backToReview(tx: Tx, app: ApplicationRow): ApplicationRow {
+  tx.db
+    .update(tasks)
+    .set({ status: 'done', updatedAt: tx.now })
+    .where(
+      and(
+        eq(tasks.kind, 'deliver_application'),
+        eq(tasks.entityId, app.id),
+        eq(tasks.status, 'needs_candidate'),
+      ),
+    )
+    .run();
+  const row = tx.db
+    .update(applications)
+    .set({
+      stage: 'ready_for_review',
+      approvedAt: null,
+      submitAttemptedAt: null,
+      note: 'taken back to review: approve it again to send it',
+      updatedAt: tx.now,
+    })
+    .where(eq(applications.id, app.id))
+    .returning()
+    .get();
+  emitStage(
+    tx,
+    row,
+    'ready_for_review',
+    `application ${app.id}: approved → ready for review (set by hand)`,
+  );
   return row;
 }

@@ -44,14 +44,14 @@ interface NodeLike {
   childNodes: ArrayLike<NodeLike>;
 }
 
-function render(node: NodeLike, out: string[]): void {
+function render(node: NodeLike, out: string[], skip: ReadonlySet<string> = SKIP): void {
   if (node.nodeType === 3) {
     out.push((node.textContent ?? '').replace(/\s+/g, ' '));
     return;
   }
   if (node.nodeType !== 1 && node.nodeType !== 9 && node.nodeType !== 11) return;
   const tag = node.nodeName.toLowerCase();
-  if (SKIP.has(tag)) return;
+  if (SKIP.has(tag) || skip.has(tag)) return;
   if (tag === 'br') {
     out.push('\n');
     return;
@@ -66,7 +66,7 @@ function render(node: NodeLike, out: string[]): void {
   } else if (BLOCK.has(tag)) {
     out.push('\n');
   }
-  for (const child of Array.from(node.childNodes)) render(child, out);
+  for (const child of Array.from(node.childNodes)) render(child, out, skip);
   // List items start their own line; a trailing break would leave blank lines between them.
   if (heading || (BLOCK.has(tag) && tag !== 'li')) out.push('\n');
 }
@@ -78,6 +78,22 @@ function tidy(text: string): string {
     .join('\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
+}
+
+/** Page furniture that a whole-page reading leaves out. */
+const FURNITURE = new Set(['nav', 'footer', 'form', 'button', 'select', 'dialog']);
+
+/**
+ * The whole page as text, without Readability's choice of a main block: navigation, footers
+ * and forms are left out, everything else is kept in order.
+ */
+export function wholePageText(html: string): HtmlText {
+  const { document } = parseHTML(html);
+  const out: string[] = [];
+  const body =
+    (document as unknown as { body?: NodeLike }).body ?? (document as unknown as NodeLike);
+  render(body, out, FURNITURE);
+  return { title: document.title?.trim() || null, text: tidy(out.join('')) };
 }
 
 /** `url` (when known) lets Readability resolve relative links; it isn't fetched. */

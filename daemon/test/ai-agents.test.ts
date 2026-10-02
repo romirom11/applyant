@@ -218,7 +218,9 @@ describe('sync_source with the candidate’s agent commits', () => {
     const now = new Date('2026-09-27T10:00:00Z');
     const sha = (i: number) => repo.shas[i]?.slice(0, 10) ?? '';
     const extraction: SourceExtraction = {
-      projects: [{ name: 'Callcenter', summary: null, role: null, period: null, stack: [] }],
+      projects: [
+        { kind: 'project', name: 'Callcenter', summary: null, role: null, period: null, stack: [] },
+      ],
       facts: [
         {
           text: FEATURE_CLAIM,

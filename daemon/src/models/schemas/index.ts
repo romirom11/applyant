@@ -6,6 +6,7 @@ import { answerCheckSchema, writerSchema } from './application.ts';
 import { claimCheckSchema } from './claim-check.ts';
 import { companyResearchSchema } from './company.ts';
 import { cvPlanSchema } from './cv.ts';
+import { cvHeaderSchema } from './cv-header.ts';
 import { emailClassSchema } from './email.ts';
 import { sourceExtractionSchema } from './extractor.ts';
 import { interviewSchema } from './interview.ts';
@@ -15,6 +16,7 @@ import { telegramPostsSchema } from './telegram.ts';
 
 export const ROLE_SCHEMAS: Record<string, z.ZodType> = {
   source_extraction: sourceExtractionSchema,
+  cv_header: cvHeaderSchema,
   claim_check: claimCheckSchema,
   application_writer: writerSchema,
   cv_plan: cvPlanSchema,
@@ -35,6 +37,7 @@ export * from './application.ts';
 export { CLAIM_ISSUES, type ClaimCheck, claimCheckSchema } from './claim-check.ts';
 export * from './company.ts';
 export * from './cv.ts';
+export * from './cv-header.ts';
 export * from './email.ts';
 export { type SourceExtraction, sourceExtractionSchema } from './extractor.ts';
 export * from './interview.ts';

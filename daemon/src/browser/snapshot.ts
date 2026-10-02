@@ -920,7 +920,33 @@ export async function formSignature(page: Page): Promise<string> {
       .evaluate(scanFrame, { attr: MARK, signatureOnly: true })
       .catch(() => null);
     if (r && r.score > best.score)
-      best = { score: r.score, signature: `${frame.url()}#${r.signature}` };
+      best = { score: r.score, signature: signatureOf(frame.url(), r.signature) };
   }
   return best.signature;
+}
+
+/** Whether any frame shows a password field inside a form: a sign-in wall. */
+export async function asksSignIn(page: Page): Promise<boolean> {
+  for (const frame of page.frames()) {
+    if (!usableFrame(frame)) continue;
+    const r = await frame
+      .evaluate(scanFrame, { attr: MARK, signatureOnly: true })
+      .catch(() => null);
+    if (r?.signIn) return true;
+  }
+  return false;
+}
+
+/** Between the frame's URL and its controls in a signature (a URL may itself hold a `#`). */
+const SIGNATURE_SEP = '\n';
+
+/** A frame's controls as `formSignature` reports them (what a snapshot compares against). */
+export function signatureOf(frameUrl: string, controls: string): string {
+  return `${frameUrl}${SIGNATURE_SEP}${controls}`;
+}
+
+/** Whether a `formSignature` saw any form controls at all. */
+export function signatureHasControls(signature: string): boolean {
+  const at = signature.indexOf(SIGNATURE_SEP);
+  return at >= 0 && signature.slice(at + SIGNATURE_SEP.length) !== '';
 }

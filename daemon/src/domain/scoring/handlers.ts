@@ -15,8 +15,8 @@ import { eq } from 'drizzle-orm';
 import { readerFor } from '../../browser/platform-reader.ts';
 import { type PostingRow, postings } from '../../db/schema.ts';
 import { matcherSchema, postingExtractionSchema } from '../../models/schemas/posting.ts';
-import type { Handler, HandlerContext, Outcome, Task } from '../../queue/types.ts';
-import { ensureApplication } from '../applications/store.ts';
+import type { Handler, HandlerContext, Outcome, Provider, Task } from '../../queue/types.ts';
+import { autoPrepare } from '../applications/store.ts';
 import { fetchPostingText } from '../search/posting-text.ts';
 import {
   extractionKey,
@@ -35,6 +35,7 @@ import {
   validateMatcherOutput,
 } from './match.ts';
 import { getPreferences } from './prefs.ts';
+import { currentRoleFit, judgeRoleFit } from './role-fit.ts';
 import { rescorePosting, SCORABLE_STAGES } from './store.ts';
 import type { StoredMatch } from './types.ts';
 
@@ -131,6 +132,27 @@ async function matchAndScore(
   const extraction = posting.extraction;
   if (!extraction) return { kind: 'done', commit: () => {} };
 
+  // The role first: a small decision, so a limit here stops before the matcher is paid for.
+  const roles = getPreferences(ctx.read).roles;
+  let roleFit = currentRoleFit(posting, roles);
+  if (roles.length > 0 && !roleFit) {
+    ctx.progress({ message: 'comparing the job with the roles you want' });
+    const judged = await judgeRoleFit(
+      (role, req) => ctx.deps.models.decide(role, req),
+      { title: posting.title, extraction, extractionKey: posting.extractionKey },
+      roles,
+      { taskId: task.id, signal: ctx.signal },
+    );
+    if (!judged.fit && judged.limit) {
+      return {
+        kind: 'pause_provider',
+        provider: judged.limit.provider as Provider,
+        until: judged.limit.until,
+      };
+    }
+    roleFit = judged.fit;
+  }
+
   ctx.progress({ message: `retrieving facts for ${extraction.requirements.length} requirements` });
   const candidates = await gatherCandidates(extraction.requirements, ctx.deps, {
     signal: ctx.signal,
@@ -196,7 +218,7 @@ async function matchAndScore(
       }
       tx.db
         .update(postings)
-        .set({ matches, scoreNote: null })
+        .set({ matches, scoreNote: null, ...(roleFit ? { roleFit } : {}) })
         .where(eq(postings.id, posting.id))
         .run();
       const result = rescorePosting(tx.db, posting.id, tx.now);
@@ -212,12 +234,17 @@ async function matchAndScore(
         kind: 'posting.stage',
         postingId: posting.id,
         stage,
-        message: `score ${result.score}${flags}`,
+        message: `${result.score === null ? 'no score: nothing to compare' : `score ${result.score}`}${flags}`,
       });
       // At or above the threshold with no dealbreaker: prepared without asking.
-      const threshold = getPreferences(tx.db).threshold;
-      if (stage === 'scored' && result.score >= threshold && result.dealbreakers.length === 0) {
-        ensureApplication(tx, posting.id, `score ${result.score} ≥ ${threshold}`);
+      const { threshold, dailyCap } = getPreferences(tx.db);
+      if (
+        stage === 'scored' &&
+        result.score !== null &&
+        result.score >= threshold &&
+        result.dealbreakers.length === 0
+      ) {
+        autoPrepare(tx, posting.id, `score ${result.score} ≥ ${threshold}`, dailyCap);
       }
     },
   };

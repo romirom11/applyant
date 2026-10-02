@@ -91,6 +91,56 @@ describe('tailored CV rendering', () => {
     expect(html).not.toMatch(/\{\{\w+\}\}/);
   });
 
+  it('jobs are Experience, newest first; built things are Projects', () => {
+    const line = (text: string) => ({ text, factIds: [1] });
+    const body = cvBody(
+      {
+        summary: [],
+        projects: [
+          {
+            slug: 'solovei',
+            name: 'Solovei',
+            period: null,
+            kind: 'project',
+            bullets: [line('Built the STT pipeline.')],
+          },
+          {
+            slug: 'asg',
+            name: 'Tech Lead at ASG',
+            period: 'May 2024 – May 2025',
+            kind: 'position',
+            bullets: [line('Set up CI/CD.')],
+          },
+          {
+            slug: 'nda',
+            name: 'Tech Lead at NDA',
+            period: 'Jul 2025 – May 2026',
+            kind: 'position',
+            bullets: [line('Led 4 engineers.')],
+          },
+          {
+            slug: 'kg',
+            name: 'KILOGRAMM LLC',
+            period: 'Jun 2020–Dec 2022',
+            role: 'Head of IT',
+            bullets: [line('Ran IT.')],
+          },
+        ],
+        education: [],
+        skills: [],
+        dropped: [],
+      },
+      { name: 'Alex Example', headline: null, contact: [] },
+    );
+    const at = (s: string) => body.indexOf(s);
+    expect(at('<h2>Experience</h2>')).toBeLessThan(at('<h2>Projects</h2>'));
+    // Newest first, whatever order the writer gave; an older plan's entry without a kind is guessed.
+    expect(at('Tech Lead at NDA')).toBeLessThan(at('Tech Lead at ASG'));
+    expect(at('Tech Lead at ASG')).toBeLessThan(at('Head of IT · KILOGRAMM LLC'));
+    expect(at('Head of IT · KILOGRAMM LLC')).toBeLessThan(at('<h2>Projects</h2>'));
+    expect(at('<h3>Solovei</h3>')).toBeGreaterThan(at('<h2>Projects</h2>'));
+  });
+
   it('prints an A4 PDF whose text has every line of the plan, in order', async () => {
     const header = cvHeader(profile);
     if (!header) throw new Error('no header');

@@ -8,6 +8,7 @@ import {
   parsePreference,
   setPreference,
 } from '../domain/scoring/prefs.ts';
+import { requestRoleFit } from '../domain/scoring/rematch.ts';
 import { rescoreAll, scoringContext } from '../domain/scoring/store.ts';
 import {
   type ApplyantService,
@@ -25,16 +26,19 @@ export function preferencesToPb(conn: Conn): PbPreferences {
     roles: prefs.roles,
     seniority: prefs.seniority,
     basedIn: prefs.basedIn ?? undefined,
+    basedCity: prefs.basedCity ?? undefined,
     locations: prefs.locations,
     remote: prefs.remote,
     salary: prefs.salary ?? undefined,
     salaryFloor: prefs.salaryFloor ?? undefined,
     languages: prefs.languages,
+    workingLanguages: prefs.workingLanguages,
     employment: prefs.employment,
     dealbreakers: prefs.dealbreakers,
     weights: prefs.weights,
     feedbackMultipliers: multipliers,
     threshold: prefs.threshold,
+    dailyCap: prefs.dailyCap,
   });
 }
 
@@ -49,6 +53,8 @@ export function prefsRpcs(c: RpcContext): Pick<Impl, 'getPreferences' | 'setPref
         return runInTx(c.db, c.bus, { now: c.now() }, (tx) => {
           const parsed = parsePreference(req.key.trim(), req.value, getPreferences(tx.db));
           setPreference(tx.db, parsed.key, parsed.value, tx.now);
+          // New roles: open postings are compared with them (one small decision each).
+          if (parsed.key === 'roles') requestRoleFit(tx);
           const rescored = rescoreAll(tx.db, tx.now);
           return { preferences: preferencesToPb(tx.db), rescored };
         });

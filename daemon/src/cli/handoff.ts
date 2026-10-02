@@ -44,8 +44,12 @@ export function registerHandoff(program: Command, client: () => ApplyantClient):
         }
       }
       out('');
-      out('Finish it in the window left open, or fix what it needs and run:');
+      out('Finish it in the window left open, then record it:');
+      out(`  applyant applications mark-submitted ${idArg}`);
+      out('Or let Applyant try again with the same values (this submits):');
       out(`  applyant applications submit ${idArg}`);
+      out('Or take the approval back to change a value first:');
+      out(`  applyant applications status ${idArg} ready_for_review`);
     });
 }
 

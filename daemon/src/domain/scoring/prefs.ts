@@ -8,8 +8,6 @@ import { preferences } from '../../db/schema.ts';
 import {
   EMPLOYMENT_TYPES,
   type EmploymentType,
-  ROLE_FAMILIES,
-  type RoleFamily,
   SENIORITIES,
   type Seniority,
 } from '../../models/schemas/posting.ts';
@@ -34,12 +32,17 @@ export const DEALBREAKERS = [
 export type Dealbreaker = (typeof DEALBREAKERS)[number];
 
 export interface Preferences {
-  /** Kinds of role wanted; empty = any. */
-  roles: RoleFamily[];
+  /**
+   * The job titles wanted, in the candidate's own words ("CFO", "Chef", "Backend Engineer");
+   * empty = any. Each posting is judged against them once (role-fit.ts).
+   */
+  roles: string[];
   /** Seniority levels wanted; empty = any. */
   seniority: Seniority[];
   /** ISO country code where the candidate lives and works from. */
   basedIn: string | null;
+  /** The city the candidate lives in (free text); an office elsewhere in `basedIn` counts less. */
+  basedCity: string | null;
   /** Countries where on-site or hybrid work is fine (besides `basedIn`). */
   locations: string[];
   remote: RemotePref;
@@ -49,6 +52,11 @@ export interface Preferences {
   salaryFloor: Money | null;
   /** Languages the candidate speaks, ISO 639-1 → level. */
   languages: Record<string, CefrLevel>;
+  /**
+   * The languages they'd rather work in (ISO 639-1): a posting that works only in others
+   * counts for less. Empty = no preference.
+   */
+  workingLanguages: string[];
   /** Employment types accepted; empty = any. */
   employment: EmploymentType[];
   dealbreakers: Dealbreaker[];
@@ -56,6 +64,11 @@ export interface Preferences {
   weights: Weights;
   /** Auto-prepare at or above this score (used from phase 5). */
   threshold: number;
+  /**
+   * How many applications may be started on their own per 24 hours (each costs a writer run, a
+   * tailored CV and company research). 0 = none: only the ones the candidate asks for.
+   */
+  dailyCap: number;
 }
 
 export const DEFAULT_WEIGHTS: Weights = {
@@ -74,18 +87,59 @@ export const DEFAULT_PREFERENCES: Preferences = {
   roles: [],
   seniority: [],
   basedIn: null,
+  basedCity: null,
   locations: [],
   remote: 'any',
   salary: null,
   salaryFloor: null,
   languages: {},
+  workingLanguages: [],
   employment: [],
   dealbreakers: [],
   weights: DEFAULT_WEIGHTS,
   threshold: 80,
+  dailyCap: 10,
 };
 
 export class PreferenceError extends Error {}
+
+export const MAX_ROLES = 15;
+export const MAX_ROLE_LENGTH = 60;
+
+/**
+ * Roles were once a fixed list of engineering families; a stored or typed key from that list
+ * reads as the title it stood for.
+ */
+const LEGACY_ROLES: Record<string, string | null> = {
+  ai_ml: 'AI / ML Engineer',
+  backend: 'Backend Engineer',
+  fullstack: 'Full-stack Engineer',
+  frontend: 'Frontend Engineer',
+  data: 'Data Engineer',
+  platform: 'Platform / DevOps Engineer',
+  mobile: 'Mobile Engineer',
+  security: 'Security Engineer',
+  founding: 'Founding Engineer',
+  management: 'Engineering Manager',
+  research: 'Research Engineer',
+  other: null,
+};
+
+/** Job titles as typed: trimmed, legacy keys spelled out, each once (whatever its case). */
+export function cleanRoles(titles: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of titles) {
+    const typed = raw.replace(/\s+/g, ' ').trim();
+    const title = Object.hasOwn(LEGACY_ROLES, typed.toLowerCase())
+      ? LEGACY_ROLES[typed.toLowerCase()]
+      : typed;
+    if (!title || seen.has(title.toLowerCase())) continue;
+    seen.add(title.toLowerCase());
+    out.push(title);
+  }
+  return out;
+}
 
 const country = z.string().regex(/^[A-Z]{2}$/);
 const money = z.object({
@@ -96,9 +150,10 @@ const money = z.object({
 
 /** Stored key → (field, validator). */
 const FIELDS = {
-  roles: { field: 'roles', schema: z.array(z.enum(ROLE_FAMILIES)) },
+  roles: { field: 'roles', schema: z.array(z.string().min(1).max(MAX_ROLE_LENGTH)).max(MAX_ROLES) },
   seniority: { field: 'seniority', schema: z.array(z.enum(SENIORITIES)) },
   based_in: { field: 'basedIn', schema: country.nullable() },
+  based_city: { field: 'basedCity', schema: z.string().min(1).max(80).nullable() },
   locations: { field: 'locations', schema: z.array(country) },
   remote: { field: 'remote', schema: z.enum(REMOTE_PREFS) },
   salary: { field: 'salary', schema: money.nullable() },
@@ -107,6 +162,7 @@ const FIELDS = {
     field: 'languages',
     schema: z.record(z.string().regex(/^[a-z]{2}$/), z.enum(CEFR_LEVELS)),
   },
+  working_languages: { field: 'workingLanguages', schema: z.array(z.string().regex(/^[a-z]{2}$/)) },
   employment: { field: 'employment', schema: z.array(z.enum(EMPLOYMENT_TYPES)) },
   dealbreakers: { field: 'dealbreakers', schema: z.array(z.enum(DEALBREAKERS)) },
   weights: {
@@ -114,6 +170,7 @@ const FIELDS = {
     schema: z.record(z.enum(COMPONENT_KEYS), z.number().min(0).max(100)),
   },
   threshold: { field: 'threshold', schema: z.number().int().min(0).max(100) },
+  daily_cap: { field: 'dailyCap', schema: z.number().int().min(0).max(200) },
 } as const satisfies Record<string, { field: keyof Preferences; schema: z.ZodType }>;
 
 export type PreferenceKey = keyof typeof FIELDS;
@@ -128,6 +185,8 @@ export function getPreferences(conn: Conn): Preferences {
     if (!parsed.success) continue;
     if (row.key === 'weights') {
       prefs.weights = { ...DEFAULT_WEIGHTS, ...(parsed.data as Partial<Weights>) };
+    } else if (row.key === 'roles') {
+      prefs.roles = cleanRoles(parsed.data as string[]);
     } else {
       (prefs as unknown as Record<string, unknown>)[spec.field] = parsed.data;
     }
@@ -233,8 +292,20 @@ export function parsePreference(key: string, raw: string, current: Preferences):
   const k = key as PreferenceKey;
   if (value === '' || (k === 'weights' && value === 'reset')) return { key: k, value: null };
   switch (k) {
-    case 'roles':
-      return { key: k, value: list(value).map((v) => oneOf(ROLE_FAMILIES, v, 'role family')) };
+    case 'roles': {
+      // Titles have spaces in them: separated by `;`, a new line or a comma.
+      const roles = cleanRoles(value.split(/[;,\n]+/));
+      if (roles.length > MAX_ROLES) throw new PreferenceError(`at most ${MAX_ROLES} roles`);
+      const long = roles.find((r) => r.length > MAX_ROLE_LENGTH);
+      if (long) {
+        throw new PreferenceError(
+          `"${long.slice(0, 30)}…" is too long for a role: a job title, at most ${MAX_ROLE_LENGTH} characters`,
+        );
+      }
+      return { key: k, value: roles.length ? roles : null };
+    }
+    case 'based_city':
+      return { key: k, value: value.replace(/\s+/g, ' ').slice(0, 80) };
     case 'seniority':
       return { key: k, value: list(value).map((v) => oneOf(SENIORITIES, v, 'seniority')) };
     case 'based_in': {
@@ -264,6 +335,17 @@ export function parsePreference(key: string, raw: string, current: Preferences):
       }
       return { key: k, value: out };
     }
+    case 'working_languages':
+      return {
+        key: k,
+        value: list(value).map((v) => {
+          const code = v.toLowerCase();
+          if (!/^[a-z]{2}$/.test(code)) {
+            throw new PreferenceError(`"${v}" is not a two-letter language code (e.g. de, uk)`);
+          }
+          return code;
+        }),
+      };
     case 'employment':
       return {
         key: k,
@@ -275,6 +357,15 @@ export function parsePreference(key: string, raw: string, current: Preferences):
       const n = Number(value);
       if (!Number.isInteger(n) || n < 0 || n > 100) {
         throw new PreferenceError('threshold is a whole number from 0 to 100');
+      }
+      return { key: k, value: n };
+    }
+    case 'daily_cap': {
+      const n = Number(value);
+      if (!Number.isInteger(n) || n < 0 || n > 200) {
+        throw new PreferenceError(
+          'daily_cap is a whole number from 0 to 200: applications started on their own per day (0 = none)',
+        );
       }
       return { key: k, value: n };
     }

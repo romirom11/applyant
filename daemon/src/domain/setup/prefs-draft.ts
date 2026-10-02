@@ -1,15 +1,17 @@
 // Preferences pre-filled from the imported CV (phase 16 onboarding, step 3). Read from the
-// facts and projects the import drafted and from the profile, deterministically (no model run):
-// titles give role families and seniority, language lines give languages, the profile's
-// location gives where the candidate is based, its salary expectation the target. Each value
+// facts and projects the import drafted, from the profile and from what the CV's header read
+// suggested (knowledge/cv-header.ts), with no model run of its own: the roles are the titles
+// that reading suggests (or the ones the candidate held), titles give the seniority, the CV's
+// languages and place give languages, country and city, the salary expectation the target. Each value
 // is in SetPreference's form, with the lines it came from, so the candidate adjusts and confirms
 // it; nothing here is stored. Keys the candidate already set are left out.
 import { ne } from 'drizzle-orm';
 import type { Conn } from '../../db/client.ts';
 import { facts, preferences, projects } from '../../db/schema.ts';
-import type { RoleFamily, Seniority } from '../../models/schemas/posting.ts';
+import type { Seniority } from '../../models/schemas/posting.ts';
+import { getCvSuggestions } from '../knowledge/cv-header.ts';
 import { getStandardProfile } from '../knowledge/profile.ts';
-import { parseMoney } from '../scoring/prefs.ts';
+import { CEFR_LEVELS, cleanRoles, MAX_ROLE_LENGTH, parseMoney } from '../scoring/prefs.ts';
 import { listedPlace } from '../scoring/regions.ts';
 
 export interface PreferenceSuggestion {
@@ -25,23 +27,6 @@ interface Line {
   /** Titles and role facts weigh more than skills mentioned in passing. */
   title: boolean;
 }
-
-const ROLE_WORDS: Array<[RegExp, RoleFamily]> = [
-  [/\b(machine learning|ml|ai|llm|deep learning|nlp|computer vision|genai|agentic)\b/i, 'ai_ml'],
-  [/\b(full[\s-]?stack)\b/i, 'fullstack'],
-  [/\b(back[\s-]?end|server[\s-]side|api engineer)\b/i, 'backend'],
-  [/\b(front[\s-]?end|ui engineer|react developer)\b/i, 'frontend'],
-  [/\b(data engineer|data scientist|analytics engineer|data platform)\b/i, 'data'],
-  [/\b(devops|sre|site reliability|platform engineer|infrastructure)\b/i, 'platform'],
-  [/\b(ios|android|mobile)\b/i, 'mobile'],
-  [/\b(security|appsec|pentest)/i, 'security'],
-  [/\b(founding engineer|co-?founder|founder|cto)\b/i, 'founding'],
-  [
-    /\b(engineering manager|head of engineering|vp of engineering|director of engineering)\b/i,
-    'management',
-  ],
-  [/\b(research (engineer|scientist)|researcher)\b/i, 'research'],
-];
 
 const SENIORITY_WORDS: Array<[RegExp, Seniority]> = [
   [/\b(head of|vp|director|cto)\b/i, 'head'],
@@ -92,11 +77,28 @@ const LEVEL_WORDS: Array<[RegExp, string]> = [
   [/\b(A1|basic|beginner)\b/i, 'A1'],
 ];
 
+/**
+ * A title the candidate held, as a role to search for: without the employer or what it was
+ * for ("Tech Lead for the agents platform at Acme"), and without the seniority, which is its
+ * own preference ("Senior Backend Engineer").
+ */
+function heldTitle(text: string): string {
+  return text
+    .replace(/\s+(at|@|for|of|with|on|in)\s+.*$/i, '')
+    .replace(/^(senior|sr\.?|junior|jr\.?|middle|mid(-level)?|staff|principal)\s+/i, '')
+    .trim();
+}
+
+/** A few of the lines a suggestion rests on: each once, the shortest (the titles) first. */
 function quote(lines: Line[]): string {
-  const shown = lines
+  const unique = [
+    ...new Map(lines.map((l) => [l.text.trim().toLowerCase(), l.text.trim()])).values(),
+  ];
+  const shown = [...unique]
+    .sort((a, b) => a.length - b.length)
     .slice(0, 3)
-    .map((l) => `"${l.text.length > 80 ? `${l.text.slice(0, 77)}…` : l.text}"`);
-  return `${shown.join(', ')}${lines.length > 3 ? ` and ${lines.length - 3} more` : ''}`;
+    .map((t) => `"${t.length > 60 ? `${t.slice(0, 57)}…` : t}"`);
+  return `${shown.join(', ')}${unique.length > 3 ? ` and ${unique.length - 3} more` : ''}`;
 }
 
 function ids(lines: Line[]): number[] {
@@ -112,6 +114,7 @@ export function preferencesDraft(conn: Conn): PreferenceSuggestion[] {
       .map((r) => r.key),
   );
   const profile = getStandardProfile(conn);
+  const cv = getCvSuggestions(conn);
   const factRows = conn
     .select({ id: facts.id, text: facts.text, kind: facts.kind })
     .from(facts)
@@ -129,33 +132,22 @@ export function preferencesDraft(conn: Conn): PreferenceSuggestion[] {
   ];
   const out: PreferenceSuggestion[] = [];
 
-  // Role families: from titles and role facts; a family needs a title, or two other lines.
+  // Roles: the titles the CV's own reading suggests, else the titles the candidate held.
   const titles = lines.filter((l) => l.title);
-  const roleHits = new Map<RoleFamily, Line[]>();
-  for (const l of lines) {
-    for (const [re, family] of ROLE_WORDS) {
-      if (!re.test(l.text)) continue;
-      const hit = roleHits.get(family) ?? [];
-      hit.push(l);
-      roleHits.set(family, hit);
+  if (!alreadySet.has('roles')) {
+    const suggested = cleanRoles(cv?.roles ?? []).filter((r) => r.length <= MAX_ROLE_LENGTH);
+    const held = cleanRoles(titles.map((l) => heldTitle(l.text)).filter((t) => t.length <= 40));
+    const roles = (suggested.length ? suggested : held).slice(0, 6);
+    if (roles.length) {
+      out.push({
+        key: 'roles',
+        value: roles.join(', '),
+        reason: suggested.length
+          ? `From your CV: you worked as ${quote(titles.length ? titles : lines)}`
+          : 'From your CV: the titles you held',
+        factIds: ids(titles),
+      });
     }
-  }
-  const roles = [...roleHits.entries()]
-    .filter(([, ls]) => ls.some((l) => l.title) || ls.length >= 2)
-    .sort(
-      (a, b) =>
-        b[1].filter((l) => l.title).length - a[1].filter((l) => l.title).length ||
-        b[1].length - a[1].length,
-    )
-    .slice(0, 4);
-  if (roles.length && !alreadySet.has('roles')) {
-    const used = roles.flatMap(([, ls]) => ls);
-    out.push({
-      key: 'roles',
-      value: roles.map(([f]) => f).join(', '),
-      reason: `From your CV: ${quote(used)}`,
-      factIds: ids(used),
-    });
   }
 
   // Seniority: the highest level the titles show, and the one below it.
@@ -180,17 +172,19 @@ export function preferencesDraft(conn: Conn): PreferenceSuggestion[] {
     });
   }
 
-  // Where the candidate is based: the profile's location.
-  if (profile.location && !alreadySet.has('based_in')) {
-    const country = listedPlace(profile.location).countries[0];
-    if (country) {
-      out.push({
-        key: 'based_in',
-        value: country,
-        reason: `Your profile's location: "${profile.location}"`,
-        factIds: [],
-      });
-    }
+  // Where the candidate is based: the country and city the CV states, else the profile's
+  // location line.
+  const place = profile.location ? listedPlace(profile.location) : null;
+  const country = cv?.country ?? place?.countries[0] ?? null;
+  const from = profile.location ? `Your profile's location: "${profile.location}"` : 'From your CV';
+  if (country && !alreadySet.has('based_in')) {
+    out.push({ key: 'based_in', value: country, reason: from, factIds: [] });
+  }
+  const city =
+    cv?.city ??
+    (profile.location?.includes(',') ? (profile.location.split(',')[0]?.trim() ?? null) : null);
+  if (city && !alreadySet.has('based_city')) {
+    out.push({ key: 'based_city', value: city, reason: from, factIds: [] });
   }
 
   // Languages: "English (C1)", "German — native", "Greek: fluent".
@@ -204,7 +198,19 @@ export function preferencesDraft(conn: Conn): PreferenceSuggestion[] {
         langs.set(code, { level, line: { text: f.text, factId: f.id, title: false } });
     }
   }
-  if (langs.size && !alreadySet.has('languages')) {
+  // The CV's own reading names every language it lists, not only the ones in the table above.
+  const read = (cv?.languages ?? []).filter((l) =>
+    (CEFR_LEVELS as readonly string[]).includes(l.level),
+  );
+  if (read.length && !alreadySet.has('languages')) {
+    const used = [...langs.values()].map((v) => v.line);
+    out.push({
+      key: 'languages',
+      value: read.map((l) => `${l.code}:${l.level}`).join(', '),
+      reason: used.length ? `From your CV: ${quote(used)}` : 'From your CV',
+      factIds: ids(used),
+    });
+  } else if (langs.size && !alreadySet.has('languages')) {
     const used = [...langs.values()].map((v) => v.line);
     out.push({
       key: 'languages',

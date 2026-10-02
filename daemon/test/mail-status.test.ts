@@ -95,6 +95,7 @@ describe('mail status', () => {
       read: t.read,
       signal: new AbortController().signal,
       progress: () => {},
+      record: () => true,
       now: () => NOW,
     });
     expect(outcome.kind).toBe('done');
@@ -283,6 +284,48 @@ describe('mail status', () => {
       by: 'apple',
       problem: null,
     };
-    expect(decide(cls, { ids: [], sure: false, why: null }, 0.7)).toBeNull();
+    expect(decide(cls, { ids: [], sure: false, strong: false, why: null }, 0.7)).toBeNull();
+  });
+
+  it('a status moves only on a strong match, and never on mail from before the application', () => {
+    const app = addApp('Helix', 'https://helix.io/jobs/1', 'AI Engineer');
+    const apps = trackedApplications(t.read);
+    const mail = (over: Partial<Parameters<typeof matchEmail>[0]>) => ({
+      key: 'k',
+      messageId: null,
+      inReplyTo: null,
+      references: [],
+      fromAddress: 'digest@jobnews.example',
+      fromName: null,
+      to: [],
+      subject: 'This week',
+      text: 'Helix is hiring again.',
+      date: NOW,
+      ...over,
+    });
+    const rejection = {
+      label: 'rejection' as const,
+      confidence: 0.95,
+      language: null,
+      by: 'apple',
+      problem: null,
+    };
+    // The company's name in somebody else's mail: asked about, never a rejection on its own.
+    const weak = matchEmail(mail({}), apps);
+    expect(weak).toMatchObject({ ids: [app.id], sure: true, strong: false });
+    expect(decide(rejection, weak, 0.7)).toMatchObject({ status: 'ask', applicationId: null });
+    // The company's own domain is a strong match.
+    const own = matchEmail(mail({ fromAddress: 'people@helix.io' }), apps);
+    expect(own.strong).toBe(true);
+    expect(decide(rejection, own, 0.7)).toMatchObject({ status: 'matched', applicationId: app.id });
+    // Mail from a week before the application was sent isn't about it.
+    const old = matchEmail(
+      mail({ fromAddress: 'people@helix.io', date: new Date(NOW.getTime() - 7 * 86_400_000) }),
+      apps,
+    );
+    expect(old.ids).toEqual([]);
+    // A rejected application is still followed, and a later invite moves it on.
+    expect(nextStage('rejected', 'interview')).toBe('interview');
+    expect(nextStage('rejected', 'rejection')).toBeNull();
   });
 });

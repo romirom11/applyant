@@ -17,6 +17,8 @@ import type { Conn } from '../../db/client.ts';
 import { applications, type PostingRow, postings, tasks } from '../../db/schema.ts';
 import type { Handler, Tx } from '../../queue/types.ts';
 import { gatherCandidates } from './match.ts';
+import { getPreferences } from './prefs.ts';
+import { currentRoleFit } from './role-fit.ts';
 
 /** How long a sweep waits for more changes before it runs. */
 export const REMATCH_DELAY_MS = 30_000;
@@ -74,6 +76,23 @@ export function rematchCandidates(conn: Conn): PostingRow[] {
       ),
     )
     .all();
+}
+
+/**
+ * After the candidate changed the roles they're after: every open posting whose role verdict
+ * was made for other roles is scored again (its matches are reused by key, so that is the one
+ * small role decision each). Returns how many were queued.
+ */
+export function requestRoleFit(tx: Tx): number {
+  const roles = getPreferences(tx.db).roles;
+  if (roles.length === 0) return 0;
+  let queued = 0;
+  for (const posting of rematchCandidates(tx.db)) {
+    if (currentRoleFit(posting, roles) || pending(tx.db, 'score_posting', posting.id)) continue;
+    tx.enqueue('score_posting', posting.id, { runId: null });
+    queued++;
+  }
+  return queued;
 }
 
 export const rematchPostings: Handler<'rematch_postings'> = async (_task, ctx) => {

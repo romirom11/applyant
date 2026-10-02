@@ -6,7 +6,12 @@ import { type EventRow, postings as postingsTable } from '../db/schema.ts';
 import { READABLE_STAGES, requestFormRead } from '../domain/applications/read-form.ts';
 import { applicationsByPosting } from '../domain/applications/store.ts';
 import { companyForPosting } from '../domain/companies/store.ts';
-import { DecisionError, recordDecision, requestScoring } from '../domain/scoring/store.ts';
+import {
+  DecisionError,
+  recordDecision,
+  requestScoring,
+  undoDecision,
+} from '../domain/scoring/store.ts';
 import { InvalidUrlError } from '../domain/search/canonical-url.ts';
 import {
   addPosting,
@@ -48,6 +53,7 @@ export function postingRpcs(
   | 'getPosting'
   | 'skipPosting'
   | 'markInterested'
+  | 'undoDecision'
   | 'scorePostings'
   | 'readForms'
   | 'listEvents'
@@ -113,6 +119,14 @@ export function postingRpcs(
           reason: null,
           now: c.now(),
         });
+        const app = applicationsByPosting(c.db).get(res.posting.id) ?? null;
+        return { posting: postingToPb(res.posting, [], null, app), rescored: res.rescored };
+      });
+    },
+
+    undoDecision(req) {
+      return decision(() => {
+        const res = undoDecision(c.db, c.bus, { id: id(req.id, 'id'), now: c.now() });
         const app = applicationsByPosting(c.db).get(res.posting.id) ?? null;
         return { posting: postingToPb(res.posting, [], null, app), rescored: res.rescored };
       });

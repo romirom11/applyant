@@ -1,7 +1,9 @@
 // The deterministic number & date check: contradictions are hard flags, numbers the facts
 // don't have are confirmable, and unrelated numbers never read as contradictions.
+
 import { describe, expect, it } from 'vitest';
 import { checkNumbers, extractQuantities } from '../src/domain/applications/checks/numbers.ts';
+import { answerCheckPrompt } from '../src/domain/applications/checks/verify.ts';
 
 const fact = (id: number, text: string, period: string | null = null) => ({ id, text, period });
 
@@ -95,5 +97,35 @@ describe('checkNumbers', () => {
     expect(
       checkNumbers('I can start within 1 month.', [], ['1 month', '60000 EUR per year']),
     ).toEqual({ kind: 'ok' });
+  });
+
+  it("repeats the employer's own numbers, never as the candidate's years or team", () => {
+    const posting = 'We serve 270 merchants and want 5+ years of Python in a team of 8.';
+    const facts = [{ id: 1, text: 'Built a Laravel B2B portal' }];
+    expect(
+      checkNumbers('Excited to help you grow past 270 merchants.', facts, [], [posting]).kind,
+    ).toBe('ok');
+    expect(checkNumbers('I have 5+ years of Python.', facts, [], [posting]).kind).toBe('absent');
+    expect(checkNumbers('I led a team of 8.', facts, [], [posting]).kind).toBe('absent');
+  });
+
+  it('the verifier sees the project and role with each fact', () => {
+    const prompt = answerCheckPrompt([
+      {
+        key: '1',
+        text: 'As Tech Lead I shipped an AI sales assistant.',
+        facts: [
+          {
+            id: 6,
+            text: 'Shipped an AI sales assistant',
+            period: 'Jul 2025 – May 2026',
+            project: 'Tech Lead at NDA; role: Tech Lead',
+          },
+        ],
+      },
+    ]);
+    expect(prompt).toContain(
+      '#6: Shipped an AI sales assistant (project: Tech Lead at NDA; role: Tech Lead; period: Jul 2025 – May 2026)',
+    );
   });
 });

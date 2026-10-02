@@ -25,6 +25,7 @@ import {
 } from './feedback.ts';
 import { loadRates } from './fx.ts';
 import { getPreferences, type Preferences } from './prefs.ts';
+import { currentRoleFit } from './role-fit.ts';
 import { score } from './score.ts';
 import { effectiveExtraction } from './structured.ts';
 import type { ScoreResult, Weights } from './types.ts';
@@ -63,6 +64,7 @@ export function scorePostingRow(row: PostingRow, ctx: ScoringContext): ScoreResu
       matches: row.matches,
       fx: ctx.fx,
       locations: row.locations,
+      roleFit: currentRoleFit(row, ctx.prefs.roles)?.verdict ?? null,
       company: ctx.companies.get(companyKey(row.company)) ?? null,
     },
     ctx.prefs,
@@ -187,6 +189,45 @@ export function unscoredPostings(conn: Conn): number[] {
 }
 
 export class DecisionError extends Error {}
+
+/**
+ * Takes the candidate's call on a posting back: a skipped posting returns to the Inbox
+ * undecided (not marked interested), its feedback no longer nudges the weights, and every score
+ * is re-computed. An application that already exists stays as it is.
+ */
+export function undoDecision(
+  db: Db,
+  bus: EventBus,
+  input: { id: number; now: Date },
+): DecisionResult {
+  return runInTx(db, bus, { now: input.now }, (tx) => {
+    const row = tx.db.select().from(postings).where(eq(postings.id, input.id)).get();
+    if (!row) throw new DecisionError(`posting ${input.id} not found`);
+    if (row.decision === null && row.stage !== 'skipped') {
+      throw new DecisionError(`posting ${input.id} has no skip or interest to undo`);
+    }
+    const stage: PostingStage =
+      row.stage === 'skipped' ? (row.score !== null ? 'scored' : 'verified') : row.stage;
+    tx.db
+      .update(postings)
+      .set({ stage, decision: null, decisionReason: null, decidedAt: null })
+      .where(eq(postings.id, row.id))
+      .run();
+    tx.db.delete(postingFeedback).where(eq(postingFeedback.postingId, row.id)).run();
+    if (stage !== row.stage) {
+      tx.emit({
+        kind: 'posting.stage',
+        postingId: row.id,
+        stage,
+        message: 'back in the Inbox (skip undone)',
+      });
+    }
+    const rescored = rescoreAll(tx.db, tx.now);
+    const posting = tx.db.select().from(postings).where(eq(postings.id, row.id)).get();
+    if (!posting) throw new DecisionError(`posting ${input.id} vanished`);
+    return { posting, rescored };
+  });
+}
 
 export interface DecisionResult {
   posting: PostingRow;

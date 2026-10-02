@@ -774,13 +774,13 @@ export function registerApplications(program: Command, client: () => ApplyantCli
   apps
     .command('status <id> <stage>')
     .description(
-      'correct the status by hand: applied (sent outside Applyant, or a misread reply undone) | interview | offer | rejected | withdrawn; never sends anything',
+      'correct the status by hand: applied (sent outside Applyant, or a misread reply undone) | interview | offer | rejected | withdrawn, or ready_for_review to take an approval back after a hand-off; never sends anything',
     )
     .action(async (idArg: string, stageArg: string) => {
       const stage = STAGES[stageArg];
       if (stage === undefined)
         throw new Error(
-          `unknown stage "${stageArg}" (applied | interview | offer | rejected | withdrawn)`,
+          `unknown stage "${stageArg}" (applied | interview | offer | rejected | withdrawn | ready_for_review)`,
         );
       const res = await client().setApplicationStage({
         applicationId: BigInt(positiveInt(idArg)),

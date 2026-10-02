@@ -8,6 +8,7 @@ import {
   advanceDeterministic,
   type FillValue,
   fillStep,
+  pageBefore,
   pickAdvance,
   submitFinal,
   waitForForm,
@@ -15,7 +16,7 @@ import {
 } from './form-engine.ts';
 import { dismissConsent, followApply } from './form-read.ts';
 import { refKey } from './form-types.ts';
-import { formSignature, type SnapField, snapshotForm } from './snapshot.ts';
+import { type SnapField, snapshotForm } from './snapshot.ts';
 
 export interface DeliverJudge {
   /** field_classify for controls Read never saw (a conditional field only live delivery shows). */
@@ -50,6 +51,11 @@ export interface DeliverFormOptions {
    * platform's challenge rule). Unset: a captcha goes to the candidate (phase 6).
    */
   captcha?(page: Page): Promise<CaptchaStep>;
+  /**
+   * Called right before anything presses the final submit control (the engine, or the step
+   * agent): the caller records that a submission was attempted before it can happen.
+   */
+  beforeSubmit?(): void | Promise<void>;
   signal?: AbortSignal;
   progress?(message: string): void;
   maxSteps?: number;
@@ -65,6 +71,8 @@ export type DeliverFormResult =
       reason: string;
       /** A guarded platform's challenge (LinkedIn/Xing checkpoint): the platform pauses. */
       challenge?: string;
+      /** The submit control was pressed before this: the application may have been sent. */
+      afterSubmit?: boolean;
     }
   /** A control only live delivery revealed, resolvable from the profile: back to Prepare, not sent. */
   | { kind: 'new_field'; step: number; field: SnapField; value: string };
@@ -112,7 +120,23 @@ async function settle(page: Page, ms = 200): Promise<void> {
   await page.waitForTimeout(ms);
 }
 
+/** What the candidate reads when delivery stops after the submit control was pressed. */
+export const AFTER_SUBMIT =
+  'Submit was already pressed, so this application may have been sent: check the page and your inbox before sending it again. ';
+
 export async function deliverForm(page: Page, o: DeliverFormOptions): Promise<DeliverFormResult> {
+  const pressed = { submit: false };
+  const result = await deliverSteps(page, o, pressed);
+  return result.kind === 'handoff' && pressed.submit
+    ? { ...result, reason: AFTER_SUBMIT + result.reason, afterSubmit: true }
+    : result;
+}
+
+async function deliverSteps(
+  page: Page,
+  o: DeliverFormOptions,
+  pressed: { submit: boolean },
+): Promise<DeliverFormResult> {
   const notes: string[] = [];
   o.progress?.(`opening ${o.url}`);
   await page.goto(o.url, { waitUntil: 'domcontentloaded' });
@@ -216,14 +240,28 @@ export async function deliverForm(page: Page, o: DeliverFormOptions): Promise<De
         };
       }
       const submittedAt = new Date();
-      let outcome = await submitFinal(page, latest, o.signal ? { signal: o.signal } : {});
-      if (outcome.kind === 'stuck') {
+      const wait = o.signal ? { signal: o.signal } : {};
+      let outcome = await submitFinal(page, latest, {
+        ...wait,
+        ...(o.beforeSubmit ? { beforeSubmit: o.beforeSubmit } : {}),
+      });
+      // With an error on the page the step agent fixes it and presses again. With neither an
+      // error nor a confirmation nobody presses a second time: that could send it twice.
+      if (outcome.kind === 'stuck' && !outcome.unclear) {
         o.progress?.(`step ${step}: submission not accepted, escalating`);
-        const before = { url: page.url(), sig: await formSignature(page) };
+        const before = await pageBefore(page);
         const fixed = await o.agentStep(fieldsForAgent, outcome.errors, latest);
-        outcome = fixed
-          ? await waitForOutcome(page, before.url, before.sig, o.signal ? { signal: o.signal } : {})
-          : outcome;
+        outcome = fixed ? await waitForOutcome(page, before, wait) : outcome;
+      }
+      // The control led to another form: it wasn't the last step after all. Carry on there.
+      // Without an error on the page, the press may well have sent it.
+      if (outcome.kind === 'moved' || (outcome.kind === 'stuck' && outcome.unclear)) {
+        pressed.submit = true;
+      }
+      if (outcome.kind === 'moved') {
+        o.progress?.(`step ${step}: "${latest.text}" led to another form`);
+        await waitForForm(page, 8000);
+        continue;
       }
       // An emailed security code (Greenhouse): read it from the mailbox, enter it, submit again.
       const codeField = await findSecurityCodeField(page);
@@ -235,7 +273,7 @@ export async function deliverForm(page: Page, o: DeliverFormOptions): Promise<De
             step,
             fieldLabel: 'Security code',
             reason:
-              'the site emailed a security code and no mailbox is connected (`applyant mail connect`): enter the code yourself',
+              'the site emailed a security code and no mailbox is connected: enter the code yourself',
           };
         }
         o.progress?.(`step ${step}: the site emailed a security code, reading it from the mailbox`);
@@ -262,24 +300,29 @@ export async function deliverForm(page: Page, o: DeliverFormOptions): Promise<De
             reason: 'the security code is filled in, but there is no button to send it',
           };
         }
-        outcome = await submitFinal(page, again, o.signal ? { signal: o.signal } : {});
-        if (outcome.kind === 'confirmed' && (await findSecurityCodeField(page))) {
+        outcome = await submitFinal(page, again, wait);
+        if (outcome.kind !== 'stuck' && (await findSecurityCodeField(page))) {
           outcome = {
             kind: 'stuck',
             errors: ['the site did not accept the emailed security code'],
+            unclear: false,
           };
         }
       }
-      if (outcome.kind === 'stuck') {
-        return {
-          kind: 'handoff',
-          scope: 'step',
-          step,
-          fieldLabel: codeField ? 'Security code' : null,
-          reason: outcome.errors[0] ?? 'the final submission was not accepted',
-        };
+      if (outcome.kind === 'confirmed') {
+        return { kind: 'submitted', url: outcome.url, confirmationText: outcome.text };
       }
-      return { kind: 'submitted', url: outcome.url, confirmationText: outcome.text };
+      return {
+        kind: 'handoff',
+        scope: 'step',
+        step,
+        fieldLabel: codeField ? 'Security code' : null,
+        reason:
+          outcome.kind === 'moved'
+            ? 'the site showed another form instead of a confirmation'
+            : (outcome.errors[0] ??
+              'the page showed neither a confirmation nor an error after submit was pressed'),
+      };
     }
 
     if (!latest.ref) {
@@ -294,17 +337,16 @@ export async function deliverForm(page: Page, o: DeliverFormOptions): Promise<De
     o.progress?.(`step ${step}: pressing "${latest.text}"`);
     let moved = await advanceDeterministic(page, latest, o.signal ? { signal: o.signal } : {});
     if (moved.kind === 'stuck') {
-      const before = { url: page.url(), sig: await formSignature(page) };
+      const before = await pageBefore(page);
       const fixed = await o.agentStep(fieldsForAgent, moved.errors, latest);
       moved = fixed
         ? await (async () => {
             const outcome = await waitForOutcome(
               page,
-              before.url,
-              before.sig,
+              before,
               o.signal ? { signal: o.signal } : {},
             );
-            return outcome.kind === 'confirmed' ? { kind: 'advanced' as const } : outcome;
+            return outcome.kind === 'stuck' ? outcome : { kind: 'advanced' as const };
           })()
         : moved;
     }

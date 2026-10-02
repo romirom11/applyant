@@ -349,6 +349,7 @@ describe('telegram: search, verification, the form and delivery', () => {
       read: t.read,
       signal: new AbortController().signal,
       progress: () => {},
+      record: () => true,
       now: () => new Date(),
     };
     const commit = (o: { kind: string; commit?: (tx: never) => void }) => {

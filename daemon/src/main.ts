@@ -38,7 +38,7 @@ import { planSearch } from './domain/search/planner.ts';
 import { buildRecipe } from './domain/search/recipes/build.ts';
 import { ensureBuiltinSources } from './domain/search/sources.ts';
 import { verifyPosting } from './domain/search/verify.ts';
-import { isAlive, readEndpoint, removeEndpoint, writeEndpoint } from './endpoint.ts';
+import { daemonRunning, readEndpoint, removeEndpoint, writeEndpoint } from './endpoint.ts';
 import { CapMonster } from './integrations/capmonster.ts';
 import { TelegramService } from './integrations/gramjs.ts';
 import { MailService } from './integrations/mail-service.ts';
@@ -72,8 +72,14 @@ export async function runDaemon(config: Config = loadConfig()): Promise<() => Pr
   ensurePrivateDir(config.home);
   ensurePrivateDir(config.filesDir);
 
-  const running = readEndpoint(config.endpointFile);
-  if (running && running.pid !== process.pid && isAlive(running.pid)) {
+  const running = (() => {
+    try {
+      return readEndpoint(config.endpointFile);
+    } catch {
+      return null; // a half-written file from a crash: not a running daemon
+    }
+  })();
+  if (running && running.pid !== process.pid && (await daemonRunning(running))) {
     throw new Error(`applyantd is already running (pid ${running.pid}) for ${config.home}`);
   }
 
@@ -234,9 +240,20 @@ export async function runDaemon(config: Config = loadConfig()): Promise<() => Pr
   // …and a read of the application form for live postings verified before Read existed.
   requestFormRead(db, bus, [], new Date());
   // …and an application for postings that qualified before applications existed.
-  runInTx(db, bus, { now: new Date() }, (tx) =>
-    catchUpApplications(tx, getPreferences(tx.db).threshold),
-  );
+  const catchUpPrepared = () => {
+    try {
+      runInTx(db, bus, { now: new Date() }, (tx) => {
+        const prefs = getPreferences(tx.db);
+        return catchUpApplications(tx, prefs.threshold, prefs.dailyCap);
+      });
+    } catch (err) {
+      log.warn('application catch-up failed', { err });
+    }
+  };
+  catchUpPrepared();
+  // Postings held back by the daily allowance are prepared once there's room again.
+  const prepareTimer = setInterval(catchUpPrepared, 3_600_000);
+  prepareTimer.unref();
   // …and delivery for an approved application that never got one (a restart mid-delivery).
   runInTx(db, bus, { now: new Date() }, (tx) => catchUpDeliveries(tx));
 
@@ -316,6 +333,7 @@ export async function runDaemon(config: Config = loadConfig()): Promise<() => Pr
       removeEndpoint(config.endpointFile, process.pid);
       await rpc.close();
       clearInterval(mailTimer);
+      clearInterval(prepareTimer);
       scheduler.stop();
       await worker.stop();
       await mcp.close();

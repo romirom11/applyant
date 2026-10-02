@@ -63,8 +63,20 @@ export class SubmitProfile {
     this.o = options;
   }
 
+  /**
+   * The running browser, launched when there is none. A launch that failed, and a browser that
+   * closed (the candidate quit Chrome after a hand-off, or it crashed), are forgotten, so the
+   * next delivery starts a new one instead of failing on the dead one until the daemon restarts.
+   */
   private ensure(): Promise<{ context: BrowserContext; branded: boolean }> {
-    if (!this.context) this.context = launch(this.o);
+    if (!this.context) {
+      const launched = launch(this.o);
+      const forget = () => {
+        if (this.context === launched) this.context = null;
+      };
+      launched.then(({ context }) => context.on('close', forget), forget);
+      this.context = launched;
+    }
     return this.context;
   }
 
@@ -81,8 +93,7 @@ export class SubmitProfile {
     });
     await previous;
     try {
-      const { context } = await this.ensure();
-      const page = await context.newPage();
+      const page = await this.newPage();
       try {
         await minimizeWindow(page);
       } catch (err) {
@@ -98,6 +109,24 @@ export class SubmitProfile {
       }
     } finally {
       release();
+    }
+  }
+
+  /** A fresh page; a browser that turns out to be gone is relaunched once. */
+  private async newPage(): Promise<Page> {
+    const first = await this.ensure();
+    try {
+      return await first.context.newPage();
+    } catch (err) {
+      this.o.log.warn('the submission browser was gone; starting it again', {
+        err: err instanceof Error ? err.message : String(err),
+      });
+      if (this.context) {
+        const stale = this.context;
+        this.context = null;
+        await stale.then(({ context }) => context.close()).catch(() => {});
+      }
+      return (await this.ensure()).context.newPage();
     }
   }
 

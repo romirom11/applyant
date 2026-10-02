@@ -4,7 +4,7 @@
 // included), so an override that changes a branch changes what the form will ask. Likewise
 // "relies on an unconfirmed fact" is derived from the cited facts' current status, so
 // confirming a fact anywhere clears it everywhere.
-import { and, asc, desc, eq, inArray } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gte, inArray } from 'drizzle-orm';
 import { type ElementRef, refKey } from '../../browser/form-types.ts';
 import { platformOf } from '../../browser/guardrails.ts';
 import type { Conn } from '../../db/client.ts';
@@ -250,6 +250,13 @@ export function ensureApplication(
 }
 
 /**
+ * The stages preparation may run in. An approved application is on its way out, and a sent one
+ * (applied, interview, offer, rejected, withdrawn) is history: a form read again, or a posting
+ * listed again, never pulls either back into preparing.
+ */
+export const PREPARABLE: ApplicationStage[] = ['preparing', 'ready_for_review', 'needs_candidate'];
+
+/**
  * Prepares an application again: standard fields are recomputed from the current profile
  * (overrides stay), answers that are missing or were left to the candidate are drafted again
  * (every answer with `rewrite`). Edits the candidate made stay unless `rewrite`.
@@ -261,6 +268,11 @@ export function requestPrepare(
 ): ApplicationRow {
   if (app.stage === 'approved') {
     throw new ApplicationError(`application ${app.id} is already approved`);
+  }
+  if (!PREPARABLE.includes(app.stage)) {
+    throw new ApplicationError(
+      `application ${app.id} was already sent (${app.stage}): it isn't prepared again`,
+    );
   }
   const row = tx.db
     .update(applications)
@@ -279,14 +291,63 @@ export function requestPrepare(
   return row;
 }
 
+/** Applications started in the last 24 hours, whoever started them. */
+export function startedLastDay(tx: Tx): number {
+  return (
+    tx.db
+      .select({ n: count() })
+      .from(applications)
+      .where(gte(applications.createdAt, new Date(tx.now.getTime() - 24 * 3_600_000)))
+      .get()?.n ?? 0
+  );
+}
+
+/**
+ * Starts an application for a posting that scored at or above the threshold, unless the day's
+ * allowance for applications started without asking is used up: then the posting stays in the
+ * Inbox (the hourly catch-up prepares it once there's room, or the candidate does).
+ */
+export function autoPrepare(tx: Tx, postingId: number, why: string, dailyCap: number): boolean {
+  const existing = tx.db
+    .select({ id: applications.id })
+    .from(applications)
+    .where(eq(applications.postingId, postingId))
+    .get();
+  if (!existing && startedLastDay(tx) >= dailyCap) {
+    tx.emit({
+      kind: 'posting.stage',
+      postingId,
+      stage: 'scored',
+      message:
+        dailyCap === 0
+          ? `${why}: not prepared on its own (automatic preparing is off)`
+          : `${why}: waits, ${dailyCap} applications were already started in the last 24 hours`,
+    });
+    return false;
+  }
+  ensureApplication(tx, postingId, why);
+  return true;
+}
+
 /**
  * At start: postings that qualified before applications existed (scored at or above the
  * threshold with no dealbreaker, or marked interested) get theirs. Returns how many started.
  */
-export function catchUpApplications(tx: Tx, threshold: number): number {
+export function catchUpApplications(
+  tx: Tx,
+  threshold: number,
+  dailyCap: number = Number.POSITIVE_INFINITY,
+): number {
   const have = applicationsByPosting(tx.db);
   let n = 0;
-  for (const p of tx.db.select().from(postings).where(eq(postings.stage, 'scored')).all()) {
+  const scored = tx.db
+    .select()
+    .from(postings)
+    .where(eq(postings.stage, 'scored'))
+    .all()
+    // The best ones first, so the day's allowance goes to them.
+    .sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+  for (const p of scored) {
     if (have.has(p.id)) continue;
     const qualifies =
       p.decision === 'interested' ||
@@ -295,6 +356,8 @@ export function catchUpApplications(tx: Tx, threshold: number): number {
         p.score >= threshold &&
         !(p.dealbreakers ?? []).length);
     if (!qualifies) continue;
+    // What the candidate asked for is always prepared; the rest within the day's allowance.
+    if (p.decision !== 'interested' && startedLastDay(tx) >= dailyCap) continue;
     ensureApplication(
       tx,
       p.id,
@@ -308,7 +371,7 @@ export function catchUpApplications(tx: Tx, threshold: number): number {
 /** After a form (re-)read: an application waiting for it, or not yet approved, is prepared. */
 export function formReadFor(tx: Tx, postingId: number): void {
   const app = tx.db.select().from(applications).where(eq(applications.postingId, postingId)).get();
-  if (!app || app.stage === 'approved') return;
+  if (!app || !PREPARABLE.includes(app.stage)) return;
   requestPrepare(tx, app, { rewrite: false, why: 'the application form was read' });
 }
 

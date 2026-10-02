@@ -3,6 +3,7 @@
 import { asc, eq, sql } from 'drizzle-orm';
 import type { Conn } from '../../db/client.ts';
 import { facts, type ProjectRow, projects, sources } from '../../db/schema.ts';
+import type { ProjectKind } from './project-kind.ts';
 
 export class ProjectError extends Error {}
 
@@ -36,6 +37,7 @@ export interface NewProject {
   role?: string | null;
   period?: string | null;
   stack?: string[];
+  kind?: ProjectKind | null;
 }
 
 export function createProject(conn: Conn, input: NewProject, now: Date): ProjectRow {
@@ -55,6 +57,7 @@ export function createProject(conn: Conn, input: NewProject, now: Date): Project
       summary: input.summary?.trim() || null,
       role: input.role?.trim() || null,
       period: input.period?.trim() || null,
+      kind: input.kind ?? null,
       stack: cleanStack(input.stack ?? []),
       createdAt: now,
       updatedAt: now,
@@ -108,7 +111,13 @@ export function requireProject(conn: Conn, ref: string): ProjectRow {
 export function fillProject(
   conn: Conn,
   project: ProjectRow,
-  found: { summary: string | null; role: string | null; period: string | null; stack: string[] },
+  found: {
+    summary: string | null;
+    role: string | null;
+    period: string | null;
+    stack: string[];
+    kind?: ProjectKind | null;
+  },
   now: Date,
 ): void {
   const stack = cleanStack([...project.stack, ...found.stack]);
@@ -116,12 +125,14 @@ export function fillProject(
     summary: project.summary ?? (found.summary?.trim() || null),
     role: project.role ?? (found.role?.trim() || null),
     period: project.period ?? (found.period?.trim() || null),
+    kind: project.kind ?? found.kind ?? null,
     stack,
   };
   const changed =
     set.summary !== project.summary ||
     set.role !== project.role ||
     set.period !== project.period ||
+    set.kind !== project.kind ||
     stack.length !== project.stack.length;
   if (changed) {
     conn
@@ -176,6 +187,7 @@ export interface ProjectChange {
   role?: string | null;
   period?: string | null;
   stack?: string[];
+  kind?: ProjectKind | null;
 }
 
 /** Renames a project or changes what it says; the slug stays (it's the CLI's handle). */
@@ -204,6 +216,7 @@ export function updateProject(
   if (change.role !== undefined) set.role = change.role?.trim() || null;
   if (change.period !== undefined) set.period = change.period?.trim() || null;
   if (change.stack !== undefined) set.stack = cleanStack(change.stack);
+  if (change.kind !== undefined) set.kind = change.kind;
   if (Object.keys(set).length === 0) return project;
   return conn
     .update(projects)

@@ -19,6 +19,7 @@ import {
 import type { AgentRunner } from '../../../models/agent-runner.ts';
 import type { Provider } from '../../../models/roles.ts';
 import { type CvPlanOutput, cvPlanSchema } from '../../../models/schemas/cv.ts';
+import { type ProjectKind, projectKind } from '../../knowledge/project-kind.ts';
 import { type FactRef, factLine } from '../../knowledge/retrieve.ts';
 import type { SentenceResult, SentenceToCheck } from '../checks/verify.ts';
 import { FLAG_TEXT } from '../store.ts';
@@ -41,6 +42,9 @@ export interface CvProject {
   slug: string;
   name: string;
   period: string | null;
+  /** A job (shown under Experience, newest first) or something built (under Projects). */
+  kind: ProjectKind;
+  role: string | null;
   facts: FactRef[];
 }
 
@@ -101,6 +105,8 @@ export function buildCvContext(conn: Conn, posting: PostingRow): CvContext {
       slug: p.slug,
       name: p.name,
       period: p.period,
+      kind: projectKind(p),
+      role: p.role,
       facts: chosen.filter((f) => f.projectId === p.id),
     }));
   const ex = posting.extraction;
@@ -129,7 +135,8 @@ Truthfulness (the most important part):
 - Skills: only technologies and skills that the given facts name.
 
 Tailoring (your actual job):
-- Choose which projects to show and order them by how much they matter for this role; leave out projects that don't help. Usually 2–5 projects.
+- Each project is marked as a job (a position at an employer or client) or as something the candidate built (a product, side project, open source). The CV shows jobs as Experience, newest first, and built things in their own Projects section, so never present a built thing as a job or the other way round.
+- Choose what to show: usually the 2–4 jobs that matter for this role (the most recent ones unless an older one is clearly more relevant) and 0–3 built projects that strengthen the case; leave out what doesn't help. Order built projects by relevance.
 - For each project shown, pick the 2–5 facts that matter most for this role, strongest first, each as one concise CV bullet: past tense, starts with a verb, no "I".
 - Write a 2–3 sentence summary introducing the candidate for this role, from the facts only (no "I", nothing about the employer).
 - Order skills by relevance to the requirements; at most 15.
@@ -149,7 +156,9 @@ export function cvPrompt(ctx: CvContext): string {
   if (ctx.job.text) parts.push('', 'Posting text:', '"""', ctx.job.text, '"""');
   parts.push('', "The candidate's confirmed facts, by project:");
   for (const p of ctx.projects) {
-    parts.push(`[${p.slug}] ${p.name}${p.period ? ` · ${p.period}` : ''}`);
+    parts.push(
+      `[${p.slug}] ${p.name} · ${p.kind === 'position' ? 'job' : 'built project'}${p.period ? ` · ${p.period}` : ''}`,
+    );
     for (const f of p.facts) parts.push(`  ${factLine(f)}`);
   }
   if (ctx.general.length) {
@@ -246,6 +255,8 @@ export function planFromOutput(out: CvPlanOutput, ctx: CvContext): CvPlan {
         slug: p.project,
         name: project?.name ?? p.project,
         period: project?.period ?? null,
+        kind: project?.kind ?? 'project',
+        role: project?.role ?? null,
         bullets: p.bullets.map(clean),
       };
     }),

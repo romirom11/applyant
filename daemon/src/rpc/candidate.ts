@@ -21,6 +21,12 @@ import {
   setProfileValue,
 } from '../domain/knowledge/profile.ts';
 import {
+  PROJECT_KINDS,
+  type ProjectKind,
+  periodEnd,
+  projectKind,
+} from '../domain/knowledge/project-kind.ts';
+import {
   createProject,
   deleteProject,
   listProjects,
@@ -29,6 +35,12 @@ import {
   requireProject,
   updateProject,
 } from '../domain/knowledge/projects.ts';
+import {
+  GhUnavailable,
+  RepositoryList,
+  type RepositorySuggestion,
+  suggestRepositories,
+} from '../domain/knowledge/repo-suggest.ts';
 import {
   addSource,
   deleteSource,
@@ -47,6 +59,7 @@ import {
   SourceKind as PbSourceKind,
   type Project,
   ProjectSchema,
+  RepositorySuggestionSchema,
   type Source,
   SourceSchema,
 } from '../gen/applyant/v1/applyant_pb.js';
@@ -79,6 +92,25 @@ function statusFromPb(status: PbFactStatus): FactStatus | undefined {
   return undefined;
 }
 
+/** Jobs newest first (as a CV reads), then built projects newest first; undated ones by name. */
+function inCvOrder<T extends ProjectSummary>(list: T[]): T[] {
+  const now = new Date();
+  return [...list].sort(
+    (a, b) =>
+      Number(projectKind(a) !== 'position') - Number(projectKind(b) !== 'position') ||
+      (periodEnd(b.period, now) ?? -1) - (periodEnd(a.period, now) ?? -1) ||
+      a.name.localeCompare(b.name),
+  );
+}
+
+function projectKindFromPb(kind: string): ProjectKind {
+  const k = kind.trim().toLowerCase();
+  if (!(PROJECT_KINDS as readonly string[]).includes(k)) {
+    throw new ConnectError(`kind is position or project, not "${kind}"`, Code.InvalidArgument);
+  }
+  return k as ProjectKind;
+}
+
 export function projectToPb(p: ProjectSummary): Project {
   return create(ProjectSchema, {
     id: BigInt(p.id),
@@ -92,6 +124,7 @@ export function projectToPb(p: ProjectSummary): Project {
     factCount: p.facts,
     unconfirmedCount: p.unconfirmed,
     confirmedCount: p.confirmed,
+    kind: projectKind(p),
   });
 }
 
@@ -172,6 +205,9 @@ function profileEntries(profile: Record<string, unknown>) {
     }));
 }
 
+/** The candidate's GitHub repositories, listed once in a while (shared by every call). */
+const repositories = new RepositoryList();
+
 export function candidateRpcs(
   c: RpcContext,
 ): Pick<
@@ -184,6 +220,7 @@ export function candidateRpcs(
   | 'updateProject'
   | 'deleteProject'
   | 'addSource'
+  | 'suggestRepositories'
   | 'syncSources'
   | 'deleteSource'
   | 'listFacts'
@@ -199,7 +236,7 @@ export function candidateRpcs(
         .get();
       return {
         profile: profileEntries(getProfile(c.db)),
-        projects: listProjects(c.db).map(projectToPb),
+        projects: inCvOrder(listProjects(c.db)).map(projectToPb),
         profileSources: listSources(c.db, null).map(sourceToPb),
         profileFactCount: Number(profileFacts?.n ?? 0),
       };
@@ -234,7 +271,7 @@ export function candidateRpcs(
     },
 
     listProjects() {
-      return { projects: listProjects(c.db).map(projectToPb) };
+      return { projects: inCvOrder(listProjects(c.db)).map(projectToPb) };
     },
 
     getProject(req) {
@@ -260,6 +297,7 @@ export function candidateRpcs(
             ...(req.role === undefined ? {} : { role: req.role }),
             ...(req.period === undefined ? {} : { period: req.period }),
             ...(req.stack === undefined ? {} : { stack: req.stack.values }),
+            ...(req.kind === undefined ? {} : { kind: projectKindFromPb(req.kind) }),
           },
           c.now(),
         );
@@ -302,6 +340,40 @@ export function candidateRpcs(
           enqueuedSourceIds: res.enqueued.map((id) => BigInt(id)),
         };
       });
+    },
+
+    async suggestRepositories(req) {
+      const project = requireProject(c.db, req.project);
+      let listed: Awaited<ReturnType<RepositoryList['list']>>;
+      try {
+        listed = await repositories.list();
+      } catch (err) {
+        if (err instanceof GhUnavailable) {
+          throw new ConnectError(err.message, Code.FailedPrecondition);
+        }
+        throw new ConnectError(
+          `couldn't list your repositories: ${(err as Error).message}`,
+          Code.Unavailable,
+        );
+      }
+      const taken = listSources(c.db)
+        .filter((s) => s.kind === 'github')
+        .map((s) => s.locator);
+      const { matches, others } = suggestRepositories(
+        { name: project.name, summary: project.summary, stack: project.stack ?? [] },
+        listed.repos,
+        taken,
+      );
+      const toPb = (r: RepositorySuggestion) =>
+        create(RepositorySuggestionSchema, {
+          url: r.url,
+          fullName: r.fullName,
+          description: r.description ?? undefined,
+          pushedAt: r.pushedAt ? timestampFromDate(r.pushedAt) : undefined,
+          private: r.private,
+          reason: r.reason,
+        });
+      return { matches: matches.map(toPb), others: others.map(toPb), accounts: listed.accounts };
     },
 
     deleteSource(req) {

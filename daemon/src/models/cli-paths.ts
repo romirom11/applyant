@@ -1,5 +1,5 @@
-// Where the agent CLIs live. A launchd agent doesn't inherit the shell's PATH, so the daemon
-// looks for `claude` and `codex` itself, at explicit places, and hands the SDKs the path:
+// Where the CLIs live. A launchd agent doesn't inherit the shell's PATH, so the daemon looks
+// for `claude`, `codex` and `gh` itself, at explicit places, and runs them by that path:
 //
 //   $APPLYANT_<TOOL>_PATH → ~/.local/bin → ~/.npm-global/bin → /opt/homebrew/bin → /usr/local/bin
 //     → the login shell's PATH (last resort)
@@ -12,8 +12,9 @@ import { accessSync, constants, statSync } from 'node:fs';
 import { homedir, userInfo } from 'node:os';
 import { delimiter, dirname, join } from 'node:path';
 
-export type Tool = 'claude' | 'codex';
-export const TOOLS: readonly Tool[] = ['claude', 'codex'];
+/** The agent CLIs, and `gh`: the GitHub CLI that reads PRs and private repositories. */
+export type Tool = 'claude' | 'codex' | 'gh';
+export const TOOLS: readonly Tool[] = ['claude', 'codex', 'gh'];
 
 type Env = Record<string, string | undefined>;
 

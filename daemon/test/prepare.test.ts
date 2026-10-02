@@ -9,6 +9,7 @@ import { postings } from '../src/db/schema.ts';
 import { setFieldValue } from '../src/domain/applications/review.ts';
 import {
   applicationView,
+  autoPrepare,
   catchUpApplications,
   ensureApplication,
   getApplicationRow,
@@ -380,6 +381,41 @@ describe('prepare_application', () => {
       [high, 'ready_for_review'],
     ]);
     expect(tx((x) => catchUpApplications(x, 80))).toBe(0);
+  });
+
+  it('starts at most the daily allowance on its own; what you ask for is always prepared', async () => {
+    t = tempDb();
+    setProfile(t.db, SYNTHETIC_PROFILE, now);
+    const read = form([spec('Email', 'text', { meaning: 'email', required: true })]);
+    const best = seedPosting(t.db, read, { now });
+    const good = seedPosting(t.db, read, { now });
+    const third = seedPosting(t.db, read, { now });
+    t.db.update(postings).set({ score: 95 }).where(eq(postings.id, best)).run();
+    t.db.update(postings).set({ score: 85 }).where(eq(postings.id, good)).run();
+    t.db.update(postings).set({ score: 82 }).where(eq(postings.id, third)).run();
+    await start();
+    // An allowance of one: the best-scoring posting gets it.
+    expect(tx((x) => catchUpApplications(x, 80, 1))).toBe(1);
+    expect(listApplications(t.db).map((a) => a.postingId)).toEqual([best]);
+    expect(tx((x) => autoPrepare(x, good, 'score 85 ≥ 80', 1))).toBe(false);
+    expect(listApplications(t.db)).toHaveLength(1);
+    // 0 switches automatic preparing off.
+    expect(tx((x) => catchUpApplications(x, 80, 0))).toBe(0);
+    // Interested is the candidate asking: prepared whatever the allowance.
+    recordDecision(t.db, (h as PrepareHarness).bus, {
+      id: third,
+      decision: 'interested',
+      reason: null,
+      now,
+    });
+    await settle();
+    expect(
+      listApplications(t.db)
+        .map((a) => a.postingId)
+        .sort(),
+    ).toEqual([best, third].sort());
+    // With room again, the one that waited is prepared.
+    expect(tx((x) => autoPrepare(x, good, 'score 85 ≥ 80', 10))).toBe(true);
   });
 
   it('a question the facts can’t answer waits for the candidate', async () => {

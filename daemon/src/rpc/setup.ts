@@ -59,6 +59,7 @@ function toolToPb(t: ToolCheck): ToolStatus {
     version: t.version ?? '',
     signedIn: t.signedIn,
     error: t.error ?? '',
+    account: t.account ?? '',
   });
 }
 
@@ -94,10 +95,7 @@ async function connections(db: Conn, secrets: Secrets) {
   const googleOnly = (what: string) =>
     google
       ? conn(true, `through ${box?.address}`)
-      : conn(
-          false,
-          `Needs a Google mailbox (one consent covers Gmail, Calendar and Drive): ${what}`,
-        );
+      : conn(false, `Needs a Google mailbox (one consent covers Gmail and Calendar): ${what}`);
   return {
     jev: jev
       ? conn(true, 'key stored')
@@ -110,7 +108,7 @@ async function connections(db: Conn, secrets: Secrets) {
       : conn(false, 'Without your login, no commit counts as your own work'),
     mailbox,
     calendar: googleOnly('interview invites become calendar events'),
-    drive: googleOnly('Docs and Drive files as knowledge sources'),
+    drive: conn(false, 'Not asked for: add a Google Doc as a downloaded PDF instead'),
     telegram: telegram
       ? conn(true, account ?? 'connected')
       : conn(
@@ -131,6 +129,7 @@ export async function setupStatus(
   const status = create(SetupStatusSchema, {
     claude: toolToPb(checks.tools.claude),
     codex: toolToPb(checks.tools.codex),
+    gh: toolToPb(checks.tools.gh),
     nativeHelper: native,
     secretsBackend: o.secrets.backend,
     pid: BigInt(process.pid),

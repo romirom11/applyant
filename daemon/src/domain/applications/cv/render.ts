@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 import type { ReaderPool } from '../../../browser/reader-pool.ts';
 import type { CvPlan } from '../../../db/schema.ts';
 import type { StandardProfile } from '../../knowledge/profile.ts';
+import { periodEnd, projectKind } from '../../knowledge/project-kind.ts';
 
 export const BUNDLED_TEMPLATE = fileURLToPath(new URL('./templates/clean/', import.meta.url));
 
@@ -57,6 +58,15 @@ export function cvHeader(p: StandardProfile): CvHeader | null {
 const esc = (s: string) =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
+/** "Head of IT · KILOGRAMM LLC" for a job whose name is only the employer. */
+function heading(p: CvPlan['projects'][number], kind: 'position' | 'project'): string {
+  const role = p.role?.trim();
+  if (kind !== 'position' || !role || p.name.toLowerCase().includes(role.toLowerCase())) {
+    return p.name;
+  }
+  return `${role} · ${p.name}`;
+}
+
 export function cvBody(plan: CvPlan, header: CvHeader): string {
   const out: string[] = [];
   const contact = header.contact
@@ -76,14 +86,24 @@ export function cvBody(plan: CvPlan, header: CvHeader): string {
       '</section>',
     );
   }
-  const projects = plan.projects.filter((p) => p.bullets.length);
-  if (projects.length) {
-    out.push('<section class="cv-section cv-experience">', '<h2>Experience</h2>');
-    for (const p of projects) {
+  const shown = plan.projects.filter((p) => p.bullets.length);
+  const kindOf = (p: CvPlan['projects'][number]) =>
+    p.kind ?? projectKind({ name: p.name, role: null, period: p.period });
+  // Jobs newest first (a CV reads backwards in time); built projects in the writer's order.
+  const jobs = shown
+    .filter((p) => kindOf(p) === 'position')
+    .map((p, i) => ({ p, i, end: periodEnd(p.period) }))
+    .sort((a, b) => (b.end ?? -1) - (a.end ?? -1) || a.i - b.i)
+    .map((x) => x.p);
+  const built = shown.filter((p) => kindOf(p) === 'project');
+  const section = (cls: string, title: string, list: typeof shown) => {
+    if (!list.length) return;
+    out.push(`<section class="cv-section ${cls}">`, `<h2>${title}</h2>`);
+    for (const p of list) {
       out.push(
         '<article class="cv-project">',
         '<div class="cv-project-head">',
-        `<h3>${esc(p.name)}</h3>`,
+        `<h3>${esc(heading(p, kindOf(p)))}</h3>`,
         p.period ? `<span class="cv-period">${esc(p.period)}</span>` : '',
         '</div>',
         '<ul class="cv-bullets">',
@@ -93,7 +113,9 @@ export function cvBody(plan: CvPlan, header: CvHeader): string {
       );
     }
     out.push('</section>');
-  }
+  };
+  section('cv-experience', 'Experience', jobs);
+  section('cv-projects', 'Projects', built);
   if (plan.education.length) {
     out.push(
       '<section class="cv-section cv-education">',

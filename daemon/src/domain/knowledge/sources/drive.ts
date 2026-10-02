@@ -1,6 +1,8 @@
 // drive sources: a Google Doc, Sheet or Slides deck, or a PDF / DOCX / text file kept in the
 // candidate's Google Drive. Read through the Drive REST API with the phase-13 Google consent
-// (`drive.readonly`); plain fetch like gmail.ts and gcal.ts.
+// (`drive.readonly`); plain fetch like gmail.ts and gcal.ts. The consent no longer asks for that
+// scope (the owner keeps nothing in Drive), so a Drive source now fails with what to do instead;
+// the reader stays for an account that was connected with it.
 //   metadata        files.get fields=id,name,mimeType,modifiedTime,size,webViewLink
 //   Google formats  files.export → text/markdown (Docs, so headings survive for locators),
 //                   text/csv (Sheets: the first sheet), text/plain (Slides)
@@ -144,7 +146,7 @@ export class GoogleDrive implements DriveApi {
     }
     if (res.status === 401 || reason === 'insufficientPermissions') {
       throw new DriveError(
-        `Google Drive refused access (${msg}): connect Google again (\`applyant mail connect gmail\`)`,
+        `Google Drive refused access (${msg}). Applyant's Google consent doesn't include Drive: download the document (File → Download → PDF) and add that file instead`,
         true,
       );
     }
@@ -230,7 +232,7 @@ export async function readDriveSource(
   });
   if (!api) {
     throw new SourceReadError(
-      'Google Drive needs a connected Google account: `applyant mail connect gmail` (one consent covers Gmail, Calendar and Drive)',
+      "Applyant's Google consent doesn't include Drive: download the document (File → Download → PDF) and add that file instead",
       true,
     );
   }

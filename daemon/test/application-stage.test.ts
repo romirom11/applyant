@@ -80,6 +80,35 @@ describe('setting an application status by hand', () => {
     expect(t.db.select().from(tasks).all()).toEqual([]);
   });
 
+  it('takes an approval back after a hand-off: review again, hand-off closed, nothing queued', () => {
+    const a = addApp('approved');
+    t.db
+      .update(applications)
+      .set({ submitAttemptedAt: now, approvedAt: now })
+      .where(eq(applications.id, a.id))
+      .run();
+    const handOff = t.db
+      .insert(tasks)
+      .values({ kind: 'deliver_application', entityId: a.id, status: 'needs_candidate' })
+      .returning()
+      .get();
+    expect(set(a.id, 'ready_for_review')).toMatchObject({
+      stage: 'ready_for_review',
+      approvedAt: null,
+      submitAttemptedAt: null,
+    });
+    expect(t.db.select().from(tasks).where(eq(tasks.id, handOff.id)).get()?.status).toBe('done');
+    expect(t.db.select().from(tasks).where(eq(tasks.status, 'queued')).all()).toEqual([]);
+
+    // Only from approved, and never while a delivery is under way.
+    expect(refuseStage({ id: 1, stage: 'applied' }, 'ready_for_review', false)).toMatch(
+      /only an approved application that hasn't been sent/,
+    );
+    expect(refuseStage({ id: 1, stage: 'approved' }, 'ready_for_review', true)).toMatch(
+      /being delivered/,
+    );
+  });
+
   it('SetApplicationStage: FailedPrecondition with the reason; refused while delivering', () => {
     const rpc = applicationRpcs({ db: t.db, bus, now: () => now }) as Required<
       ReturnType<typeof applicationRpcs>

@@ -25,6 +25,8 @@ For each numbered sentence decide whether its cited facts support everything it 
 - issue "unsupported": a claim about the candidate that no cited fact shows at all.
 - A sentence with no cited facts is supported only if it claims nothing about the candidate (interest in the company or role, courtesy, a statement about the employer).
 - issue "none" when supported.
+- The project and role given with a fact are true: "as Tech Lead" or "I founded X" is supported when the fact's project shows that role.
+- Statements about the employer, the posting or what the candidate wants next are not claims about the candidate.
 Judge only by the cited facts, not by what is plausible. Return one verdict per sentence, with its number and a one-sentence note.`;
 
 export interface SentenceToCheck {
@@ -43,7 +45,10 @@ export function answerCheckPrompt(items: SentenceToCheck[], offset = 0): string 
   const blocks = items.map((s, i) => {
     const facts = s.facts.length
       ? s.facts
-          .map((f) => `  #${f.id}: ${f.text}${f.period ? ` (period: ${f.period})` : ''}`)
+          .map(
+            (f) =>
+              `  #${f.id}: ${f.text}${[f.project ? `project: ${f.project}` : '', f.period ? `period: ${f.period}` : ''].filter(Boolean).length ? ` (${[f.project ? `project: ${f.project}` : '', f.period ? `period: ${f.period}` : ''].filter(Boolean).join('; ')})` : ''}`,
+          )
           .join('\n')
       : '  (no facts cited)';
     return `Sentence ${offset + i + 1}: ${s.text}\nCited facts:\n${facts}`;
@@ -69,13 +74,20 @@ export async function checkSentences(
     progress?(message: string): void;
     /** Texts whose numbers need no fact (the profile values stated for this application). */
     allowedNumbers?: string[];
+    /** The posting's text: numbers about the employer a sentence may repeat. */
+    employerText?: string | null;
   },
 ): Promise<VerifyResult> {
   const results = new Map<string, SentenceResult>();
   const toVerify: SentenceToCheck[] = [];
   const absent = new Map<string, string>();
   for (const s of items) {
-    const n = checkNumbers(s.text, s.facts, o.allowedNumbers ?? []);
+    const n = checkNumbers(
+      s.text,
+      s.facts,
+      o.allowedNumbers ?? [],
+      o.employerText ? [o.employerText] : [],
+    );
     if (n.kind === 'contradiction') {
       results.set(s.key, { flag: 'contradiction', note: describeCheck(n) });
       continue;

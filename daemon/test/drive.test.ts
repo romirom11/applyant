@@ -170,6 +170,7 @@ describe('sync_source on Drive files', () => {
         projects: [
           {
             name: 'Harbor',
+            kind: 'project',
             summary: 'Call analytics for sales teams',
             role: null,
             period: null,
@@ -267,7 +268,7 @@ describe('sync_source on Drive files', () => {
       now,
     });
     await worker.idle();
-    expect(note(noGoogle.id)).toMatch(/needs a connected Google account/);
+    expect(note(noGoogle.id)).toMatch(/consent doesn.t include Drive: download the document/);
     expect(fake.requests).toHaveLength(0);
     expect(() =>
       addSource(t.db, bus, { project: null, kind: 'drive', locator: 'https://example.com/x', now }),

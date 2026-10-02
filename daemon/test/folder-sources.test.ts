@@ -211,7 +211,14 @@ async function fakeDrive(): Promise<FakeDrive> {
 
 const folderExtraction: SourceExtraction = {
   projects: [
-    { name: 'Harbor', summary: 'Call analytics', role: null, period: null, stack: ['Python'] },
+    {
+      kind: 'project',
+      name: 'Harbor',
+      summary: 'Call analytics',
+      role: null,
+      period: null,
+      stack: ['Python'],
+    },
   ],
   facts: [
     {

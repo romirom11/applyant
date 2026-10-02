@@ -17,6 +17,10 @@ service ApplyantService {
   rpc SkipPosting(SkipPostingRequest) returns (SkipPostingResponse);
   // MarkInterested records interest (undoing a skip) as feedback and re-scores.
   rpc MarkInterested(MarkInterestedRequest) returns (MarkInterestedResponse);
+  // UndoDecision takes a skip (or an interest) back: the posting returns to the Inbox as if it
+  // had never been decided on, its feedback is dropped and scores are re-computed. An
+  // application that was already started stays.
+  rpc UndoDecision(UndoDecisionRequest) returns (UndoDecisionResponse);
   // ScorePostings enqueues score_posting; cached extractions and matches are reused.
   rpc ScorePostings(ScorePostingsRequest) returns (ScorePostingsResponse);
   // ReadForms enqueues read_form: the posting's application form is read (again), read-only.
@@ -63,6 +67,11 @@ service ApplyantService {
   rpc SyncSources(SyncSourcesRequest) returns (SyncSourcesResponse);
   // DeleteSource removes one source with its evidence; facts only it supported go too.
   rpc DeleteSource(DeleteSourceRequest) returns (DeleteSourceResponse);
+  // SuggestRepositories lists the candidate's own GitHub repositories (through the signed-in
+  // `gh`, their account and its organisations) for a project: the ones that look like it
+  // first, with why, then the rest, newest push first. Repositories already a source of any
+  // project are left out. Needs `gh` signed in (FailedPrecondition otherwise).
+  rpc SuggestRepositories(SuggestRepositoriesRequest) returns (SuggestRepositoriesResponse);
   rpc ListFacts(ListFactsRequest) returns (ListFactsResponse);
   // ConfirmFact marks facts as true in the candidate's own judgement.
   rpc ConfirmFact(ConfirmFactRequest) returns (ConfirmFactResponse);
@@ -135,7 +144,9 @@ service ApplyantService {
   // OFFER, REJECTED or WITHDRAWN. Recorded as a manual `application.stage` event. It never
   // delivers anything; moves that can't be true are refused (FailedPrecondition, saying why):
   // a reply stage before the application was sent, a stage only the pipeline sets (preparing,
-  // review, approved), or while a delivery is under way.
+  // approved), or while a delivery is under way. READY_FOR_REVIEW takes an approval back: only
+  // from APPROVED with no delivery under way (after a hand-off); its hand-off closes, and only a
+  // new approval sends it.
   rpc SetApplicationStage(SetApplicationStageRequest) returns (SetApplicationStageResponse);
   // The candidate's own notes on an application (free text; empty clears them).
   rpc SetApplicationNotes(SetApplicationNotesRequest) returns (SetApplicationNotesResponse);
@@ -453,6 +464,15 @@ message MarkInterestedResponse {
   int32 rescored = 2;
 }
 
+message UndoDecisionRequest {
+  int64 id = 1;
+}
+
+message UndoDecisionResponse {
+  Posting posting = 1;
+  int32 rescored = 2;
+}
+
 message ScorePostingsRequest {
   // Empty: every verified or scored posting.
   repeated int64 ids = 1;
@@ -482,8 +502,8 @@ message Money {
 }
 
 message Preferences {
-  // Role families: ai_ml, backend, fullstack, frontend, data, platform, mobile, security,
-  // founding, management, research, other. Empty = any.
+  // The job titles the candidate is after, in their own words ("CFO", "Chef", "Backend
+  // Engineer"). Empty = any. Each posting is judged against them (the role_fit decision).
   repeated string roles = 1;
   repeated string seniority = 2;
   optional string based_in = 3;
@@ -501,6 +521,16 @@ message Preferences {
   // Bounded feedback nudges per component (1 = none).
   map<string, double> feedback_multipliers = 12;
   int32 threshold = 13;
+  // How many applications may be started on their own per 24 hours (each costs a writer run,
+  // a tailored CV and company research); 0 = none. Set with key `daily_cap`.
+  int32 daily_cap = 14;
+  // The city the candidate lives in (free text): an office elsewhere in their own country
+  // counts for less than one in their city.
+  optional string based_city = 15;
+  // ISO 639-1 codes of the languages the candidate would rather work in (a German-speaking
+  // team, a Ukrainian one). A posting that works only in other languages counts for less;
+  // empty = no preference. Set with key `working_languages`.
+  repeated string working_languages = 16;
 }
 
 message GetPreferencesRequest {}
@@ -511,7 +541,9 @@ message GetPreferencesResponse {
 
 message SetPreferenceRequest {
   // roles | seniority | based_in | locations | remote | salary | salary_floor | languages |
-  // employment | dealbreakers | threshold | weight.<component> | weights
+  // employment | dealbreakers | threshold | daily_cap | based_city | working_languages |
+  // weight.<component> |
+  // weights. `roles` takes job titles separated by `;`, a new line or a comma.
   string key = 1;
   // Lists are comma-separated; empty resets the key ("reset" for weights).
   string value = 2;
@@ -689,6 +721,8 @@ message ToolStatus {
   bool signed_in = 5;
   // Why it's missing, can't run or isn't signed in; empty when all is well.
   string error = 6;
+  // gh only: the GitHub account it is signed in as.
+  string account = 7;
 }
 
 message SetupStatus {
@@ -720,6 +754,8 @@ message SetupStatus {
   bool search_started = 18;
   // Every step is done, skipped or left for later: the app stops showing the setup on launch.
   bool setup_done = 19;
+  // The GitHub CLI: PRs and private repositories are read through its sign-in.
+  ToolStatus gh = 20;
 }
 
 message Connection {
@@ -805,6 +841,9 @@ message Project {
   int32 fact_count = 9;
   int32 unconfirmed_count = 10;
   int32 confirmed_count = 11;
+  // position (a job, a freelance engagement: a CV's Experience) | project (something built: a
+  // CV's Projects). Guessed from the name and role until the extractor or the candidate says.
+  string kind = 12;
 }
 
 enum SourceKind {
@@ -922,6 +961,8 @@ message UpdateProjectRequest {
   optional string period = 5;
   // Set to replace.
   optional StringList stack = 6;
+  // position | project
+  optional string kind = 7;
 }
 
 message UpdateProjectResponse {
@@ -950,6 +991,33 @@ message AddSourceResponse {
   Source source = 1;
   // False when the same source was already there (no sync is enqueued then).
   bool created = 2;
+}
+
+message SuggestRepositoriesRequest {
+  // Project id, slug or name.
+  string project = 1;
+}
+
+message RepositorySuggestion {
+  // https://github.com/<owner>/<name>
+  string url = 1;
+  // "<owner>/<name>"
+  string full_name = 2;
+  optional string description = 3;
+  optional google.protobuf.Timestamp pushed_at = 4;
+  bool private = 5;
+  // It looks like this project: why ("its name is close to Solovei", "its description names
+  // Speechmatics"). Empty for the rest of the list.
+  string reason = 6;
+}
+
+message SuggestRepositoriesResponse {
+  // The ones that look like the project, best first.
+  repeated RepositorySuggestion matches = 1;
+  // Every other repository of the candidate's, newest push first.
+  repeated RepositorySuggestion others = 2;
+  // Which account(s) were listed ("romirom11", "kdn-agency").
+  repeated string accounts = 3;
 }
 
 message SyncSourcesRequest {
@@ -2149,7 +2217,7 @@ message Email {
   string from_address = 2;
   optional string from_name = 3;
   string subject = 4;
-  // The start of the text.
+  // The text, up to about 1200 characters (cut at a word, with "…").
   string snippet = 5;
   google.protobuf.Timestamp received_at = 6;
   // rejection | interview | offer | acknowledgement | security_code | other | unknown

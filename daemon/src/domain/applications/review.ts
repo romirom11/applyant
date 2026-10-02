@@ -446,7 +446,13 @@ export function approveApplication(tx: Tx, applicationId: number): ApplicationRo
   }
   const row = tx.db
     .update(applications)
-    .set({ stage: 'approved', approvedAt: tx.now, note: null, updatedAt: tx.now })
+    .set({
+      stage: 'approved',
+      approvedAt: tx.now,
+      submitAttemptedAt: null,
+      note: null,
+      updatedAt: tx.now,
+    })
     .where(eq(applications.id, applicationId))
     .returning()
     .get();
@@ -459,6 +465,15 @@ export function approveApplication(tx: Tx, applicationId: number): ApplicationRo
 /** `applications submit`: approve if needed, then (re-)enqueue delivery either way. */
 export function submitApplication(tx: Tx, applicationId: number): ApplicationRow {
   const row = approveApplication(tx, applicationId);
+  // The candidate asks for it again, knowing what the last attempt did: a submission that was
+  // pressed and never confirmed no longer holds delivery back.
+  if (row.submitAttemptedAt) {
+    tx.db
+      .update(applications)
+      .set({ submitAttemptedAt: null, updatedAt: tx.now })
+      .where(eq(applications.id, applicationId))
+      .run();
+  }
   enqueueDelivery(tx, applicationId);
   return row;
 }

@@ -31,6 +31,7 @@ import {
   type ComponentKey,
   LOGISTICS_KEYS,
   type RequirementMatch,
+  type RoleVerdict,
   type ScoreResult,
   type Weights,
 } from './types.ts';
@@ -42,14 +43,17 @@ export interface ScoreInput {
   fx: FxRates | null;
   /** Where the posting's listings say it is (a role listed per country has several). */
   locations?: string[] | null;
+  /**
+   * How the posting compares with the roles the candidate is after (role-fit.ts). Null/absent:
+   * not judged (yet), so the role counts on seniority alone.
+   */
+  roleFit?: RoleVerdict | null;
   /** The company's research: its red flags. Null/absent = not researched. */
   company?: CompanyScoreInfo | null;
 }
 
 /** Salary value = 1 − SALARY_SLOPE × shortfall: 5% below → 0.88, 17% → 0.58, 40% → 0. */
 export const SALARY_SLOPE = 2.5;
-/** Score when nothing at all can be compared. */
-export const NOTHING_KNOWN = 50;
 /** The highest score a role out of the candidate's reach can get. */
 export const OUT_OF_REACH_CAP = 30;
 /** Core fit at or above this lets logistics count in full. */
@@ -83,7 +87,7 @@ export function score(input: ScoreInput, prefs: Preferences, w: Weights): ScoreR
       'nice',
       input.matches.filter((m) => !m.must),
     ),
-    rolePart(p, prefs, hard),
+    rolePart(p, prefs, hard, input.roleFit ?? null),
     locationPart(p, prefs, hard, input.locations ?? []),
     remotePart(p, prefs, hard),
     salaryPart(p, prefs, input.fx, (text) => dealbreakers.push(text)),
@@ -119,7 +123,15 @@ export function score(input: ScoreInput, prefs: Preferences, w: Weights): ScoreR
     total += c.weight;
     sum += c.weight * c.value * c.scale;
   }
-  let result = total > 0 ? Math.round((100 * sum) / total) : NOTHING_KNOWN;
+  let result = total > 0 ? Math.round((100 * sum) / total) : 0;
+  // A posting that lists nothing to match (an empty description, only conditions) says nothing
+  // about how well the candidate fits: it gets no number at all, rather than one made of the
+  // title and the logistics. The breakdown still shows what could be compared.
+  const musts = breakdown.find((c) => c.key === 'must');
+  const unscorable = !must && !!musts;
+  if (unscorable && musts) {
+    musts.note = `${musts.note ?? ''} · nothing to compare with your experience, so no score: open the posting and decide yourself`;
+  }
   const where = breakdown.find((c) => c.key === 'location');
   if (where && where.weight > 0 && !where.uncertain && where.value === 0) {
     if (result > OUT_OF_REACH_CAP) {
@@ -128,7 +140,7 @@ export function score(input: ScoreInput, prefs: Preferences, w: Weights): ScoreR
     result = Math.min(result, OUT_OF_REACH_CAP);
   }
   return {
-    score: Math.max(0, Math.min(100, result)),
+    score: unscorable ? null : Math.max(0, Math.min(100, result)),
     coreFit: coreFit === null ? null : round2(coreFit),
     breakdown,
     dealbreakers,
@@ -190,26 +202,23 @@ const LEVEL: Record<Seniority, number> = {
   head: 5,
 };
 
-const FAMILY_LABEL: Record<string, string> = {
-  ai_ml: 'AI/ML',
-  backend: 'backend',
-  fullstack: 'full-stack',
-  frontend: 'frontend',
-  data: 'data',
-  platform: 'platform',
-  mobile: 'mobile',
-  security: 'security',
-  founding: 'founding',
-  management: 'management',
-  research: 'research',
-  other: 'other',
-};
-
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 type Hard = (d: Preferences['dealbreakers'][number], text: string) => void;
 
-function rolePart(p: PostingExtraction, prefs: Preferences, hard: Hard): Part {
+/** What each role verdict is worth, and how the breakdown says it. */
+const ROLE_FIT: Record<RoleVerdict, { value: number; note: string }> = {
+  same: { value: 1, note: "One of the roles you're after" },
+  close: { value: 0.6, note: 'Close to the roles you want' },
+  different: { value: 0.2, note: "Not a role you're after" },
+};
+
+function rolePart(
+  p: PostingExtraction,
+  prefs: Preferences,
+  hard: Hard,
+  roleFit: RoleVerdict | null,
+): Part {
   const wantsFamily = prefs.roles.length > 0;
   const wantsLevel = prefs.seniority.length > 0;
   if (!wantsFamily && !wantsLevel) return part('role', false, 1, 'no role preferences');
@@ -231,12 +240,10 @@ function rolePart(p: PostingExtraction, prefs: Preferences, hard: Hard): Part {
     }
   }
   if (wantsFamily) {
-    const families = p.roleFamilies.map((f) => FAMILY_LABEL[f] ?? f).join(', ');
-    if (p.roleFamilies.length === 0) notes.push('kind of role unclear');
+    if (!roleFit) notes.push('not compared with your roles yet');
     else {
-      const overlap = p.roleFamilies.some((f) => prefs.roles.includes(f));
-      factors.push(overlap ? 1 : 0.2);
-      notes.push(overlap ? families : `${families} · not a role you're after`);
+      factors.push(ROLE_FIT[roleFit].value);
+      notes.push(ROLE_FIT[roleFit].note);
     }
   }
   if (factors.length === 0) return part('role', true, 0, notes.join(' · '), true);
@@ -297,7 +304,45 @@ function locationPart(
     return part('location', true, 0, `Listed only in ${shown} · not ${bases.join('/')}`);
   };
   const own = locationFromPosting(p, bases, officeOk, reachable ? () => {} : hard);
-  return where(own);
+  return otherCity(where(own), p, prefs);
+}
+
+/** What an office in the candidate's country, but not their city, is worth. */
+export const OTHER_CITY_VALUE = 0.6;
+
+const sameCity = (a: string, b: string) => {
+  const norm = (s: string) =>
+    s
+      .normalize('NFD')
+      .replace(/\p{M}/gu, '')
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}]+/gu, ' ')
+      .trim();
+  return norm(a) === norm(b);
+};
+
+/**
+ * An office job in the candidate's own country but another city means a move or a long
+ * commute: it counts, for less. Remote work, an office in their city, one whose city isn't
+ * stated, and offices in the other countries they named are left as they are.
+ */
+function otherCity(base: Part, p: PostingExtraction, prefs: Preferences): Part {
+  const city = prefs.basedCity;
+  if (!city || !prefs.basedIn || base.value !== 1 || base.uncertain) return base;
+  if (p.workplace !== 'onsite' && p.workplace !== 'hybrid') return base;
+  const offices = p.offices.filter((o) => o.country);
+  const fine = offices.some(
+    (o) =>
+      (o.country === prefs.basedIn && (!o.city || sameCity(o.city, city))) ||
+      (o.country !== prefs.basedIn && prefs.locations.includes(o.country ?? '')),
+  );
+  const elsewhere = offices.filter((o) => o.country === prefs.basedIn && o.city);
+  if (fine || elsewhere.length === 0) return base;
+  const where = elsewhere
+    .slice(0, 3)
+    .map((o) => o.city)
+    .join(', ');
+  return part('location', true, OTHER_CITY_VALUE, `Office in ${where} · you're in ${city}`);
 }
 
 function locationFromPosting(
@@ -433,7 +478,8 @@ function languagePart(p: PostingExtraction, prefs: Preferences, hard: Hard): Par
   const written = p.postingLanguage?.toLowerCase();
   // A posting written in a language asks for it, even when it doesn't say so.
   if (written && !listed.has(written)) required.push({ language: written, level: 'professional' });
-  if (required.length === 0) return part('language', true, 1, 'no language requirements');
+  if (required.length === 0)
+    return workingLanguage(part('language', true, 1, 'no language requirements'), p, prefs);
 
   let worst = { factor: 2, note: '' };
   for (const r of required) {
@@ -449,7 +495,39 @@ function languagePart(p: PostingExtraction, prefs: Preferences, hard: Hard): Par
     if (!have) hard('language', `${name} required`);
     if (factor < worst.factor) worst = { factor, note };
   }
-  return part('language', true, worst.factor, worst.note);
+  return workingLanguage(part('language', true, worst.factor, worst.note), p, prefs);
+}
+
+/** What a posting in none of the languages the candidate would rather work in is worth. */
+export const OTHER_WORKING_LANGUAGE = 0.5;
+
+/**
+ * The candidate would rather work in certain languages (a German-speaking team). A posting
+ * that names one of them, or is written in one, is fine; one that works only in others counts
+ * for less. Nothing known about the posting's languages: left as it is.
+ */
+function workingLanguage(base: Part, p: PostingExtraction, prefs: Preferences): Part {
+  const wanted = prefs.workingLanguages;
+  if (wanted.length === 0 || base.value === 0) return base;
+  const spoken = new Set(p.languages.map((l) => l.language.toLowerCase()));
+  if (p.postingLanguage) spoken.add(p.postingLanguage.toLowerCase());
+  if (spoken.size === 0) return base;
+  const names = (codes: Iterable<string>) =>
+    [...codes].map((c) => LANGUAGE_NAME[c] ?? c).join(', ');
+  // Named among the posting's languages it plainly works in; only written in it is a sign of
+  // the team's language, worth the same but said as what it is.
+  const named = wanted.find((w) => p.languages.some((l) => l.language.toLowerCase() === w));
+  const written = wanted.find((w) => p.postingLanguage?.toLowerCase() === w);
+  if (named) return { ...base, note: `${base.note} · works in ${LANGUAGE_NAME[named] ?? named}` };
+  if (written) {
+    return { ...base, note: `${base.note} · written in ${LANGUAGE_NAME[written] ?? written}` };
+  }
+  return part(
+    'language',
+    true,
+    base.value * OTHER_WORKING_LANGUAGE,
+    `${names(spoken)} only · you'd rather work in ${names(wanted)}`,
+  );
 }
 
 // ---- employment -----------------------------------------------------------------------

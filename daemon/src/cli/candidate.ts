@@ -325,7 +325,7 @@ export function registerCandidate(program: Command, client: () => ApplyantClient
   source
     .command('add <project> <kind> <locator>')
     .description(
-      'add a source and sync it: kind is file (a file, or a folder of documents) | url | github | drive (a Docs, Drive file or Drive folder link, read through the Google account connected with `mail connect gmail`); project "profile" (or "-") for a CV that covers many projects',
+      'add a source and sync it: kind is file (a file, or a folder of documents) | url | github; project "profile" (or "-") for a CV that covers many projects',
     )
     .option('--json', 'print JSON')
     .action(

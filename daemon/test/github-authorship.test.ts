@@ -216,6 +216,7 @@ describe('sync_source on a repository', () => {
       projects: [
         {
           name: 'Nightingale',
+          kind: 'project',
           summary: 'Call analytics for sales teams',
           role: null,
           period: null,
