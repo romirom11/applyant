@@ -122,8 +122,9 @@ import Testing
 
     @Test func thePreferencesFormCoversEveryKeyPrefsSetTakes() {
         let prefs = SearchPreferences.with {
-            $0.roles = ["backend", "ai_ml"]
+            $0.roles = ["Backend Engineer", "CFO", "Chef"]
             $0.basedIn = "GR"
+            $0.basedCity = "Athens"
             $0.remote = "preferred"
             $0.salary = .with { $0.amount = 4500; $0.currency = "EUR"; $0.period = "month" }
             $0.languages = ["en": "C1", "el": "native"]
@@ -136,6 +137,8 @@ import Testing
         #expect(form["salary"] == "4500 EUR/month")
         #expect(form["languages"] == "el:native, en:C1")
         #expect(form["based_in"] == "GR")
+        #expect(form["roles"] == "Backend Engineer; CFO; Chef")
+        #expect(form["based_city"] == "Athens")
         #expect(!form.hasChanges)
         form["seniority"] = "senior, lead"
         form["based_in"] = ""
@@ -147,6 +150,7 @@ import Testing
         #expect(changes == ["seniority=senior, lead", "based_in=", "remote=required", "dealbreakers=outstaffing,onsite",
                             "threshold=75", "weight.salary=20"])
         #expect(PreferencesText.summary(prefs).contains("dealbreakers: outstaffing"))
+        #expect(PreferencesText.summary(prefs).hasPrefix("Backend Engineer, CFO +1 · based in Athens, "))
         #expect(PreferencesText.summary(nil) == "Not loaded yet")
     }
 

@@ -132,6 +132,7 @@ struct SiteSignInSheet: View {
         }
         .padding(20)
         .frame(width: 520)
+        .showsErrors(store)
     }
 }
 

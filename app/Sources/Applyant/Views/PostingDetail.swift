@@ -70,10 +70,14 @@ struct PostingDetail: View {
                 }
                 .buttonStyle(.borderedProminent)
             }
-            if p.decision != "interested" {
+            if p.decision != "interested" && p.decision != "skipped" && p.stage != .skipped {
                 Button("Interested") { Task { await store.markInterested(posting: p.id) } }
             }
-            if p.stage != .skipped {
+            if p.stage == .skipped || p.decision == "skipped" {
+                Button("Back to Inbox") { Task { await store.backToInbox(posting: p.id) } }
+                    .help("Takes the skip back; the posting is undecided again")
+                Button("Interested") { Task { await store.markInterested(posting: p.id) } }
+            } else {
                 Button("Skip…") { skipping = true }
             }
             if Score.canRescore(p) {
@@ -172,7 +176,7 @@ struct PostingDetail: View {
     private var skipSheet: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Skip this posting").font(.headline)
-            Text("The reason decides which weight the feedback nudges (within bounds).")
+            Text("Say why in a few words. Applyant uses it to score similar postings a little lower next time (for example, “salary too low” makes salary count more).")
                 .font(.callout).foregroundStyle(.secondary)
             TextField("e.g. salary too low", text: $skipReason)
                 .textFieldStyle(.roundedBorder)

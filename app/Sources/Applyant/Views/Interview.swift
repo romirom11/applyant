@@ -11,11 +11,19 @@ struct InterviewList: View {
         let rows = store.interviewRows
         Group {
             if rows.waiting.isEmpty && rows.projects.isEmpty {
-                ContentUnavailableView(
-                    "No projects yet",
-                    systemImage: ApplyantKit.Section.interview.symbol,
-                    description: Text("Add a CV or a repository first (`applyant candidate source add`).")
-                )
+                ContentUnavailableView {
+                    Label("No projects yet", systemImage: ApplyantKit.Section.interview.symbol)
+                } description: {
+                    Text("Questions are asked about your projects. Import your CV or add a project first.")
+                } actions: {
+                    Button("Open Projects") {
+                        store.showOnboarding = false
+                        store.navigation.section = .projects
+                    }
+                    if store.showOnboarding {
+                        Button("Back to Import") { store.onboarding.open(.importing) }
+                    }
+                }
             } else {
                 List(selection: Binding(
                     get: { store.navigation.interview },
@@ -34,7 +42,7 @@ struct InterviewList: View {
                 }
             }
         }
-        .navigationTitle("Interview")
+        .navigationTitle("Questions for you")
     }
 }
 
@@ -58,6 +66,7 @@ struct InterviewThreadView: View {
     let target: InterviewTarget
     @State private var answer = ""
     @FocusState private var answering: Bool
+    @State private var dictation = Dictation()
 
     var body: some View {
         Group {
@@ -195,7 +204,7 @@ struct InterviewThreadView: View {
                 Spacer()
                 if let app = store.applications[q.applicationID] {
                     Button("Open the application") {
-                        store.navigation.showReview(application: app.id, posting: app.postingID)
+                        store.navigation.showReview(application: app.id, posting: app.postingID, stage: app.stage)
                     }
                 }
             }
@@ -217,11 +226,19 @@ struct InterviewThreadView: View {
                 .scrollContentBackground(.hidden)
                 .padding(6)
                 .background(Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+            if case let .failed(why) = dictation.state {
+                Text(why).font(.caption).foregroundStyle(.orange)
+            } else if dictation.listening {
+                Text("Listening: speak, then press Stop. You can correct the text before sending.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             HStack {
                 Button("Later") {
+                    dictation.stop()
                     Task { await store.dismissInterview(target, question: q.id) }
                 }
                 .help(q.hasApplicationID ? "You can write this answer yourself in review" : "Skip this question for now")
+                DictateButton(dictation: dictation, spoken: store.spokenLanguages, text: $answer)
                 Spacer()
                 Button("Send") { send(q) }
                     .buttonStyle(.borderedProminent)
@@ -231,12 +248,54 @@ struct InterviewThreadView: View {
         }
         .padding(14)
         .onAppear { answering = true }
+        .task { await store.loadSpokenLanguages() }
+        .onDisappear { dictation.stop() }
     }
 
     private func send(_ q: InterviewQuestion) {
         let text = answer.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
+        dictation.stop()
         answer = ""
         Task { await store.answerInterview(target, question: q.id, text: text) }
+    }
+}
+
+/// The microphone button and its language: speaks the answer into the field.
+private struct DictateButton: View {
+    let dictation: Dictation
+    /// Language codes from the candidate's preferences ("uk", "en").
+    let spoken: [String]
+    @Binding var text: String
+
+    var body: some View {
+        let offered = DictationLanguages.offered(supported: Dictation.supported, spoken: spoken, system: Locale.preferredLanguages)
+        HStack(spacing: 4) {
+            Button {
+                if dictation.listening {
+                    dictation.stop()
+                } else {
+                    if dictation.locale == nil || !offered.contains(dictation.locale ?? "") {
+                        dictation.locale = DictationLanguages.initial(saved: dictation.locale, offered: offered)
+                    }
+                    dictation.start(base: text) { text = $0 }
+                }
+            } label: {
+                Label(dictation.listening ? "Stop" : "Dictate", systemImage: dictation.listening ? "stop.circle.fill" : "mic")
+            }
+            .tint(dictation.listening ? .red : nil)
+            .keyboardShortcut("d", modifiers: .command)
+            .help("Speak your answer (⌘D starts and stops): it's turned into text here by the Mac's speech recognition")
+            Picker("Language", selection: Binding(
+                get: { DictationLanguages.initial(saved: dictation.locale, offered: offered) ?? "" },
+                set: { dictation.locale = $0 }
+            )) {
+                ForEach(offered, id: \.self) { Text(DictationLanguages.name($0, among: offered)).tag($0) }
+            }
+            .labelsHidden()
+            .fixedSize()
+            .disabled(dictation.listening)
+            .help("The language you'll speak")
+        }
     }
 }

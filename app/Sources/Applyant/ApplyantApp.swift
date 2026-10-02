@@ -73,6 +73,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         notifications.install()
         store.onNotify = { notifications.post($0) }
         running = Task { await store.run() }
+        // Opened by hand (Finder, Spotlight, the first install): show the window right away, with
+        // "Starting…" until the background service answers. At login it stays in the menu bar.
+        if !Self.launchedAtLogin {
+            Task { [weak self] in
+                for _ in 0..<50 {
+                    guard let self else { return }
+                    if self.openMainWindow != nil {
+                        self.showMainWindow()
+                        return
+                    }
+                    try? await Task.sleep(for: .milliseconds(100))
+                }
+            }
+        }
         // First launch: the setup opens with the window as soon as the daemon says it isn't done.
         Task { [weak self] in
             for _ in 0..<120 {
@@ -85,6 +99,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 try? await Task.sleep(for: .milliseconds(500))
             }
         }
+    }
+
+    /// macOS started the app as a login item (nobody asked for a window).
+    private static var launchedAtLogin: Bool {
+        guard let event = NSAppleEventManager.shared().currentAppleEvent,
+              event.eventID == kAEOpenApplication
+        else { return false }
+        return event.paramDescriptor(forKeyword: keyAEPropData)?.enumCodeValue == keyAELaunchedAsLogInItem
     }
 
     /// Opening the app again (Finder, Spotlight, Dock) shows the window.

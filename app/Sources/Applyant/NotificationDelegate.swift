@@ -94,7 +94,7 @@ final class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
     }
 
     private func navigate(application: Int64, posting: Int64, kind: String?) {
-        store.navigation.showReview(application: application, posting: posting)
+        store.navigation.showReview(application: application, posting: posting, stage: store.applications[application]?.stage)
         if kind == StoreNotification.Kind.handOff.rawValue { store.navigation.section = .applied }
         if kind == StoreNotification.Kind.statusChange.rawValue {
             store.navigation.section = switch store.applications[application]?.stage {

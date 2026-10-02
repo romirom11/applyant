@@ -5,6 +5,7 @@ import AppKit
 import ApplyantAPI
 import ApplyantKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 typealias Answer = Applyant_V1_Answer
 typealias Sentence = Applyant_V1_AnswerSentence
@@ -17,6 +18,7 @@ struct ReviewApplication: View {
     @State private var editing: EditRequest?
     @State private var showAllFields = false
     @State private var confirmRegenerate = false
+    @State private var confirmApprove = false
 
     var body: some View {
         Group {
@@ -81,7 +83,7 @@ struct ReviewApplication: View {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(app.hasTitle ? app.title : "Application \(app.id)").font(.title2.weight(.semibold))
-                    Text([app.hasCompany ? app.company : nil, app.channel.replacingOccurrences(of: "_", with: " "),
+                    Text([app.hasCompany ? app.company : nil, "sent through " + ApproveText.channel(app),
                           app.hasScore ? "score \(app.score)" : nil].compactMap { $0 }.joined(separator: " · "))
                         .foregroundStyle(.secondary)
                 }
@@ -114,10 +116,12 @@ struct ReviewApplication: View {
                 Spacer()
                 if app.stage == .readyForReview || app.stage == .needsCandidate {
                     Button("Regenerate…") { confirmRegenerate = true }
-                    Button("Approve") { Task { await store.approve(application: app.id) } }
+                    Button("Approve and send…") { confirmApprove = true }
                         .buttonStyle(.borderedProminent)
                         .disabled(!ReviewRules.canApprove(app))
-                        .help(ReviewRules.canApprove(app) ? "Approve: the daemon delivers it on its own" : app.blockers.joined(separator: "\n"))
+                        .help(ReviewRules.canApprove(app)
+                            ? "Asks once more, then Applyant submits the application on its own"
+                            : app.blockers.joined(separator: "\n"))
                 }
                 SetStatusMenu(store: store, app: app).fixedSize()
                 if let url = URL(string: app.postingURL) { Link("Posting ↗", destination: url) }
@@ -127,6 +131,11 @@ struct ReviewApplication: View {
             Button("Regenerate") { Task { await store.regenerate(application: app.id) } }
         } message: {
             Text("Your edits are redrafted too; your per-application values stay.")
+        }
+        .confirmationDialog(ApproveText.title(app), isPresented: $confirmApprove) {
+            Button("Send it") { Task { await store.approve(application: app.id) } }
+        } message: {
+            Text(ApproveText.message(app))
         }
     }
 
@@ -166,7 +175,7 @@ struct ReviewApplication: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Needs a value").font(.headline)
                     ForEach(fields, id: \.ref) { field in
-                        MissingFieldRow(field: field) { value in
+                        MissingFieldRow(store: store, field: field) { value in
                             Task { await store.setField(application: app.id, field: field.ref, value: value) }
                         }
                     }
@@ -181,12 +190,14 @@ struct ReviewApplication: View {
 
     // MARK: Standard fields
 
+    @ViewBuilder
     private func standardFields(_ app: Application) -> some View {
         let routine = ReviewRules.routineFields(app)
-        return VStack(alignment: .leading, spacing: 6) {
+        // Nothing to fold while the form is still being prepared.
+        if !routine.isEmpty { VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Label(
-                    "\(routine.count) standard fields ready — " + routine.prefix(6).map { $0.label.lowercased() }.joined(separator: ", "),
+                    "\(routine.count) standard field\(routine.count == 1 ? "" : "s") ready: " + routine.prefix(6).map { $0.label.lowercased() }.joined(separator: ", "),
                     systemImage: "checkmark.circle"
                 )
                 .lineLimit(1)
@@ -200,7 +211,7 @@ struct ReviewApplication: View {
                     }
                 }
             }
-        }
+        } }
     }
 
     // MARK: Questions
@@ -294,9 +305,11 @@ struct EditSheet: View {
 }
 
 struct MissingFieldRow: View {
+    let store: AppStore
     let field: FormFieldValue
     let set: (String) -> Void
     @State private var value = ""
+    @State private var picking = false
 
     var body: some View {
         HStack {
@@ -312,12 +325,27 @@ struct MissingFieldRow: View {
                 }
                 .labelsHidden()
                 .frame(width: 260)
+            } else if field.kind == "file" {
+                Text(value.isEmpty ? "No file chosen" : (value as NSString).lastPathComponent)
+                    .foregroundStyle(value.isEmpty ? .secondary : .primary)
+                    .lineLimit(1).truncationMode(.middle)
+                    .frame(width: 170, alignment: .leading)
+                    .help(value)
+                Button("Choose…") { picking = true }
             } else {
-                TextField(field.kind == "file" ? "/path/to/file" : "value", text: $value)
+                TextField("value", text: $value)
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 260)
             }
             Button("Set") { set(value) }.disabled(value.isEmpty)
+        }
+        .fileImporter(isPresented: $picking, allowedContentTypes: [.pdf, UTType(filenameExtension: "docx") ?? .data, .plainText, .image]) { result in
+            // Applyant keeps its own copy, so the background service can always read it.
+            if case let .success(url) = result {
+                let scoped = url.startAccessingSecurityScopedResource()
+                if let path = store.keepCopy(url) { value = path }
+                if scoped { url.stopAccessingSecurityScopedResource() }
+            }
         }
     }
 }
@@ -341,12 +369,12 @@ struct FieldRow: View {
                 Button("Cancel") { editing = false }
             } else {
                 Text(field.hasValue ? field.value : "—").lineLimit(2).textSelection(.enabled)
-                Text(field.source).font(.caption).foregroundStyle(.tertiary)
+                Text(FieldText.source(field.source)).font(.caption).foregroundStyle(.tertiary)
                 Spacer()
                 if !editable {
                     EmptyView()
                 } else if field.source == "override" {
-                    Button("Profile value") { set(nil) }.buttonStyle(.link)
+                    Button("Use profile value") { set(nil) }.buttonStyle(.link)
                 }
                 if editable {
                     Button("Change") {
@@ -381,11 +409,11 @@ struct AnswerCard: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(answer.question).font(.subheadline.weight(.semibold))
             if answer.status == "needs_candidate" {
-                Label("Needs you: " + (answer.hasMissing ? answer.missing : "no facts cover this"), systemImage: "person.fill.questionmark")
+                Label("Needs you: " + (answer.hasMissing ? answer.missing : "nothing Applyant knows about you answers this"), systemImage: "person.fill.questionmark")
                     .foregroundStyle(.orange)
                 HStack {
                     if let interview {
-                        Button("Answer in the interview", action: interview)
+                        Button("Answer in Questions for you", action: interview)
                             .buttonStyle(.borderedProminent)
                             .help("Your answer is saved as facts, then this application is prepared again")
                     }
@@ -444,13 +472,18 @@ struct AnswerCard: View {
     @ViewBuilder
     private var flagged: some View {
         let sentences = answer.sentences.filter { ReviewRules.flagText($0) != nil }
+        if !sentences.isEmpty {
+            Text(ReviewRules.flaggedIntro(sentences.count))
+                .font(.callout).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
         ForEach(sentences, id: \.index) { s in
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .foregroundStyle(s.flag == "contradiction" ? .red : .orange)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(ReviewRules.flagText(s) ?? "").font(.caption.weight(.medium))
-                    Text("“\(s.text)”").font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                    Text("“\(s.text)”").font(.callout).lineLimit(3)
+                    Text(ReviewRules.flagReason(s)).font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer()
                 let unconfirmed = s.facts.filter { $0.status == .unconfirmed }.map(\.id)
@@ -458,7 +491,8 @@ struct AnswerCard: View {
                     Button("Confirm facts") { confirmFacts(unconfirmed) }
                 }
                 if ReviewRules.canConfirmAsWritten(s) {
-                    Button("True as written") { confirmSentence(s) }
+                    Button("It's true") { confirmSentence(s) }
+                        .help("Keep it as written: it's saved as a fact you stand behind")
                 }
                 Button("Edit…") { editSentence(s) }
             }
@@ -483,6 +517,7 @@ struct EvidencePanel: View {
     let answer: Answer?
     var scrolls = true
     @State private var editing: EditRequest?
+    @State private var confirmingAll = false
 
     var body: some View {
         Group {
@@ -503,9 +538,15 @@ struct EvidencePanel: View {
             VStack(alignment: .leading, spacing: 12) {
                 Text("Evidence").font(.headline)
                 if !app.unconfirmedFactIds.isEmpty {
-                    Button("Confirm all \(app.unconfirmedFactIds.count) unconfirmed") {
-                        Task { await store.confirmFacts(application: app.id, factIds: []) }
-                    }
+                    let n = app.unconfirmedFactIds.count
+                    Button("Confirm all \(n) unconfirmed…") { confirmingAll = true }
+                        .confirmationDialog("Mark \(n) fact\(n == 1 ? "" : "s") as true?", isPresented: $confirmingAll) {
+                            Button("Confirm \(n) fact\(n == 1 ? "" : "s")") {
+                                Task { await store.confirmFacts(application: app.id, factIds: []) }
+                            }
+                        } message: {
+                            Text("Every fact this application relies on is marked true, for good: this and later applications may state them. Read them below first; Edit or reject any that aren't right (Projects → Facts to confirm).")
+                        }
                     Text("Confirming says the fact is true, for good: later applications use it too.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
@@ -515,7 +556,7 @@ struct EvidencePanel: View {
                     if facts.isEmpty { Text("No facts cited.").foregroundStyle(.secondary) }
                     ForEach(facts, id: \.id) { fact in
                         VStack(alignment: .leading, spacing: 4) {
-                            Text((fact.hasProjectSlug ? fact.projectSlug : "profile") + " · #\(fact.id)")
+                            Text((fact.hasProjectSlug ? (store.candidateProfile?.projects.first { $0.slug == fact.projectSlug }?.name ?? fact.projectSlug) : "Profile") + " · fact \(fact.id)")
                                 .font(.caption).foregroundStyle(.secondary)
                             Text(fact.text).font(.callout)
                             HStack {
@@ -558,9 +599,9 @@ struct EvidencePanel: View {
 
     private func statusText(_ status: Applyant_V1_FactStatus) -> String {
         switch status {
-        case .confirmed: "confirmed"
-        case .unconfirmed: "unconfirmed"
-        case .rejected: "rejected"
+        case .confirmed: "Confirmed"
+        case .unconfirmed: "Not confirmed yet"
+        case .rejected: "Rejected"
         default: "?"
         }
     }
@@ -598,7 +639,7 @@ struct CvCard: View {
                     }
                     if let summary = cv.summary.first { Text("Summary: " + summary.text).lineLimit(3) }
                     if !cv.dropped.isEmpty {
-                        Text("\(cv.dropped.count) line\(cv.dropped.count == 1 ? "" : "s") left out (didn't pass the checks)")
+                        Text("\(cv.dropped.count) line\(cv.dropped.count == 1 ? "" : "s") left out because your facts don't back \(cv.dropped.count == 1 ? "it" : "them") (Edit… shows which)")
                             .font(.caption).foregroundStyle(.secondary)
                     }
                     if !cv.stale.isEmpty {
@@ -641,6 +682,7 @@ struct CvEditSheet: View {
     let close: () -> Void
     @State private var editingLine: String?
     @State private var text = ""
+    @State private var removing: CvEditableLine?
 
     var body: some View {
         let app = store.applicationDetails[appId] ?? store.applications[appId]
@@ -663,16 +705,13 @@ struct CvEditSheet: View {
                     VStack(alignment: .leading, spacing: 4) {
                         HStack(alignment: .firstTextBaseline) {
                             Text(line.section).font(.caption.weight(.semibold)).foregroundStyle(line.dropped ? .orange : .secondary)
-                            Text(line.handle).font(.caption.monospaced()).foregroundStyle(.tertiary)
                             Spacer()
                             if editingLine != line.handle, app.map(CvText.canEdit) == true {
                                 Button(line.dropped ? "Put back…" : "Edit") { text = line.text; editingLine = line.handle }
                                     .controlSize(.small)
                                 if !line.dropped {
-                                    Button("Remove", role: .destructive) {
-                                        Task { await store.editCv(application: appId, line: line.handle, text: nil) }
-                                    }
-                                    .controlSize(.small)
+                                    Button("Remove…", role: .destructive) { removing = line }
+                                        .controlSize(.small)
                                 }
                             }
                         }
@@ -696,11 +735,23 @@ struct CvEditSheet: View {
                     .padding(.vertical, 3)
                 }
             }
-            Text("Your words are saved as a confirmed fact and the CV is rendered again; its handles change after each edit.")
+            Text("Your words are saved as a confirmed fact, and the CV is printed again.")
                 .font(.caption).foregroundStyle(.secondary)
                 .padding(16)
         }
         .frame(minWidth: 620, idealWidth: 700, minHeight: 480, idealHeight: 620)
+        .showsErrors(store)
+        .confirmationDialog(
+            "Remove this line from the CV?",
+            isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }),
+            presenting: removing
+        ) { line in
+            Button("Remove the line", role: .destructive) {
+                Task { await store.editCv(application: appId, line: line.handle, text: nil) }
+            }
+        } message: { line in
+            Text("“\(line.text)” leaves this CV. The fact behind it stays in your profile.")
+        }
         .task { await store.openApplication(appId) }
     }
 }

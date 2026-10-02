@@ -165,11 +165,11 @@ func searchList() -> SearchList {
         var page = source("page:https://acme.example/careers", "Acme", kind: "page", complete: false)
         page.origin = "agent"
         page.recipe = .with { $0.status = "ok"; $0.lastCount = 12 }
-        #expect(SearchText.sourceRow(page).chips.map(\.text) == ["Latest jobs", "Listing recipe", "Found by the agent"])
+        #expect(SearchText.sourceRow(page).chips.map(\.text) == ["Latest jobs", "Reads this page", "Found by the agent"])
         page.recipe.status = "building"
-        #expect(SearchText.sourceRow(page).chips.map(\.text).contains("Building recipe…"))
+        #expect(SearchText.sourceRow(page).chips.map(\.text).contains("Learning to read it…"))
         page.recipe.status = "failed"
-        #expect(SearchText.sourceRow(page).chips.map(\.text).contains("No recipe yet"))
+        #expect(SearchText.sourceRow(page).chips.map(\.text).contains("Can't read it yet"))
         let plan = SearchPlan.with { $0.status = "done"; $0.note = "2 new strategies · 5 new boards watched" }
         #expect(SearchText.planSummary(plan) == "2 new strategies · 5 new boards watched")
         #expect(SearchText.planSummary(.with { $0.status = "queued"; $0.trigger = "schedule" }) == "Planning searches (weekly)…")

@@ -64,7 +64,7 @@ private func message(_ e: DaemonEvent, _ text: String) -> DaemonEvent {
         let line = WorkingLine.text(running: store.activity.running, deliveries: store.deliveries) { id in
             id == 9 ? "Acme" : "application \(id)"
         }
-        #expect(line == "Delivering to Acme: Filling 14/16 fields · solving captcha\nWorking: verify_posting")
+        #expect(line == "Delivering to Acme: Filling 14/16 fields · solving captcha\nWorking: checking a posting")
 
         // Done (or failed, or handed off): the progress goes, the chip is the stage's again.
         await store.apply(event(6, task(70, app: 9, .done)), live: true)

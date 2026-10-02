@@ -123,11 +123,11 @@ final class Box<T>: @unchecked Sendable {
         let status = try #require(try JSONDecoder().decode(GetSetupStatusResponse.self, from: Data(sampleStatus.utf8)).status)
         let view = StatusView(.running(status))
         #expect(view.health == .ok)
-        #expect(view.title == "Daemon running (pid 4242)")
+        #expect(view.title == "Applyant is running")
         #expect(view.lines == [
             "claude: ✓ 2.1.283 · /Users/me/.local/bin/claude",
             "codex: ✗ not found",
-            "Secrets: keychain · native helper ✓",
+            "Keys are kept in the Keychain",
         ])
         var codex = status.codex
         codex.found = true

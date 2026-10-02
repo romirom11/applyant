@@ -62,7 +62,7 @@ func freshSetup(_ states: [String: String] = [:]) -> OnboardingStatus {
     @Test func textsForConnectionsAndTheImport() {
         #expect(OnboardingText.connection(.with { $0.connected = true; $0.detail = "me@gmail.com (Gmail)" }) == "me@gmail.com (Gmail)")
         #expect(OnboardingText.connection(.with { $0.detail = "Without your login, …" }) == "Not connected · Without your login, …")
-        #expect(OnboardingText.tool("Claude Code", .with { $0.found = false; $0.error = "not in ~/.local/bin" }) == "Claude Code not found: not in ~/.local/bin")
+        #expect(OnboardingText.tool("Claude Code", .with { $0.found = false; $0.error = "not in ~/.local/bin" }) == "Claude Code not found: not in ~/.local/bin · install Claude Code, sign in, then press Check again")
         #expect(OnboardingText.tool("Codex", .with { $0.found = true; $0.path = "/x/codex"; $0.signedIn = false }).contains("codex login"))
         #expect(OnboardingText.importProgress(nil) == "Nothing imported yet")
         var s = freshSetup()

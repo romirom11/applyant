@@ -6,7 +6,7 @@ import Foundation
 
 public enum RolesText {
     /// The roles the Jev model can answer (bounded decisions); the daemon refuses it elsewhere.
-    public static let decisionRoles: Set<String> = ["field_classify", "option_match", "posting_liveness", "listing_check"]
+    public static let decisionRoles: Set<String> = ["field_classify", "option_match", "posting_liveness", "listing_check", "role_fit"]
     public static let emailRole = "email_classify"
     /// The cloud route the email opt-in uses (the CLI's example: `config roles set email_classify claude:haiku`).
     public static let cloudEmailRoute = "claude:haiku"

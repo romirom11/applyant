@@ -12,7 +12,7 @@ public enum PlatformText {
     public static let captchaSecret = "capmonster"
 
     public static func captcha(_ list: PlatformList?) -> String {
-        guard let list else { return "Captcha solver: unknown (daemon not reachable)" }
+        guard let list else { return "Captcha solver: unknown (the background service isn't reachable)" }
         return list.captchaSolver
             ? "CapMonster key set: captchas off LinkedIn and Xing are solved before any hand-off"
             : "No CapMonster key: captchas go to you"
@@ -53,7 +53,7 @@ public typealias TelegramAccount = Applyant_V1_Telegram
 public enum TelegramText {
     /// "Connected as @roman · Roman" · "Waiting for the code Telegram sent" · "Not connected".
     public static func status(_ t: TelegramAccount?) -> String {
-        guard let t else { return "Telegram: unknown (daemon not reachable)" }
+        guard let t else { return "Telegram: unknown (the background service isn't reachable)" }
         var line: String
         switch t.state {
         case .connected: line = "Connected" + (t.hasAccount ? " as \(t.account)" : "")

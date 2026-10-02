@@ -249,4 +249,10 @@ func mailbox(_ status: String = "connected", address: String = "me@gmail.com", a
         await store.disconnectMailbox()
         #expect(store.mailbox == nil && daemon.mailSecrets["mail.password"] == nil)
     }
+
+    @Test func theNoteReadsAsASentence() {
+        #expect(MailText.noteSentence("a rejection that matches no application") == "A rejection that matches no application.")
+        #expect(MailText.noteSentence("Is it about this one?") == "Is it about this one?")
+        #expect(MailText.noteSentence("  ") == "")
+    }
 }

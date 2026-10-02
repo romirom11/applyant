@@ -40,7 +40,7 @@ struct RunsList: View {
             ContentUnavailableView(
                 "No runs yet",
                 systemImage: ApplyantKit.Section.agentRuns.symbol,
-                description: Text("A search strategy's runs show here. `applyant runs show` has every task's events.")
+                description: Text("Every run of a search shows here, with what it found. Add a search in Search to get the first one.")
             )
         } else {
             List(store.searchRuns, id: \.id, selection: Binding(
@@ -104,7 +104,7 @@ struct RunDetail: View {
             ContentUnavailableView(
                 "Model runs",
                 systemImage: "cpu",
-                description: Text("\(store.agentRuns.count) recent runs. `applyant runs show <task>` has a task's events.")
+                description: Text("\(store.agentRuns.count) recent runs on the left: what each model call was for, how long it took and whether it worked.")
             )
         } else if let id = store.navigation.run, let run = store.searchRuns.first(where: { $0.id == id }) {
             ScrollView {

@@ -16,10 +16,11 @@ struct MailboxStatus: View {
         HStack(spacing: 8) {
             Image(systemName: MailText.isConnected(store.mailbox) ? "envelope" : "envelope.badge.shield.half.filled")
                 .foregroundStyle(MailText.isConnected(store.mailbox) ? Color.secondary : Color.orange)
-            Text(MailText.connection(store.mailbox))
+            Text(MailText.connection(store.mailbox).replacingOccurrences(of: "Mailbox: ", with: ""))
                 .font(.callout)
                 .foregroundStyle(.secondary)
-                .lineLimit(2)
+                .lineLimit(1)
+                .truncationMode(.middle)
             Spacer()
             if MailText.isConnected(store.mailbox) {
                 Button("Sync now") { Task { await store.syncMailbox() } }
@@ -73,7 +74,11 @@ struct WhichApplicationList: View {
             }
         }
         .navigationTitle("Which application?")
-        .task { await store.openMail() }
+        .task {
+            await store.openMail()
+            // The first reply opens by itself: there's only ever something to decide here.
+            if store.navigation.email == nil { store.navigation.email = store.mailQueue.first?.id }
+        }
     }
 }
 
@@ -101,67 +106,79 @@ struct WhichApplication: View {
     init(store: AppStore, email: Email) {
         self.store = store
         self.email = email
-        _label = State(initialValue: MailText.pickableLabels.contains(email.label) ? email.label : "")
+        _label = State(initialValue: MailText.pickableLabels.contains(email.label) ? email.label : "other")
     }
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 20) {
+                // The reply, read like a message.
+                VStack(alignment: .leading, spacing: 6) {
                     Text(email.subject.isEmpty ? "(no subject)" : email.subject).font(.title2.weight(.semibold))
-                    Text(MailText.sender(email)).foregroundStyle(.secondary)
                     HStack(spacing: 6) {
-                        ChipView(chip: MailText.labelChip(email))
+                        Text(MailText.sender(email))
+                        Text("·")
                         Text(email.receivedAt.date.formatted(date: .abbreviated, time: .shortened))
-                            .font(.caption).foregroundStyle(.secondary)
-                        if email.hasClassifiedBy {
-                            Text("· read by \(email.classifiedBy)").font(.caption).foregroundStyle(.secondary)
-                        }
                     }
-                    if email.hasNote { Label(email.note, systemImage: "info.circle").foregroundStyle(.secondary) }
+                    .font(.callout).foregroundStyle(.secondary)
                 }
-                GroupBox {
-                    Text(email.snippet)
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(6)
-                }
-                Picker("It is", selection: $label) {
-                    Text("As read (\(MailText.labelTitle(email.label)))").tag("")
-                    ForEach(MailText.pickableLabels, id: \.self) { Text(MailText.labelTitle($0)).tag($0) }
-                }
-                .frame(maxWidth: 360)
-                .help("A rejection, interview or offer moves the application on.")
-                GroupBox("Which application is it about?") {
-                    VStack(alignment: .leading, spacing: 8) {
-                        ForEach(email.candidates, id: \.applicationID) { c in
-                            HStack {
-                                Text(MailText.candidateTitle(c))
-                                ChipView(chip: MailText.stageChip(c.stage) ?? Chip(text: "Applied", tone: .neutral))
-                                Spacer()
-                                Button("This one") { assign(c.applicationID) }
+                Text(email.snippet)
+                    .textSelection(.enabled)
+                    .lineSpacing(3)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Divider()
+                // What Applyant made of it, and what's left for you.
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(spacing: 8) {
+                        Text("It is").foregroundStyle(.secondary)
+                        Picker("It is", selection: $label) {
+                            ForEach(MailText.pickableLabels, id: \.self) {
+                                Text(MailText.labelTitle($0)).tag($0)
                             }
                         }
+                        .labelsHidden()
+                        .fixedSize()
+                        .help("A rejection, interview or offer moves the application on.")
+                        if email.hasConfidence, label == email.label {
+                            Text("Applyant is \(Int((email.confidence * 100).rounded()))% sure")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                    if email.hasNote {
+                        Text(MailText.noteSentence(email.note)).font(.callout).foregroundStyle(.secondary)
+                    }
+                    Text("Which application is it about?").font(.headline).padding(.top, 4)
+                    ForEach(email.candidates, id: \.applicationID) { c in
+                        HStack {
+                            Text(MailText.candidateTitle(c))
+                            ChipView(chip: MailText.stageChip(c.stage) ?? Chip(text: "Applied", tone: .neutral))
+                            Spacer()
+                            Button("This one") { assign(c.applicationID) }
+                        }
+                    }
+                    HStack(spacing: 10) {
                         let others = otherApplications
                         if !others.isEmpty {
-                            Menu(email.candidates.isEmpty ? "Pick an application" : "Another application") {
+                            Menu(email.candidates.isEmpty ? "Pick an application…" : "Another application…") {
                                 ForEach(others, id: \.id) { app in
                                     Button((app.hasCompany ? "\(app.company) · " : "") + (app.hasTitle ? app.title : "Application \(app.id)")) {
                                         assign(app.id)
                                     }
                                 }
                             }
-                            .frame(maxWidth: 320)
+                            .fixedSize()
                         }
-                        Divider()
-                        Button("Not about any application") { assign(nil) }
+                        Button(email.candidates.isEmpty && otherApplications.isEmpty ? "Not one of mine" : "None of these") { assign(nil) }
+                            .help("It isn't about an application sent through Applyant; it's kept, and no status changes.")
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(6)
+                    if email.candidates.isEmpty && otherApplications.isEmpty {
+                        Text("No application sent through Applyant matches it, so there's nothing to move on.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                 }
             }
-            .padding(20)
-            .frame(maxWidth: 760, alignment: .leading)
+            .padding(24)
+            .frame(maxWidth: 720, alignment: .leading)
         }
     }
 
@@ -174,7 +191,8 @@ struct WhichApplication: View {
     }
 
     private func assign(_ application: Int64?) {
-        let chosen = label.isEmpty ? nil : label
+        // Only a correction is sent: what Applyant read stays as it was.
+        let chosen = label == email.label ? nil : label
         Task {
             await store.assignEmail(email.id, application: application, label: chosen)
             store.navigation.email = store.mailQueue.first?.id
@@ -225,6 +243,10 @@ struct SetStatusMenu: View {
         let targets = StageRules.targets(from: app.stage)
         if !targets.isEmpty {
             Menu("Set status") {
+                if ApproveText.canReturnToReview(app) {
+                    Button("Back to review (nothing is sent)") { Task { await store.returnToReview(application: app.id) } }
+                    Divider()
+                }
                 ForEach(targets, id: \.self) { stage in
                     Button(StageText.statusItem(stage, from: app.stage)) {
                         Task { await store.setStage(application: app.id, to: stage) }

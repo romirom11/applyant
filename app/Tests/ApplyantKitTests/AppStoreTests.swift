@@ -56,6 +56,12 @@ final class FakeDaemon: DaemonAPI, @unchecked Sendable {
         postings[id]?.decision = "interested"
         return postings[id]!
     }
+    func undoDecision(posting id: Int64) async throws -> Posting {
+        log("unskip \(id)")
+        postings[id]?.stage = .scored
+        postings[id]?.decision = ""
+        return postings[id]!
+    }
     func prepare(posting id: Int64) async throws -> Application { throw APIError("unused") }
     func prepare(application id: Int64, rewrite: Bool) async throws -> Application { throw APIError("unused") }
     func confirmFacts(application id: Int64, factIds: [Int64]) async throws {
@@ -457,6 +463,12 @@ final class FakeDaemon: DaemonAPI, @unchecked Sendable {
         projects[i].name = name
         return projects[i]
     }
+    func setProjectKind(_ ref: String, kind: String) async throws -> KnowledgeProject {
+        log("setProjectKind \(ref) \(kind)")
+        guard let i = projects.firstIndex(where: { String($0.id) == ref }) else { throw APIError("no project") }
+        projects[i].kind = kind
+        return projects[i]
+    }
     func deleteProject(_ ref: String) async throws {
         log("deleteProject \(ref)")
         projects.removeAll { String($0.id) == ref }
@@ -474,6 +486,13 @@ final class FakeDaemon: DaemonAPI, @unchecked Sendable {
     func syncSources(_ target: String, force: Bool) async throws -> Int {
         log("syncSources \(target)")
         return 1
+    }
+    var repoSuggestions = RepoSuggestions()
+    var repoProblem: String?
+    func suggestRepositories(project: String) async throws -> RepoSuggestions {
+        log("suggestRepositories \(project)")
+        if let repoProblem { throw APIError(repoProblem) }
+        return repoSuggestions
     }
     func getPreferences() async throws -> SearchPreferences { log("getPreferences"); return prefs }
     func addStrategy(_ request: Applyant_V1_AddStrategyRequest) async throws -> SearchStrategy {
@@ -901,7 +920,7 @@ func eventually(_ what: String, timeout: Duration = .seconds(3), _ condition: ()
         let store = AppStore(connector: FakeConnector([]), backoff: { _ in try? await Task.sleep(for: .milliseconds(5)) })
         let run = Task { await store.run() }
         defer { run.cancel() }
-        try await eventually("disconnected") { store.connection == .disconnected("applyantd isn't running") }
+        try await eventually("disconnected") { store.connection == .disconnected("Applyant's background service isn't running") }
     }
 
     @Test func skipMovesAPostingOutOfTheInbox() async throws {
@@ -916,6 +935,11 @@ func eventually(_ what: String, timeout: Duration = .seconds(3), _ condition: ()
         #expect(store.items(.skipped).map(\.postingId) == [1])
         await store.markInterested(posting: 2)
         #expect(store.items(.interested).map(\.postingId) == [2])
+        // Back to Inbox takes the skip back without marking it interested.
+        await store.backToInbox(posting: 1)
+        #expect(daemon.calls.contains("unskip 1"))
+        #expect(store.items(.skipped).isEmpty)
+        #expect(store.items(.inbox).map(\.postingId) == [1, 2])
     }
 }
 
@@ -942,10 +966,13 @@ func eventually(_ what: String, timeout: Duration = .seconds(3), _ condition: ()
         #expect(ListItem(posting: p, application: nil).chips.map(\.text) == ["Dealbreaker: outstaffing", "Ashby"])
     }
 
-    @Test func sectionsWithoutContentSayWhichPhaseFillsThem() {
+    @Test func everySectionHasContentAndOnlySettingsIsOnePage() {
         for section in Section.allCases {
-            #expect(section.isBuilt == (section.comesWith == nil), "\(section)")
+            #expect(section.isBuilt, "\(section)")
+            #expect(section.isSinglePane == (section == .settings), "\(section)")
         }
+        #expect(Section.interview.title == "Questions for you")
+        #expect(Section.interviews.title == "Interviews")
     }
 
     @Test func flaggedSentences() {
@@ -959,6 +986,6 @@ func eventually(_ what: String, timeout: Duration = .seconds(3), _ condition: ()
         #expect(!ReviewRules.canConfirmAsWritten(s))
         s.flag = "verifier:scope"
         s.note = "claims the whole platform"
-        #expect(ReviewRules.flagText(s) == "Verifier: scope — claims the whole platform")
+        #expect(ReviewRules.flagText(s) == "Claims more than its facts say: claims the whole platform")
     }
 }

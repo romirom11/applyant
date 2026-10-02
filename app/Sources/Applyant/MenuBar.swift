@@ -54,8 +54,7 @@ struct StatusMenu: View {
         }
         ForEach(needs.prefix(3), id: \.id) { app in
             Button("Needs you: \(app.hasCompany ? app.company : "application \(app.id)")") {
-                store.navigation.showReview(application: app.id, posting: app.postingID)
-                store.navigation.section = app.stage == .approved ? .applied : .readyToReview
+                store.navigation.showReview(application: app.id, posting: app.postingID, stage: app.stage)
                 open()
             }
         }
@@ -90,7 +89,7 @@ struct StatusMenu: View {
 
     private var registrationNote: String? {
         switch status.registration {
-        case let .failed(reason): "Couldn't register the daemon: \(reason)"
+        case let .failed(reason): "Couldn't set up the background service: \(reason)"
         default: nil
         }
     }

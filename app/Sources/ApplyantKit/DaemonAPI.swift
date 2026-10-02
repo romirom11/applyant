@@ -50,6 +50,8 @@ public protocol DaemonAPI: Sendable {
 
     func skip(posting id: Int64, reason: String) async throws -> Posting
     func markInterested(posting id: Int64) async throws -> Posting
+    /// Takes a skip (or an interest) back: the posting returns to the Inbox undecided.
+    func undoDecision(posting id: Int64) async throws -> Posting
     /// Starts (or re-starts) preparation: for a posting, or an application (`rewrite` redrafts all).
     func prepare(posting id: Int64) async throws -> Application
     func prepare(application id: Int64, rewrite: Bool) async throws -> Application
@@ -166,6 +168,8 @@ public protocol DaemonAPI: Sendable {
     func project(_ ref: String) async throws -> (project: KnowledgeProject, sources: [KnowledgeSource])
     func createProject(name: String) async throws -> KnowledgeProject
     func renameProject(_ ref: String, name: String) async throws -> KnowledgeProject
+    /// position (a job: the CV's Experience) or project (something built: the CV's Projects).
+    func setProjectKind(_ ref: String, kind: String) async throws -> KnowledgeProject
     /// Removes the project with its sources and facts.
     func deleteProject(_ ref: String) async throws
     /// Removes one source with what was read from it; the facts only it supported go too.
@@ -173,6 +177,8 @@ public protocol DaemonAPI: Sendable {
     func deleteSource(_ id: Int64) async throws -> Int
     /// Syncs again: a project ref, "profile", "source:<id>"; `force` re-reads unchanged material.
     func syncSources(_ target: String, force: Bool) async throws -> Int
+    /// The candidate's own GitHub repositories for a project: the ones that look like it first.
+    func suggestRepositories(project: String) async throws -> RepoSuggestions
     func getPreferences() async throws -> SearchPreferences
     func addStrategy(_ request: Applyant_V1_AddStrategyRequest) async throws -> SearchStrategy
     func updateStrategy(_ request: Applyant_V1_UpdateStrategyRequest) async throws -> SearchStrategy
@@ -228,30 +234,30 @@ public protocol DaemonAPI: Sendable {
 /// Older fakes and daemons: the setup RPCs answer "not available" unless implemented.
 public extension DaemonAPI {
     func addPosting(url: String) async throws -> (posting: Posting, created: Bool) {
-        throw APIError("adding a posting needs a newer applyantd")
+        throw APIError("adding a posting needs a newer Applyant (its background service is older than the app)")
     }
-    func listAgentRuns(limit: Int32, role: String?) async throws -> [AgentRun] { throw APIError("model runs need a newer applyantd") }
+    func listAgentRuns(limit: Int32, role: String?) async throws -> [AgentRun] { throw APIError("model runs need a newer Applyant (its background service is older than the app)") }
     func setApplicationNotes(application id: Int64, notes: String) async throws -> Application {
-        throw APIError("notes need a newer applyantd")
+        throw APIError("notes need a newer Applyant (its background service is older than the app)")
     }
     func addApplicationContact(_ request: Applyant_V1_AddApplicationContactRequest) async throws -> Application {
-        throw APIError("contacts need a newer applyantd")
+        throw APIError("contacts need a newer Applyant (its background service is older than the app)")
     }
-    func deleteApplicationContact(_ id: Int64) async throws -> Application { throw APIError("contacts need a newer applyantd") }
-    func cvTemplate() async throws -> CvTemplateInfo { throw APIError("the CV template needs a newer applyantd") }
+    func deleteApplicationContact(_ id: Int64) async throws -> Application { throw APIError("contacts need a newer Applyant (its background service is older than the app)") }
+    func cvTemplate() async throws -> CvTemplateInfo { throw APIError("the CV template needs a newer Applyant (its background service is older than the app)") }
     func setCvTemplate(files: [CvTemplateFile], name: String?) async throws -> CvTemplateInfo {
-        throw APIError("the CV template needs a newer applyantd")
+        throw APIError("the CV template needs a newer Applyant (its background service is older than the app)")
     }
-    func resetCvTemplate() async throws -> CvTemplateInfo { throw APIError("the CV template needs a newer applyantd") }
+    func resetCvTemplate() async throws -> CvTemplateInfo { throw APIError("the CV template needs a newer Applyant (its background service is older than the app)") }
     func setStage(application id: Int64, to stage: ApplicationStage) async throws -> Application {
-        throw APIError("setting a status by hand needs a newer applyantd")
+        throw APIError("setting a status by hand needs a newer Applyant (its background service is older than the app)")
     }
     func scorePostings(_ ids: [Int64], refresh: Bool) async throws -> [Int64] {
-        throw APIError("re-scoring needs a newer applyantd")
+        throw APIError("re-scoring needs a newer Applyant (its background service is older than the app)")
     }
-    func listRoles() async throws -> [RoleRoute] { throw APIError("model roles need a newer applyantd") }
-    func setRole(_ role: String, route: String) async throws -> RoleRoute { throw APIError("model roles need a newer applyantd") }
-    func resetRoles(_ role: String?) async throws -> [String] { throw APIError("model roles need a newer applyantd") }
+    func listRoles() async throws -> [RoleRoute] { throw APIError("model roles need a newer Applyant (its background service is older than the app)") }
+    func setRole(_ role: String, route: String) async throws -> RoleRoute { throw APIError("model roles need a newer Applyant (its background service is older than the app)") }
+    func resetRoles(_ role: String?) async throws -> [String] { throw APIError("model roles need a newer Applyant (its background service is older than the app)") }
     func listFacts(project: String, status: FactStatus?) async throws -> [Fact] { throw APIError("facts aren't available") }
     func confirmFacts(_ ids: [Int64]) async throws -> [Fact] { throw APIError("facts aren't available") }
     func editFact(_ id: Int64, text: String) async throws -> Fact { throw APIError("facts aren't available") }
@@ -260,12 +266,12 @@ public extension DaemonAPI {
         throw APIError("editing the CV isn't available")
     }
     func redraftAnswer(application id: Int64, answer: Int32, shorter: Bool, project: String?) async throws -> Application {
-        throw APIError("Shorter and Use another project… need a newer applyantd")
+        throw APIError("Shorter and Use another project… need a newer Applyant (its background service is older than the app)")
     }
     func listSecrets() async throws -> [String] { [] }
     func deleteSecret(_ name: String) async throws -> Bool { throw APIError("deleting a key isn't available") }
     func overview(_ window: OverviewWindow) async throws -> OverviewReport {
-        throw APIError("the overview needs a newer applyantd")
+        throw APIError("the overview needs a newer Applyant (its background service is older than the app)")
     }
     func mailboxSetup() async throws -> MailboxSetup {
         var setup = MailboxSetup()
@@ -293,11 +299,17 @@ public extension DaemonAPI {
     }
     func createProject(name: String) async throws -> KnowledgeProject { throw APIError("projects aren't available") }
     func renameProject(_ ref: String, name: String) async throws -> KnowledgeProject {
-        throw APIError("renaming a project needs a newer applyantd")
+        throw APIError("renaming a project needs a newer Applyant (its background service is older than the app)")
     }
-    func deleteProject(_ ref: String) async throws { throw APIError("removing a project needs a newer applyantd") }
-    func deleteSource(_ id: Int64) async throws -> Int { throw APIError("removing a source needs a newer applyantd") }
+    func setProjectKind(_ ref: String, kind: String) async throws -> KnowledgeProject {
+        throw APIError("telling jobs from projects needs a newer Applyant (its background service is older than the app)")
+    }
+    func deleteProject(_ ref: String) async throws { throw APIError("removing a project needs a newer Applyant (its background service is older than the app)") }
+    func deleteSource(_ id: Int64) async throws -> Int { throw APIError("removing a source needs a newer Applyant (its background service is older than the app)") }
     func syncSources(_ target: String, force: Bool) async throws -> Int { throw APIError("syncing isn't available") }
+    func suggestRepositories(project: String) async throws -> RepoSuggestions {
+        throw APIError("repository suggestions need a newer Applyant (its background service is older than the app)")
+    }
     func getPreferences() async throws -> SearchPreferences { throw APIError("preferences aren't available") }
     func addStrategy(_ request: Applyant_V1_AddStrategyRequest) async throws -> SearchStrategy {
         throw APIError("adding a strategy isn't available")
@@ -314,9 +326,11 @@ func unwrap<T>(_ response: ResponseMessage<T>) throws -> T {
     case let .success(message): return message
     case let .failure(error):
         if error.code == .unavailable || error.code == .unknown && error.message == nil {
-            throw APIError("applyantd is not reachable")
+            throw APIError("Applyant's background service isn't reachable")
         }
-        throw APIError(error.message ?? "\(error.code)")
+        // An older daemon answers an unknown method with a bare code and no message.
+        let message = error.message.flatMap { $0.isEmpty ? nil : $0 }
+        throw APIError(message ?? (error.code == .unimplemented ? "this needs a newer Applyant (its background service is older than the app)" : "\(error.code)"))
     }
 }
 
@@ -405,6 +419,10 @@ public final class ConnectDaemonAPI: DaemonAPI {
 
     public func markInterested(posting id: Int64) async throws -> Posting {
         try unwrap(await unary.markInterested(request: .with { $0.id = id }, headers: headers)).posting
+    }
+
+    public func undoDecision(posting id: Int64) async throws -> Posting {
+        try unwrap(await unary.undoDecision(request: .with { $0.id = id }, headers: headers)).posting
     }
 
     public func prepare(posting id: Int64) async throws -> Application {
@@ -627,7 +645,7 @@ extension ConnectDaemonAPI {
             }
         }
         let response = try unwrap(await unary.connectMailbox(request: request, headers: headers))
-        guard response.hasAuthURL else { throw APIError("the daemon gave no Google sign-in URL") }
+        guard response.hasAuthURL else { throw APIError("no Google sign-in link came back") }
         return (response.mailbox, response.authURL)
     }
 
@@ -761,12 +779,29 @@ extension ConnectDaemonAPI {
         return try unwrap(await unary.updateProject(request: request, headers: headers)).project
     }
 
+    public func setProjectKind(_ ref: String, kind: String) async throws -> KnowledgeProject {
+        let request = Applyant_V1_UpdateProjectRequest.with {
+            $0.project = ref
+            $0.kind = kind
+        }
+        return try unwrap(await unary.updateProject(request: request, headers: headers)).project
+    }
+
     public func deleteProject(_ ref: String) async throws {
         _ = try unwrap(await unary.deleteProject(request: .with { $0.project = ref }, headers: headers))
     }
 
     public func deleteSource(_ id: Int64) async throws -> Int {
         Int(try unwrap(await unary.deleteSource(request: .with { $0.id = id }, headers: headers)).factsRemoved)
+    }
+
+    public func suggestRepositories(project: String) async throws -> RepoSuggestions {
+        let res = try unwrap(await unary.suggestRepositories(request: .with { $0.project = project }, headers: headers))
+        return RepoSuggestions(
+            matches: res.matches.map(RepoSuggestion.init),
+            others: res.others.map(RepoSuggestion.init),
+            accounts: res.accounts
+        )
     }
 
     public func syncSources(_ target: String, force: Bool) async throws -> Int {

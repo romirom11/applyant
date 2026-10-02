@@ -17,7 +17,7 @@ struct SettingsView: View {
         Form {
             SwiftUI.Section("Setup") {
                 HStack {
-                    Text(OnboardingText.search(store.onboarding)).font(.callout)
+                    Text(OnboardingText.search(store.onboarding, status: store.setup).text).font(.callout)
                     Spacer()
                     Button("Open the setup…") { Task { await store.openOnboarding() } }
                 }
@@ -63,6 +63,9 @@ struct SettingsView: View {
             StoredKeysSection(store: store)
         }
         .formStyle(.grouped)
+        // One readable column in the middle of the pane, however wide the window is.
+        .frame(maxWidth: 820)
+        .frame(maxWidth: .infinity)
         .navigationTitle("Settings")
         .task {
             await store.openSettings()
@@ -141,28 +144,41 @@ struct PlatformSection: View {
 /// Connections step).
 struct CaptchaSection: View {
     let store: AppStore
-    @State private var captchaKey = ""
 
     var body: some View {
-        SwiftUI.Section("Captcha solver") {
-            HStack(alignment: .firstTextBaseline) {
+        SwiftUI.Section {
+            StoredKeyField(label: "CapMonster key", stored: store.platforms?.captchaSolver == true) { key in
+                await store.setCaptchaKey(key)
+            } status: {
                 Text(PlatformText.captcha(store.platforms)).font(.callout)
-                Spacer()
                 if let solver = store.platforms?.captchaSolver {
                     ChipView(chip: Chip(text: solver ? "Key stored" : "No key", tone: solver ? .good : .neutral))
                 }
             }
-            HStack {
-                SecureField("CapMonster key", text: $captchaKey)
-                Button(store.platforms?.captchaSolver == true ? "Replace key" : "Save key") {
-                    let key = captchaKey
-                    captchaKey = ""
-                    Task { await store.setCaptchaKey(key) }
-                }
-                .disabled(captchaKey.trimmingCharacters(in: .whitespaces).isEmpty)
-            }
             Text("Stored with Applyant's secrets (the Keychain); it's never shown again.")
                 .font(.caption).foregroundStyle(.secondary)
+        } header: {
+            ConnectionHeader(title: "Captcha solver", note: ConnectionText.captcha)
+        }
+    }
+}
+
+/// A connection's section header: its name, Required or Optional, and what it's for.
+struct ConnectionHeader: View {
+    let title: String
+    let note: ConnectionNote
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 6) {
+                Text(title)
+                Text(note.tag)
+                    .font(.caption2.weight(.semibold))
+                    .padding(.horizontal, 5).padding(.vertical, 1)
+                    .background((note.required ? Color.orange : Color.secondary).opacity(0.18), in: Capsule())
+                    .foregroundStyle(note.required ? Color.orange : Color.secondary)
+            }
+            Text(note.purpose).font(.caption).foregroundStyle(.secondary).textCase(nil)
         }
     }
 }
@@ -174,6 +190,7 @@ struct TelegramSection: View {
     @State private var apiHash = ""
     @State private var code = ""
     @State private var password = ""
+    @State private var confirmingDisconnect = false
 
     var body: some View {
         let t = store.telegram
@@ -185,11 +202,16 @@ struct TelegramSection: View {
             }
             switch t?.state {
             case .connected?:
-                Button("Disconnect") { Task { await store.disconnectTelegram() } }
+                Button("Disconnect…", role: .destructive) { confirmingDisconnect = true }
+                    .confirmationDialog("Disconnect Telegram?", isPresented: $confirmingDisconnect) {
+                        Button("Disconnect", role: .destructive) { Task { await store.disconnectTelegram() } }
+                    } message: {
+                        Text("Private channels stop being read and Telegram applications can't be sent until you connect again.")
+                    }
             case .waitingCode?:
                 HStack {
-                    TextField("Code", text: $code)
-                    Button("Send code") {
+                    TextField("The code Telegram sent you", text: $code)
+                    Button("Verify") {
                         let value = code
                         code = ""
                         Task { await store.connectTelegram(.code(value)) }
@@ -210,8 +232,10 @@ struct TelegramSection: View {
                 }
             default:
                 if t?.apiConfigured != true {
-                    TextField("api_id (my.telegram.org → API development tools)", text: $apiId)
-                    SecureField("api_hash", text: $apiHash)
+                    Text("Telegram asks every app for its own key: sign in at my.telegram.org, open API development tools, create an app and copy the two values here.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    TextField("App api_id", text: $apiId)
+                    SecureField("App api_hash", text: $apiHash)
                 }
                 HStack {
                     TextField("Phone (+30…)", text: $phone)
@@ -230,7 +254,7 @@ struct TelegramSection: View {
             Text("Only the session is kept, in Applyant's secrets (the Keychain). Telegram applications are sent from this account after you approve them.")
                 .font(.caption).foregroundStyle(.secondary)
         } header: {
-            Text("Telegram")
+            ConnectionHeader(title: "Telegram", note: ConnectionText.telegram)
         }
     }
 }

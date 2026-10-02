@@ -69,18 +69,16 @@ public struct DeliveryProgress: Equatable, Sendable {
 
 public enum WorkingLine {
     /// The menu bar's Working line: each delivery with what it's doing ("Delivering to Helix:
-    /// Filling 14/16 fields · solving captcha"), then the other running task kinds.
+    /// Filling 14/16 fields · solving captcha"), then the other running work in plain words ("Working: checking 2 postings").
     public static func text(
         running: [Int64: String],
         deliveries: [Int64: DeliveryProgress],
         name: (Int64) -> String
     ) -> String {
-        let kinds = Dictionary(grouping: running.values.filter { $0 != "deliver_application" || deliveries.isEmpty }, by: { $0 })
-            .map { $0.value.count > 1 ? "\($0.key) ×\($0.value.count)" : $0.key }
-            .sorted()
+        let kinds = TaskText.summary(running, skipping: deliveries.isEmpty ? [] : ["deliver_application"])
         let delivering = deliveries.sorted { $0.key < $1.key }
             .map { "Delivering to \(name($0.key)): \($0.value.line)" }
-        let others = kinds.isEmpty ? [] : ["Working: " + kinds.joined(separator: ", ")]
+        let others = kinds.isEmpty ? [] : ["Working: " + kinds]
         return (delivering + others).joined(separator: "\n")
     }
 }

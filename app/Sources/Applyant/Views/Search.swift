@@ -22,7 +22,7 @@ struct SearchList: View {
                         .font(.caption).foregroundStyle(.secondary).lineLimit(3)
                 }
                 if strategies.isEmpty {
-                    Text("No strategies yet. Plan searches, or add one with New strategy.")
+                    Text("No searches yet. Press Plan searches to have them proposed from your profile, or New search to write one yourself.")
                         .font(.callout).foregroundStyle(.secondary)
                 }
                 ForEach(strategies) { row in
@@ -30,10 +30,10 @@ struct SearchList: View {
                 }
             } header: {
                 HStack {
-                    Text("Strategies")
+                    Text("Searches")
                     Spacer()
                     if store.planning { ProgressView().controlSize(.mini) }
-                    Button("New strategy") { creating = true }
+                    Button("New search") { creating = true }
                         .buttonStyle(.link)
                         .controlSize(.small)
                     Button("Plan searches") { Task { await store.planSearch() } }
@@ -42,7 +42,7 @@ struct SearchList: View {
                         .disabled(store.planning)
                         .help(store.planning
                             ? "The planner is running"
-                            : "Let the agent propose strategies from your profile and find new boards with web search")
+                            : "Applyant proposes searches from your profile and looks for new job boards on the web (2–4 minutes)")
                 }
             }
             SwiftUI.Section("Sources") {
@@ -126,7 +126,7 @@ struct SearchDetail: View {
             if let s = store.strategy(id) {
                 StrategyDetail(store: store, strategy: s)
             } else {
-                ContentUnavailableView("Strategy gone", systemImage: "magnifyingglass")
+                ContentUnavailableView("This search was deleted", systemImage: "magnifyingglass")
             }
         case let .source(key)?:
             if let s = store.source(key) {
@@ -138,7 +138,7 @@ struct SearchDetail: View {
             ContentUnavailableView(
                 "Search",
                 systemImage: ApplyantKit.Section.search.symbol,
-                description: Text("Strategies find postings on their own, on their schedule. Pick one to see what it searches and how it's doing, or a source to switch it off.")
+                description: Text("A search looks for job titles in the sources below, on its schedule, and puts what it finds in the Inbox. Pick a search to see what it looks for and how it's doing, or a source to switch it off.")
             )
         }
     }
@@ -223,7 +223,7 @@ struct StrategyDetail: View {
             StrategyEditorSheet(store: store, strategy: s) { editing = false }
         }
         .confirmationDialog("Delete \(s.name)?", isPresented: $confirmingDelete) {
-            Button("Delete the strategy", role: .destructive) { Task { await store.deleteStrategy(s.id) } }
+            Button("Delete the search", role: .destructive) { Task { await store.deleteStrategy(s.id) } }
         } message: {
             Text("It stops searching. The postings it found stay.")
         }
@@ -288,7 +288,7 @@ struct SourceDetail: View {
                     get: { s.enabled },
                     set: { on in Task { await store.setSource(s.key, enabled: on) } }
                 )) {
-                    Text(s.enabled ? "On: strategies that select it read it" : "Off: never queried")
+                    Text(s.enabled ? "On: searches that include it read it" : "Off: never read")
                 }
                 .toggleStyle(.switch)
                 if !s.kindEnabled {
@@ -341,12 +341,12 @@ struct RecipeView: View {
         let r = source.recipe
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                Text("Listing recipe").font(.headline)
+                Text("How this page is read").font(.headline)
                 ChipView(chip: SearchText.recipeChip(r))
                 Spacer()
                 Button("Rebuild") { Task { await store.rebuildRecipe(source.key) } }
                     .disabled(r.status == "building")
-                    .help("Ask the agent to write a new recipe for this page now")
+                    .help("This page has no feed, so Applyant worked out where its job list is. Rebuild makes it work that out again, for when the page changed")
             }
             if r.hasNote { Text(r.note).font(.callout).foregroundStyle(.secondary) }
             if r.hasBuiltAt {

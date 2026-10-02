@@ -82,9 +82,9 @@ public enum SearchText {
     /// A career page's listing recipe as a chip.
     public static func recipeChip(_ r: Applyant_V1_ListingRecipe) -> Chip {
         switch r.status {
-        case "ok": Chip(text: "Listing recipe", tone: .good)
-        case "building": Chip(text: "Building recipe…", tone: .accent)
-        default: Chip(text: "No recipe yet", tone: .warning)
+        case "ok": Chip(text: "Reads this page", tone: .good)
+        case "building": Chip(text: "Learning to read it…", tone: .accent)
+        default: Chip(text: "Can't read it yet", tone: .warning)
         }
     }
 

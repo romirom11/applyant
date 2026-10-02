@@ -24,15 +24,15 @@ public enum OnboardingStep: String, CaseIterable, Identifiable, Sendable {
         case .connections: "Connections"
         case .importing: "Import"
         case .preferences: "Preferences"
-        case .interview: "Interview"
+        case .interview: "Questions"
         }
     }
 
     public var summary: String {
         switch self {
-        case .connections: "Claude Code and Codex, the Jev key, GitHub, your mailbox and Calendar. Any of them can wait; each says what won't work without it."
-        case .importing: "Your CV or LinkedIn PDF, your GitHub account and any links or Google Docs. The profile and projects are drafted in the background while you go on."
-        case .preferences: "Roles, where and how you work, salary and dealbreakers, pre-filled from your CV. Search starts when you finish this step."
+        case .connections: "Only Claude Code is required. Everything else is optional and can be added later in Settings; each row says what it's for."
+        case .importing: "Your CV or LinkedIn PDF, GitHub repositories and any links. The profile and projects are drafted in the background while you go on."
+        case .preferences: "Roles, where and how you work, salary and dealbreakers, pre-filled from your CV. Search starts when you finish this step; all of it can be changed later in Settings."
         case .interview: "A few questions about your projects: what you built yourself, the team, the results. Answer now or later."
         }
     }
@@ -123,7 +123,10 @@ public enum OnboardingText {
     }
 
     public static func tool(_ name: String, _ t: Applyant_V1_ToolStatus) -> String {
-        if !t.found { return "\(name) not found" + (t.error.isEmpty ? "" : ": \(t.error)") }
+        if !t.found {
+            return "\(name) not found" + (t.error.isEmpty ? "" : ": \(t.error)")
+                + " · install \(name == "Codex" ? "Codex" : "Claude Code"), sign in, then press Check again"
+        }
         let version = t.version.isEmpty ? "" : " · \(t.version)"
         return t.signedIn
             ? "\(name) · \(t.path)\(version) · signed in"
@@ -142,8 +145,16 @@ public enum OnboardingText {
 
     public static func search(_ flow: OnboardingFlow) -> String {
         flow.searchStarted
-            ? "Search has started: the planner proposes strategies from your profile, and postings arrive in the Inbox."
+            ? "Search has started: searches are planned from your profile, and postings arrive in the Inbox."
             : "Search starts when you finish Preferences."
+    }
+
+    /// The setup's footer: search is only really running once Claude Code is ready.
+    public static func search(_ flow: OnboardingFlow, status: OnboardingStatus?) -> (text: String, ok: Bool) {
+        if flow.searchStarted, status != nil, !ConnectionText.claudeReady(status) {
+            return ("Search is on, but it waits for Claude Code: see Connections.", false)
+        }
+        return (search(flow), flow.searchStarted)
     }
 
     /// A Drive or Docs link (a Google account must be connected), else a web page.
@@ -245,7 +256,7 @@ extension OnboardingText {
     static func withHint(_ line: String) -> String {
         let l = line.lowercased()
         guard l.contains("eperm") || l.contains("operation not permitted") || l.contains("eacces") else { return line }
-        return line + " · macOS keeps Applyant's background daemon out of this folder: move the file elsewhere (or allow it in System Settings → Privacy & Security → Files and Folders) and add it again."
+        return line + " · macOS keeps Applyant's background service out of this folder: allow it in System Settings → Privacy & Security → Files and Folders, or pick the files themselves (Applyant keeps its own copy of a picked file)."
     }
 
     /// The GitHub login(s) already saved ("romirom11, ro-work"), empty when none are.

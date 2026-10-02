@@ -21,23 +21,22 @@ public struct StatusView: Equatable, Sendable {
         switch state {
         case .stopped:
             health = .down
-            title = "Daemon not running"
-            lines = ["launchd starts it at login and after a crash."]
+            title = "Applyant's background service isn't running"
+            lines = ["macOS starts it at login and again after a crash."]
         case let .unreachable(reason):
             health = .down
-            title = "Daemon not answering"
+            title = "Applyant's background service isn't answering"
             lines = [reason]
         case let .running(s):
             let claude = StatusView.tool("claude", s.claude)
             let codex = StatusView.tool("codex", s.codex)
             // claude is required (every role defaults to it); codex is optional.
             health = s.claude.ready ? .ok : .warning
-            title = "Daemon running" + (s.pid.isEmpty ? "" : " (pid \(s.pid))")
+            title = "Applyant is running"
             lines = [
                 claude,
                 codex,
-                "Secrets: \(s.secretsBackend.isEmpty ? "?" : s.secretsBackend)"
-                    + (s.nativeHelper ? " · native helper ✓" : " · native helper ✗"),
+                "Keys are kept in " + (s.secretsBackend == "keychain" ? "the Keychain" : s.secretsBackend == "file" ? "a private file (the Keychain isn't available)" : "?"),
             ]
         }
     }

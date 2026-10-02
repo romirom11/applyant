@@ -135,11 +135,11 @@ public struct ShareClient: Sendable {
         }
         guard code == 200 else {
             let body = try? JSONDecoder().decode(ConnectErrorBody.self, from: data)
-            if code == 401 { return .refused("The daemon didn't accept the extension's token. Restart Applyant and try again.") }
+            if code == 401 { return .refused("Applyant didn't accept the extension's token. Restart Applyant and try again.") }
             return .refused(body?.message?.nilIfBlank ?? "HTTP \(code)")
         }
         guard let reply = try? JSONDecoder().decode(AddPostingReply.self, from: data) else {
-            return .refused("Unexpected answer from the daemon.")
+            return .refused("Unexpected answer from Applyant.")
         }
         let posting = reply.posting
         if reply.created == true { return .added(title: posting?.title, company: posting?.company) }

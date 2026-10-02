@@ -27,7 +27,7 @@ struct CvTemplateSection: View {
                     Label(t.problem, systemImage: "exclamationmark.triangle").foregroundStyle(.orange).font(.callout)
                 }
             } else {
-                Text("The daemon hasn't said which template is in use.").foregroundStyle(.secondary)
+                Text("Not loaded yet.").foregroundStyle(.secondary)
             }
             // Side by side when the column is wide enough, else one under the other (never cut).
             ViewThatFits(in: .horizontal) {

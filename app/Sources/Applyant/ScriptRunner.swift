@@ -17,7 +17,7 @@ struct ScriptStep: Decodable {
     var section: String?
     var posting: Int64?
     var review: Int64?
-    /// skip · interested · prepare · confirmAll · confirmFacts · editAnswer · setField · approve · submit · setCvMode ·
+    /// skip · interested · unskip · prepare · confirmAll · confirmFacts · editAnswer · setField · approve · submit · setCvMode ·
     /// startInterview · answerInterview · dismissInterview · pauseStrategy · resumeStrategy · runStrategy ·
     /// sourceOff · sourceOn (value: a source key or kind) · planSearch · rebuildRecipe (value: a source
     /// key) · researchCompany (the posting on screen, or `company`; value "refresh" researches again) ·
@@ -63,9 +63,16 @@ struct ScriptStep: Decodable {
     var width: Double?
     var height: Double?
     /// The setup window instead of the main one, on this step (connections · import ·
-    /// preferences · interview); "main" goes back. A sheet is its own window, so the setup is
+    /// preferences · interview); "main" goes back. `project`: the Projects section, this project open;
+    /// sheet "repositories": its repository picker. A sheet is its own window, so the setup is
     /// rendered as the window's content at the sheet's size.
     var onboarding: String?
+    /// Something that is a sheet or a popover in the app, rendered as the window's content:
+    /// "preferences" (Settings → Edit preferences), "countries" / "languages" (the searchable
+    /// list, with `value` typed into its search field). "main" (in `onboarding`) goes back.
+    var sheet: String?
+    /// The Projects section: open this project (its id).
+    var project: Int64?
 }
 
 @MainActor
@@ -133,6 +140,31 @@ final class ScriptRunner {
                 if let step = OnboardingStep(rawValue: o) { store.onboarding.open(step) }
             }
         }
+        if let sheet = s.sheet, let window {
+            switch sheet {
+            case "preferences":
+                window.contentView = NSHostingView(rootView: PreferencesSheet(store: store) {})
+                window.setContentSize(NSSize(width: 680, height: 1500))
+            case "countries":
+                window.contentView = NSHostingView(rootView: SearchableList(
+                    prompt: "Search countries", items: Places.countries(), decoration: Places.flag, initialQuery: s.value ?? ""
+                ) { _ in })
+                window.setContentSize(NSSize(width: 280, height: 320))
+            case "repositories":
+                // The repository picker for the project in `project` (its suggestions are asked for).
+                let id = s.project ?? store.navigation.project ?? 0
+                window.contentView = NSHostingView(rootView: RepoPickerSheet(
+                    store: store, project: id, projectName: store.knowledgeProject(id)?.name ?? "the project"
+                ) {})
+                window.setContentSize(NSSize(width: 560, height: 480))
+            case "languages":
+                window.contentView = NSHostingView(rootView: SearchableList(
+                    prompt: "Search languages", items: Places.languages(), initialQuery: s.value ?? ""
+                ) { _ in })
+                window.setContentSize(NSSize(width: 280, height: 320))
+            default: break
+            }
+        }
         if let section = s.section.flatMap(Section.init(rawValue:)) {
             store.navigation.section = section
             store.navigation.postingId = nil
@@ -163,12 +195,17 @@ final class ScriptRunner {
             store.navigation.section = .whichApplication
             store.navigation.email = e
         }
+        if let p = s.project {
+            store.navigation.section = .projects
+            store.navigation.project = p
+        }
         if let p = s.interviewProject { store.navigation.showInterview(.project(p)) }
         if let q = s.interviewQuestion { store.navigation.showInterview(.question(q)) }
         let app = s.application ?? store.navigation.reviewing ?? 0
         switch s.action {
         case "skip": await store.skip(posting: s.posting ?? 0, reason: s.reason ?? "")
         case "interested": await store.markInterested(posting: s.posting ?? 0)
+        case "unskip": await store.backToInbox(posting: s.posting ?? 0)
         case "prepare":
             if let id = await store.prepare(posting: s.posting ?? 0) { store.navigation.reviewing = id }
         case "confirmAll": await store.confirmFacts(application: app, factIds: [])
@@ -452,6 +489,10 @@ final class ScriptRunner {
         }
         if let target = nav.interview, nav.section == .interview, let thread = store.interviewThreads[target] {
             parts.append("interview=\(target) questions=\(thread.questions.map { "\($0.id):\($0.status)" }) pending=\(thread.pending)")
+        }
+        if nav.section == .projects, let p = nav.project {
+            let repos = store.repoSuggestions[p]
+            parts.append("project=\(p) sources=\(store.projectSources[p]?.count ?? -1) repos=\(repos.map { $0.problem ?? "\($0.matches.count) matches, \($0.others.count) others" } ?? "not asked")")
         }
         if nav.section == .search {
             parts.append("strategies=\(store.search.strategies.map { "\($0.id):\($0.state):\($0.origin):\($0.stats.found)" }) sources on=\(store.search.sources.filter { $0.enabled && $0.kindEnabled }.count)/\(store.search.sources.count) agent sources=\(store.search.sources.filter { $0.origin == "agent" }.count) plan=\(store.search.plans.first.map { "\($0.id):\($0.status)" } ?? "none")")

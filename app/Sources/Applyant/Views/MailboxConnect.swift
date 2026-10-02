@@ -11,6 +11,7 @@ import SwiftUI
 struct MailboxRows: View {
     let store: AppStore
     @State private var connecting = false
+    @State private var confirmingDisconnect = false
 
     var body: some View {
         let box = store.mailbox
@@ -27,7 +28,12 @@ struct MailboxRows: View {
                 connecting = true
             }
             if box != nil {
-                Button("Disconnect", role: .destructive) { Task { await store.disconnectMailbox() } }
+                Button("Disconnect…", role: .destructive) { confirmingDisconnect = true }
+                    .confirmationDialog("Disconnect this mailbox?", isPresented: $confirmingDisconnect) {
+                        Button("Disconnect", role: .destructive) { Task { await store.disconnectMailbox() } }
+                    } message: {
+                        Text("Replies stop moving applications on, security codes can't be read and email applications can't be sent until you connect again. Its sign-in is forgotten.")
+                    }
             }
             if MailText.isConnected(box) {
                 Button("Sync now") { Task { await store.syncMailbox() } }
@@ -99,7 +105,7 @@ struct MailboxConnectSheet: View {
             }
         }
         .padding(20)
-        .frame(width: 560, height: 560)
+        .frame(width: 560, height: 640)
         .onAppear(perform: prefill)
     }
 
@@ -119,8 +125,10 @@ struct MailboxConnectSheet: View {
                 HStack {
                     Link("Google Cloud credentials", destination: MailText.googleCredentialsURL)
                     Link("Google's steps", destination: MailText.googleGuideURL)
+                    Link("Audience (publish or add test users)", destination: MailText.googleAudienceURL)
                 }
                 Text("One consent covers Gmail and Calendar (interview events). Google warns the client is unverified: choose Advanced → continue.")
+                Text(MailText.googleBlockedHint)
             }
             .font(.caption).foregroundStyle(.secondary)
         }

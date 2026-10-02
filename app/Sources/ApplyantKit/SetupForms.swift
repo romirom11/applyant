@@ -100,6 +100,18 @@ public enum KnowledgeText {
 
     public static func kindName(_ s: KnowledgeSource) -> String { kindName(s.kind, folder: s.folder) }
 
+    /// The SF Symbol for a source's kind.
+    public static func symbol(_ s: KnowledgeSource) -> String {
+        switch s.kind {
+        case .file: s.folder ? "folder" : "doc"
+        case .url: "link"
+        case .github: "chevron.left.forwardslash.chevron.right"
+        case .drive: s.folder ? "folder" : "doc.richtext"
+        case .manual: "text.quote"
+        default: "doc"
+        }
+    }
+
     /// "cv.pdf", "Projects" (a folder), "github.com/me/app", "acme.dev/case-study", "1AbC" (a Drive folder).
     public static func title(_ s: KnowledgeSource) -> String {
         if s.kind == .file { return (s.locator as NSString).lastPathComponent }
@@ -257,13 +269,15 @@ public struct PreferencesForm: Equatable, Sendable {
     /// The text fields (`prefs set <key>`), in order; dealbreakers, remote, the threshold and
     /// the weights have their own controls.
     public static let fields: [Field] = [
-        .init(key: "roles", label: "Roles", hint: "backend, ai_ml, fullstack, frontend, data, platform, mobile, security, founding, management, research, other"),
+        .init(key: "roles", label: "Roles", hint: "any job titles, in your own words"),
         .init(key: "seniority", label: "Seniority", hint: "intern, junior, mid, senior, lead, staff, principal, head"),
-        .init(key: "based_in", label: "Based in", hint: "a country code: GR"),
-        .init(key: "locations", label: "Also on-site/hybrid in", hint: "country codes: CY, DE"),
+        .init(key: "based_in", label: "Based in", hint: "a country"),
+        .init(key: "based_city", label: "City", hint: "Athens"),
+        .init(key: "locations", label: "Also on-site/hybrid in", hint: "countries"),
         .init(key: "salary", label: "Target salary", hint: "4500 EUR/month or 60k EUR/year"),
         .init(key: "salary_floor", label: "Salary floor", hint: "below it is a dealbreaker: 3500 EUR/month"),
         .init(key: "languages", label: "Languages", hint: "en:C1, el:native"),
+        .init(key: "working_languages", label: "Rather work in", hint: "de, uk"),
         .init(key: "employment", label: "Employment", hint: "full_time, part_time, contract, freelance, internship"),
     ]
     public static let dealbreakers = ["outstaffing", "onsite", "location", "language", "employment", "seniority"]
@@ -274,23 +288,28 @@ public struct PreferencesForm: Equatable, Sendable {
     public var remote = "any"
     public var dealbreakers: Set<String> = []
     public var threshold = 70
+    /// Applications started on their own per 24 hours (0: only the ones asked for).
+    public var dailyCap = 10
     public var weights: [String: Int] = [:]
     public private(set) var original: PreferencesFormSnapshot
 
     public init(_ p: SearchPreferences = SearchPreferences()) {
-        text["roles"] = p.roles.joined(separator: ", ")
+        text["roles"] = RoleTokens.joined(p.roles)
         text["seniority"] = p.seniority.joined(separator: ", ")
         text["based_in"] = p.hasBasedIn ? p.basedIn : ""
+        text["based_city"] = p.hasBasedCity ? p.basedCity : ""
         text["locations"] = p.locations.joined(separator: ", ")
         text["salary"] = p.hasSalary ? Self.money(p.salary) : ""
         text["salary_floor"] = p.hasSalaryFloor ? Self.money(p.salaryFloor) : ""
         text["languages"] = p.languages.sorted { $0.key < $1.key }.map { "\($0.key):\($0.value)" }.joined(separator: ", ")
+        text["working_languages"] = p.workingLanguages.joined(separator: ", ")
         text["employment"] = p.employment.joined(separator: ", ")
         remote = p.remote.isEmpty ? "any" : p.remote
         dealbreakers = Set(p.dealbreakers)
         threshold = Int(p.threshold)
+        dailyCap = Int(p.dailyCap)
         for c in Self.components { weights[c] = Int((p.weights[c] ?? 0).rounded()) }
-        original = PreferencesFormSnapshot(text: text, remote: remote, dealbreakers: dealbreakers, threshold: threshold, weights: weights)
+        original = PreferencesFormSnapshot(text: text, remote: remote, dealbreakers: dealbreakers, threshold: threshold, dailyCap: dailyCap, weights: weights)
     }
 
     public subscript(key: String) -> String {
@@ -317,6 +336,7 @@ public struct PreferencesForm: Equatable, Sendable {
             out.append(("dealbreakers", Self.dealbreakers.filter(dealbreakers.contains).joined(separator: ",")))
         }
         if threshold != original.threshold { out.append(("threshold", String(threshold))) }
+        if dailyCap != original.dailyCap { out.append(("daily_cap", String(dailyCap))) }
         for c in Self.components where weights[c] != original.weights[c] {
             out.append(("weight.\(c)", String(weights[c] ?? 0)))
         }
@@ -331,21 +351,26 @@ public struct PreferencesFormSnapshot: Equatable, Sendable {
     var remote: String
     var dealbreakers: Set<String>
     var threshold: Int
+    var dailyCap: Int
     var weights: [String: Int]
 }
 
 public enum PreferencesText {
-    /// "Backend, ai_ml · senior · GR · remote preferred · 4500 EUR/month · threshold 70".
+    /// "Chef, CFO +1 · senior · based in Athens, Greece · remote preferred · 4500 EUR/month · …".
     public static func summary(_ p: SearchPreferences?) -> String {
         guard let p else { return "Not loaded yet" }
         var parts: [String] = []
-        parts.append(p.roles.isEmpty ? "any role" : p.roles.joined(separator: ", "))
+        parts.append(RoleTokens.summary(p.roles))
         if !p.seniority.isEmpty { parts.append(p.seniority.joined(separator: ", ")) }
-        if p.hasBasedIn { parts.append("based in \(p.basedIn)") }
+        if p.hasBasedIn {
+            let city = p.hasBasedCity && !p.basedCity.isEmpty ? "\(p.basedCity), " : ""
+            parts.append("based in \(city)\(Places.countryName(p.basedIn))")
+        }
         parts.append("remote \(p.remote.isEmpty ? "any" : p.remote)")
         if p.hasSalary { parts.append(PreferencesForm.money(p.salary)) }
         if !p.dealbreakers.isEmpty { parts.append("dealbreakers: \(p.dealbreakers.joined(separator: ", "))") }
         parts.append("prepares at \(p.threshold)+")
+        parts.append(p.dailyCap == 0 ? "starts no applications on its own" : "up to \(p.dailyCap) a day on its own")
         return parts.joined(separator: " · ")
     }
 }

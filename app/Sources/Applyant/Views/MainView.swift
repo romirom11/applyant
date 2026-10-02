@@ -1,4 +1,5 @@
 // The main window, Mail-style: sections → the section's list → the selected item.
+import AppKit
 import ApplyantKit
 import SwiftUI
 
@@ -6,6 +7,34 @@ struct MainView: View {
     @Bindable var store: AppStore
 
     var body: some View {
+        Group {
+            switch store.connection {
+            case .disconnected:
+                ServiceDown(store: store)
+            case .connecting where store.reloads == 0:
+                ServiceStarting()
+            default:
+                if store.navigation.section.isSinglePane { onePane } else { threePanes }
+            }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) { ActivityBar(store: store) }
+        .sheet(isPresented: $store.showOnboarding) {
+            OnboardingView(store: store)
+                .frame(minWidth: 900, idealWidth: 980, minHeight: 640, idealHeight: 720)
+        }
+        .alert(
+            "Applyant",
+            // The setup and the sheets show their own errors inline while they're open.
+            isPresented: Binding(
+                get: { store.lastError != nil && !store.showOnboarding && store.inlineErrorViews == 0 },
+                set: { if !$0 { store.lastError = nil } }
+            ),
+            actions: { Button("OK") { store.lastError = nil } },
+            message: { Text(store.lastError ?? "") }
+        )
+    }
+
+    private var threePanes: some View {
         NavigationSplitView {
             Sidebar(store: store)
                 .navigationSplitViewColumnWidth(min: 190, ideal: 210)
@@ -18,7 +47,6 @@ struct MainView: View {
                 case .agentRuns: RunsList(store: store)
                 case .companies: CompaniesList(store: store)
                 case .whichApplication: WhichApplicationList(store: store)
-                case .settings: SettingsView(store: store)
                 case .profile: ProfileEditor(store: store).navigationTitle("Profile")
                 case .projects: ProjectsList(store: store)
                 default: PostingList(store: store)
@@ -28,20 +56,107 @@ struct MainView: View {
         } detail: {
             Detail(store: store)
         }
-        .toolbar {
-            ToolbarItem(placement: .status) { ConnectionBadge(connection: store.connection) }
+    }
+
+    /// Settings is one page: it takes the whole window beside the sidebar.
+    private var onePane: some View {
+        NavigationSplitView {
+            Sidebar(store: store)
+                .navigationSplitViewColumnWidth(min: 190, ideal: 210)
+        } detail: {
+            SettingsView(store: store)
         }
-        .sheet(isPresented: $store.showOnboarding) {
-            OnboardingView(store: store)
-                .frame(minWidth: 900, idealWidth: 980, minHeight: 640, idealHeight: 720)
+    }
+}
+
+/// Before the first answer from the background service.
+struct ServiceStarting: View {
+    var body: some View {
+        VStack(spacing: 12) {
+            ProgressView()
+            Text("Starting Applyant…").font(.title3)
+            Text("Waiting for its background service. The first start also fetches a browser for reading job pages, which can take a minute.")
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 420)
         }
-        .alert(
-            "Applyant",
-            // The setup shows its own errors inline while it's open.
-            isPresented: Binding(get: { store.lastError != nil && !store.showOnboarding }, set: { if !$0 { store.lastError = nil } }),
-            actions: { Button("OK") { store.lastError = nil } },
-            message: { Text(store.lastError ?? "") }
-        )
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+/// The background service isn't reachable: say so across the window instead of empty lists.
+struct ServiceDown: View {
+    let store: AppStore
+
+    var body: some View {
+        ContentUnavailableView {
+            Label("Applyant's background service isn't running", systemImage: "bolt.horizontal.circle")
+        } description: {
+            VStack(spacing: 6) {
+                if case let .disconnected(reason) = store.connection { Text(reason).textSelection(.enabled) }
+                Text("It does all the work: searching, scoring, writing and sending. macOS starts it at login and again after a crash, and Applyant keeps trying to reach it. If it stays down, the log says why.")
+            }
+        } actions: {
+            Button("Retry") { store.retryConnection() }.buttonStyle(.borderedProminent)
+            Button("Show Logs") { NSWorkspace.shared.open(UserPaths().logsDir) }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+/// A slim line along the window's bottom: what Applyant is doing now, or what it waits for.
+struct ActivityBar: View {
+    let store: AppStore
+
+    var body: some View {
+        if store.connection == .connected, let line = store.activityLine {
+            HStack(spacing: 8) {
+                if store.activity.paused == nil {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Image(systemName: "pause.circle").foregroundStyle(.orange)
+                }
+                Text(line).font(.callout).foregroundStyle(.secondary).lineLimit(1).truncationMode(.tail)
+                Spacer()
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 5)
+            .background(.bar)
+            .overlay(alignment: .top) { Divider() }
+        }
+    }
+}
+
+/// What an action was refused for, inside a sheet (the main window's alert is behind it).
+struct ErrorBanner: View {
+    let store: AppStore
+
+    var body: some View {
+        if let error = store.lastError {
+            HStack(alignment: .firstTextBaseline) {
+                Label(error, systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange).font(.callout).textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer()
+                Button("Dismiss") { store.lastError = nil }.controlSize(.small)
+            }
+            .padding(10)
+            .background(.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+        }
+    }
+}
+
+extension View {
+    /// A sheet that shows the store's last error itself, along its bottom edge.
+    func showsErrors(_ store: AppStore) -> some View {
+        safeAreaInset(edge: .bottom, spacing: 0) {
+            ErrorBanner(store: store).padding(.horizontal, 16).padding(.bottom, store.lastError == nil ? 0 : 12)
+        }
+        .onAppear {
+            store.lastError = nil
+            store.inlineErrorViews += 1
+        }
+        .onDisappear { store.inlineErrorViews = max(0, store.inlineErrorViews - 1) }
     }
 }
 
@@ -69,9 +184,9 @@ struct Detail: View {
                     .id(target)
             } else {
                 ContentUnavailableView(
-                    "The interview",
+                    "Questions for you",
                     systemImage: ApplyantKit.Section.interview.symbol,
-                    description: Text("Pick a question or a project on the left. Your answers become facts that applications can use.")
+                    description: Text("Applyant asks what your CV and repositories can't show: what you built yourself, the team, the results. Pick a question or a project on the left; your answers become facts that applications can use.")
                 )
             }
         } else if let app = store.navigation.reviewing {
@@ -81,22 +196,13 @@ struct Detail: View {
             PostingDetail(store: store, postingId: posting)
                 .id(posting)
         } else {
-            ContentUnavailableView("Nothing selected", systemImage: "tray", description: Text("Pick a posting on the left."))
-        }
-    }
-}
-
-struct ConnectionBadge: View {
-    let connection: AppStore.Connection
-
-    var body: some View {
-        switch connection {
-        case .connected:
-            EmptyView()
-        case .connecting:
-            Label("Connecting…", systemImage: "circle.dotted").foregroundStyle(.secondary)
-        case let .disconnected(reason):
-            Label(reason, systemImage: "bolt.horizontal.circle").foregroundStyle(.orange)
+            let section = store.navigation.section
+            if store.items(section).isEmpty {
+                // The list says why it's empty; nothing to repeat here.
+                Color.clear
+            } else {
+                ContentUnavailableView("Nothing selected", systemImage: section.symbol, description: Text("Pick one on the left."))
+            }
         }
     }
 }
@@ -147,14 +253,20 @@ struct PostingList: View {
         let section = store.navigation.section
         let items = store.items(section)
         Group {
-            if !section.isBuilt {
-                ContentUnavailableView(
-                    section.title,
-                    systemImage: section.symbol,
-                    description: Text("Comes with \(section.comesWith ?? "a later phase").")
-                )
-            } else if items.isEmpty {
-                ContentUnavailableView(emptyTitle(section), systemImage: section.symbol)
+            if items.isEmpty {
+                let empty = store.emptyState(section)
+                ContentUnavailableView {
+                    Label(empty.title, systemImage: section.symbol)
+                } description: {
+                    Text(empty.detail)
+                } actions: {
+                    if section == .inbox {
+                        Button("Add posting…") { addingPosting = true }
+                        if store.search.strategies.isEmpty {
+                            Button("Open Search") { store.navigation.section = .search }
+                        }
+                    }
+                }
             } else {
                 List(items, selection: Binding(
                     get: { store.navigation.postingId.flatMap { id in items.first { $0.postingId == id }?.id } },
@@ -209,18 +321,6 @@ struct PostingList: View {
         // Application sections open the review; posting sections open the posting.
         let reviewSections: Set<ApplyantKit.Section> = [.readyToReview, .preparing, .applied, .interviews, .offers]
         store.navigation.reviewing = reviewSections.contains(section) ? item.applicationId : nil
-    }
-
-    private func emptyTitle(_ section: ApplyantKit.Section) -> String {
-        switch section {
-        case .inbox: "No scored postings yet"
-        case .readyToReview: "Nothing to review"
-        case .preparing: "Nothing being prepared"
-        case .applied: "No applications sent yet"
-        case .interviews: "No interviews yet"
-        case .offers: "No offers yet"
-        default: "Empty"
-        }
     }
 }
 

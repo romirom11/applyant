@@ -38,7 +38,7 @@ public enum Section: String, CaseIterable, Identifiable, Sendable {
         case .whichApplication: "Which application?"
         case .profile: "Profile"
         case .projects: "Projects"
-        case .interview: "Interview"
+        case .interview: "Questions for you"
         case .search: "Search"
         case .agentRuns: "Agent runs"
         case .companies: "Companies"
@@ -68,12 +68,11 @@ public enum Section: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
-    /// Sections with content so far (every one, since the Overview); the rest would show an
-    /// empty state until their phase.
+    /// Every section has content.
     public var isBuilt: Bool { true }
 
-    /// Which phase of the plan fills an empty section.
-    public var comesWith: String? { isBuilt ? nil : "a later phase" }
+    /// Sections that are one page: no list to pick from, so they take the whole window.
+    public var isSinglePane: Bool { self == .settings }
 }
 
 public struct Navigation: Equatable, Sendable {
@@ -104,10 +103,23 @@ public struct Navigation: Equatable, Sendable {
         interview = target
     }
 
-    public mutating func showReview(application: Int64, posting: Int64) {
-        section = .readyToReview
+    /// Opens an application's review in the list its stage puts it in (Ready to review when
+    /// the stage isn't known).
+    public mutating func showReview(application: Int64, posting: Int64, stage: ApplicationStage? = nil) {
+        section = stage.map(Navigation.section(for:)) ?? .readyToReview
         postingId = posting
         reviewing = application
+    }
+
+    /// The list an application is in, by its stage (AppStore.items follows the same split).
+    public static func section(for stage: ApplicationStage) -> Section {
+        switch stage {
+        case .preparing: .preparing
+        case .approved, .applied, .rejected, .withdrawn: .applied
+        case .interview: .interviews
+        case .offer: .offers
+        default: .readyToReview
+        }
     }
 }
 
@@ -313,13 +325,40 @@ public enum ReviewRules {
         switch s.flag {
         case "", "none": nil
         case "unchecked": "Not checked yet"
-        case "unconfirmed": "Relies on an unconfirmed fact"
+        case "unconfirmed": "Relies on a fact you haven't confirmed yet"
         case "rejected_fact": "Cites a fact you rejected"
         case "absent_number": "A number the facts don't have"
         case "contradiction": "Contradicts its facts"
         default: s.flag.hasPrefix("verifier:")
-            ? "Verifier: \(s.flag.dropFirst("verifier:".count))" + (s.hasNote ? " — \(s.note)" : "")
-            : s.flag
+            ? FieldText.verifierIssue(String(s.flag.dropFirst("verifier:".count))) + (s.hasNote ? ": \(s.note)" : "")
+            : "Flagged: " + s.flag.replacingOccurrences(of: "_", with: " ")
+        }
+    }
+
+    /// What the highlighted sentences mean and what to do about them.
+    public static func flaggedIntro(_ count: Int) -> String {
+        let n = count == 1 ? "1 highlighted sentence says" : "\(count) highlighted sentences say"
+        return "\(n) more than your confirmed facts show, so Approve waits. For each: “It's true” keeps it (it becomes a fact you stand behind), “Edit…” puts it in your words. Or redraft the whole answer below."
+    }
+
+    /// Why a sentence is highlighted, in a few plain words, with the checker's note.
+    public static func flagReason(_ s: Applyant_V1_AnswerSentence) -> String {
+        switch s.flag {
+        case "unconfirmed": return "It relies on a fact you haven't confirmed yet."
+        case "rejected_fact": return "It cites a fact you rejected."
+        case "absent_number": return "Your facts don't have this number."
+        case "contradiction": return "A number here contradicts your facts: only an edit clears it."
+        default:
+            guard s.flag.hasPrefix("verifier:") else { return flagText(s) ?? "" }
+            let issue: String = switch String(s.flag.dropFirst("verifier:".count)) {
+            case "unsupported": "Your facts don't say this."
+            case "role": "It makes your part bigger than your facts do."
+            case "scope": "It makes the work bigger than your facts do."
+            case "quantity": "A number differs from your facts."
+            case "timeframe": "The dates or duration aren't in your facts."
+            default: FieldText.verifierIssue(String(s.flag.dropFirst("verifier:".count)))
+            }
+            return s.hasNote ? "\(issue) \(s.note)" : issue
         }
     }
 

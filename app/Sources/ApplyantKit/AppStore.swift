@@ -94,6 +94,12 @@ public final class AppStore {
     public private(set) var candidateProfile: CandidateProfile?
     /// Each open project's sources, with their sync state.
     public private(set) var projectSources: [Int64: [KnowledgeSource]] = [:]
+    /// The candidate's GitHub repositories offered to a project (SuggestRepositories), by project
+    /// id; loaded once per session and again after a source is added. A failed look is kept as
+    /// its `problem`, so the pane shows a line and doesn't ask again on every appearance.
+    public private(set) var repoSuggestions: [Int64: RepoSuggestions] = [:]
+    /// Suggestions the candidate waved away ("Not this one"), by repository URL, this session.
+    public var dismissedRepoSuggestions: Set<String> = []
     /// Knowledge sources being read right now (or waiting to try again, or given up on), from
     /// live `sync_source` task events: source id → where its reading stands.
     public private(set) var sourceSync: [Int64: SourceSync] = [:]
@@ -115,9 +121,17 @@ public final class AppStore {
     public private(set) var postingCompany: [Int64: Int64] = [:]
     /// The CV template in use (Settings → CV template).
     public private(set) var cvTemplate: CvTemplateInfo?
+    /// Every fact still to confirm, across the projects and the profile (Projects → Facts to confirm).
+    public private(set) var unconfirmedFacts: [Fact] = []
+    /// Said after an import made the imported CV the one that's sent.
+    public private(set) var baseCvNote: String?
+    /// The daemon's data directory: picked files are copied under it (ImportedFile).
+    public var dataDir: URL = UserPaths().dataDir()
     private var onboardingOffered = false
     /// The last failed action, for an alert.
     public var lastError: String?
+    /// Sheets on screen that show `lastError` themselves (the main window's alert stays away).
+    public var inlineErrorViews = 0
     /// Where the main window is (notifications and the menu bar move it).
     public var navigation = Navigation()
     /// Full reloads so far (tests: one per connect).
@@ -126,6 +140,8 @@ public final class AppStore {
     public private(set) var eventsApplied = 0
 
     public var onNotify: (@MainActor (StoreNotification) -> Void)?
+    /// The connection loop's wait between attempts; Retry cuts it short.
+    private var waiting: Task<Void, Never>?
 
     private let connector: DaemonConnector
     private let backoff: @Sendable (Int) async -> Void
@@ -148,9 +164,9 @@ public final class AppStore {
         var attempt = 0
         while !Task.isCancelled {
             guard let api = connector.connect() else {
-                connection = .disconnected("applyantd isn't running")
+                connection = .disconnected("Applyant's background service isn't running")
                 self.api = nil
-                await backoff(attempt)
+                await pause(attempt)
                 attempt += 1
                 continue
             }
@@ -164,14 +180,28 @@ public final class AppStore {
                 for try await event in api.events(after: after) {
                     await apply(event, live: true)
                 }
-                connection = .disconnected("the event stream ended")
+                connection = .disconnected("The connection to Applyant's background service was lost")
             } catch {
                 if Task.isCancelled { return }
                 connection = .disconnected(error.localizedDescription)
             }
-            await backoff(attempt)
+            await pause(attempt)
             attempt += 1
         }
+    }
+
+    private func pause(_ attempt: Int) async {
+        let backoff = backoff
+        let wait = Task { await backoff(attempt) }
+        waiting = wait
+        await wait.value
+        waiting = nil
+    }
+
+    /// Retry: tries to reach the background service now instead of after the wait.
+    public func retryConnection() {
+        if case .disconnected = connection { connection = .connecting }
+        waiting?.cancel()
     }
 
     func reloadAll(_ api: DaemonAPI) async throws {
@@ -189,6 +219,7 @@ public final class AppStore {
         mailQueue = (try? await queue) ?? []
         platforms = try? await api.listPlatforms()
         if let status = try? await api.setupStatus(refresh: false) { applySetup(status) }
+        await refreshUnconfirmedFacts(api)
         postings = Dictionary(p.map { ($0.id, $0) }, uniquingKeysWith: { _, last in last })
         applications = Dictionary(a.map { ($0.id, $0) }, uniquingKeysWith: { _, last in last })
         interviewQuestions = i.questions
@@ -417,6 +448,13 @@ public final class AppStore {
         if postingDetails[id] != nil { await openPosting(id) }
     }
 
+    /// A skipped posting goes back to the Inbox, undecided.
+    public func backToInbox(posting id: Int64) async {
+        guard let api, let p = await attempt({ try await api.undoDecision(posting: id) }) else { return }
+        postings[id] = p
+        if postingDetails[id] != nil { await openPosting(id) }
+    }
+
     /// Starts preparation for a posting; returns its application.
     @discardableResult
     public func prepare(posting id: Int64) async -> Int64? {
@@ -473,6 +511,13 @@ public final class AppStore {
         }
         guard let api, let approved = await attempt({ try await api.approve(application: id) }) else { return }
         record(approved)
+    }
+
+    /// "Back to review": an approved application whose delivery stopped goes back to be corrected
+    /// (nothing is sent until it's approved again). True when the daemon took it.
+    @discardableResult
+    public func returnToReview(application id: Int64) async -> Bool {
+        await setStage(application: id, to: .readyForReview)
     }
 
     /// Retries a delivery that got stuck (or approves and delivers).
@@ -958,10 +1003,20 @@ public final class AppStore {
         return true
     }
 
+    /// The preferences as saved, for a form that opens again (nil until the daemon answers).
+    public func savedPreferences() async -> SearchPreferences? {
+        guard let api, let p = try? await api.getPreferences() else { return nil }
+        searchPreferences = p
+        return p
+    }
+
     public func loadPreferencesDraft() async {
         guard let api else { return }
         preferencesDraft = (try? await api.preferencesDraft()) ?? []
     }
+
+    /// Sources of the setup's Import step still being read (the Preferences draft isn't final).
+    public var importReading: Bool { (setup?.import.syncing ?? 0) > 0 }
 
     /// The candidate's preferences (key → SetPreference value; empty values are left alone),
     /// then Preferences done: search starts.
@@ -976,12 +1031,13 @@ public final class AppStore {
         return await settleStep(.preferences)
     }
 
-    /// Import: a CV or LinkedIn PDF (a path on this Mac) or a link (a page, a Google Doc).
+    /// Import: a CV or LinkedIn PDF (a path on this Mac), a GitHub repository, or a link (a
+    /// page, a Google Doc).
     @discardableResult
     public func importSource(_ input: String) async -> Bool {
         let s = input.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let api, !s.isEmpty else { return false }
-        let kind: Applyant_V1_SourceKind = s.hasPrefix("/") ? .file : OnboardingText.sourceKind(for: s)
+        let kind = KnowledgeText.sourceKind(for: s)
         guard await attempt({ try await api.addKnowledgeSource(project: nil, kind: kind, locator: s) }) != nil else {
             return false
         }
@@ -989,6 +1045,50 @@ public final class AppStore {
         await refreshKnowledge(api)
         await refreshSetup()
         return true
+    }
+
+    /// Applyant's own copy of a picked file (a folder stays where it is): its path, or nil when
+    /// it couldn't be copied (the reason is shown). The background service can always read it.
+    public func keepCopy(_ url: URL) -> String? {
+        do {
+            return try ImportedFile.copy(url, dataDir: dataDir).path
+        } catch {
+            lastError = "Couldn't copy \(url.lastPathComponent): \(error.localizedDescription)"
+            return nil
+        }
+    }
+
+    /// A picked file or folder as a knowledge source of a project (nil: the profile). A CV-like
+    /// file added to the profile while no CV is set also becomes the CV that's sent.
+    @discardableResult
+    public func importFile(_ url: URL, to project: Int64? = nil) async -> Bool {
+        guard let path = keepCopy(url) else { return false }
+        guard await addKnowledgeSource(to: project, path) else { return false }
+        if project == nil, ImportedFile.isCv(path), let api {
+            let current = candidateProfile?.profile.first { $0.key == ProfileForm.baseCvKey }?.values.first ?? ""
+            if current.isEmpty, (try? await api.setProfileValue(ProfileForm.baseCvKey, value: path)) != nil {
+                baseCvNote = "\(url.lastPathComponent) is also used as the CV that's sent; change it in Profile."
+                await refreshKnowledge(api)
+            }
+        }
+        return true
+    }
+
+    /// What an AI assistant wrote about the candidate (the setup's prompt, pasted back): kept as
+    /// a document and read like any other source, so its facts start unconfirmed.
+    @discardableResult
+    public func importAssistantNotes(_ text: String) async -> Bool {
+        if let problem = AssistantNotes.problem(text) {
+            lastError = problem
+            return false
+        }
+        do {
+            let file = try AssistantNotes.save(text, dataDir: dataDir)
+            return await addKnowledgeSource(to: nil, file.path)
+        } catch {
+            lastError = "Couldn't keep the assistant's answer: \(error.localizedDescription)"
+            return false
+        }
     }
 
     /// The Import step's list: the profile's sources (what the step imports), each with where its
@@ -1021,7 +1121,19 @@ public final class AppStore {
 
     // MARK: The profile and projects (app parity with the CLI for setup)
 
+    private func refreshUnconfirmedFacts(_ api: DaemonAPI) async {
+        if let list = try? await api.listFacts(project: "", status: .unconfirmed) { unconfirmedFacts = list }
+    }
+
+    /// Projects → Facts to confirm opens with a fresh list (and the project names).
+    public func openUnconfirmedFacts() async {
+        guard let api else { return }
+        await refreshUnconfirmedFacts(api)
+        if candidateProfile == nil, let c = try? await api.candidate() { candidateProfile = c }
+    }
+
     private func refreshKnowledge(_ api: DaemonAPI) async {
+        await refreshUnconfirmedFacts(api)
         if let c = try? await api.candidate() { candidateProfile = c }
         for id in projectSources.keys {
             if let p = try? await api.project(String(id)) { projectSources[id] = p.sources }
@@ -1085,6 +1197,17 @@ public final class AppStore {
         return true
     }
 
+    /// A job or something built: decides where the tailored CV shows it.
+    public func setProjectKind(_ id: Int64, kind: String) async {
+        guard let api, await attempt({ try await api.setProjectKind(String(id), kind: kind) }) != nil else { return }
+        await refreshKnowledge(api)
+    }
+
+    /// The projects as the list shows them: jobs (newest first, as given), then built things.
+    public var projectGroups: (jobs: [KnowledgeProject], built: [KnowledgeProject]) {
+        (knowledgeProjects.filter { $0.kind == "position" }, knowledgeProjects.filter { $0.kind != "position" })
+    }
+
     /// Removes a project with its sources and facts.
     public func deleteProject(_ id: Int64) async {
         guard let api, await attempt({ try await api.deleteProject(String(id)) }) != nil else { return }
@@ -1093,6 +1216,24 @@ public final class AppStore {
         await refreshKnowledge(api)
         await refreshInterview(api)
         await refreshSetup()
+    }
+
+    /// The repositories offered to a project: from the cache, else asked now. `refresh` asks
+    /// again (after a source was added, the list no longer holds it).
+    @discardableResult
+    public func loadRepoSuggestions(project id: Int64, refresh: Bool = false) async -> RepoSuggestions? {
+        guard let api else { return nil }
+        if !refresh, let cached = repoSuggestions[id] { return cached }
+        do {
+            let found = try await api.suggestRepositories(project: String(id))
+            repoSuggestions[id] = found
+            return found
+        } catch {
+            let message = (error as? APIError)?.message ?? error.localizedDescription
+            let failed = RepoSuggestions(problem: message)
+            repoSuggestions[id] = failed
+            return failed
+        }
     }
 
     /// Loads a project's sources for its detail (kept current from then on).
@@ -1115,6 +1256,10 @@ public final class AppStore {
         if let project, projectSources[project] == nil { projectSources[project] = [] }
         await refreshKnowledge(api)
         await refreshSetup()
+        // The added repository is no longer on offer.
+        if let project, kind == .github, repoSuggestions[project] != nil {
+            await loadRepoSuggestions(project: project, refresh: true)
+        }
         return true
     }
 
@@ -1154,7 +1299,10 @@ public final class AppStore {
     }
 
     private func afterFactChange(_ project: Int64?, _ api: DaemonAPI) async {
-        if let list = try? await api.listFacts(project: FactsText.ref(project), status: nil) { facts[FactsText.ref(project)] = list }
+        // Every list on screen may hold the fact (its project's, and Facts to confirm).
+        for ref in Set(facts.keys).union([FactsText.ref(project)]) {
+            if let list = try? await api.listFacts(project: ref, status: nil) { facts[ref] = list }
+        }
         await refreshKnowledge(api)
         // A review open on screen may rely on the fact.
         for id in applicationDetails.keys { await refreshApplication(id, api) }
@@ -1195,6 +1343,19 @@ public final class AppStore {
     public func openPreferences() async {
         guard let api, let p = await attempt({ try await api.getPreferences() }) else { return }
         searchPreferences = p
+    }
+
+    /// The languages the candidate speaks (codes like "uk"), for the dictation button: their
+    /// saved preferences, else what the CV suggested. Loaded quietly; empty until then.
+    public var spokenLanguages: [String] {
+        if let saved = searchPreferences?.languages, !saved.isEmpty { return saved.keys.sorted() }
+        let drafted = preferencesDraft.first { $0.key == "languages" }?.value ?? ""
+        return LanguageRows.parse(drafted).map(\.code)
+    }
+
+    public func loadSpokenLanguages() async {
+        guard let api, searchPreferences == nil else { return }
+        if let p = try? await api.getPreferences() { searchPreferences = p }
     }
 
     /// Saves what changed, one key at a time (the first refusal stops it and is shown).
@@ -1262,7 +1423,7 @@ public final class AppStore {
         let s = input.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !s.isEmpty else { return nil }
         guard let url = SourceInput.url(s) else { return .refused("That isn't a web address.") }
-        guard let api else { return .refused("applyantd is not reachable") }
+        guard let api else { return .refused("Applyant's background service isn't reachable") }
         do {
             let (posting, created) = try await api.addPosting(url: url)
             postings[posting.id] = posting
@@ -1407,6 +1568,7 @@ public final class AppStore {
         // A badge on Companies only while research is going.
         if section == .companies { return companies.filter(\.researching).count }
         if section == .whichApplication { return mailQueue.count }
+        if section == .projects { return unconfirmedFacts.count }
         return section.isBuilt ? items(section).count : 0
     }
 
@@ -1453,4 +1615,35 @@ func pauseText(_ message: String) -> String {
     guard let date = formatter.date(from: iso) else { return message }
     let time = date.formatted(date: .omitted, time: .shortened)
     return head.prefix(1).uppercased() + head.dropFirst() + " · resumes \(time)"
+}
+
+extension AppStore {
+    /// The main window's status line: a provider pause, or the work running now; nil when idle.
+    public var activityLine: String? {
+        ActivityText.line(activity, deliveries: deliveries) { id in
+            applications[id].map { $0.hasCompany ? $0.company : "application \(id)" } ?? "application \(id)"
+        }
+    }
+
+    /// What an empty list is waiting for.
+    public func emptyState(_ section: Section) -> ActivityText.Empty {
+        ActivityText.empty(
+            section,
+            activity: activity,
+            postings: Array(postings.values),
+            strategies: search.strategies.count,
+            searchStarted: onboarding.searchStarted
+        )
+    }
+
+    /// The facts still to confirm, grouped by project (the profile's own first), for one list.
+    public var unconfirmedFactGroups: [(project: Int64?, name: String, facts: [Fact])] {
+        let byProject = Dictionary(grouping: unconfirmedFacts) { $0.hasProjectID ? $0.projectID : Int64(-1) }
+        return byProject.map { key, facts -> (project: Int64?, name: String, facts: [Fact]) in
+            if key == -1 { return (nil, "Profile", facts) }
+            let name = knowledgeProject(key)?.name ?? facts.first.flatMap { $0.hasProjectSlug ? $0.projectSlug : nil } ?? "Project \(key)"
+            return (key, name, facts)
+        }
+        .sorted { ($0.project == nil ? 0 : 1, $0.name) < ($1.project == nil ? 0 : 1, $1.name) }
+    }
 }

@@ -49,6 +49,40 @@ public enum FactsText {
         return ([KnowledgeText.kindName(e.sourceKind), source] + (e.hasLocator ? [e.locator] : [])).joined(separator: " · ")
     }
 
+    /// The row's one secondary line: "Unconfirmed · Skill · cv.pdf · page 2" (status only
+    /// while it isn't confirmed; the first evidence, the rest in the tooltip).
+    public static func detailLine(_ f: Fact) -> String {
+        var parts: [String] = []
+        switch f.status {
+        case .unconfirmed: parts.append("Unconfirmed")
+        case .rejected: parts.append("Rejected")
+        default: break
+        }
+        parts.append(kind(f))
+        if let o = origin(f) { parts.append(o) }
+        if let e = f.evidence.first {
+            parts.append(evidence(e) + (f.evidence.count > 1 ? " (+\(f.evidence.count - 1))" : ""))
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    /// The words each piece of evidence was read from, without repeats.
+    public static func quotes(_ f: Fact) -> [String] {
+        var seen = Set<String>()
+        return f.evidence.compactMap { e in
+            guard e.hasExcerpt, !e.excerpt.isEmpty, seen.insert(e.excerpt).inserted else { return nil }
+            return e.excerpt
+        }
+    }
+
+    /// The row's tooltip: every evidence line with its quote.
+    public static func tooltip(_ f: Fact) -> String {
+        f.evidence.map { e in
+            evidence(e) + (e.hasExcerpt && !e.excerpt.isEmpty ? "\n“\(e.excerpt)”" : "")
+        }
+        .joined(separator: "\n\n")
+    }
+
     /// "3 to confirm · 12 confirmed".
     public static func counts(_ facts: [Fact]) -> String {
         let open = facts.filter { $0.status == .unconfirmed }.count
