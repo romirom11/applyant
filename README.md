@@ -71,7 +71,8 @@ pnpm -C daemon cli candidate profile set commit_emails you@example.com
 # Commits by your AI coding agents (Claude Code, Codex, Cursor, Copilot built in) count as yours
 # in repos you own and in PRs you opened or merged; add other agents' emails or logins:
 pnpm -C daemon cli candidate profile set ai_agent_identities aider@example.dev
-pnpm -C daemon cli candidate source add profile file ~/cv.pdf         # a CV drafts projects + facts
+pnpm -C daemon cli candidate source add profile file ~/cv.pdf         # a CV drafts projects + facts, and fills
+                                                                      #   the profile's empty fields (name, contacts, links)
 pnpm -C daemon cli candidate project add Solovei
 pnpm -C daemon cli candidate source add solovei github https://github.com/<owner>/<repo>
 pnpm -C daemon cli candidate fact list solovei                        # every fact with its evidence
@@ -157,13 +158,17 @@ Scoring: a verified posting keeps its text and gets an explained 0–100 score. 
 reads its requirements, salary, location and so on once; the `matcher` judges each requirement
 against facts found by hybrid retrieval (FTS5 + EmbeddingGemma vectors); the number itself comes
 from a pure function over your preferences, so changing them re-scores instantly, with no model
-call. The embedding model (~300 MB) is downloaded into `$APPLYANT_HOME/models` on first use
+call. A posting that lists nothing to compare with (an empty description) gets no score at all
+rather than one made of its title and location, and is never prepared on its own. The roles you're after are job titles in your own words (any occupation: "CFO", "Chef",
+"Backend Engineer"); each posting is compared with them once by the `role_fit` decision (Jev, or
+claude:haiku), and only changing the roles asks again. The embedding model (~300 MB) is downloaded into `$APPLYANT_HOME/models` on first use
 (`APPLYANT_MODELS_DIR` overrides; `APPLYANT_EMBEDDER=hash` is an offline keyword-only stand-in).
 
 ```sh
-pnpm -C daemon cli candidate prefs set roles ai_ml,backend,founding    # see `candidate prefs set --help`
+pnpm -C daemon cli candidate prefs set roles "AI Engineer; Backend Engineer"   # any job titles; see `prefs set --help`
 pnpm -C daemon cli candidate prefs set seniority senior,staff,lead
 pnpm -C daemon cli candidate prefs set based_in GR                     # where you work from
+pnpm -C daemon cli candidate prefs set based_city Athens               # an office elsewhere in GR counts for less
 pnpm -C daemon cli candidate prefs set locations GR,CY                 # on-site / hybrid is fine here
 pnpm -C daemon cli candidate prefs set remote required                 # required | preferred | any
 pnpm -C daemon cli candidate prefs set salary "3000 EUR/month"         # target (gross)
@@ -202,7 +207,9 @@ pnpm -C daemon cli jobs read-form [id…]                                # read 
 
 Applications: a posting that scores at or above your threshold (`candidate prefs set threshold`,
 default 80) with no dealbreaker, or that you mark `interested`, gets an application prepared for
-its real form. Standard fields come from your profile, which is only a default: nothing about
+its real form. At most `daily_cap` applications (default 10, `candidate prefs set daily_cap`)
+are started on their own per 24 hours, best score first; the rest wait in the Inbox until
+there's room, or until you prepare them yourself. Standard fields come from your profile, which is only a default: nothing about
 you is built in, a value your profile lacks is never guessed (the application waits for you
 instead), and every value can be set for one application without touching the profile. Custom
 questions are drafted by `application_writer` (claude:opus) sentence by sentence, each sentence
@@ -224,6 +231,16 @@ with no reviewed value, or a step that won't advance ends in a hand-off: the win
 with the form filled, the application waits, and `handoff show` says what is left. A delivered
 application is `applied` with a receipt of exactly what was sent (every value and its source,
 the CV file hash, the final URL and the confirmation text).
+
+Nothing is submitted twice on a guess. An application counts as sent only when the page shows
+it: the form is gone, or confirmation wording appeared that wasn't there before the press
+(another form showing up is a next step, not a confirmation). Just before pressing submit (or
+sending the email or Telegram message) the daemon records that it is about to; a delivery that
+was interrupted after that, or that saw neither a confirmation nor an error, becomes a hand-off
+that says the application may already be sent, and a restart leaves a hand-off alone. From
+there it's yours: `applications mark-submitted <id>` if it arrived, `applications submit <id>`
+to send it again, or `applications status <id> ready_for_review` to take the approval back and
+change a value first.
 
 ```sh
 pnpm -C daemon cli candidate profile set visa_sponsorship "No sponsorship needed in the EU"  # also:
