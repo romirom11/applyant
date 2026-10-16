@@ -193,6 +193,9 @@ public protocol DaemonAPI: Sendable {
     func scorePostings(_ ids: [Int64], refresh: Bool) async throws -> [Int64]
     /// The funnel and the success metrics over a window.
     func overview(_ window: OverviewWindow) async throws -> OverviewReport
+    /// Pauses or resumes background work (search, scoring, research, mail); since when it's
+    /// paused, nil when it runs.
+    func setBackgroundPaused(_ paused: Bool) async throws -> Date?
 
     // Gap audit: model roles, the facts browser, CV edits and stored keys in the app.
     /// Every model role with its route, default, fallback and what it does.
@@ -272,6 +275,9 @@ public extension DaemonAPI {
     func deleteSecret(_ name: String) async throws -> Bool { throw APIError("deleting a key isn't available") }
     func overview(_ window: OverviewWindow) async throws -> OverviewReport {
         throw APIError("the overview needs a newer Applyant (its background service is older than the app)")
+    }
+    func setBackgroundPaused(_ paused: Bool) async throws -> Date? {
+        throw APIError("pausing needs a newer Applyant (its background service is older than the app)")
     }
     func mailboxSetup() async throws -> MailboxSetup {
         var setup = MailboxSetup()
@@ -848,6 +854,11 @@ extension ConnectDaemonAPI {
 
     public func overview(_ window: OverviewWindow) async throws -> OverviewReport {
         try unwrap(await unary.getOverview(request: .with { $0.window = window }, headers: headers))
+    }
+
+    public func setBackgroundPaused(_ paused: Bool) async throws -> Date? {
+        let response = try unwrap(await unary.setBackgroundPaused(request: .with { $0.paused = paused }, headers: headers))
+        return response.hasPausedAt ? response.pausedAt.date : nil
     }
 }
 

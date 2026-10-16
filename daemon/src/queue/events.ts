@@ -30,6 +30,9 @@ export type EventKind =
   | 'interview'
   // The Mac woke from sleep (applyant-native); the scheduler runs each missed search once.
   | 'system.wake'
+  // The candidate paused background work, or resumed it (queue/pause.ts).
+  | 'system.paused'
+  | 'system.resumed'
   // A search run was queued, finished or failed (entity_id = strategy id, run_id = the run,
   // stage = queued | done | failed; message = what it found).
   | 'search.run'

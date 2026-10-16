@@ -1,18 +1,20 @@
 // The lease-based worker.
 //
 //   tx1 (ms):   requeue expired leases · lease the oldest runnable task whose provider
-//               isn't paused by a subscription limit
+//               isn't paused by a subscription limit (while the candidate has paused
+//               background work, only the tasks that run anyway: queue/pause.ts)
 //   handler:    runs with NO transaction open, lease renewed in the background
 //   tx2 (ms):   stillLeased? → apply the Outcome (commit, stage moves, next tasks)
 //               lease lost ⇒ the handler's results are discarded
 import { randomBytes } from 'node:crypto';
 import { hostname } from 'node:os';
-import { and, asc, eq, gt, isNull, lt, lte, notInArray, or } from 'drizzle-orm';
+import { and, asc, eq, gt, inArray, isNull, lt, lte, notInArray, or } from 'drizzle-orm';
 import type { Db, ReadDb } from '../db/client.ts';
 import { providerPauses, type TaskRow, tasks } from '../db/schema.ts';
 import type { Deps } from '../deps.ts';
 import type { Logger } from '../util/log.ts';
 import type { EventBus, EventInput } from './events.ts';
+import { pausedAt, RUNS_WHILE_PAUSED } from './pause.ts';
 import { runInTx } from './tx.ts';
 import {
   type Handler,
@@ -53,6 +55,14 @@ class ShutdownError extends Error {
   }
 }
 
+/** The candidate paused background work: the task goes back to the queue, attempts unspent. */
+class PausedError extends Error {
+  constructor() {
+    super('background work paused');
+    this.name = 'PausedError';
+  }
+}
+
 class LeaseLostError extends Error {
   constructor() {
     super('lease lost');
@@ -65,11 +75,15 @@ export class Worker {
   private readonly o: WorkerOptions;
   private readonly now: () => Date;
   private readonly backoffMs: (attempts: number) => number;
-  private readonly inFlight = new Map<number, { promise: Promise<void>; ac: AbortController }>();
+  private readonly inFlight = new Map<
+    number,
+    { promise: Promise<void>; ac: AbortController; kind: string }
+  >();
   private running = false;
   private loopDone: Promise<void> | null = null;
   private wakeUp: (() => void) | null = null;
   private unsubscribe: (() => void) | null = null;
+  private unsubscribePause: (() => void) | null = null;
   private readonly idleWaiters: Array<() => void> = [];
 
   constructor(options: WorkerOptions) {
@@ -83,6 +97,9 @@ export class Worker {
     if (this.running) return;
     this.running = true;
     this.unsubscribe = this.o.bus.onTasksEnqueued(() => this.wake());
+    this.unsubscribePause = this.o.bus.subscribe((e) => {
+      if (e.kind === 'system.paused' || e.kind === 'system.resumed') this.wake();
+    });
     this.loopDone = this.loop();
   }
 
@@ -91,6 +108,7 @@ export class Worker {
     if (!this.running) return;
     this.running = false;
     this.unsubscribe?.();
+    this.unsubscribePause?.();
     this.wake();
     for (const { ac } of this.inFlight.values()) ac.abort(new ShutdownError());
     await Promise.allSettled([...this.inFlight.values()].map((f) => f.promise));
@@ -114,10 +132,12 @@ export class Worker {
   private async loop(): Promise<void> {
     while (this.running) {
       let leased = false;
+      const paused = this.pausedNow();
+      if (paused) this.pauseInFlight();
       while (this.running && this.inFlight.size < this.o.concurrency) {
         let row: TaskRow | null;
         try {
-          row = this.lease();
+          row = this.lease(paused);
         } catch (err) {
           this.o.log.error('lease failed', { err });
           break;
@@ -140,6 +160,23 @@ export class Worker {
     }
   }
 
+  private pausedNow(): boolean {
+    try {
+      return pausedAt(this.o.db) !== null;
+    } catch (err) {
+      this.o.log.error('pause check failed', { err });
+      return false;
+    }
+  }
+
+  /** Paused: what's running and doesn't run while paused goes back to the queue. */
+  private pauseInFlight(): void {
+    for (const { ac, kind } of this.inFlight.values()) {
+      if (ac.signal.aborted || (RUNS_WHILE_PAUSED as readonly string[]).includes(kind)) continue;
+      ac.abort(new PausedError());
+    }
+  }
+
   private emitTask(
     tx: Tx,
     row: Pick<TaskRow, 'id' | 'kind' | 'entityId' | 'runId'>,
@@ -155,8 +192,11 @@ export class Worker {
     });
   }
 
-  /** tx1: requeue expired leases, then lease the oldest runnable task of an unpaused provider. */
-  private lease(): TaskRow | null {
+  /**
+   * tx1: requeue expired leases, then lease the oldest runnable task of an unpaused provider
+   * (only one that runs while paused, when the candidate has paused background work).
+   */
+  private lease(paused: boolean): TaskRow | null {
     const now = this.now();
     return runInTx(this.o.db, this.o.bus, { now }, (tx) => {
       const expired = tx.db
@@ -199,7 +239,7 @@ export class Worker {
       }
 
       // Providers paused by a subscription limit: their tasks wait, everything else runs.
-      const paused = tx.db
+      const limited = tx.db
         .select({ provider: providerPauses.provider })
         .from(providerPauses)
         .where(gt(providerPauses.until, now))
@@ -208,7 +248,10 @@ export class Worker {
       const runnable = and(
         eq(tasks.status, 'queued'),
         lte(tasks.runAfter, now),
-        paused.length ? or(isNull(tasks.provider), notInArray(tasks.provider, paused)) : undefined,
+        limited.length
+          ? or(isNull(tasks.provider), notInArray(tasks.provider, limited))
+          : undefined,
+        paused ? inArray(tasks.kind, [...RUNS_WHILE_PAUSED]) : undefined,
       );
 
       for (;;) {
@@ -262,7 +305,7 @@ export class Worker {
         this.inFlight.delete(row.id);
         this.wake();
       });
-    this.inFlight.set(row.id, { promise, ac });
+    this.inFlight.set(row.id, { promise, ac, kind: row.kind });
   }
 
   private renewLease(id: number): boolean {
@@ -310,9 +353,9 @@ export class Worker {
         record: (write) => this.record(row, write),
       });
     } catch (err) {
-      if (ac.signal.reason instanceof ShutdownError) {
+      if (ac.signal.reason instanceof ShutdownError || ac.signal.reason instanceof PausedError) {
         clearInterval(renew);
-        this.release(row);
+        this.release(row, ac.signal.reason);
         return;
       }
       const attempts = task.attempts + 1;
@@ -326,8 +369,11 @@ export class Worker {
       clearInterval(renew);
     }
 
-    if (ac.signal.reason instanceof ShutdownError && outcome.kind === 'retry') {
-      this.release(row);
+    if (
+      (ac.signal.reason instanceof ShutdownError || ac.signal.reason instanceof PausedError) &&
+      outcome.kind === 'retry'
+    ) {
+      this.release(row, ac.signal.reason);
       return;
     }
 
@@ -436,16 +482,28 @@ export class Worker {
     });
   }
 
-  /** Gives a task back without spending an attempt (shutdown). */
-  private release(row: TaskRow): void {
+  /**
+   * Gives a task back without spending an attempt (shutdown, or the candidate paused). A pause
+   * says so on the event stream: the app stops showing the task as running.
+   */
+  private release(row: TaskRow, why: ShutdownError | PausedError): void {
     const now = this.now();
-    this.o.db
-      .update(tasks)
-      .set({ status: 'queued', leaseOwner: null, leaseExpiresAt: null, updatedAt: now })
-      .where(
-        and(eq(tasks.id, row.id), eq(tasks.leaseOwner, this.owner), eq(tasks.status, 'running')),
-      )
-      .run();
+    runInTx(this.o.db, this.o.bus, { now, runId: row.runId }, (tx) => {
+      const released = tx.db
+        .update(tasks)
+        .set({ status: 'queued', leaseOwner: null, leaseExpiresAt: null, updatedAt: now })
+        .where(
+          and(eq(tasks.id, row.id), eq(tasks.leaseOwner, this.owner), eq(tasks.status, 'running')),
+        )
+        .run();
+      if (released.changes === 1 && why instanceof PausedError) {
+        this.emitTask(tx, row, {
+          kind: 'task.requeued',
+          attempts: row.attempts,
+          message: 'background work paused; runs again on resume',
+        });
+      }
+    });
   }
 
   /** A handler's durable marker: applied now, only while the lease is still ours. */

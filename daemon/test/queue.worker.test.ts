@@ -2,6 +2,7 @@ import { eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { type EventRow, postings, tasks } from '../src/db/schema.ts';
 import { EventBus } from '../src/queue/events.ts';
+import { setPaused } from '../src/queue/pause.ts';
 import { runInTx } from '../src/queue/tx.ts';
 import type { Handler, HandlerContext, Outcome, Task, Tx } from '../src/queue/types.ts';
 import { Worker, type WorkerOptions } from '../src/queue/worker.ts';
@@ -374,6 +375,70 @@ describe('queue worker', () => {
     await started.promise;
     await w.stop();
     expect(taskRow(taskId)).toMatchObject({ status: 'queued', attempts: 0, leaseOwner: null });
+  });
+
+  const pause = (paused: boolean) =>
+    runInTx(t.db, bus, { now: clock.now() }, (tx) => setPaused(tx, paused));
+  const settle = () => new Promise((r) => setTimeout(r, 50));
+
+  it('leases nothing but what runs while paused, and catches up on resume', async () => {
+    pause(true);
+    const { postingId, taskId } = addPosting();
+    const turnId = runInTx(t.db, bus, { now: clock.now() }, (tx) => tx.enqueue('interview_turn', 1));
+    const w = worker(markVerified('ok'), {
+      handlers: handlers({
+        verify_posting: markVerified('ok'),
+        interview_turn: async () => ({ kind: 'done', commit: () => {} }),
+      }),
+    });
+    w.start();
+    await settle();
+    // The candidate's interview answer still runs; the posting waits, attempts unspent.
+    expect(taskRow(turnId)?.status).toBe('done');
+    expect(taskRow(taskId)).toMatchObject({ status: 'queued', attempts: 0 });
+    expect(postingRow(postingId)?.stage).toBe('found');
+
+    pause(false);
+    await settle();
+    expect(postingRow(postingId)?.stage).toBe('verified');
+    expect(published.map((e) => e.kind)).toEqual(
+      expect.arrayContaining(['system.paused', 'system.resumed']),
+    );
+  });
+
+  it('gives a running task back to the queue when paused, and runs it again on resume', async () => {
+    const { postingId, taskId } = addPosting();
+    const started = gate();
+    let runs = 0;
+    const w = worker(async (task, ctx) => {
+      runs++;
+      if (runs === 1) {
+        started.open();
+        await new Promise((_, reject) =>
+          ctx.signal.addEventListener('abort', () => reject(ctx.signal.reason)),
+        );
+      }
+      return markVerified('second run')(task, ctx);
+    });
+    w.start();
+    await started.promise;
+    pause(true);
+    await settle();
+    expect(taskRow(taskId)).toMatchObject({ status: 'queued', attempts: 0, leaseOwner: null });
+    expect(kinds(taskId)).toEqual(['task.queued', 'task.started', 'task.requeued']);
+
+    pause(false);
+    await settle();
+    expect(runs).toBe(2);
+    expect(postingRow(postingId)).toMatchObject({ stage: 'verified', verifyNote: 'second run' });
+  });
+
+  it('keeps the first pause time when paused twice', () => {
+    const first = pause(true);
+    clock.advance(60_000);
+    expect(pause(true)).toEqual(first);
+    expect(pause(false)).toBeNull();
+    expect(published.filter((e) => e.kind === 'system.paused')).toHaveLength(1);
   });
 
   it('wakes up as soon as a task is enqueued', async () => {

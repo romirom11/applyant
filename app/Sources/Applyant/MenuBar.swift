@@ -41,7 +41,9 @@ struct StatusMenu: View {
         let ready = store.items(.readyToReview)
         let needs = store.needsYou
         Text(counterLine(ready: ready.count, needs: needs.count, preparing: store.count(.preparing)))
-        if let paused = store.activity.paused {
+        if let since = store.backgroundPausedAt {
+            Text(ActivityText.backgroundPaused(since: since))
+        } else if let paused = store.activity.paused {
             Text(paused)
         } else if !store.activity.running.isEmpty || !store.deliveries.isEmpty {
             ForEach(workingLine.components(separatedBy: "\n"), id: \.self) { Text($0) }
@@ -56,6 +58,17 @@ struct StatusMenu: View {
             Button("Needs you: \(app.hasCompany ? app.company : "application \(app.id)")") {
                 store.navigation.showReview(application: app.id, posting: app.postingID, stage: app.stage)
                 open()
+            }
+        }
+
+        if store.connection == .connected {
+            Divider()
+            if store.backgroundPausedAt != nil {
+                Button("Resume Background Work") { Task { await store.setBackgroundPaused(false) } }
+                    .keyboardShortcut("p")
+            } else {
+                Button("Pause Background Work") { Task { await store.setBackgroundPaused(true) } }
+                    .keyboardShortcut("p")
             }
         }
 

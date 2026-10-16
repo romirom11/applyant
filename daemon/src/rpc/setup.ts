@@ -1,7 +1,7 @@
 // GetSetupStatus: can this daemon do its work here? Agent CLIs, the native helper, secrets, and
 // (phase 16) the onboarding: the connections, the setup steps, the import's progress and
 // whether search has started. SetSetupStep records a step; GetPreferencesDraft pre-fills
-// Preferences from the imported CV.
+// Preferences from the imported CV. SetBackgroundPaused pauses or resumes background work.
 import { create } from '@bufbuild/protobuf';
 import { timestampFromDate } from '@bufbuild/protobuf/wkt';
 import { Code, ConnectError, type ServiceImpl } from '@connectrpc/connect';
@@ -34,6 +34,7 @@ import { currentMailbox } from '../integrations/mail-service.ts';
 import type { CliStatus, ToolCheck } from '../models/cli-status.ts';
 import { JEV_SECRET } from '../models/providers/jev.ts';
 import type { NativeHelper } from '../native/client.ts';
+import { pausedAt, setPaused } from '../queue/pause.ts';
 import { runInTx } from '../queue/tx.ts';
 import type { Secrets } from '../secrets/secrets.ts';
 import type { RpcContext } from './postings.ts';
@@ -149,12 +150,14 @@ export async function setupStatus(
   status.import = create(ImportProgressSchema, importProgress(o.db));
   status.searchStarted = searchStarted(o.db);
   status.setupDone = setupDone(o.db);
+  const paused = pausedAt(o.db);
+  if (paused) status.backgroundPausedAt = timestampFromDate(paused);
   return status;
 }
 
 export function setupRpcs(
   o: SetupContext & Partial<RpcContext>,
-): Pick<Impl, 'getSetupStatus' | 'setSetupStep' | 'getPreferencesDraft'> {
+): Pick<Impl, 'getSetupStatus' | 'setSetupStep' | 'getPreferencesDraft' | 'setBackgroundPaused'> {
   const need = (): RpcContext => {
     if (!o.db || !o.bus || !o.now) throw new ConnectError('no database', Code.Unavailable);
     return { db: o.db, bus: o.bus, now: o.now };
@@ -175,6 +178,12 @@ export function setupRpcs(
         throw err;
       }
       return { status: await setupStatus(o), planId: BigInt(planId ?? 0) };
+    },
+
+    setBackgroundPaused(req) {
+      const c = need();
+      const at = runInTx(c.db, c.bus, { now: c.now() }, (tx) => setPaused(tx, req.paused));
+      return at ? { pausedAt: timestampFromDate(at) } : {};
     },
 
     getPreferencesDraft() {

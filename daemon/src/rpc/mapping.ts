@@ -520,6 +520,12 @@ export function eventToPb(row: EventRow): Event {
       },
     });
   }
+  if (row.kind === 'system.paused' || row.kind === 'system.resumed') {
+    return create(EventSchema, {
+      ...base,
+      payload: { case: 'background', value: { paused: row.kind === 'system.paused' } },
+    });
+  }
   if (row.kind === 'posting.stage' || row.kind === 'posting.form') {
     return create(EventSchema, {
       ...base,

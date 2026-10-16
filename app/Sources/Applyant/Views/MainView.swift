@@ -104,6 +104,21 @@ struct ServiceDown: View {
     }
 }
 
+/// Pauses or resumes search, scoring and the rest of the background work, without quitting.
+struct PauseButton: View {
+    let store: AppStore
+
+    var body: some View {
+        let paused = store.backgroundPausedAt != nil
+        Button { Task { await store.setBackgroundPaused(!paused) } } label: {
+            Label(paused ? "Resume" : "Pause", systemImage: paused ? "play.fill" : "pause.fill")
+        }
+        .help(paused
+            ? "Resume background work: whatever came due while paused runs now"
+            : "Pause searching, scoring, research and mail until you resume (interview answers and approved applications still go through)")
+    }
+}
+
 /// A slim line along the window's bottom: what Applyant is doing now, or what it waits for.
 struct ActivityBar: View {
     let store: AppStore
@@ -111,7 +126,7 @@ struct ActivityBar: View {
     var body: some View {
         if store.connection == .connected, let line = store.activityLine {
             HStack(spacing: 8) {
-                if store.activity.paused == nil {
+                if store.activity.paused == nil && store.backgroundPausedAt == nil {
                     ProgressView().controlSize(.small)
                 } else {
                     Image(systemName: "pause.circle").foregroundStyle(.orange)
@@ -232,6 +247,8 @@ struct Sidebar: View {
             }
         }
         .listStyle(.sidebar)
+        // Above the sections, so it's there whichever one is open.
+        .toolbar { ToolbarItem { PauseButton(store: store) } }
     }
 
     private func row(_ section: ApplyantKit.Section) -> some View {

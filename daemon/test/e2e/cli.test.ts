@@ -543,6 +543,18 @@ describe('applyant CLI against a live daemon', () => {
     expect(text.stdout).toMatch(/codex {5}✗ APPLYANT_CODEX_PATH/);
   });
 
+  it('pause and resume turn background work off and on, and status says so', async () => {
+    const paused = await cli(['pause']);
+    expect(paused.code).toBe(0);
+    expect(paused.stdout).toMatch(/^Background work paused/);
+    expect((await cliJson<{ pausedAt: string | null }>(['status'])).pausedAt).toMatch(/^\d{4}-/);
+    expect((await cli(['status'])).stdout).toMatch(/^paused {4}since /m);
+
+    const resumed = await cli(['resume']);
+    expect(resumed.code).toBe(0);
+    expect((await cliJson<{ pausedAt: string | null }>(['status'])).pausedAt).toBeNull();
+  });
+
   it('stores secrets write-only and never leaks values into logs or other files', async () => {
     const set = await cli(['secrets', 'set', 'jev'], `${SECRET}\n`);
     expect(set.code).toBe(0);

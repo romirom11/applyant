@@ -1366,6 +1366,24 @@ export declare type PlatformEvent = Message<"applyant.v1.PlatformEvent"> & {
 export declare const PlatformEventSchema: GenMessage<PlatformEvent>;
 
 /**
+ * The candidate paused background work, or resumed it.
+ *
+ * @generated from message applyant.v1.BackgroundEvent
+ */
+export declare type BackgroundEvent = Message<"applyant.v1.BackgroundEvent"> & {
+  /**
+   * @generated from field: bool paused = 1;
+   */
+  paused: boolean;
+};
+
+/**
+ * Describes the message applyant.v1.BackgroundEvent.
+ * Use `create(BackgroundEventSchema)` to create a new message.
+ */
+export declare const BackgroundEventSchema: GenMessage<BackgroundEvent>;
+
+/**
  * @generated from message applyant.v1.Event
  */
 export declare type Event = Message<"applyant.v1.Event"> & {
@@ -1448,6 +1466,12 @@ export declare type Event = Message<"applyant.v1.Event"> & {
      */
     value: PlatformEvent;
     case: "platform";
+  } | {
+    /**
+     * @generated from field: applyant.v1.BackgroundEvent background = 19;
+     */
+    value: BackgroundEvent;
+    case: "background";
   } | { case: undefined; value?: undefined };
 };
 
@@ -1823,6 +1847,13 @@ export declare type SetupStatus = Message<"applyant.v1.SetupStatus"> & {
    * @generated from field: applyant.v1.ToolStatus gh = 20;
    */
   gh?: ToolStatus | undefined;
+
+  /**
+   * Set while the candidate has paused background work (SetBackgroundPaused): since when.
+   *
+   * @generated from field: google.protobuf.Timestamp background_paused_at = 21;
+   */
+  backgroundPausedAt?: Timestamp | undefined;
 };
 
 /**
@@ -2068,6 +2099,40 @@ export declare type GetSetupStatusResponse = Message<"applyant.v1.GetSetupStatus
  * Use `create(GetSetupStatusResponseSchema)` to create a new message.
  */
 export declare const GetSetupStatusResponseSchema: GenMessage<GetSetupStatusResponse>;
+
+/**
+ * @generated from message applyant.v1.SetBackgroundPausedRequest
+ */
+export declare type SetBackgroundPausedRequest = Message<"applyant.v1.SetBackgroundPausedRequest"> & {
+  /**
+   * @generated from field: bool paused = 1;
+   */
+  paused: boolean;
+};
+
+/**
+ * Describes the message applyant.v1.SetBackgroundPausedRequest.
+ * Use `create(SetBackgroundPausedRequestSchema)` to create a new message.
+ */
+export declare const SetBackgroundPausedRequestSchema: GenMessage<SetBackgroundPausedRequest>;
+
+/**
+ * @generated from message applyant.v1.SetBackgroundPausedResponse
+ */
+export declare type SetBackgroundPausedResponse = Message<"applyant.v1.SetBackgroundPausedResponse"> & {
+  /**
+   * Since when it's paused; unset: background work runs.
+   *
+   * @generated from field: google.protobuf.Timestamp paused_at = 1;
+   */
+  pausedAt?: Timestamp | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.SetBackgroundPausedResponse.
+ * Use `create(SetBackgroundPausedResponseSchema)` to create a new message.
+ */
+export declare const SetBackgroundPausedResponseSchema: GenMessage<SetBackgroundPausedResponse>;
 
 /**
  * @generated from message applyant.v1.ProfileEntry
@@ -8630,6 +8695,18 @@ export declare const ApplyantService: GenService<{
     methodKind: "unary";
     input: typeof GetPreferencesDraftRequestSchema;
     output: typeof GetPreferencesDraftResponseSchema;
+  },
+  /**
+   * Pauses or resumes background work (search, scoring, research, preparation, mail) without
+   * quitting: paused, the scheduler starts nothing and what was running goes back to the queue.
+   * Interview answers and deliveries the candidate approved still run. Outlasts a restart.
+   *
+   * @generated from rpc applyant.v1.ApplyantService.SetBackgroundPaused
+   */
+  setBackgroundPaused: {
+    methodKind: "unary";
+    input: typeof SetBackgroundPausedRequestSchema;
+    output: typeof SetBackgroundPausedResponseSchema;
   },
   /**
    * Candidate knowledge: profile, projects, sources and the facts extracted from them.

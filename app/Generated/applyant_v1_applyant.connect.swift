@@ -88,6 +88,12 @@ public protocol Applyant_V1_ApplyantServiceClientInterface: Sendable {
     @available(iOS 13, *)
     func `getPreferencesDraft`(request: Applyant_V1_GetPreferencesDraftRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_GetPreferencesDraftResponse>
 
+    /// Pauses or resumes background work (search, scoring, research, preparation, mail) without
+    /// quitting: paused, the scheduler starts nothing and what was running goes back to the queue.
+    /// Interview answers and deliveries the candidate approved still run. Outlasts a restart.
+    @available(iOS 13, *)
+    func `setBackgroundPaused`(request: Applyant_V1_SetBackgroundPausedRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_SetBackgroundPausedResponse>
+
     /// Candidate knowledge: profile, projects, sources and the facts extracted from them.
     @available(iOS 13, *)
     func `getCandidate`(request: Applyant_V1_GetCandidateRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_GetCandidateResponse>
@@ -523,6 +529,11 @@ public final class Applyant_V1_ApplyantServiceClient: Applyant_V1_ApplyantServic
     }
 
     @available(iOS 13, *)
+    public func `setBackgroundPaused`(request: Applyant_V1_SetBackgroundPausedRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_SetBackgroundPausedResponse> {
+        return await self.client.unary(path: "/applyant.v1.ApplyantService/SetBackgroundPaused", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
     public func `getCandidate`(request: Applyant_V1_GetCandidateRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_GetCandidateResponse> {
         return await self.client.unary(path: "/applyant.v1.ApplyantService/GetCandidate", idempotencyLevel: .unknown, request: request, headers: headers)
     }
@@ -902,6 +913,7 @@ public final class Applyant_V1_ApplyantServiceClient: Applyant_V1_ApplyantServic
             public static let getSetupStatus = Connect.MethodSpec(name: "GetSetupStatus", service: "applyant.v1.ApplyantService", type: .unary)
             public static let setSetupStep = Connect.MethodSpec(name: "SetSetupStep", service: "applyant.v1.ApplyantService", type: .unary)
             public static let getPreferencesDraft = Connect.MethodSpec(name: "GetPreferencesDraft", service: "applyant.v1.ApplyantService", type: .unary)
+            public static let setBackgroundPaused = Connect.MethodSpec(name: "SetBackgroundPaused", service: "applyant.v1.ApplyantService", type: .unary)
             public static let getCandidate = Connect.MethodSpec(name: "GetCandidate", service: "applyant.v1.ApplyantService", type: .unary)
             public static let setProfileValue = Connect.MethodSpec(name: "SetProfileValue", service: "applyant.v1.ApplyantService", type: .unary)
             public static let createProject = Connect.MethodSpec(name: "CreateProject", service: "applyant.v1.ApplyantService", type: .unary)

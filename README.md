@@ -62,6 +62,18 @@ pnpm -C daemon cli runs show --follow
 printf %s "$KEY" | pnpm -C daemon cli secrets set jev
 ```
 
+Background work can be paused without quitting: **Pause Background Work** in the menu bar (⌘P),
+**Pause** above the sidebar, or `applyant pause`. Paused, the scheduler starts no search runs and
+the worker leases nothing new; what was running (a search, a scoring, a company's research) goes
+back to the queue without spending an attempt. Interview answers and deliveries you approved still
+run. Work keeps queueing while paused (a mail sync, a posting you add) and the pause outlasts a
+restart; on resume, every search that came due runs once, at once.
+
+```sh
+pnpm -C daemon cli pause                      # status then says "paused since …"
+pnpm -C daemon cli resume
+```
+
 Candidate knowledge (facts are extracted by the `claude` CLI signed in on this machine;
 set `APPLYANT_CLAUDE_PATH` if it isn't on the daemon's `PATH`):
 

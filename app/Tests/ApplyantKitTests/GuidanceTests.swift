@@ -21,6 +21,19 @@ import Testing
         #expect(ActivityText.line(activity, deliveries: [:]) { _ in "" }?.hasPrefix("Waiting for claude limit · resumes 15:45") == true)
     }
 
+    @Test func aPauseLeadsTheStatusLine() {
+        let since = Date()
+        var activity = Activity()
+        #expect(ActivityText.line(activity, deliveries: [:], backgroundPaused: since) { _ in "" }?.hasPrefix("Paused since ") == true)
+        // What still runs while paused (an interview answer) is named after the pause.
+        activity.running = [3: "interview_turn"]
+        activity.paused = "Waiting for claude limit · resumes 15:45"
+        let line = ActivityText.line(activity, deliveries: [:], backgroundPaused: since) { _ in "" }
+        #expect(line?.hasPrefix("Paused since ") == true && line?.contains("still running") == true)
+        let empty = ActivityText.empty(.inbox, activity: Activity(), postings: [], strategies: 1, searchStarted: true, backgroundPaused: since)
+        #expect(empty.title == "Paused")
+    }
+
     @Test func anEmptyInboxSaysWhatItWaitsFor() {
         let idle = Activity()
         let none = ActivityText.empty(.inbox, activity: idle, postings: [], strategies: 0, searchStarted: true)

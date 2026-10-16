@@ -1713,6 +1713,19 @@ public nonisolated struct Applyant_V1_PlatformEvent: Sendable {
   public init() {}
 }
 
+/// The candidate paused background work, or resumed it.
+public nonisolated struct Applyant_V1_BackgroundEvent: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var paused: Bool = false
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
 public nonisolated struct Applyant_V1_Event: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
@@ -1815,6 +1828,14 @@ public nonisolated struct Applyant_V1_Event: Sendable {
     set {payload = .platform(newValue)}
   }
 
+  public var background: Applyant_V1_BackgroundEvent {
+    get {
+      if case .background(let v)? = payload {return v}
+      return Applyant_V1_BackgroundEvent()
+    }
+    set {payload = .background(newValue)}
+  }
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public nonisolated enum OneOf_Payload: Equatable, Sendable {
@@ -1827,6 +1848,7 @@ public nonisolated struct Applyant_V1_Event: Sendable {
     case company(Applyant_V1_CompanyEvent)
     case mail(Applyant_V1_MailEvent)
     case platform(Applyant_V1_PlatformEvent)
+    case background(Applyant_V1_BackgroundEvent)
 
   }
 
@@ -2215,6 +2237,16 @@ public nonisolated struct Applyant_V1_SetupStatus: @unchecked Sendable {
   /// Clears the value of `gh`. Subsequent reads from it will return its default value.
   public mutating func clearGh() {_uniqueStorage()._gh = nil}
 
+  /// Set while the candidate has paused background work (SetBackgroundPaused): since when.
+  public var backgroundPausedAt: SwiftProtobuf.Google_Protobuf_Timestamp {
+    get {_storage._backgroundPausedAt ?? SwiftProtobuf.Google_Protobuf_Timestamp()}
+    set {_uniqueStorage()._backgroundPausedAt = newValue}
+  }
+  /// Returns true if `backgroundPausedAt` has been explicitly set.
+  public var hasBackgroundPausedAt: Bool {_storage._backgroundPausedAt != nil}
+  /// Clears the value of `backgroundPausedAt`. Subsequent reads from it will return its default value.
+  public mutating func clearBackgroundPausedAt() {_uniqueStorage()._backgroundPausedAt = nil}
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -2400,6 +2432,40 @@ public nonisolated struct Applyant_V1_GetSetupStatusResponse: Sendable {
   public init() {}
 
   fileprivate var _status: Applyant_V1_SetupStatus? = nil
+}
+
+public nonisolated struct Applyant_V1_SetBackgroundPausedRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var paused: Bool = false
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Applyant_V1_SetBackgroundPausedResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// Since when it's paused; unset: background work runs.
+  public var pausedAt: SwiftProtobuf.Google_Protobuf_Timestamp {
+    get {_pausedAt ?? SwiftProtobuf.Google_Protobuf_Timestamp()}
+    set {_pausedAt = newValue}
+  }
+  /// Returns true if `pausedAt` has been explicitly set.
+  public var hasPausedAt: Bool {self._pausedAt != nil}
+  /// Clears the value of `pausedAt`. Subsequent reads from it will return its default value.
+  public mutating func clearPausedAt() {self._pausedAt = nil}
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _pausedAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
 }
 
 public nonisolated struct Applyant_V1_ProfileEntry: Sendable {
@@ -10543,9 +10609,39 @@ nonisolated extension Applyant_V1_PlatformEvent: SwiftProtobuf.Message, SwiftPro
   }
 }
 
+nonisolated extension Applyant_V1_BackgroundEvent: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".BackgroundEvent"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}paused\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularBoolField(value: &self.paused) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.paused != false {
+      try visitor.visitSingularBoolField(value: self.paused, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Applyant_V1_BackgroundEvent, rhs: Applyant_V1_BackgroundEvent) -> Bool {
+    if lhs.paused != rhs.paused {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
 nonisolated extension Applyant_V1_Event: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Event"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}at\0\u{3}run_id\0\u{1}message\0\u{2}\u{6}task\0\u{1}posting\0\u{1}application\0\u{1}handoff\0\u{1}interview\0\u{1}search\0\u{1}company\0\u{1}mail\0\u{1}platform\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}at\0\u{3}run_id\0\u{1}message\0\u{2}\u{6}task\0\u{1}posting\0\u{1}application\0\u{1}handoff\0\u{1}interview\0\u{1}search\0\u{1}company\0\u{1}mail\0\u{1}platform\0\u{1}background\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -10674,6 +10770,19 @@ nonisolated extension Applyant_V1_Event: SwiftProtobuf.Message, SwiftProtobuf._M
           self.payload = .platform(v)
         }
       }()
+      case 19: try {
+        var v: Applyant_V1_BackgroundEvent?
+        var hadOneofValue = false
+        if let current = self.payload {
+          hadOneofValue = true
+          if case .background(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.payload = .background(v)
+        }
+      }()
       default: break
       }
     }
@@ -10732,6 +10841,10 @@ nonisolated extension Applyant_V1_Event: SwiftProtobuf.Message, SwiftProtobuf._M
     case .platform?: try {
       guard case .platform(let v)? = self.payload else { preconditionFailure() }
       try visitor.visitSingularMessageField(value: v, fieldNumber: 18)
+    }()
+    case .background?: try {
+      guard case .background(let v)? = self.payload else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 19)
     }()
     case nil: break
     }
@@ -11126,7 +11239,7 @@ nonisolated extension Applyant_V1_ToolStatus: SwiftProtobuf.Message, SwiftProtob
 
 nonisolated extension Applyant_V1_SetupStatus: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".SetupStatus"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}claude\0\u{1}codex\0\u{3}native_helper\0\u{3}secrets_backend\0\u{1}pid\0\u{1}home\0\u{3}started_at\0\u{3}checked_at\0\u{1}jev\0\u{1}github\0\u{1}mailbox\0\u{1}calendar\0\u{1}drive\0\u{1}telegram\0\u{1}captcha\0\u{1}steps\0\u{1}import\0\u{3}search_started\0\u{3}setup_done\0\u{1}gh\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}claude\0\u{1}codex\0\u{3}native_helper\0\u{3}secrets_backend\0\u{1}pid\0\u{1}home\0\u{3}started_at\0\u{3}checked_at\0\u{1}jev\0\u{1}github\0\u{1}mailbox\0\u{1}calendar\0\u{1}drive\0\u{1}telegram\0\u{1}captcha\0\u{1}steps\0\u{1}import\0\u{3}search_started\0\u{3}setup_done\0\u{1}gh\0\u{3}background_paused_at\0")
 
   fileprivate class _StorageClass {
     var _claude: Applyant_V1_ToolStatus? = nil
@@ -11149,6 +11262,7 @@ nonisolated extension Applyant_V1_SetupStatus: SwiftProtobuf.Message, SwiftProto
     var _searchStarted: Bool = false
     var _setupDone: Bool = false
     var _gh: Applyant_V1_ToolStatus? = nil
+    var _backgroundPausedAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
 
       // This property is used as the initial default value for new instances of the type.
       // The type itself is protecting the reference to its storage via CoW semantics.
@@ -11179,6 +11293,7 @@ nonisolated extension Applyant_V1_SetupStatus: SwiftProtobuf.Message, SwiftProto
       _searchStarted = source._searchStarted
       _setupDone = source._setupDone
       _gh = source._gh
+      _backgroundPausedAt = source._backgroundPausedAt
     }
   }
 
@@ -11217,6 +11332,7 @@ nonisolated extension Applyant_V1_SetupStatus: SwiftProtobuf.Message, SwiftProto
         case 18: try { try decoder.decodeSingularBoolField(value: &_storage._searchStarted) }()
         case 19: try { try decoder.decodeSingularBoolField(value: &_storage._setupDone) }()
         case 20: try { try decoder.decodeSingularMessageField(value: &_storage._gh) }()
+        case 21: try { try decoder.decodeSingularMessageField(value: &_storage._backgroundPausedAt) }()
         default: break
         }
       }
@@ -11289,6 +11405,9 @@ nonisolated extension Applyant_V1_SetupStatus: SwiftProtobuf.Message, SwiftProto
       try { if let v = _storage._gh {
         try visitor.visitSingularMessageField(value: v, fieldNumber: 20)
       } }()
+      try { if let v = _storage._backgroundPausedAt {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 21)
+      } }()
     }
     try unknownFields.traverse(visitor: &visitor)
   }
@@ -11318,6 +11437,7 @@ nonisolated extension Applyant_V1_SetupStatus: SwiftProtobuf.Message, SwiftProto
         if _storage._searchStarted != rhs_storage._searchStarted {return false}
         if _storage._setupDone != rhs_storage._setupDone {return false}
         if _storage._gh != rhs_storage._gh {return false}
+        if _storage._backgroundPausedAt != rhs_storage._backgroundPausedAt {return false}
         return true
       }
       if !storagesAreEqual {return false}
@@ -11683,6 +11803,70 @@ nonisolated extension Applyant_V1_GetSetupStatusResponse: SwiftProtobuf.Message,
 
   public static func ==(lhs: Applyant_V1_GetSetupStatusResponse, rhs: Applyant_V1_GetSetupStatusResponse) -> Bool {
     if lhs._status != rhs._status {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Applyant_V1_SetBackgroundPausedRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".SetBackgroundPausedRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}paused\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularBoolField(value: &self.paused) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.paused != false {
+      try visitor.visitSingularBoolField(value: self.paused, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Applyant_V1_SetBackgroundPausedRequest, rhs: Applyant_V1_SetBackgroundPausedRequest) -> Bool {
+    if lhs.paused != rhs.paused {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Applyant_V1_SetBackgroundPausedResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".SetBackgroundPausedResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}paused_at\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularMessageField(value: &self._pausedAt) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if let v = self._pausedAt {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Applyant_V1_SetBackgroundPausedResponse, rhs: Applyant_V1_SetBackgroundPausedResponse) -> Bool {
+    if lhs._pausedAt != rhs._pausedAt {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

@@ -304,6 +304,9 @@ public final class AppStore {
             // LinkedIn/Xing paused, resumed, capped or signed in: Settings shows it. A pause
             // during a delivery also arrives as its hand-off event, which notifies.
             await refreshPlatforms(api)
+        case .background?:
+            // Paused or resumed (here, from the menu, or `applyant pause` in a terminal).
+            await refreshSetup()
         case nil:
             break
         }
@@ -549,6 +552,30 @@ public final class AppStore {
         record(app)
         await refreshPosting(app.postingID, api)
         if overview != nil { await refreshOverview(api) }
+        return true
+    }
+
+    // MARK: Pausing background work
+
+    /// Since when the candidate has paused background work; nil while it runs.
+    public var backgroundPausedAt: Date? {
+        guard let setup, setup.hasBackgroundPausedAt else { return nil }
+        return setup.backgroundPausedAt.date
+    }
+
+    /// Pauses or resumes search, scoring, research and the rest of the background work, without
+    /// quitting. False when the daemon refused (the reason is in `lastError`).
+    @discardableResult
+    public func setBackgroundPaused(_ paused: Bool) async -> Bool {
+        guard let api, let result = await attempt({ try await api.setBackgroundPaused(paused) }) else { return false }
+        if var status = setup {
+            if let at = result {
+                status.backgroundPausedAt = .init(date: at)
+            } else {
+                status.clearBackgroundPausedAt()
+            }
+            setup = status
+        }
         return true
     }
 
@@ -1618,9 +1645,9 @@ func pauseText(_ message: String) -> String {
 }
 
 extension AppStore {
-    /// The main window's status line: a provider pause, or the work running now; nil when idle.
+    /// The main window's status line: a pause, or the work running now; nil when idle.
     public var activityLine: String? {
-        ActivityText.line(activity, deliveries: deliveries) { id in
+        ActivityText.line(activity, deliveries: deliveries, backgroundPaused: backgroundPausedAt) { id in
             applications[id].map { $0.hasCompany ? $0.company : "application \(id)" } ?? "application \(id)"
         }
     }
@@ -1632,7 +1659,8 @@ extension AppStore {
             activity: activity,
             postings: Array(postings.values),
             strategies: search.strategies.count,
-            searchStarted: onboarding.searchStarted
+            searchStarted: onboarding.searchStarted,
+            backgroundPaused: backgroundPausedAt
         )
     }
 

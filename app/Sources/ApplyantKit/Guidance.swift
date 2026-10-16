@@ -41,8 +41,27 @@ public enum TaskText {
 }
 
 public enum ActivityText {
-    /// The main window's status line: a pause first, then what's running; nil when idle.
-    public static func line(_ activity: Activity, deliveries: [Int64: DeliveryProgress], name: (Int64) -> String) -> String? {
+    /// "Paused since 15:42: no searching, scoring or other background work".
+    public static func backgroundPaused(since: Date) -> String {
+        let time = Calendar.current.isDateInToday(since)
+            ? since.formatted(date: .omitted, time: .shortened)
+            : since.formatted(.dateTime.day().month(.abbreviated).hour().minute())
+        return "Paused since \(time): no searching, scoring or other background work"
+    }
+
+    /// The main window's status line: the candidate's pause, a limit's pause, then what's
+    /// running; nil when idle.
+    public static func line(
+        _ activity: Activity,
+        deliveries: [Int64: DeliveryProgress],
+        backgroundPaused: Date? = nil,
+        name: (Int64) -> String
+    ) -> String? {
+        if let since = backgroundPaused {
+            let running = WorkingLine.text(running: activity.running, deliveries: deliveries, name: name)
+            let still = running.isEmpty ? "" : " · still running: " + running.replacingOccurrences(of: "\n", with: " · ")
+            return ActivityText.backgroundPaused(since: since) + still
+        }
         if let paused = activity.paused { return paused + " · work continues on its own after that" }
         let text = WorkingLine.text(running: activity.running, deliveries: deliveries, name: name)
         return text.isEmpty ? nil : text.replacingOccurrences(of: "\n", with: " · ")
@@ -59,10 +78,14 @@ public enum ActivityText {
         activity: Activity,
         postings: [Posting],
         strategies: Int,
-        searchStarted: Bool
+        searchStarted: Bool,
+        backgroundPaused: Date? = nil
     ) -> Empty {
         switch section {
         case .inbox:
+            if backgroundPaused != nil {
+                return Empty(title: "Paused", detail: "Background work is paused: nothing is searched or scored until you resume it (Resume above the sidebar, or in the menu bar).")
+            }
             if let paused = activity.paused {
                 return Empty(title: "Waiting", detail: paused + ". Postings are scored again once the limit is over.")
             }

@@ -24,6 +24,7 @@ import {
   updateStrategy,
 } from '../src/domain/search/strategies.ts';
 import { EventBus } from '../src/queue/events.ts';
+import { setPaused } from '../src/queue/pause.ts';
 import { Scheduler } from '../src/queue/scheduler.ts';
 import { runInTx } from '../src/queue/tx.ts';
 import { type TempDb, tempDb } from './helpers/db.ts';
@@ -198,6 +199,29 @@ describe('the scheduler', () => {
     now = at('2026-09-29T09:00:00Z');
     expect(scheduler.tick('wake')).toHaveLength(1);
     expect(listRuns(t.db).map((r) => r.trigger)).toEqual(['wake', 'schedule']);
+  });
+
+  it('the Scheduler starts nothing while background work is paused, and catches up on resume', () => {
+    const now = at('2026-09-28T08:00:00Z');
+    add('A', now);
+    const scheduler = new Scheduler({
+      db: t.db,
+      bus,
+      log: quietLog,
+      intervalMs: 3_600_000,
+      now: () => now,
+    });
+    runInTx(t.db, bus, { now }, (tx) => setPaused(tx, true));
+    expect(scheduler.tick('schedule')).toEqual([]);
+    expect(listRuns(t.db)).toEqual([]);
+    scheduler.start();
+    try {
+      runInTx(t.db, bus, { now }, (tx) => setPaused(tx, false));
+      // The resume itself starts what came due, not the next tick.
+      expect(listRuns(t.db)).toHaveLength(1);
+    } finally {
+      scheduler.stop();
+    }
   });
 
   it('pausing and resuming; a resumed strategy whose slot passed is due now', () => {

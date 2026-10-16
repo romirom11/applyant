@@ -1,4 +1,5 @@
 // `applyant status`: is the daemon up, and can it reach what it needs on this machine?
+// `applyant pause` / `applyant resume`: background work off and on, without stopping the daemon.
 import { timestampDate } from '@bufbuild/protobuf/wkt';
 import type { Command } from 'commander';
 import type { SetupStatus, ToolStatus } from '../gen/applyant/v1/applyant_pb.js';
@@ -46,6 +47,7 @@ export function statusJson(s: SetupStatus): unknown {
     nativeHelper: s.nativeHelper,
     secretsBackend: s.secretsBackend,
     checkedAt: s.checkedAt ? timestampDate(s.checkedAt).toISOString() : null,
+    pausedAt: s.backgroundPausedAt ? timestampDate(s.backgroundPausedAt).toISOString() : null,
   };
 }
 
@@ -58,6 +60,11 @@ export function statusText(s: SetupStatus): string {
     toolLine('gh', s.gh) + (s.gh?.account ? ` as ${s.gh.account}` : ''),
     `native    ${s.nativeHelper ? '✓ applyant-native answers' : '– applyant-native unavailable (macOS app only)'}`,
     `secrets   ${s.secretsBackend}`,
+    ...(s.backgroundPausedAt
+      ? [
+          `paused    since ${timestampDate(s.backgroundPausedAt).toLocaleString()}: no search or other background work (applyant resume)`,
+        ]
+      : []),
   ].join('\n');
 }
 
@@ -71,5 +78,26 @@ export function registerStatus(program: Command, client: () => ApplyantClient): 
       const { status } = await client().getSetupStatus({ refresh: opts.refresh ?? false });
       if (!status) throw new Error('the daemon sent no status');
       out(opts.json ? JSON.stringify(statusJson(status), null, 2) : statusText(status));
+    });
+
+  program
+    .command('pause')
+    .description(
+      'pause background work (search, scoring, research, preparation, mail) until `applyant resume`',
+    )
+    .action(async () => {
+      const { pausedAt } = await client().setBackgroundPaused({ paused: true });
+      const since = pausedAt ? timestampDate(pausedAt).toLocaleString() : '?';
+      out(
+        `Background work paused (since ${since}). Interview answers and approved deliveries still run.`,
+      );
+    });
+
+  program
+    .command('resume')
+    .description('resume background work after `applyant pause`')
+    .action(async () => {
+      await client().setBackgroundPaused({ paused: false });
+      out('Background work resumed: what came due while paused runs now.');
     });
 }

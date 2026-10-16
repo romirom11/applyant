@@ -2,12 +2,15 @@
 // when the Mac wakes (applyant-native's `wake` event). Node can't see sleep, so a strategy
 // whose slots passed while the Mac slept is simply due at the next tick, and runs once, not
 // once per missed slot: its next run counts from when it started. Once the candidate has run
-// the search planner, it also starts a new plan a week after the last one.
+// the search planner, it also starts a new plan a week after the last one. While the candidate
+// has paused background work (queue/pause.ts) it starts nothing; on resume, whatever came due
+// in the meantime starts at once, once.
 import type { Db } from '../db/client.ts';
 import { schedulePlanner } from '../domain/search/planner.ts';
 import { scheduleDue } from '../domain/search/strategies.ts';
 import type { Logger } from '../util/log.ts';
 import type { EventBus } from './events.ts';
+import { pausedAt } from './pause.ts';
 import { runInTx } from './tx.ts';
 
 export interface SchedulerOptions {
@@ -21,6 +24,7 @@ export interface SchedulerOptions {
 export class Scheduler {
   private readonly o: SchedulerOptions;
   private timer: NodeJS.Timeout | null = null;
+  private unsubscribe: (() => void) | null = null;
 
   constructor(options: SchedulerOptions) {
     this.o = options;
@@ -31,21 +35,27 @@ export class Scheduler {
     this.tick('schedule');
     this.timer = setInterval(() => this.tick('schedule'), this.o.intervalMs);
     this.timer.unref();
+    this.unsubscribe = this.o.bus.subscribe((e) => {
+      if (e.kind === 'system.resumed') this.tick('schedule');
+    });
   }
 
   stop(): void {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
+    this.unsubscribe?.();
+    this.unsubscribe = null;
   }
 
   /** Starts every due strategy's run; returns the new run ids. */
   tick(trigger: 'schedule' | 'wake'): number[] {
     try {
       const now = this.o.now?.() ?? new Date();
-      const { runs, plan } = runInTx(this.o.db, this.o.bus, { now }, (tx) => ({
-        runs: scheduleDue(tx, trigger),
-        plan: schedulePlanner(tx),
-      }));
+      const { runs, plan } = runInTx(this.o.db, this.o.bus, { now }, (tx) =>
+        pausedAt(tx.db)
+          ? { runs: [], plan: null }
+          : { runs: scheduleDue(tx, trigger), plan: schedulePlanner(tx) },
+      );
       if (runs.length) this.o.log.info('search runs started', { trigger, runs });
       if (plan !== null) this.o.log.info('search planner started', { plan });
       return runs;

@@ -50,6 +50,10 @@ service ApplyantService {
   // Preferences pre-filled from the imported CV's facts, for the candidate to adjust and confirm
   // (each value is what SetPreference takes).
   rpc GetPreferencesDraft(GetPreferencesDraftRequest) returns (GetPreferencesDraftResponse);
+  // Pauses or resumes background work (search, scoring, research, preparation, mail) without
+  // quitting: paused, the scheduler starts nothing and what was running goes back to the queue.
+  // Interview answers and deliveries the candidate approved still run. Outlasts a restart.
+  rpc SetBackgroundPaused(SetBackgroundPausedRequest) returns (SetBackgroundPausedResponse);
 
   // Candidate knowledge: profile, projects, sources and the facts extracted from them.
   rpc GetCandidate(GetCandidateRequest) returns (GetCandidateResponse);
@@ -642,6 +646,11 @@ message PlatformEvent {
   string status = 2;
 }
 
+// The candidate paused background work, or resumed it.
+message BackgroundEvent {
+  bool paused = 1;
+}
+
 message Event {
   int64 id = 1;
   google.protobuf.Timestamp at = 2;
@@ -658,6 +667,7 @@ message Event {
     CompanyEvent company = 16;
     MailEvent mail = 17;
     PlatformEvent platform = 18;
+    BackgroundEvent background = 19;
   }
 }
 
@@ -756,6 +766,8 @@ message SetupStatus {
   bool setup_done = 19;
   // The GitHub CLI: PRs and private repositories are read through its sign-in.
   ToolStatus gh = 20;
+  // Set while the candidate has paused background work (SetBackgroundPaused): since when.
+  google.protobuf.Timestamp background_paused_at = 21;
 }
 
 message Connection {
@@ -817,6 +829,15 @@ message GetSetupStatusRequest {
 
 message GetSetupStatusResponse {
   SetupStatus status = 1;
+}
+
+message SetBackgroundPausedRequest {
+  bool paused = 1;
+}
+
+message SetBackgroundPausedResponse {
+  // Since when it's paused; unset: background work runs.
+  google.protobuf.Timestamp paused_at = 1;
 }
 
 // ---- Candidate knowledge ------------------------------------------------------------
