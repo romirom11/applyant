@@ -8,6 +8,7 @@
       "!src/db/migrations",
       "!test/fixtures",
       "!src/domain/applications/cv/templates",
+      "!scripts/tmp",
       "!node_modules"
     ]
   },

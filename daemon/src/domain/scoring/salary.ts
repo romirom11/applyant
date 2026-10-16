@@ -47,7 +47,11 @@ export function perPeriod(amount: number, from: SalaryPeriod, to: TargetPeriod):
 function inferBareMonthly(s: NonNullable<PostingExtraction['salary']>): SalaryPeriod | null {
   const t = (s.text ?? '').toLowerCase();
   // Don't guess when period is explicitly stated in other units (e.g. "$30/hour", "$400/day", "per year").
-  if (/\b(per\s+)?(hour|day|week|year|annum|pa)\b/.test(t) || /\/\s*(hour|day|year|yr|week|mo)\b/.test(t)) return null;
+  if (
+    /\b(per\s+)?(hour|day|week|year|annum|pa)\b/.test(t) ||
+    /\/\s*(hour|day|year|yr|week|mo)\b/.test(t)
+  )
+    return null;
   const looksDollar = /\$/.test(t);
   const bareRange =
     /\bto\s*\$\s*\d/i.test(t) ||

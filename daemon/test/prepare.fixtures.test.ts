@@ -123,7 +123,7 @@ describe('preparing the recorded public forms', () => {
     const writer = h.claude.requests.find((r) => r.role === 'application_writer');
     expect(writer?.prompt).toContain('open models forever');
     expect(writer?.prompt).toMatch(
-      /\[q1\] \(choice: "YES" \| "NO", required\) Did you start your first written answer below with the exact phrase[^\n]*\n {2}\(refers back to the job posting/,
+      /\[q\d+\] \(choice: "YES" \| "NO", required\) Did you start your first written answer below with the exact phrase[^\n]*\n {2}\(refers back to the job posting/,
     );
     // Required consent radios answer "YES" by approving; the application waits for the rest.
     expect(v.app.stage).toBe('needs_candidate');

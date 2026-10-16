@@ -98,12 +98,21 @@ describe('prepare_application', () => {
 
   it('does not approve an application after its posting is skipped', async () => {
     setProfile(t.db, SYNTHETIC_PROFILE, now);
-    const pid = seedPosting(t.db, form([spec('Email', 'text', { meaning: 'email', required: true })]), { now });
+    const pid = seedPosting(
+      t.db,
+      form([spec('Email', 'text', { meaning: 'email', required: true })]),
+      { now },
+    );
     await start();
     const id = create(pid);
     await settle();
     expect(view(id).app.stage).toBe('ready_for_review');
-    recordDecision(t.db, (h as PrepareHarness).bus, { id: pid, decision: 'skipped', reason: 'link opens the homepage', now });
+    recordDecision(t.db, (h as PrepareHarness).bus, {
+      id: pid,
+      decision: 'skipped',
+      reason: 'link opens the homepage',
+      now,
+    });
     expect(view(id).blockers).toContain('you skipped this posting');
     expect(() => tx((x) => approveApplication(x, id))).toThrow(/skipped this posting/);
   });

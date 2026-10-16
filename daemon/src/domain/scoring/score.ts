@@ -446,7 +446,11 @@ function salaryPart(
             converted = convert(per, raw.currency, prefs.salaryFloor.currency, fx);
           } catch {}
           const floorAmount =
-            converted !== null ? converted : raw.currency === prefs.salaryFloor.currency ? prefs.salaryFloor.amount : null;
+            converted !== null
+              ? converted
+              : raw.currency === prefs.salaryFloor.currency
+                ? prefs.salaryFloor.amount
+                : null;
           if (floorAmount !== null && offeredGuess < floorAmount && converted === null) {
             dealbreaker(
               `Salary below your floor (${formatMoney(offeredGuess, raw.currency)} < ${formatMoney(floorAmount, prefs.salaryFloor.currency, prefs.salaryFloor.period)})`,

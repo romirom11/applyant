@@ -129,7 +129,8 @@ function salaryFrom(base: unknown): PostingExtraction['salary'] {
   unit ??= b.unitText;
   const period = typeof unit === 'string' ? (UNIT[unit.toUpperCase()] ?? null) : null;
   // Allow Djinni-style $X–$Y with no unitText in the same node: treat as monthly.
-  const inferredPeriod: typeof period = period ?? (currency && min && max ? ('month' as const) : null);
+  const inferredPeriod: typeof period =
+    period ?? (currency && min && max ? ('month' as const) : null);
   if (!currency || !inferredPeriod || !(min && min > 0) || !(max && max > 0)) return null;
   const resolved: SalaryPeriod = inferredPeriod;
   return {

@@ -89,21 +89,29 @@ export async function readPostingText(page: Page): Promise<PostingText> {
     ? await page
         .evaluate(() => {
           const salaryEl =
-            document.querySelector<HTMLElement>('.job-post__description')
+            document
+              .querySelector<HTMLElement>('.job-post__description')
               ?.closest('body')
               ?.querySelector<HTMLElement>(
                 'header .text-success, .job-post-page header .text-success, [class*="text-success"]',
-              ) ??
-            document.querySelector<HTMLElement>('.text-success');
+              ) ?? document.querySelector<HTMLElement>('.text-success');
           const salary =
             salaryEl?.innerText?.replace(/\s+/g, ' ').trim() ??
-            (document.body?.innerText.match(/\b(to\s*)?\$ ?\d[\d,\-–— ]*\b/)?.[0] ?? null);
+            document.body?.innerText.match(/\b(to\s*)?\$ ?\d[\d,\-–— ]*\b/)?.[0] ??
+            null;
           const descEl = document.querySelector<HTMLElement>('.job-post__description');
           const descriptionHtml = descEl?.innerHTML ?? null;
           const descriptionText = descEl?.innerText?.trim() ?? null;
           return { salary, descriptionHtml, descriptionText };
         })
-        .catch(() => null as { salary: string | null; descriptionHtml: string | null; descriptionText: string | null } | null)
+        .catch(
+          () =>
+            null as {
+              salary: string | null;
+              descriptionHtml: string | null;
+              descriptionText: string | null;
+            } | null,
+        )
     : null;
 
   let body = main.text;
@@ -152,10 +160,14 @@ export async function readPostingText(page: Page): Promise<PostingText> {
     .join('\n');
   // As a last resort ensure salary token is somewhere in the text for the extractor.
   const salarySuffix =
-    djinniExtra?.salary && body.includes(djinniExtra.salary) === false && header.includes(djinniExtra.salary) === false
+    djinniExtra?.salary &&
+    body.includes(djinniExtra.salary) === false &&
+    header.includes(djinniExtra.salary) === false
       ? `\n\nSalary: ${djinniExtra.salary}`
       : '';
-  const text = `${header ? `${header}\n\n` : ''}${body}${salarySuffix}`.slice(0, MAX_POSTING_TEXT).trim();
+  const text = `${header ? `${header}\n\n` : ''}${body}${salarySuffix}`
+    .slice(0, MAX_POSTING_TEXT)
+    .trim();
   return { text, jsonLd: job };
 }
 

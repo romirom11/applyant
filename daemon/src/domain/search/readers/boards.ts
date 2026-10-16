@@ -429,13 +429,23 @@ async function djinniViaBrowser(ctx: ReaderContext, term: string | null): Promis
             const salaryEl = el.querySelector<HTMLElement>('.text-success');
             const salary = salaryEl?.innerText?.replace(/\s+/g, ' ').trim() || null;
             // Full description is in the hidden original; truncated as fallback.
-            const orig = el.querySelector<HTMLElement>('.js-original-text, .description-expandable');
+            const orig = el.querySelector<HTMLElement>(
+              '.js-original-text, .description-expandable',
+            );
             const trunc = el.querySelector<HTMLElement>('.js-truncated-text');
             const descEl = orig ?? trunc;
             const raw = descEl?.innerText?.trim() ?? '';
             // Salary badge is outside the description; prepend it so text contains it.
             const description = salary ? `${salary}\n\n${raw}` : raw || null;
-            out.push({ href, title, company, location, remote, salary, description: description || null });
+            out.push({
+              href,
+              title,
+              company,
+              location,
+              remote,
+              salary,
+              description: description || null,
+            });
           }
           // Fallback: cards rendered as plain anchors (older markup)
           if (out.length === 0) {
@@ -482,7 +492,7 @@ async function djinniViaRss(ctx: ReaderContext, term: string | null): Promise<Li
   if (term) url.searchParams.set('all_keywords', term);
   const res = await get(ctx.fetch, url.toString(), ctx.signal);
   const feed = parseFeed(res.text, res.contentType, res.url, ctx.now);
-  if (!feed || feed.format !== 'rss') throw new Error(`Djinni did not return an RSS feed: ${url}`);
+  if (feed?.format !== 'rss') throw new Error(`Djinni did not return an RSS feed: ${url}`);
   return feed.listings.map((l) => boardListing({ ...l, boardUrl: l.url }));
 }
 
