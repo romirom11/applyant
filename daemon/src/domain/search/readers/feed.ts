@@ -12,7 +12,7 @@ import {
   str,
 } from './types.ts';
 
-export type FeedFormat = 'json-feed' | 'json-ld' | 'rss' | 'atom';
+export type FeedFormat = 'json-feed' | 'json-ld' | 'rss' | 'atom' | 'job-xml';
 
 export interface ParsedFeed {
   format: FeedFormat;
@@ -198,6 +198,34 @@ function child(el: ElementLike, ...names: string[]): string | null {
 
 function parseXmlFeed(text: string, url: string): ParsedFeed | null {
   const doc = new DOMParser().parseFromString(text, 'text/xml') as unknown as ElementLike;
+  // Jobico publishes all active jobs as a <source><job> XML feed.
+  const source = doc.querySelector('source');
+  if (source && child(source, 'publisher') === 'Jobico') {
+    return {
+      format: 'job-xml',
+      complete: true,
+      title: 'Jobico',
+      listings: Array.from(source.querySelectorAll('job')).flatMap((job) => {
+        const title = child(job, 'title');
+        const link = abs(child(job, 'link'), url);
+        if (!title || !link) return [];
+        const location = [child(job, 'city'), child(job, 'country')].filter(Boolean).join(', ');
+        const remote = child(job, 'locationtype')?.toLowerCase() === 'remote';
+        return [
+          listing({
+            url: link,
+            title: decodeEntities(title),
+            externalId: child(job, 'id') ?? link,
+            company: child(job, 'company'),
+            location: location || (remote ? 'Remote' : null),
+            remote,
+            description: plainText(child(job, 'description')),
+            postedAt: child(job, 'date'),
+          }),
+        ];
+      }),
+    };
+  }
   const rss = Array.from(doc.querySelectorAll('item'));
   const atom = Array.from(doc.querySelectorAll('entry'));
   if (!rss.length && !atom.length) {

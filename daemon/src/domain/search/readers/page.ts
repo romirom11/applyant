@@ -88,6 +88,16 @@ async function viaAts(
   return fromAts(run, { via: 'ats', ats: board.ats, token: board.token }, how);
 }
 
+function feedTitleAsCompany(title: string | null): string | null {
+  if (!title) return null;
+  const t = title.trim();
+  if (!t || t.length > 80) return null;
+  if (/vacanc/i.test(t)) return null;
+  if (/latest\s+job/i.test(t)) return null;
+  if (/job vacancies/i.test(t)) return null;
+  return t;
+}
+
 /** The way that worked last time; null when it no longer does (the page changed). */
 async function viaCache(cached: ResolvedSource, ctx: ReaderContext): Promise<PageRun | null> {
   try {
@@ -96,7 +106,7 @@ async function viaCache(cached: ResolvedSource, ctx: ReaderContext): Promise<Pag
     if (cached.via === 'feed') {
       const feed = await readFeed(cached.url, ctx);
       if (feed.listings.length === 0 && feed.format === 'json-ld') return null;
-      return { ...feed, resolved: cached, company: feed.title };
+      return { ...feed, resolved: cached, company: feedTitleAsCompany(feed.title) };
     }
   } catch {
     ctx.signal.throwIfAborted();
@@ -131,7 +141,7 @@ export async function readPage(
       listings: feed.listings,
       complete: feed.complete,
       resolved: { via: 'feed', url: page.url, format: feed.format },
-      company: feed.title,
+      company: feedTitleAsCompany(feed.title),
       note: `${feed.format}: ${feed.listings.length} jobs${feed.complete ? '' : ' (one page of several)'}`,
     };
   }
@@ -143,7 +153,7 @@ export async function readPage(
       return {
         ...linked,
         resolved: { via: 'feed', url: link, format: linked.format },
-        company: linked.title,
+        company: feedTitleAsCompany(linked.title),
       };
     } catch {
       ctx.signal.throwIfAborted();

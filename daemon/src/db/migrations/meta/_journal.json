@@ -183,6 +183,13 @@
       "when": 1790866471940,
       "tag": "0025_project_kind",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "6",
+      "when": 1790966400000,
+      "tag": "0026_chat",
+      "breakpoints": true
     }
   ]
 }

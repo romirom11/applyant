@@ -18,6 +18,7 @@ struct PostingDetail: View {
                     VStack(alignment: .leading, spacing: 18) {
                         header(p)
                         actions(p)
+                        originalPosting(p)
                         if !p.breakdown.isEmpty { breakdown(p) }
                         if !p.requirements.isEmpty { requirements(p) }
                         issues(p)
@@ -35,6 +36,27 @@ struct PostingDetail: View {
         }
         .task(id: postingId) { await store.openPosting(postingId) }
         .sheet(isPresented: $skipping) { skipSheet }
+    }
+
+    @ViewBuilder
+    private func originalPosting(_ p: Posting) -> some View {
+        if p.hasText, !p.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            DisclosureGroup {
+                ScrollView {
+                    Text(p.text)
+                        .font(.system(.callout, design: .monospaced))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(8)
+                }
+                .frame(maxHeight: 520)
+                .background(Color(nsColor: .textBackgroundColor).opacity(0.6), in: RoundedRectangle(cornerRadius: 6))
+                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.secondary.opacity(0.2)))
+            } label: {
+                Label("Original posting", systemImage: "doc.text")
+                    .font(.headline)
+            }
+        }
     }
 
     private func header(_ p: Posting) -> some View {
@@ -174,21 +196,33 @@ struct PostingDetail: View {
     }
 
     private var skipSheet: some View {
+        SkipPostingSheet(reason: $skipReason) { reason in
+            Task { await store.skip(posting: postingId, reason: reason) }
+        }
+    }
+}
+
+struct SkipPostingSheet: View {
+    @Binding var reason: String
+    let onSkip: (String) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Skip this posting").font(.headline)
             Text("Say why in a few words. Applyant uses it to score similar postings a little lower next time (for example, “salary too low” makes salary count more).")
                 .font(.callout).foregroundStyle(.secondary)
-            TextField("e.g. salary too low", text: $skipReason)
+            TextField("e.g. application link opens the homepage", text: $reason)
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 360)
             HStack {
                 Spacer()
-                Button("Cancel") { skipping = false }
+                Button("Cancel") { dismiss() }
                 Button("Skip") {
-                    let reason = skipReason
-                    skipping = false
-                    skipReason = ""
-                    Task { await store.skip(posting: postingId, reason: reason) }
+                    let value = reason
+                    reason = ""
+                    dismiss()
+                    onSkip(value)
                 }
                 .keyboardShortcut(.defaultAction)
             }

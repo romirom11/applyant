@@ -7,17 +7,21 @@ struct MainView: View {
     @Bindable var store: AppStore
 
     var body: some View {
-        Group {
-            switch store.connection {
-            case .disconnected:
-                ServiceDown(store: store)
-            case .connecting where store.reloads == 0:
-                ServiceStarting()
-            default:
-                if store.navigation.section.isSinglePane { onePane } else { threePanes }
+        VStack(spacing: 0) {
+            Group {
+                switch store.connection {
+                case .disconnected:
+                    ServiceDown(store: store)
+                case .connecting where store.reloads == 0:
+                    ServiceStarting()
+                default:
+                    if store.navigation.section.isSinglePane { onePane } else { threePanes }
+                }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            ActivityBar(store: store)
         }
-        .safeAreaInset(edge: .bottom, spacing: 0) { ActivityBar(store: store) }
         .sheet(isPresented: $store.showOnboarding) {
             OnboardingView(store: store)
                 .frame(minWidth: 900, idealWidth: 980, minHeight: 640, idealHeight: 720)
@@ -58,13 +62,17 @@ struct MainView: View {
         }
     }
 
-    /// Settings is one page: it takes the whole window beside the sidebar.
+    /// Settings and Chat use the whole window beside the sidebar.
     private var onePane: some View {
         NavigationSplitView {
             Sidebar(store: store)
                 .navigationSplitViewColumnWidth(min: 190, ideal: 210)
         } detail: {
-            SettingsView(store: store)
+            if store.navigation.section == .chat {
+                ChatView(store: store)
+            } else {
+                SettingsView(store: store)
+            }
         }
     }
 }

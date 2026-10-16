@@ -1,9 +1,9 @@
 // Job boards with key-free lists: Hacker News "Who is hiring" (Algolia), RemoteOK, We Work
-// Remotely (RSS), Remotive, Himalayas, Arbeitnow and Jobicy. A board shows its latest jobs, or
+// Remotely (RSS), Remotive, Himalayas, Arbeitnow, Jobicy and Djinni. A board shows its latest jobs, or
 // the results of a search, never a company's whole list: its runs are never complete, so a
 // job missing from one is re-verified, not closed.
 //
-// Boards that search server-side (Remotive, Himalayas, Jobicy) get the strategy's queries;
+// Boards that search server-side (Remotive, Himalayas, Jobicy, Djinni) get the strategy's queries;
 // the others are read once and the queries are applied afterwards like everywhere else.
 // Terms: RemoteOK and Himalayas ask for a link back, which the posting's source URL keeps;
 // Jobicy asks for at most hourly polls, Himalayas for daily refreshes (strategies run every
@@ -41,6 +41,7 @@ export const BOARDS = {
   himalayas: 'Himalayas',
   arbeitnow: 'Arbeitnow',
   jobicy: 'Jobicy',
+  djinni: 'Djinni',
 } as const;
 export type BoardId = keyof typeof BOARDS;
 
@@ -371,6 +372,145 @@ async function jobicy(ctx: ReaderContext): Promise<ReaderRun> {
   return { listings: out, complete: false, note: `Jobicy: ${out.length} jobs` };
 }
 
+// ---- Djinni (browser-first: full cards from HTML; RSS as fallback) ---------------------
+
+function djinniSearchUrl(term: string | null): string {
+  const url = new URL('https://djinni.co/jobs/');
+  if (term) url.searchParams.set('all_keywords', term);
+  return url.toString();
+}
+
+type RawDjinniCard = {
+  href: string;
+  title: string;
+  company: string | null;
+  location: string | null;
+  remote: boolean | null;
+  salary: string | null;
+  description: string | null;
+  postedAt: string | null;
+};
+
+async function djinniViaBrowser(ctx: ReaderContext, term: string | null): Promise<Listing[]> {
+  const url = djinniSearchUrl(term);
+  if (!ctx.reader) throw new Error('no browser reader');
+  return ctx.reader.withPage(
+    async (page) => {
+      const res = await page.goto(url, { waitUntil: 'domcontentloaded' });
+      const status = res?.status() ?? 200;
+      if (status >= 400) throw new Error(`HTTP ${status} from ${url}`);
+      await page.waitForLoadState('networkidle', { timeout: 8_000 }).catch(() => {});
+      const cards = await page
+        .evaluate(() => {
+          const out: Array<{
+            href: string;
+            title: string;
+            company: string | null;
+            location: string | null;
+            remote: boolean | null;
+            salary: string | null;
+            description: string | null;
+          }> = [];
+          for (const el of document.querySelectorAll<HTMLDivElement>('div[id^="job-item-"]')) {
+            const link = el.querySelector<HTMLAnchorElement>('a[href^="/jobs/"]');
+            const href = link?.getAttribute('href')?.trim() ?? '';
+            const titleEl = el.querySelector<HTMLElement>('.job-item__position, h2');
+            const title = titleEl?.innerText?.trim() ?? '';
+            if (!href || !title) continue;
+            const companyEl = el.querySelector<HTMLElement>('.text-gray-800, .job-item__company');
+            const company = companyEl?.innerText?.trim() || null;
+            const locEl = el.querySelector<HTMLElement>('.location-text');
+            const locationRaw = locEl?.innerText?.trim() ?? '';
+            // Fallback: text that looks like remote/office line
+            const meta = el.querySelector<HTMLElement>('.fw-medium');
+            const metaText = meta?.innerText ?? '';
+            const location = locationRaw || (metaText.includes('Remote') ? 'Remote' : null);
+            const remote = /remote/i.test(metaText) ? true : null;
+            const salaryEl = el.querySelector<HTMLElement>('.text-success');
+            const salary = salaryEl?.innerText?.replace(/\s+/g, ' ').trim() || null;
+            // Full description is in the hidden original; truncated as fallback.
+            const orig = el.querySelector<HTMLElement>('.js-original-text, .description-expandable');
+            const trunc = el.querySelector<HTMLElement>('.js-truncated-text');
+            const descEl = orig ?? trunc;
+            const raw = descEl?.innerText?.trim() ?? '';
+            // Salary badge is outside the description; prepend it so text contains it.
+            const description = salary ? `${salary}\n\n${raw}` : raw || null;
+            out.push({ href, title, company, location, remote, salary, description: description || null });
+          }
+          // Fallback: cards rendered as plain anchors (older markup)
+          if (out.length === 0) {
+            for (const a of document.querySelectorAll<HTMLAnchorElement>('a[href^="/jobs/"]')) {
+              const href = a.getAttribute('href')?.trim() ?? '';
+              if (!/\/jobs\/\d+/.test(href)) continue;
+              const title = a.innerText.trim().split('\n')[0]?.trim() ?? '';
+              if (!title || title.length < 3) continue;
+              out.push({
+                href,
+                title,
+                company: null,
+                location: null,
+                remote: null,
+                salary: null,
+                description: null,
+              });
+            }
+          }
+          return out;
+        })
+        .catch(() => [] as RawDjinniCard[]);
+      return cards.map((c) => {
+        const boardUrl = new URL(c.href, 'https://djinni.co').toString();
+        const idMatch = c.href.match(/\/jobs\/(\d+)/);
+        return boardListing({
+          boardUrl,
+          title: decodeEntities(c.title),
+          externalId: idMatch?.[1] ?? boardUrl,
+          company: c.company ? decodeEntities(c.company) : null,
+          location: c.location,
+          remote: c.remote,
+          description: c.description ? plainText(c.description) : null,
+          postedAt: null,
+        });
+      });
+    },
+    { signal: ctx.signal },
+  );
+}
+
+async function djinniViaRss(ctx: ReaderContext, term: string | null): Promise<Listing[]> {
+  const url = new URL('https://djinni.co/jobs/rss/');
+  if (term) url.searchParams.set('all_keywords', term);
+  const res = await get(ctx.fetch, url.toString(), ctx.signal);
+  const feed = parseFeed(res.text, res.contentType, res.url, ctx.now);
+  if (!feed || feed.format !== 'rss') throw new Error(`Djinni did not return an RSS feed: ${url}`);
+  return feed.listings.map((l) => boardListing({ ...l, boardUrl: l.url }));
+}
+
+async function djinni(ctx: ReaderContext): Promise<ReaderRun> {
+  const listings: Listing[] = [];
+  for (const term of searchTerms(ctx.queries)) {
+    let chunk: Listing[] = [];
+    let used: 'browser' | 'rss' = 'rss';
+    if (ctx.reader) {
+      try {
+        chunk = await djinniViaBrowser(ctx, term);
+        used = 'browser';
+        // Empty page (blocked, markup changed) → fall back to RSS
+        if (chunk.length === 0) chunk = await djinniViaRss(ctx, term);
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        if (chunk.length === 0 && used === 'browser') used = 'browser';
+      } catch {
+        chunk = await djinniViaRss(ctx, term);
+      }
+    } else {
+      chunk = await djinniViaRss(ctx, term);
+    }
+    listings.push(...chunk);
+  }
+  const out = dedupeById(listings);
+  return { listings: out, complete: false, note: `Djinni: ${out.length} jobs for this search` };
+}
+
 const READERS: Record<BoardId, (ctx: ReaderContext) => Promise<ReaderRun>> = {
   hn,
   remoteok,
@@ -379,6 +519,7 @@ const READERS: Record<BoardId, (ctx: ReaderContext) => Promise<ReaderRun>> = {
   himalayas,
   arbeitnow,
   jobicy,
+  djinni,
 };
 
 export function readBoard(board: BoardId, ctx: ReaderContext): Promise<ReaderRun> {

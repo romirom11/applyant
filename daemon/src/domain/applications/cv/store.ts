@@ -227,6 +227,19 @@ function editable(tx: Tx, applicationId: number): CvRow {
 /** `applications cv use-base` / `use-tailored`. */
 export function setCvMode(tx: Tx, applicationId: number, mode: CvMode, p: StandardProfile): CvRow {
   const cv = editable(tx, applicationId);
+  // Choosing a CV mode explicitly replaces an earlier per-form file override.
+  for (const field of tx.db
+    .select()
+    .from(fieldValues)
+    .where(eq(fieldValues.applicationId, applicationId))
+    .all()) {
+    if (!isResumeField(field.spec) || field.source !== 'override') continue;
+    tx.db
+      .update(fieldValues)
+      .set({ source: field.defaultSource, value: field.defaultValue })
+      .where(eq(fieldValues.id, field.id))
+      .run();
+  }
   if (mode === 'base') {
     const row = updateCv(tx, cv.id, { mode });
     applyCvToFields(tx, applicationId, p);

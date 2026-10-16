@@ -3,10 +3,11 @@
 // nothing missing is invented, branches follow the values, group entries are filled by their
 // group, and loose classifications don't put a profile value in the wrong field.
 
+import { existsSync, readFileSync } from 'node:fs';
 import { eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { postings } from '../src/db/schema.ts';
-import { setFieldValue } from '../src/domain/applications/review.ts';
+import { approveApplication, setFieldValue } from '../src/domain/applications/review.ts';
 import {
   applicationView,
   autoPrepare,
@@ -17,6 +18,7 @@ import {
   requestPrepare,
 } from '../src/domain/applications/store.ts';
 import { getStandardProfile } from '../src/domain/knowledge/profile.ts';
+import { pdfToText } from '../src/domain/knowledge/text/pdf.ts';
 import { recordDecision } from '../src/domain/scoring/store.ts';
 import { runInTx } from '../src/queue/tx.ts';
 import {
@@ -62,6 +64,49 @@ describe('prepare_application', () => {
     if (!f) throw new Error(`no field ${label}`);
     return f;
   };
+
+  it('writes optional cover letters for text fields and PDF uploads', async () => {
+    setProfile(t.db, SYNTHETIC_PROFILE, now);
+    const pid = seedPosting(
+      t.db,
+      form([
+        spec('Cover letter', 'textarea', { meaning: 'cover_letter' }),
+        spec('Upload cover letter', 'file', { meaning: 'cover_letter' }),
+      ]),
+      { now },
+    );
+    const s = await start();
+    const id = create(pid);
+    await settle();
+    expect(
+      s.claude.requests.some(
+        (r) => r.role === 'application_writer' && r.prompt.includes('cover letter / cover note'),
+      ),
+    ).toBe(true);
+    expect(field(id, 'Cover letter')).toMatchObject({
+      value: 'I would love to work on this.',
+      source: 'answer',
+    });
+    const upload = field(id, 'Upload cover letter');
+    expect(upload.source).toBe('file');
+    expect(upload.value).toMatch(/\.pdf$/);
+    expect(existsSync(upload.value ?? '')).toBe(true);
+    const pdf = (await pdfToText(readFileSync(upload.value ?? ''))).pages.join(' ');
+    expect(pdf).toContain('I would love to work on this.');
+    expect(pdf).toContain('Jordan Testperson');
+  });
+
+  it('does not approve an application after its posting is skipped', async () => {
+    setProfile(t.db, SYNTHETIC_PROFILE, now);
+    const pid = seedPosting(t.db, form([spec('Email', 'text', { meaning: 'email', required: true })]), { now });
+    await start();
+    const id = create(pid);
+    await settle();
+    expect(view(id).app.stage).toBe('ready_for_review');
+    recordDecision(t.db, (h as PrepareHarness).bus, { id: pid, decision: 'skipped', reason: 'link opens the homepage', now });
+    expect(view(id).blockers).toContain('you skipped this posting');
+    expect(() => tx((x) => approveApplication(x, id))).toThrow(/skipped this posting/);
+  });
 
   it('fills standard fields from the profile and never invents what the profile lacks', async () => {
     setProfile(t.db, SYNTHETIC_PROFILE, now);

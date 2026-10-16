@@ -39,6 +39,7 @@ export interface WriterQuestion {
   kind: 'text' | 'choice';
   options: string[] | null;
   required: boolean;
+  coverLetter?: boolean;
   /** "asked only if [q2] is answered "Yes"" for questions revealed by another question. */
   condition: string | null;
   /** The label points back at instructions in the posting ("the exact phrase we asked for"). */

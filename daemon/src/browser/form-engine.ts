@@ -360,6 +360,17 @@ export function newConfirmation(before: string | null, after: string | null): bo
   return false;
 }
 
+/** A short receipt quote, never the entire page body or the job description. */
+export function confirmationExcerpt(before: string | null, after: string | null): string | null {
+  if (!after || !newConfirmation(before, after)) return null;
+  const previous = new Set((before?.match(CONFIRMED_TEXT) ?? []).map((s) => s.toLowerCase()));
+  const phrase = [...after.matchAll(CONFIRMED_TEXT)].find((m) => !previous.has(m[0].toLowerCase()));
+  if (!phrase || phrase.index === undefined) return null;
+  const start = Math.max(0, phrase.index - 50);
+  const end = Math.min(after.length, phrase.index + phrase[0].length + 110);
+  return `${start ? '…' : ''}${after.slice(start, end).trim()}${end < after.length ? '…' : ''}`;
+}
+
 /** The page's address without its fragment: `#step-2` alone is not a navigation. */
 function place(url: string): string {
   const at = url.indexOf('#');
@@ -423,20 +434,22 @@ export async function waitForOutcome(
       await page.waitForLoadState('domcontentloaded').catch(() => {});
       await settle(page, 500);
       const text = await bodyText(page);
-      if (newConfirmation(before.text, text)) return { kind: 'confirmed', url: page.url(), text };
+      if (newConfirmation(before.text, text))
+        return { kind: 'confirmed', url: page.url(), text: confirmationExcerpt(before.text, text) };
       // A new page that is itself a form (the next step, a sign-in) is not a confirmation.
       const sig = await formSignature(page).catch(() => '');
       if (signatureHasControls(sig) || (await asksSignIn(page).catch(() => false))) {
         return { kind: 'moved', url: page.url() };
       }
-      return { kind: 'confirmed', url: page.url(), text };
+      return { kind: 'confirmed', url: page.url(), text: confirmationExcerpt(before.text, text) };
     }
     const sig = await formSignature(page).catch(() => '');
     const text = await bodyText(page);
     if (!signatureHasControls(sig)) {
       // The form's controls are gone: a confirmation replaced it in place. Seen twice in a
       // row, because a page in the middle of navigating away also reads as "no controls".
-      if (++gone >= 2) return { kind: 'confirmed', url: page.url(), text };
+      if (++gone >= 2)
+        return { kind: 'confirmed', url: page.url(), text: confirmationExcerpt(before.text, text) };
       continue;
     }
     gone = 0;
@@ -450,7 +463,8 @@ export async function waitForOutcome(
         return { kind: 'stuck', errors: [...(snap?.errors ?? []), ...alerts], unclear: false };
       }
     }
-    if (newConfirmation(before.text, text)) return { kind: 'confirmed', url: page.url(), text };
+    if (newConfirmation(before.text, text))
+      return { kind: 'confirmed', url: page.url(), text: confirmationExcerpt(before.text, text) };
   }
   const snap = await snapshotForm(page).catch(() => null);
   const alerts = await visibleAlerts(page);

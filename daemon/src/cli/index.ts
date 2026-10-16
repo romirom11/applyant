@@ -87,6 +87,39 @@ export function buildCli(client: () => ApplyantClient): Command {
   registerPlatforms(program, client, readSecretValue);
   registerTelegram(program, client, readSecretValue);
 
+  const chat = program.command('chat').description('conversation grounded in your confirmed facts');
+  chat
+    .command('ask <message...>')
+    .description('ask about your experience')
+    .action(async (parts: string[]) => {
+      const response = await client().sendChat({ text: parts.join(' ') });
+      out(response.assistant?.text ?? '');
+    });
+  chat
+    .command('history')
+    .description('show the conversation')
+    .option('--json', 'print JSON')
+    .action(async (opts: { json?: boolean }) => {
+      const response = await client().listChat({});
+      if (opts.json)
+        return json(
+          response.messages.map((m) => ({
+            id: Number(m.id),
+            role: m.role,
+            text: m.text,
+            factIds: m.factIds.map(Number),
+          })),
+        );
+      for (const message of response.messages) out(`${message.role}: ${message.text}`);
+    });
+  chat
+    .command('clear')
+    .description('clear the conversation')
+    .action(async () => {
+      await client().clearChat({});
+      out('Conversation cleared.');
+    });
+
   const runs = program.command('runs').description('task activity');
   runs
     .command('show [run]')

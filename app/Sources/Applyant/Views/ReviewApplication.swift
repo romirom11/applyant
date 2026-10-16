@@ -19,6 +19,8 @@ struct ReviewApplication: View {
     @State private var showAllFields = false
     @State private var confirmRegenerate = false
     @State private var confirmApprove = false
+    @State private var skipping = false
+    @State private var skipReason = ""
 
     var body: some View {
         Group {
@@ -43,6 +45,7 @@ struct ReviewApplication: View {
                                 standardFields(app)
                                 if app.hasCv { CvCard(store: store, app: app) }
                                 questions(app)
+                                postingTextCard(app)
                                 if !sent { notesAndContacts(app) }
                                 if !side {
                                     Divider()
@@ -67,6 +70,17 @@ struct ReviewApplication: View {
         .sheet(item: $editing) { request in
             EditSheet(request: request) { text in
                 Task { await request.save(text) }
+            }
+        }
+        .sheet(isPresented: $skipping) {
+            SkipPostingSheet(reason: $skipReason) { reason in
+                Task {
+                    guard let postingID = store.applicationDetails[applicationId]?.postingID else { return }
+                    if await store.skip(posting: postingID, reason: reason) {
+                        store.navigation.reviewing = nil
+                        store.navigation.section = .skipped
+                    }
+                }
             }
         }
     }
@@ -115,6 +129,7 @@ struct ReviewApplication: View {
             HStack(spacing: 8) {
                 Spacer()
                 if app.stage == .readyForReview || app.stage == .needsCandidate {
+                    Button("Skip…") { skipping = true }
                     Button("Regenerate…") { confirmRegenerate = true }
                     Button("Approve and send…") { confirmApprove = true }
                         .buttonStyle(.borderedProminent)
@@ -150,10 +165,13 @@ struct ReviewApplication: View {
     }
 
     private func receipt(_ r: Applyant_V1_Receipt) -> some View {
-        GroupBox("Sent") {
+        GroupBox("Submission receipt") {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Submitted " + r.submittedAt.date.formatted(date: .abbreviated, time: .shortened))
-                if r.hasConfirmationText { Text("“\(r.confirmationText)”").foregroundStyle(.secondary) }
+                if r.hasConfirmationText {
+                    Text(r.confirmationText.count > 300 ? "Confirmation page captured" : "“\(r.confirmationText)”")
+                        .foregroundStyle(.secondary)
+                }
                 Text("\(r.fieldValues.count) values sent" + (r.hasSalaryValue ? " · salary \(r.salaryValue)" : ""))
                 if r.hasCvPath {
                     Button("Show the CV that was sent") { NSWorkspace.shared.open(URL(fileURLWithPath: r.cvPath)) }
@@ -212,6 +230,31 @@ struct ReviewApplication: View {
                 }
             }
         } }
+    }
+
+    @ViewBuilder
+    private func postingTextCard(_ app: Application) -> some View {
+        if let posting = store.postings[app.postingID] ?? store.postingDetails[app.postingID],
+           posting.hasText, !posting.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            DisclosureGroup {
+                ScrollView {
+                    Text(posting.text)
+                        .font(.system(.callout, design: .monospaced))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(8)
+                }
+                .frame(maxHeight: 420)
+                .background(Color(nsColor: .textBackgroundColor).opacity(0.6), in: RoundedRectangle(cornerRadius: 6))
+                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.secondary.opacity(0.2)))
+            } label: {
+                Label("Original posting", systemImage: "doc.text")
+                    .font(.headline)
+            }
+        } else if let posting = store.postingDetails[app.postingID], posting.hasText == false {
+            // Posting detail still loading — fetch it so the card appears.
+            Color.clear.onAppear { Task { await store.openPosting(app.postingID) } }
+        }
     }
 
     // MARK: Questions
@@ -649,8 +692,8 @@ struct CvCard: View {
                 }
                 if cv.hasNote { Text(cv.note).font(.caption).foregroundStyle(.secondary) }
                 HStack {
-                    if cv.hasPdfPath {
-                        Button("Preview") { NSWorkspace.shared.open(URL(fileURLWithPath: cv.pdfPath)) }
+                    if let path = CvText.previewPath(app) {
+                        Button("Preview") { NSWorkspace.shared.open(URL(fileURLWithPath: path)) }
                     }
                     if CvText.canEdit(app) {
                         Button("Edit…") { editing = true }

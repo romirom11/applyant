@@ -111,6 +111,9 @@ public final class AppStore {
     public var overviewWindow: OverviewWindow = .overviewWindow30Days
     /// Model roles (Settings → Models).
     public private(set) var roles: [RoleRoute] = []
+    public private(set) var chatMessages: [ChatMessage] = []
+    public private(set) var chatFacts: [Int64: Fact] = [:]
+    public private(set) var chatSending = false
     /// Facts per project ref (FactsText.ref: a project id, or "profile"), for the facts browser.
     public private(set) var facts: [String: [Fact]] = [:]
     /// The names of the stored secrets (Settings → Stored keys; values are never read).
@@ -439,10 +442,12 @@ public final class AppStore {
 
     // MARK: Actions (each one RPC; the stream brings the rest)
 
-    public func skip(posting id: Int64, reason: String) async {
-        guard let api, let p = await attempt({ try await api.skip(posting: id, reason: reason) }) else { return }
+    @discardableResult
+    public func skip(posting id: Int64, reason: String) async -> Bool {
+        guard let api, let p = await attempt({ try await api.skip(posting: id, reason: reason) }) else { return false }
         postings[id] = p
         if postingDetails[id] != nil { await openPosting(id) }
+        return true
     }
 
     public func markInterested(posting id: Int64) async {
@@ -1402,6 +1407,29 @@ public final class AppStore {
 
     // MARK: Search: strategies and sources
 
+    public func openChat() async {
+        guard let api, let messages = await attempt({ try await api.listChat() }) else { return }
+        chatMessages = messages
+        if let facts = try? await api.listFacts(project: "", status: .confirmed) {
+            chatFacts = Dictionary(facts.map { ($0.id, $0) }, uniquingKeysWith: { _, last in last })
+        }
+    }
+
+    @discardableResult
+    public func sendChat(_ text: String) async -> Bool {
+        guard !chatSending, let api else { return false }
+        chatSending = true
+        defer { chatSending = false }
+        guard let pair = await attempt({ try await api.sendChat(text) }) else { return false }
+        chatMessages.append(contentsOf: [pair.user, pair.assistant])
+        return true
+    }
+
+    public func clearChat() async {
+        guard !chatSending, let api, await attempt({ try await api.clearChat() }) != nil else { return }
+        chatMessages = []
+    }
+
     /// A new strategy (id nil) or the whole strategy replaced; its id, opened in Search.
     @discardableResult
     public func saveStrategy(_ form: StrategyForm, id: Int64? = nil) async -> Int64? {
@@ -1571,9 +1599,9 @@ public final class AppStore {
                 .sorted { $0.firstSeenAt.date > $1.firstSeenAt.date }
                 .map { item($0) }
         case .readyToReview:
-            return applicationItems { $0.stage == .readyForReview || $0.stage == .needsCandidate }
+            return applicationItems { ($0.stage == .readyForReview || $0.stage == .needsCandidate) && postings[$0.postingID]?.decision != "skipped" }
         case .preparing:
-            return applicationItems { $0.stage == .preparing }
+            return applicationItems { $0.stage == .preparing && postings[$0.postingID]?.decision != "skipped" }
         case .applied:
             // Sent, and where the mail (or the candidate) left them: rejections and withdrawals
             // stay here, marked.

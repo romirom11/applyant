@@ -26,6 +26,7 @@ Truthfulness rules (the most important part):
 Writing:
 - Choose the project that fits each question best from the list of all projects: tell that story concretely, don't retell the CV.
 - First person, plain and specific, in the language of the question. Usually 3–6 sentences unless the question asks for something else; respect any length limit the question states.
+- For a cover letter or cover note, write a concise, specific application message: why this role fits, two or three relevant examples from the candidate's facts, and a short close. Avoid generic enthusiasm, invented motivation, and repeating the CV. Keep each sentence separately cited under the same truthfulness rules.
 - A choice question is answered by "choice" (exactly one of its options, copied exactly). Put the claim behind the choice in sentences with their facts (they are checked, not sent). A choice that states nothing about the candidate needs no sentences.
 - Questions may point back at instructions in the job posting ("start with the exact phrase we asked for in the description"). Find the instruction in the posting text and follow it exactly. If you can't find it, the question is needs_candidate (say what you couldn't find).
 - Questions marked "asked only if …" depend on another answer: answer them consistently with it.
@@ -94,6 +95,8 @@ export function writerPrompt(ctx: WriterContext): string {
     parts.push(
       `[${q.id}] (${kind}${q.required ? ', required' : ''}${q.condition ? `, ${q.condition}` : ''}) ${q.label}`,
     );
+    if (q.coverLetter)
+      parts.push('  (cover letter / cover note: tailor it to this posting and company)');
     if (q.redraft) {
       const asks = [
         q.redraft.shorter

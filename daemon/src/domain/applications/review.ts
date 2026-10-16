@@ -366,6 +366,9 @@ export function editAnswer(
     .run();
   // The field's prepared value follows the answer (an override on the field still wins).
   if (a.kind === 'text') {
+    const coverFile = view.fields.some(
+      (f) => f.ref === a.ref && f.meaning === 'cover_letter' && f.kind === 'file',
+    );
     const text = tx.db
       .select({ text: answerSentences.text })
       .from(answerSentences)
@@ -383,13 +386,21 @@ export function editAnswer(
       tx.db
         .update(fieldValues)
         .set({
-          defaultValue: text,
-          defaultSource: 'answer',
-          note: null,
-          ...(row.source === 'override' ? {} : { value: text, source: 'answer' as const }),
+          defaultValue: coverFile ? null : text,
+          defaultSource: coverFile ? 'none' : 'answer',
+          note: coverFile ? 'rendering edited cover letter' : null,
+          ...(row.source === 'override'
+            ? {}
+            : {
+                value: coverFile ? null : text,
+                source: coverFile ? ('none' as const) : ('answer' as const),
+              }),
         })
         .where(eq(fieldValues.id, row.id))
         .run();
+    }
+    if (coverFile && row?.source !== 'override') {
+      requestPrepare(tx, view.app, { rewrite: false, why: 'rendering edited cover letter' });
     }
   }
   if (saved.length) {

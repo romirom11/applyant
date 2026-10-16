@@ -414,22 +414,53 @@ function salaryPart(
   const unit = prefs.salary ?? prefs.salaryFloor;
   if (!unit) return part('salary', false, 1, 'no salary target');
   const n = normaliseSalary(p.salary, unit, fx);
-  if (n.kind === 'uncertain') return part('salary', prefs.salary !== null, 0, n.reason, true);
 
   const shown =
-    n.min !== null && n.max !== null && Math.round(n.min) !== Math.round(n.max)
+    n.kind === 'comparable' &&
+    n.min !== null &&
+    n.max !== null &&
+    Math.round(n.min) !== Math.round(n.max)
       ? formatRange(n.min, n.max, n.currency, n.period)
-      : formatMoney(n.offered, n.currency, n.period);
-  const from = n.original ? ` (${n.original})` : '';
+      : n.kind === 'comparable'
+        ? formatMoney(n.offered, n.currency, n.period)
+        : '';
+  const from = n.kind === 'comparable' && n.original ? ` (${n.original})` : '';
 
+  // Floor check: comparable path, or uncertain with bare range guess.
   if (prefs.salaryFloor) {
-    const floor = inUnit(prefs.salaryFloor, unit, fx);
-    if (floor !== null && n.offered < floor) {
-      dealbreaker(
-        `Salary below your floor (${formatMoney(n.offered, n.currency)} < ${formatMoney(floor, n.currency, n.period)})`,
-      );
+    if (n.kind === 'comparable') {
+      const floor = inUnit(prefs.salaryFloor, unit, fx);
+      if (floor !== null && n.offered < floor) {
+        dealbreaker(
+          `Salary below your floor (${formatMoney(n.offered, n.currency)} < ${formatMoney(floor, n.currency, n.period)})`,
+        );
+      }
+    } else {
+      const raw = p.salary;
+      if (raw && (raw.min !== null || raw.max !== null) && raw.currency) {
+        const offeredGuess = raw.max ?? raw.min;
+        if (offeredGuess !== null && offeredGuess > 0) {
+          let converted: number | null = null;
+          try {
+            const per = perPeriod(offeredGuess, 'month', prefs.salaryFloor.period);
+            converted = convert(per, raw.currency, prefs.salaryFloor.currency, fx);
+          } catch {}
+          const floorAmount =
+            converted !== null ? converted : raw.currency === prefs.salaryFloor.currency ? prefs.salaryFloor.amount : null;
+          if (floorAmount !== null && offeredGuess < floorAmount && converted === null) {
+            dealbreaker(
+              `Salary below your floor (${formatMoney(offeredGuess, raw.currency)} < ${formatMoney(floorAmount, prefs.salaryFloor.currency, prefs.salaryFloor.period)})`,
+            );
+          } else if (converted !== null && converted < prefs.salaryFloor.amount) {
+            dealbreaker(
+              `Salary below your floor (${formatMoney(converted, prefs.salaryFloor.currency, prefs.salaryFloor.period)} < ${formatMoney(prefs.salaryFloor.amount, prefs.salaryFloor.currency, prefs.salaryFloor.period)})`,
+            );
+          }
+        }
+      }
     }
   }
+  if (n.kind === 'uncertain') return part('salary', prefs.salary !== null, 0, n.reason, true);
   if (!prefs.salary) return part('salary', false, 1, `Salary ${shown}${from}`);
   const target = prefs.salary.amount;
   const shortfall = (target - n.offered) / target;

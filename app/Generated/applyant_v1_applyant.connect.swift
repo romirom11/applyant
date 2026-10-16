@@ -428,6 +428,16 @@ public protocol Applyant_V1_ApplyantServiceClientInterface: Sendable {
     /// history over a window.
     @available(iOS 13, *)
     func `getOverview`(request: Applyant_V1_GetOverviewRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_GetOverviewResponse>
+
+    /// Free-form conversation grounded in the candidate's profile and confirmed facts.
+    @available(iOS 13, *)
+    func `listChat`(request: Applyant_V1_ListChatRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_ListChatResponse>
+
+    @available(iOS 13, *)
+    func `sendChat`(request: Applyant_V1_SendChatRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_SendChatResponse>
+
+    @available(iOS 13, *)
+    func `clearChat`(request: Applyant_V1_ClearChatRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_ClearChatResponse>
 }
 
 /// Concrete implementation of `Applyant_V1_ApplyantServiceClientInterface`.
@@ -893,6 +903,21 @@ public final class Applyant_V1_ApplyantServiceClient: Applyant_V1_ApplyantServic
         return await self.client.unary(path: "/applyant.v1.ApplyantService/GetOverview", idempotencyLevel: .unknown, request: request, headers: headers)
     }
 
+    @available(iOS 13, *)
+    public func `listChat`(request: Applyant_V1_ListChatRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_ListChatResponse> {
+        return await self.client.unary(path: "/applyant.v1.ApplyantService/ListChat", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
+    public func `sendChat`(request: Applyant_V1_SendChatRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_SendChatResponse> {
+        return await self.client.unary(path: "/applyant.v1.ApplyantService/SendChat", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
+    public func `clearChat`(request: Applyant_V1_ClearChatRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_ClearChatResponse> {
+        return await self.client.unary(path: "/applyant.v1.ApplyantService/ClearChat", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
     public enum Metadata {
         public enum Methods {
             public static let addPosting = Connect.MethodSpec(name: "AddPosting", service: "applyant.v1.ApplyantService", type: .unary)
@@ -986,6 +1011,9 @@ public final class Applyant_V1_ApplyantServiceClient: Applyant_V1_ApplyantServic
             public static let connectTelegram = Connect.MethodSpec(name: "ConnectTelegram", service: "applyant.v1.ApplyantService", type: .unary)
             public static let disconnectTelegram = Connect.MethodSpec(name: "DisconnectTelegram", service: "applyant.v1.ApplyantService", type: .unary)
             public static let getOverview = Connect.MethodSpec(name: "GetOverview", service: "applyant.v1.ApplyantService", type: .unary)
+            public static let listChat = Connect.MethodSpec(name: "ListChat", service: "applyant.v1.ApplyantService", type: .unary)
+            public static let sendChat = Connect.MethodSpec(name: "SendChat", service: "applyant.v1.ApplyantService", type: .unary)
+            public static let clearChat = Connect.MethodSpec(name: "ClearChat", service: "applyant.v1.ApplyantService", type: .unary)
         }
     }
 }

@@ -25,6 +25,7 @@ public typealias Company = Applyant_V1_Company
 public typealias RoleRoute = Applyant_V1_RoleRoute
 public typealias Fact = Applyant_V1_Fact
 public typealias FactStatus = Applyant_V1_FactStatus
+public typealias ChatMessage = Applyant_V1_ChatMessage
 
 /// Which company: by id, or a posting's company.
 public enum CompanyTarget: Hashable, Sendable {
@@ -232,10 +233,16 @@ public protocol DaemonAPI: Sendable {
     /// Replaces the custom template with these files; refused without {{cv}} in index.html.
     func setCvTemplate(files: [CvTemplateFile], name: String?) async throws -> CvTemplateInfo
     func resetCvTemplate() async throws -> CvTemplateInfo
+    func listChat() async throws -> [ChatMessage]
+    func sendChat(_ text: String) async throws -> (user: ChatMessage, assistant: ChatMessage)
+    func clearChat() async throws
 }
 
 /// Older fakes and daemons: the setup RPCs answer "not available" unless implemented.
 public extension DaemonAPI {
+    func listChat() async throws -> [ChatMessage] { throw APIError("chat needs a newer Applyant") }
+    func sendChat(_ text: String) async throws -> (user: ChatMessage, assistant: ChatMessage) { throw APIError("chat needs a newer Applyant") }
+    func clearChat() async throws { throw APIError("chat needs a newer Applyant") }
     func addPosting(url: String) async throws -> (posting: Posting, created: Bool) {
         throw APIError("adding a posting needs a newer Applyant (its background service is older than the app)")
     }
@@ -863,6 +870,19 @@ extension ConnectDaemonAPI {
 }
 
 extension ConnectDaemonAPI {
+    public func listChat() async throws -> [ChatMessage] {
+        try unwrap(await unary.listChat(request: .init(), headers: headers)).messages
+    }
+
+    public func sendChat(_ text: String) async throws -> (user: ChatMessage, assistant: ChatMessage) {
+        let response = try unwrap(await unary.sendChat(request: .with { $0.text = text }, headers: headers))
+        return (response.user, response.assistant)
+    }
+
+    public func clearChat() async throws {
+        _ = try unwrap(await unary.clearChat(request: .init(), headers: headers))
+    }
+
     public func listRoles() async throws -> [RoleRoute] {
         try unwrap(await unary.listRoles(request: .init(), headers: headers)).roles
     }

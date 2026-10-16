@@ -332,6 +332,17 @@ describe('sync_source on a CV', () => {
     expect(t.db.select().from(projects).all()).toHaveLength(0);
   });
 
+  it('uses a profile CV source as the base attachment, including one already added', () => {
+    const cv = join(t.dir, 'candidate_cv.pdf');
+    copyFileSync(CV, cv);
+    expect(getStandardProfile(t.db).base_cv_file).toBeNull();
+    addSource(t.db, bus, { project: null, kind: 'file', locator: cv, now });
+    expect(getStandardProfile(t.db).base_cv_file).toBe(cv);
+    setProfileValue(t.db, 'base_cv_file', null, now);
+    addSource(t.db, bus, { project: null, kind: 'file', locator: cv, now });
+    expect(getStandardProfile(t.db).base_cv_file).toBe(cv);
+  });
+
   it('rejects sources it cannot read before any task runs', () => {
     expect(() =>
       addSource(t.db, bus, { project: null, kind: 'file', locator: 'relative.pdf', now }),

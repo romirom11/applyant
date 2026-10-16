@@ -9,7 +9,7 @@ import { eq } from 'drizzle-orm';
 import { type Browser, chromium } from 'playwright';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { AFTER_SUBMIT } from '../src/browser/form-deliver.ts';
-import { newConfirmation } from '../src/browser/form-engine.ts';
+import { confirmationExcerpt, newConfirmation } from '../src/browser/form-engine.ts';
 import { signatureHasControls, signatureOf } from '../src/browser/snapshot.ts';
 import { applications, postings, tasks } from '../src/db/schema.ts';
 import { catchUpDeliveries, deliverApplication } from '../src/domain/applications/deliver.ts';
@@ -49,6 +49,16 @@ describe('what counts as a confirmation', () => {
     expect(newConfirmation(intro, 'Your application has been received.')).toBe(true);
     expect(newConfirmation('Bewerbung', 'Vielen Dank für Ihre Bewerbung!')).toBe(true);
     expect(newConfirmation(null, null)).toBe(false);
+    const posting = 'Staff Engineer. Build our platform. '.repeat(50);
+    expect(
+      confirmationExcerpt(
+        posting,
+        `${posting} Your application has been received. We'll be in touch.`,
+      ),
+    ).toContain('Your application has been received');
+    expect(
+      confirmationExcerpt(posting, `${posting} Your application has been received.`)?.length,
+    ).toBeLessThan(200);
   });
 
   it('a frame URL with a fragment does not read as "no controls"', () => {

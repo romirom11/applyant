@@ -64,7 +64,7 @@ export function fieldRole(spec: FieldSpec): FieldRole {
   if (spec.meaning === 'consent') return 'consent';
   if (spec.meaning === 'eeo') return 'eeo';
   if (spec.meaning === null || WRITTEN.has(spec.meaning)) return 'question';
-  if (spec.meaning === 'cover_letter' && (spec.kind === 'textarea' || spec.kind === 'text')) {
+  if (spec.meaning === 'cover_letter' && ['textarea', 'text', 'file'].includes(spec.kind)) {
     return 'question';
   }
   return 'standard';

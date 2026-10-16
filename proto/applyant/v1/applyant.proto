@@ -257,6 +257,11 @@ service ApplyantService {
   // interview → offer) and the PRD's success metrics, computed from the job and application
   // history over a window.
   rpc GetOverview(GetOverviewRequest) returns (GetOverviewResponse);
+
+  // Free-form conversation grounded in the candidate's profile and confirmed facts.
+  rpc ListChat(ListChatRequest) returns (ListChatResponse);
+  rpc SendChat(SendChatRequest) returns (SendChatResponse);
+  rpc ClearChat(ClearChatRequest) returns (ClearChatResponse);
 }
 
 enum PostingStage {
@@ -319,6 +324,8 @@ message Posting {
   ApplicationStage application_stage = 28;
   // Only filled by GetPosting: the company's research (without its sections), once asked for.
   optional Company company_research = 29;
+  // Only filled by GetPosting: the full posting text as captured at verification (posting-text.ts).
+  optional string text = 30;
 }
 
 // How to find a form control again: getByRole(role, {name, exact}).nth(nth) inside the
@@ -2446,3 +2453,32 @@ message GetOverviewResponse {
   repeated FunnelStep funnel = 3;
   repeated OverviewMetric metrics = 4;
 }
+
+// ---- Candidate chat --------------------------------------------------------------------
+
+message ChatMessage {
+  int64 id = 1;
+  // user | assistant
+  string role = 2;
+  string text = 3;
+  repeated int64 fact_ids = 4;
+  google.protobuf.Timestamp created_at = 5;
+}
+
+message ListChatRequest {}
+
+message ListChatResponse {
+  repeated ChatMessage messages = 1;
+}
+
+message SendChatRequest {
+  string text = 1;
+}
+
+message SendChatResponse {
+  ChatMessage user = 1;
+  ChatMessage assistant = 2;
+}
+
+message ClearChatRequest {}
+message ClearChatResponse {}

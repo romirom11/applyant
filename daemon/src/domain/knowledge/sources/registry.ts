@@ -1,7 +1,7 @@
 // Knowledge sources: adding them and asking for a (re-)sync (both enqueue `sync_source`), and
 // removing one.
 import { existsSync, statSync } from 'node:fs';
-import { isAbsolute } from 'node:path';
+import { basename, extname, isAbsolute } from 'node:path';
 import { and, asc, eq, inArray, isNull, type SQL, sql } from 'drizzle-orm';
 import type { Conn, Db } from '../../../db/client.ts';
 import {
@@ -16,6 +16,7 @@ import type { EventBus } from '../../../queue/events.ts';
 import { runInTx } from '../../../queue/tx.ts';
 import type { Tx } from '../../../queue/types.ts';
 import { requestRematch } from '../../scoring/rematch.ts';
+import { getStandardProfile, setProfileValue } from '../profile.ts';
 import { requireProject } from '../projects.ts';
 import { DRIVE_FOLDER_PREFIX, driveLocator } from './drive.ts';
 import { canonicalRepoLocator } from './github.ts';
@@ -114,6 +115,16 @@ export function addSource(
         ),
       )
       .get();
+    // A CV added to the profile is also its default attachment unless one was chosen already.
+    if (
+      !project &&
+      input.kind === 'file' &&
+      ['.pdf', '.doc', '.docx'].includes(extname(locator).toLowerCase()) &&
+      /(?:^|[\s_.-])(cv|resume|curriculum)(?:[\s_.-]|$)/i.test(basename(locator))
+    ) {
+      const chosen = getStandardProfile(tx.db).base_cv_file;
+      if (!chosen) setProfileValue(tx.db, 'base_cv_file', locator, tx.now);
+    }
     if (existing) return { source: existing, created: false };
     const source = tx.db
       .insert(sources)

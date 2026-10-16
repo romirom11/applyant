@@ -57,6 +57,7 @@ import { factRefs } from '../knowledge/facts.ts';
 import { applicationQuestion, askQuestion } from '../knowledge/interview.ts';
 import { getStandardProfile, type StandardProfile } from '../knowledge/profile.ts';
 import { checkSentences, type SentenceToCheck } from './checks/verify.ts';
+import { renderCoverLetter } from './cover-letter.ts';
 import { cvHeader, cvHtml, loadTemplate, renderPdf, storePdf } from './cv/render.ts';
 import {
   applyChecks,
@@ -304,6 +305,38 @@ export const prepareApplication: Handler<'prepare_application'> = async (task, c
       return failOrRetry(task, app, `checking answers failed: ${res.reason}`, ctx);
     results = res.results;
   }
+  const coverFiles = new Map<string, string>();
+  for (const field of fields) {
+    if (field.spec.meaning !== 'cover_letter' || field.spec.kind !== 'file') continue;
+    if (rows.get(field.ref)?.source === 'override') continue;
+    const answer = allAnswers.find((a) => a.questionRef === field.ref && a.status === 'answered');
+    const text =
+      answer?.sentences
+        .map((s) => s.text.trim())
+        .filter(Boolean)
+        .join(' ') ?? '';
+    if (!text) continue;
+    try {
+      const path = await renderCoverLetter(
+        ctx.deps.reader,
+        ctx.deps.dirs.files,
+        app.id,
+        text,
+        profile,
+        { title: posting.title, company: posting.company },
+        ctx.signal,
+      );
+      coverFiles.set(field.ref, path);
+    } catch (err) {
+      ctx.signal.throwIfAborted();
+      return failOrRetry(
+        task,
+        app,
+        `rendering cover letter failed: ${(err as Error).message.split('\n')[0]}`,
+        ctx,
+      );
+    }
+  }
   const before = applicationView(ctx.read, app.id);
   const commit = (tx: Tx) => {
     const current = tx.db.select().from(applications).where(eq(applications.id, app.id)).get();
@@ -322,6 +355,25 @@ export const prepareApplication: Handler<'prepare_application'> = async (task, c
             eq(answerSentences.flag, 'unchecked'),
           ),
         )
+        .run();
+    }
+    for (const [ref, path] of coverFiles) {
+      const field = tx.db
+        .select()
+        .from(fieldValues)
+        .where(and(eq(fieldValues.applicationId, app.id), eq(fieldValues.fieldRef, ref)))
+        .get();
+      if (!field || field.source === 'override') continue;
+      tx.db
+        .update(fieldValues)
+        .set({
+          defaultValue: path,
+          defaultSource: 'file',
+          value: path,
+          source: 'file',
+          note: 'cover letter generated for this role',
+        })
+        .where(eq(fieldValues.id, field.id))
         .run();
     }
     finalize(tx, current);
@@ -536,7 +588,12 @@ function questionsToWrite(
     true,
   );
   return fields.filter((f) => {
-    if (fieldRole(f.spec) !== 'question' || !f.spec.required || !active.has(f.ref)) return false;
+    if (
+      fieldRole(f.spec) !== 'question' ||
+      (!f.spec.required && f.spec.meaning !== 'cover_letter') ||
+      !active.has(f.ref)
+    )
+      return false;
     if (s.rows.get(f.ref)?.source === 'override') return false;
     const a = s.stored.get(f.ref);
     if (!a) return true;
@@ -567,6 +624,7 @@ function writerQuestions(
       kind: questionKind(f),
       options: questionOptions(f),
       required: f.spec.required,
+      coverLetter: f.spec.meaning === 'cover_letter',
       condition:
         by && rid
           ? `asked only if [${rid}] is answered ${by.value === '*' ? 'at all' : `"${by.value}"`}`

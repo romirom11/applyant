@@ -1,6 +1,11 @@
 // Salaries are compared in the candidate's target unit (e.g. monthly gross EUR). Whatever
 // can't be compared honestly (no period, gross/net unknown, no exchange rate) is
 // "uncertain": shown, never penalised, so "17% below target" appears only when it's true.
+//
+// Boards like Djinni show bare "$1500–2500" (no "per month", no "gross"). Those are
+// monthly gross in practice — normaliseExtraction also fills the gap — but as a final
+// guard normalisation here infers month/gross for any bare dollar range so a missing
+// qualifier never hides a salary from scoring.
 import type { PostingExtraction, SalaryPeriod } from '../../models/schemas/posting.ts';
 import { convert, type FxRates } from './fx.ts';
 
@@ -39,6 +44,21 @@ export function perPeriod(amount: number, from: SalaryPeriod, to: TargetPeriod):
   return to === 'month' ? monthly : monthly * 12;
 }
 
+function inferBareMonthly(s: NonNullable<PostingExtraction['salary']>): SalaryPeriod | null {
+  const t = (s.text ?? '').toLowerCase();
+  // Don't guess when period is explicitly stated in other units (e.g. "$30/hour", "$400/day", "per year").
+  if (/\b(per\s+)?(hour|day|week|year|annum|pa)\b/.test(t) || /\/\s*(hour|day|year|yr|week|mo)\b/.test(t)) return null;
+  const looksDollar = /\$/.test(t);
+  const bareRange =
+    /\bto\s*\$\s*\d/i.test(t) ||
+    /\$\s*\d[\d,]*\s*[-–—]\s*\$?\s*\d/.test(t) ||
+    /\b\d[\d,]*\s*[-–—]\s*\$\s*\d/.test(t);
+  if (bareRange) return 'month';
+  // Lone "$3000" on boards like Djinni is monthly; "$90,000" yearly is usually written with "per year".
+  if (looksDollar && /\$\s*\d[\d,]*/.test(t)) return 'month';
+  return null;
+}
+
 export function normaliseSalary(
   s: PostingExtraction['salary'],
   unit: { currency: string; period: TargetPeriod },
@@ -48,15 +68,18 @@ export function normaliseSalary(
     return { kind: 'uncertain', reason: 'no salary stated' };
   }
   if (!s.currency) return { kind: 'uncertain', reason: `currency not stated (${s.text})` };
-  if (!s.period) return { kind: 'uncertain', reason: `period not stated (${s.text})` };
-  if (!s.basis) return { kind: 'uncertain', reason: `gross or net not stated (${s.text})` };
-  if (s.basis === 'net') {
+  const period: SalaryPeriod | null = s.period ?? inferBareMonthly(s);
+  const basis = s.basis ?? (inferBareMonthly(s) ? 'gross' : null);
+  if (!period) return { kind: 'uncertain', reason: `period not stated (${s.text})` };
+  if (!basis) return { kind: 'uncertain', reason: `gross or net not stated (${s.text})` };
+  if (basis === 'net') {
     return { kind: 'uncertain', reason: `net salary, your target is gross (${s.text})` };
   }
+  const effectivePeriod: SalaryPeriod = (period as SalaryPeriod) ?? (s.period as SalaryPeriod);
   const to = (n: number | null): number | null | undefined => {
     if (n === null) return null;
     const c = convert(
-      perPeriod(n, s.period as SalaryPeriod, unit.period),
+      perPeriod(n, effectivePeriod, unit.period),
       s.currency as string,
       unit.currency,
       fx,
@@ -70,7 +93,7 @@ export function normaliseSalary(
   }
   const offered = max ?? min;
   if (offered === null || offered <= 0) return { kind: 'uncertain', reason: 'no salary stated' };
-  const same = s.currency === unit.currency && s.period === unit.period;
+  const same = s.currency === unit.currency && period === unit.period;
   return {
     kind: 'comparable',
     min,
@@ -78,7 +101,7 @@ export function normaliseSalary(
     offered,
     currency: unit.currency,
     period: unit.period,
-    original: same ? null : formatMoney(s.max ?? s.min ?? 0, s.currency, s.period),
+    original: same ? null : formatMoney(s.max ?? s.min ?? 0, s.currency, period as SalaryPeriod),
   };
 }
 

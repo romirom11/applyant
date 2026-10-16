@@ -13,6 +13,7 @@ import {
   ApprovalBlocked,
   approveApplication,
   confirmApplicationFacts,
+  setFieldValue,
 } from '../src/domain/applications/review.ts';
 import {
   applicationView,
@@ -175,6 +176,15 @@ describe('tailored CV in preparation', () => {
     expect(resume(id).value).toMatch(/\.pdf$/);
     expect(resume(id).value).not.toBe(base);
     expect(cvRuns()).toHaveLength(1);
+  });
+
+  it('choosing base CV replaces a previous per-application Resume override', async () => {
+    const id = await prepared(null);
+    const other = cvFile(t.dir);
+    tx((x) => setFieldValue(x, id, 'Resume', other));
+    expect(resume(id).source).toBe('override');
+    tx((x) => setCvMode(x, id, 'base', getStandardProfile(x.db)));
+    expect(resume(id)).toMatchObject({ value: base, source: 'file' });
   });
 
   it('an edited line becomes a confirmed fact and a new PDF; a left-out line can come back in your words', async () => {

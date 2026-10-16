@@ -109,6 +109,7 @@ describe('search from the CLI', () => {
       'board:himalayas',
       'board:arbeitnow',
       'board:jobicy',
+      'board:djinni',
       // LinkedIn and Xing: built in, read only once Applyant's browser is signed in (phase 14).
       'linkedin:jobs',
       'xing:jobs',

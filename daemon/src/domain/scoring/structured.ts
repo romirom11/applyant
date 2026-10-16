@@ -122,16 +122,23 @@ function salaryFrom(base: unknown): PostingExtraction['salary'] {
         : null;
     unit = value.unitText;
   }
+  // Djinni sometimes puts unitText next to min/max, sometimes only in estimatedSalary
+  // without unitText. Infer MONTH when currency + range are present and no unit given
+  // is intentionally left to salaryFrom's caller; we still require period here, but
+  // applyStructured falls back to extractor salary when this returns null.
   unit ??= b.unitText;
   const period = typeof unit === 'string' ? (UNIT[unit.toUpperCase()] ?? null) : null;
-  if (!currency || !period || !(min && min > 0) || !(max && max > 0)) return null;
+  // Allow Djinni-style $X–$Y with no unitText in the same node: treat as monthly.
+  const inferredPeriod: typeof period = period ?? (currency && min && max ? ('month' as const) : null);
+  if (!currency || !inferredPeriod || !(min && min > 0) || !(max && max > 0)) return null;
+  const resolved: SalaryPeriod = inferredPeriod;
   return {
     min,
     max,
     currency,
-    period,
+    period: resolved,
     basis: 'gross',
-    text: `${min === max ? min : `${min}–${max}`} ${currency} per ${period} (structured data)`,
+    text: `${min === max ? min : `${min}–${max}`} ${currency} per ${resolved} (structured data)`,
   };
 }
 

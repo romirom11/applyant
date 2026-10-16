@@ -924,15 +924,20 @@ func eventually(_ what: String, timeout: Duration = .seconds(3), _ condition: ()
     }
 
     @Test func skipMovesAPostingOutOfTheInbox() async throws {
-        let daemon = FakeDaemon(postings: [posting(1, score: 70, title: "A"), posting(2, score: 60, title: "B")])
+        let daemon = FakeDaemon(
+            postings: [posting(1, score: 70, title: "A", appId: 9), posting(2, score: 60, title: "B")],
+            applications: [application(9, posting: 1, stage: .readyForReview)]
+        )
         let store = AppStore(connector: FakeConnector([daemon]), backoff: { _ in })
         let run = Task { await store.run() }
         defer { run.cancel() }
         try await eventually("connected") { store.connection == .connected }
+        #expect(store.items(.readyToReview).map(\.applicationId) == [9])
         await store.skip(posting: 1, reason: "salary too low")
         #expect(daemon.calls.contains("skip 1 salary too low"))
         #expect(store.items(.inbox).map(\.postingId) == [2])
         #expect(store.items(.skipped).map(\.postingId) == [1])
+        #expect(store.items(.readyToReview).isEmpty)
         await store.markInterested(posting: 2)
         #expect(store.items(.interested).map(\.postingId) == [2])
         // Back to Inbox takes the skip back without marking it interested.
@@ -940,6 +945,7 @@ func eventually(_ what: String, timeout: Duration = .seconds(3), _ condition: ()
         #expect(daemon.calls.contains("unskip 1"))
         #expect(store.items(.skipped).isEmpty)
         #expect(store.items(.inbox).map(\.postingId) == [1, 2])
+        #expect(store.items(.readyToReview).map(\.applicationId) == [9])
     }
 }
 
@@ -966,10 +972,10 @@ func eventually(_ what: String, timeout: Duration = .seconds(3), _ condition: ()
         #expect(ListItem(posting: p, application: nil).chips.map(\.text) == ["Dealbreaker: outstaffing", "Ashby"])
     }
 
-    @Test func everySectionHasContentAndOnlySettingsIsOnePage() {
+    @Test func everySectionHasContentAndChatAndSettingsAreOnePage() {
         for section in Section.allCases {
             #expect(section.isBuilt, "\(section)")
-            #expect(section.isSinglePane == (section == .settings), "\(section)")
+            #expect(section.isSinglePane == (section == .settings || section == .chat), "\(section)")
         }
         #expect(Section.interview.title == "Questions for you")
         #expect(Section.interviews.title == "Interviews")

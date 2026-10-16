@@ -31,6 +31,20 @@ private func fact(_ id: Int64, _ text: String, _ status: FactStatus, kind: Strin
 
 @MainActor
 @Suite struct GapParityTests {
+    @Test func cvPreviewUsesTheSelectedBaseAttachment() {
+        var app = Application()
+        app.cv.mode = "base"
+        app.cv.pdfPath = "/tmp/old-tailored.pdf"
+        app.fields = [.with {
+            $0.kind = "file"
+            $0.meaning = "resume"
+            $0.value = "/tmp/profile-base.pdf"
+        }]
+        #expect(CvText.previewPath(app) == "/tmp/profile-base.pdf")
+        app.cv.mode = "tailored"
+        #expect(CvText.previewPath(app) == "/tmp/old-tailored.pdf")
+    }
+
     @Test func modelRolesChangeResetAndTheEmailOptIn() async throws {
         let daemon = FakeDaemon()
         let (store, run) = try await connected(daemon)
@@ -45,8 +59,16 @@ private func fact(_ id: Int64, _ text: String, _ status: FactStatus, kind: Strin
         #expect(RolesText.routes(for: store.roles[0]).first == "jev")
         #expect(!RolesText.routes(for: store.roles[0]).contains("apple"))
         #expect(RolesText.routes(for: store.roles[1]) == ["apple", "claude:haiku", "claude:sonnet", "codex"])
+        #expect(RolesText.routes(for: store.roles[1], provider: "codex", codexModels: ["gpt-6-sol"]) == ["codex", "codex:gpt-6-sol"])
         let writer = RoleRoute.with { $0.role = "application_writer"; $0.route = "claude:opus"; $0.defaultRoute = "claude:opus" }
-        #expect(!RolesText.routes(for: writer).contains("jev") && !RolesText.routes(for: writer).contains("apple"))
+        #expect(RolesText.providers(for: writer) == ["claude", "codex"])
+        #expect(RolesText.defaultRoute(for: "codex", role: writer) == "codex")
+        #expect(RolesText.defaultRoute(for: "claude", role: writer) == "claude:opus")
+        #expect(RolesText.model("codex:gpt-6-sol") == "gpt-6-sol")
+
+        #expect(RolesText.provider("codex:gpt-6-sol") == "codex")
+        let customCodex = RoleRoute.with { $0.role = "application_writer"; $0.route = "codex:gpt-6-sol"; $0.defaultRoute = "claude:opus" }
+        #expect(RolesText.routes(for: customCodex, provider: "codex", codexModels: []).contains("codex:gpt-6-sol"))
 
         // Opting in routes email_classify to a cloud model; opting out resets it.
         await store.setCloudEmail(true)
@@ -66,6 +88,16 @@ private func fact(_ id: Int64, _ text: String, _ status: FactStatus, kind: Strin
         await store.resetRoles()
         #expect(daemon.calls.contains("resetRoles all"))
         #expect(store.roles.allSatisfy { !$0.overridden })
+    }
+
+    @Test func codexModelCatalogShowsOnlySelectableModels() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let codex = root.appendingPathComponent("codex")
+        try FileManager.default.createDirectory(at: codex, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let data = #"{"models":[{"slug":"gpt-6-sol","visibility":"list"},{"slug":"internal","visibility":"hide"},{"slug":"gpt-6-sol","visibility":"list"},{"slug":"gpt-6-luna","visibility":"list"}]}"#.data(using: .utf8)!
+        try data.write(to: codex.appendingPathComponent("models_cache.json"))
+        #expect(CodexModels.available(home: root, env: ["CODEX_HOME": codex.path]) == ["gpt-6-sol", "gpt-6-luna"])
     }
 
     @Test func theFactsBrowserConfirmsEditsAndRejects() async throws {

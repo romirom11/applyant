@@ -5,7 +5,7 @@
 import { createHash } from 'node:crypto';
 import type { PostingExtraction } from '../../models/schemas/posting.ts';
 
-export const POSTING_PROMPT_VERSION = 'extract-posting/2';
+export const POSTING_PROMPT_VERSION = 'extract-posting/3';
 /** Postings longer than this are cut (a posting is a few thousand characters). */
 export const MAX_POSTING_CHARS = 30_000;
 export const MAX_REQUIREMENTS = 30;
@@ -23,7 +23,7 @@ Other fields:
 - seniority: the level the posting hires for; "unknown" if it doesn't say (don't guess from years alone unless the title or text states a level).
 - roleFamilies: the kinds of work, most important first. "founding" for founding-engineer / first-engineer roles.
 - workplace: remote, hybrid, onsite, or unknown when not stated. A workplace label in the page header ("Hybrid", "Remote", "On-site", shown next to the title and location) is the posting's own classification and wins over body text. Benefits and perks never define the workplace: "work from anywhere a few weeks a year", a remote-work stipend or a mobility / nomad programme don't make a hybrid or on-site role remote. Some boards mark hybrid roles as jobLocationType TELECOMMUTE in structured data, so that alone doesn't mean remote when an office location is given. remoteRegions / remoteCountries: only where the posting states who may work remotely ("Remote (EU)", "US only", "anywhere"); leave empty when it doesn't say. offices: stated office or on-site locations, country as ISO 3166-1 alpha-2.
-- salary: only a stated salary or rate, with numbers exactly as written (convert "80k" to 80000). period: hour, day, month or year as stated. basis: "gross" when the posting says gross, or states an annual base salary / compensation range (gross by convention); "net" only when it says net; null otherwise. currency as ISO 4217. null when no salary is stated.
+ - salary: only a stated salary or rate, with numbers exactly as written (convert "80k" to 80000). period: hour, day, month or year as stated; when no period is stated but the salary is a bare monthly-style figure like "$1500-2500" or "to $2500" (as Djinni shows it) infer "month". basis: "gross" when the posting says gross, states an annual base salary / compensation range (gross by convention), or when the salary comes from structured data / a salary badge with no qualifier (as on Djinni); "net" only when it says net; null only when truly unknown. currency as ISO 4217. null when no salary is stated.
 - languages: human languages the posting asks for (ISO 639-1), with level when stated. postingLanguage: the language the posting is written in.
 - employment: the stated type, null if not stated. outstaffing: true only when the posting is from an outstaffing / outsourcing / staffing agency placing the hire with a client.
 - title and company as the posting writes them; company is the employer, not the job board.`;
@@ -83,7 +83,7 @@ export function normaliseExtraction(out: PostingExtraction): PostingExtraction {
       return true;
     })
     .slice(0, MAX_REQUIREMENTS);
-  const salary = out.salary
+  let salary: PostingExtraction['salary'] = out.salary
     ? {
         ...out.salary,
         currency: out.salary.currency?.trim().toUpperCase().slice(0, 3) || null,
@@ -91,6 +91,18 @@ export function normaliseExtraction(out: PostingExtraction): PostingExtraction {
         max: out.salary.max !== null && out.salary.max > 0 ? out.salary.max : null,
       }
     : null;
+  // Djinni (and similar UA boards) show bare "$X - $Y" meaning per month gross.
+  // If the extractor copied the figure but left period/basis null, fill the obvious
+  // default so salary doesn't become "uncertain" and get excluded from scoring.
+  if (salary && (salary.min !== null || salary.max !== null)) {
+    const t = salary.text ?? '';
+    const bareMonthly =
+      /\bto\s*\$\s*\d/i.test(t) ||
+      /\$\s*\d[\d,]*\s*[-–—]\s*\$?\s*\d/i.test(t) ||
+      /\$\s*\d[\d,]*/.test(t);
+    if (!salary.period && bareMonthly) salary = { ...salary, period: 'month' };
+    if (!salary.basis && bareMonthly) salary = { ...salary, basis: 'gross' };
+  }
   return {
     ...out,
     title: out.title?.trim() || null,

@@ -656,6 +656,7 @@ export function applicationView(conn: Conn, id: number): ApplicationView {
   }
   const blockers: string[] = [];
   if (app.stage === 'preparing') blockers.push('still being prepared');
+  if (posting.decision === 'skipped') blockers.push('you skipped this posting');
   if (missing.length) {
     blockers.push(
       `${missing.length} required field(s) need a value: ${missing.slice(0, 6).join('; ')}`,

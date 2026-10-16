@@ -305,6 +305,7 @@ export async function runDaemon(config: Config = loadConfig()): Promise<() => Pr
   const rpc = await startRpcServer({
     db,
     bus,
+    models,
     secrets,
     setup: { cli, native, secrets, home: config.home, startedAt },
     mail,

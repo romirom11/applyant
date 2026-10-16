@@ -106,6 +106,14 @@ public struct CvEditableLine: Identifiable, Equatable, Sendable {
 }
 
 public enum CvText {
+    /// The attachment selected for this application is the source of truth for Preview.
+    public static func previewPath(_ app: Application) -> String? {
+        guard app.hasCv else { return nil }
+        if app.cv.mode == "base" {
+            return app.fields.first(where: { $0.meaning == "resume" && $0.kind == "file" && $0.hasValue })?.value
+        }
+        return app.cv.hasPdfPath ? app.cv.pdfPath : nil
+    }
     /// Every line in CV order, then the left-out ones.
     public static func lines(_ cv: Applyant_V1_Cv) -> [CvEditableLine] {
         var out = cv.summary.map { CvEditableLine(handle: $0.handle, section: "Summary", text: $0.text, dropped: false) }

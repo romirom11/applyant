@@ -8,6 +8,7 @@ import SwiftUI
 
 struct ModelsSection: View {
     let store: AppStore
+    @State private var codexModels: [String] = []
 
     var body: some View {
         SwiftUI.Section {
@@ -18,7 +19,7 @@ struct ModelsSection: View {
             .disabled(store.roles.isEmpty)
             Text(RolesText.emailPrivacy).font(.caption).foregroundStyle(.secondary)
             ForEach(store.roles, id: \.role) { role in
-                RoleRow(store: store, role: role)
+                RoleRow(store: store, role: role, codexModels: codexModels)
             }
             if store.roles.contains(where: \.overridden) {
                 HStack {
@@ -32,13 +33,21 @@ struct ModelsSection: View {
             Text("Which model does each job. A change applies to the next run, no restart needed.")
                 .font(.caption).foregroundStyle(.secondary)
         }
-        .task { await store.openModels() }
+        .task {
+            codexModels = CodexModels.available()
+            await store.openModels()
+        }
     }
 }
 
 private struct RoleRow: View {
     let store: AppStore
     let role: RoleRoute
+    let codexModels: [String]
+    @State private var customModel = ""
+    @State private var enteringModel = false
+
+    private var provider: String { RolesText.provider(role.route) }
 
     var body: some View {
         HStack(alignment: .firstTextBaseline) {
@@ -48,20 +57,61 @@ private struct RoleRow: View {
                 Text(RolesText.line(role)).font(.caption.monospaced()).foregroundStyle(.secondary)
             }
             Spacer()
-            Menu(RolesText.routeName(role.route)) {
-                ForEach(RolesText.routes(for: role), id: \.self) { route in
-                    Button {
-                        Task { await store.setRole(role.role, route: route) }
-                    } label: {
-                        if route == role.route { Label(RolesText.routeName(route), systemImage: "checkmark") } else { Text(RolesText.routeName(route)) }
+            if provider == "jev" || provider == "apple" {
+                Menu(RolesText.routeName(role.route)) {
+                    ForEach(RolesText.routes(for: role), id: \.self) { route in
+                        Button {
+                            Task { await store.setRole(role.role, route: route) }
+                        } label: {
+                            if route == role.route { Label(RolesText.routeName(route), systemImage: "checkmark") }
+                            else { Text(RolesText.routeName(route)) }
+                        }
+                        .disabled(route == role.route)
                     }
-                    .disabled(route == role.route)
                 }
+                .fixedSize()
+            } else {
+                Menu("Provider: \(provider.capitalized)") {
+                    ForEach(RolesText.providers(for: role), id: \.self) { choice in
+                        let route = RolesText.defaultRoute(for: choice, role: role)
+                        Button(choice == "apple" ? "On-device" : choice.capitalized) {
+                            Task { await store.setRole(role.role, route: route) }
+                        }
+                        .disabled(choice == provider)
+                    }
+                }
+                .fixedSize()
+                Menu("Model: \(RolesText.model(role.route))") {
+                    ForEach(RolesText.routes(for: role, provider: provider, codexModels: codexModels), id: \.self) { route in
+                        Button {
+                            Task { await store.setRole(role.role, route: route) }
+                        } label: {
+                            if route == role.route { Label(RolesText.model(route), systemImage: "checkmark") }
+                            else { Text(RolesText.model(route)) }
+                        }
+                        .disabled(route == role.route)
+                    }
+                    Divider()
+                    Button("Other model…") {
+                        customModel = RolesText.model(role.route) == "Default" ? "" : RolesText.model(role.route)
+                        enteringModel = true
+                    }
+                }
+                .fixedSize()
             }
-            .fixedSize()
             if role.overridden {
                 Button("Reset") { Task { await store.resetRoles(role.role) } }.controlSize(.small)
             }
+        }
+        .alert("Model for \(provider.capitalized)", isPresented: $enteringModel) {
+            TextField("Model ID", text: $customModel)
+            Button("Cancel", role: .cancel) {}
+            Button("Save") {
+                let model = customModel.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !model.isEmpty { Task { await store.setRole(role.role, route: "\(provider):\(model)") } }
+            }
+        } message: {
+            Text("Use a model ID supported by your \(provider.capitalized) account.")
         }
     }
 }

@@ -51,7 +51,21 @@ struct SearchList: View {
             ForEach(groups, id: \.kind.kind) { group in
                 SwiftUI.Section {
                     ForEach(group.rows) { row in
-                        SearchRowView(row: row).tag(row.selection)
+                        HStack {
+                            SearchRowView(row: row)
+                            Spacer()
+                            if case let .source(key) = row.selection, let source = store.source(key) {
+                                Toggle(source.enabled ? "Turn \(source.label) off" : "Turn \(source.label) on", isOn: Binding(
+                                    get: { source.enabled },
+                                    set: { on in Task { await store.setSource(key, enabled: on) } }
+                                ))
+                                .toggleStyle(.switch)
+                                .controlSize(.mini)
+                                .labelsHidden()
+                                .help(source.enabled ? "Turn \(source.label) off" : "Turn \(source.label) on")
+                            }
+                        }
+                        .tag(row.selection)
                     }
                     if group.kind.kind == "telegram" { FollowChannel(store: store) }
                 } header: {

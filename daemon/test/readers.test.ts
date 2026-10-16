@@ -117,6 +117,24 @@ describe('ATS list APIs (recorded)', () => {
 });
 
 describe('job boards (recorded)', () => {
+  it('searches Djinni for the strategy terms, whatever the role', async () => {
+    const url = 'https://djinni.co/jobs/rss/?all_keywords=Laravel';
+    const fetch = recordedFetch({
+      [url]: `<?xml version="1.0"?><rss><channel><title>Djinni</title><item>
+        <guid>https://djinni.co/jobs/123-laravel-engineer/</guid>
+        <link>https://djinni.co/jobs/123-laravel-engineer/</link>
+        <title>Laravel Engineer</title><description>Build services</description>
+      </item></channel></rss>`,
+    });
+    const run = await readBoard('djinni', ctx(fetch, ['Laravel -junior']));
+    expect(fetch.calls).toEqual([url]);
+    expect(run).toMatchObject({ complete: false, note: 'Djinni: 1 jobs for this search' });
+    expect(run.listings[0]).toMatchObject({
+      title: 'Laravel Engineer',
+      url: 'https://djinni.co/jobs/123-laravel-engineer/',
+    });
+  });
+
   it('HN "Who is hiring": one listing per comment, never a complete list', async () => {
     const run = await readBoard('hn', ctx(recordedFetch()));
     expect(run.complete).toBe(false);
@@ -385,6 +403,32 @@ describe('feeds', () => {
       ),
     ).toEqual(['https://acme.example/jobs.rss']);
     expect(plainText('&lt;p&gt;a&lt;/p&gt;&lt;p&gt;b')).toBe('a\nb');
+  });
+
+  it('reads Jobico’s public XML feed as direct job pages', () => {
+    const feed = parseFeed(
+      `<?xml version="1.0"?><source><publisher>Jobico</publisher><job>
+        <id>abc123</id><link>https://www.jobico.io/jobs/senior-python-engineer</link>
+        <title>Senior Python Engineer</title><company>Acme</company>
+        <locationtype>remote</locationtype><country>Ukraine</country>
+        <description><![CDATA[<p>Build Python services.</p>]]></description>
+        <date>2026-10-02T08:00:00Z</date>
+      </job></source>`,
+      'application/xml',
+      'https://jobico.io/api/feeds/jobs.xml',
+      now,
+    );
+    expect(feed).toMatchObject({ format: 'job-xml', complete: true, title: 'Jobico' });
+    expect(feed?.listings).toEqual([
+      expect.objectContaining({
+        url: 'https://www.jobico.io/jobs/senior-python-engineer',
+        externalId: 'abc123',
+        title: 'Senior Python Engineer',
+        company: 'Acme',
+        remote: true,
+        description: 'Build Python services.',
+      }),
+    ]);
   });
 });
 

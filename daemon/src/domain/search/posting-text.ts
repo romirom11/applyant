@@ -71,7 +71,8 @@ async function pageHeader(page: Page): Promise<string> {
 
 export async function readPostingText(page: Page): Promise<PostingText> {
   const html = await page.content();
-  const main = htmlToText(html, page.url());
+  const url = page.url();
+  const main = htmlToText(html, url);
   const blocks = await page
     .evaluate(() =>
       [...document.querySelectorAll('script[type="application/ld+json"]')].map(
@@ -80,6 +81,30 @@ export async function readPostingText(page: Page): Promise<PostingText> {
     )
     .catch(() => [] as string[]);
   const job = jobPostingNode(blocks);
+
+  // Djinni renders its full description in .job-post__description and salary badge
+  // in a .text-success header chip. Readability often trims the chip, so we pull
+  // both pieces directly when on djinni.co.
+  const djinniExtra = url.includes('djinni.co')
+    ? await page
+        .evaluate(() => {
+          const salaryEl =
+            document.querySelector<HTMLElement>('.job-post__description')
+              ?.closest('body')
+              ?.querySelector<HTMLElement>(
+                'header .text-success, .job-post-page header .text-success, [class*="text-success"]',
+              ) ??
+            document.querySelector<HTMLElement>('.text-success');
+          const salary =
+            salaryEl?.innerText?.replace(/\s+/g, ' ').trim() ??
+            (document.body?.innerText.match(/\b(to\s*)?\$ ?\d[\d,\-–— ]*\b/)?.[0] ?? null);
+          const descEl = document.querySelector<HTMLElement>('.job-post__description');
+          const descriptionHtml = descEl?.innerHTML ?? null;
+          const descriptionText = descEl?.innerText?.trim() ?? null;
+          return { salary, descriptionHtml, descriptionText };
+        })
+        .catch(() => null as { salary: string | null; descriptionHtml: string | null; descriptionText: string | null } | null)
+    : null;
 
   let body = main.text;
   // Readability picks one block as "the article". On job pages that is often the company's
@@ -92,6 +117,16 @@ export async function readPostingText(page: Page): Promise<PostingText> {
       ? htmlToText(`<body>${job.description}</body>`, null).text
       : '';
   if (description.length > body.length) body = description;
+  // Djinni's own description container is the authoritive body; prefer it when longer.
+  if (djinniExtra?.descriptionHtml) {
+    const djinniBody = htmlToText(`<body>${djinniExtra.descriptionHtml}</body>`, null).text;
+    if (djinniBody.trim().length > body.trim().length) body = djinniBody;
+    else if (djinniExtra.descriptionText && djinniExtra.descriptionText.length > body.length) {
+      body = djinniExtra.descriptionText;
+    }
+  } else if (djinniExtra?.descriptionText && djinniExtra.descriptionText.length > body.length) {
+    body = djinniExtra.descriptionText;
+  }
   if (body.length < THIN_PAGE) {
     for (const frame of page.frames()) {
       if (frame === page.mainFrame()) continue;
@@ -100,15 +135,27 @@ export async function readPostingText(page: Page): Promise<PostingText> {
     }
   }
   const top = await pageHeader(page);
+  // Ensure Djinni salary badge is in the header even when Readability dropped it.
+  const headerWithSalary =
+    djinniExtra?.salary && top && !top.includes(djinniExtra.salary)
+      ? `${top} | ${djinniExtra.salary}`
+      : djinniExtra?.salary && !top
+        ? djinniExtra.salary
+        : top;
   const structured = job ? structuredLines(job) : [];
   const header = [
     main.title ? `# ${main.title}` : null,
-    top ? `${PAGE_HEADER_PREFIX}${top}` : null,
+    headerWithSalary ? `${PAGE_HEADER_PREFIX}${headerWithSalary}` : null,
     ...structured,
   ]
     .filter(Boolean)
     .join('\n');
-  const text = `${header ? `${header}\n\n` : ''}${body}`.slice(0, MAX_POSTING_TEXT).trim();
+  // As a last resort ensure salary token is somewhere in the text for the extractor.
+  const salarySuffix =
+    djinniExtra?.salary && body.includes(djinniExtra.salary) === false && header.includes(djinniExtra.salary) === false
+      ? `\n\nSalary: ${djinniExtra.salary}`
+      : '';
+  const text = `${header ? `${header}\n\n` : ''}${body}${salarySuffix}`.slice(0, MAX_POSTING_TEXT).trim();
   return { text, jsonLd: job };
 }
 

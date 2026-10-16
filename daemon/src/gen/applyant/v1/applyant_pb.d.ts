@@ -195,6 +195,13 @@ export declare type Posting = Message<"applyant.v1.Posting"> & {
    * @generated from field: optional applyant.v1.Company company_research = 29;
    */
   companyResearch?: Company | undefined;
+
+  /**
+   * Only filled by GetPosting: the full posting text as captured at verification (posting-text.ts).
+   *
+   * @generated from field: optional string text = 30;
+   */
+  text?: string | undefined;
 };
 
 /**
@@ -8164,6 +8171,133 @@ export declare type GetOverviewResponse = Message<"applyant.v1.GetOverviewRespon
 export declare const GetOverviewResponseSchema: GenMessage<GetOverviewResponse>;
 
 /**
+ * @generated from message applyant.v1.ChatMessage
+ */
+export declare type ChatMessage = Message<"applyant.v1.ChatMessage"> & {
+  /**
+   * @generated from field: int64 id = 1;
+   */
+  id: bigint;
+
+  /**
+   * user | assistant
+   *
+   * @generated from field: string role = 2;
+   */
+  role: string;
+
+  /**
+   * @generated from field: string text = 3;
+   */
+  text: string;
+
+  /**
+   * @generated from field: repeated int64 fact_ids = 4;
+   */
+  factIds: bigint[];
+
+  /**
+   * @generated from field: google.protobuf.Timestamp created_at = 5;
+   */
+  createdAt?: Timestamp | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.ChatMessage.
+ * Use `create(ChatMessageSchema)` to create a new message.
+ */
+export declare const ChatMessageSchema: GenMessage<ChatMessage>;
+
+/**
+ * @generated from message applyant.v1.ListChatRequest
+ */
+export declare type ListChatRequest = Message<"applyant.v1.ListChatRequest"> & {
+};
+
+/**
+ * Describes the message applyant.v1.ListChatRequest.
+ * Use `create(ListChatRequestSchema)` to create a new message.
+ */
+export declare const ListChatRequestSchema: GenMessage<ListChatRequest>;
+
+/**
+ * @generated from message applyant.v1.ListChatResponse
+ */
+export declare type ListChatResponse = Message<"applyant.v1.ListChatResponse"> & {
+  /**
+   * @generated from field: repeated applyant.v1.ChatMessage messages = 1;
+   */
+  messages: ChatMessage[];
+};
+
+/**
+ * Describes the message applyant.v1.ListChatResponse.
+ * Use `create(ListChatResponseSchema)` to create a new message.
+ */
+export declare const ListChatResponseSchema: GenMessage<ListChatResponse>;
+
+/**
+ * @generated from message applyant.v1.SendChatRequest
+ */
+export declare type SendChatRequest = Message<"applyant.v1.SendChatRequest"> & {
+  /**
+   * @generated from field: string text = 1;
+   */
+  text: string;
+};
+
+/**
+ * Describes the message applyant.v1.SendChatRequest.
+ * Use `create(SendChatRequestSchema)` to create a new message.
+ */
+export declare const SendChatRequestSchema: GenMessage<SendChatRequest>;
+
+/**
+ * @generated from message applyant.v1.SendChatResponse
+ */
+export declare type SendChatResponse = Message<"applyant.v1.SendChatResponse"> & {
+  /**
+   * @generated from field: applyant.v1.ChatMessage user = 1;
+   */
+  user?: ChatMessage | undefined;
+
+  /**
+   * @generated from field: applyant.v1.ChatMessage assistant = 2;
+   */
+  assistant?: ChatMessage | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.SendChatResponse.
+ * Use `create(SendChatResponseSchema)` to create a new message.
+ */
+export declare const SendChatResponseSchema: GenMessage<SendChatResponse>;
+
+/**
+ * @generated from message applyant.v1.ClearChatRequest
+ */
+export declare type ClearChatRequest = Message<"applyant.v1.ClearChatRequest"> & {
+};
+
+/**
+ * Describes the message applyant.v1.ClearChatRequest.
+ * Use `create(ClearChatRequestSchema)` to create a new message.
+ */
+export declare const ClearChatRequestSchema: GenMessage<ClearChatRequest>;
+
+/**
+ * @generated from message applyant.v1.ClearChatResponse
+ */
+export declare type ClearChatResponse = Message<"applyant.v1.ClearChatResponse"> & {
+};
+
+/**
+ * Describes the message applyant.v1.ClearChatResponse.
+ * Use `create(ClearChatResponseSchema)` to create a new message.
+ */
+export declare const ClearChatResponseSchema: GenMessage<ClearChatResponse>;
+
+/**
  * @generated from enum applyant.v1.PostingStage
  */
 export enum PostingStage {
@@ -9464,6 +9598,32 @@ export declare const ApplyantService: GenService<{
     methodKind: "unary";
     input: typeof GetOverviewRequestSchema;
     output: typeof GetOverviewResponseSchema;
+  },
+  /**
+   * Free-form conversation grounded in the candidate's profile and confirmed facts.
+   *
+   * @generated from rpc applyant.v1.ApplyantService.ListChat
+   */
+  listChat: {
+    methodKind: "unary";
+    input: typeof ListChatRequestSchema;
+    output: typeof ListChatResponseSchema;
+  },
+  /**
+   * @generated from rpc applyant.v1.ApplyantService.SendChat
+   */
+  sendChat: {
+    methodKind: "unary";
+    input: typeof SendChatRequestSchema;
+    output: typeof SendChatResponseSchema;
+  },
+  /**
+   * @generated from rpc applyant.v1.ApplyantService.ClearChat
+   */
+  clearChat: {
+    methodKind: "unary";
+    input: typeof ClearChatRequestSchema;
+    output: typeof ClearChatResponseSchema;
   },
 }>;
 

@@ -386,6 +386,7 @@ export function postingToPb(
           }),
         )
       : [],
+    text: facts && row.text ? row.text : undefined,
   });
 }
 

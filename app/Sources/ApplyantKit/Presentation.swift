@@ -7,7 +7,7 @@ public enum Section: String, CaseIterable, Identifiable, Sendable {
     case overview
     case inbox, readyToReview, preparing, interested, skipped
     case applied, interviews, offers, whichApplication
-    case profile, projects, interview
+    case profile, projects, interview, chat
     case search, agentRuns, companies, settings
 
     public var id: String { rawValue }
@@ -19,7 +19,7 @@ public enum Section: String, CaseIterable, Identifiable, Sendable {
         case .overview: .top
         case .inbox, .readyToReview, .preparing, .interested, .skipped: .jobs
         case .applied, .interviews, .offers, .whichApplication: .applications
-        case .profile, .projects, .interview: .me
+        case .profile, .projects, .interview, .chat: .me
         case .search, .agentRuns, .companies, .settings: .system
         }
     }
@@ -39,6 +39,7 @@ public enum Section: String, CaseIterable, Identifiable, Sendable {
         case .profile: "Profile"
         case .projects: "Projects"
         case .interview: "Questions for you"
+        case .chat: "Chat"
         case .search: "Search"
         case .agentRuns: "Agent runs"
         case .companies: "Companies"
@@ -61,6 +62,7 @@ public enum Section: String, CaseIterable, Identifiable, Sendable {
         case .profile: "person.crop.circle"
         case .projects: "folder"
         case .interview: "bubble.left.and.bubble.right"
+        case .chat: "message"
         case .search: "magnifyingglass"
         case .agentRuns: "arrow.triangle.2.circlepath"
         case .companies: "building.2"
@@ -72,7 +74,7 @@ public enum Section: String, CaseIterable, Identifiable, Sendable {
     public var isBuilt: Bool { true }
 
     /// Sections that are one page: no list to pick from, so they take the whole window.
-    public var isSinglePane: Bool { self == .settings }
+    public var isSinglePane: Bool { self == .settings || self == .chat }
 }
 
 public struct Navigation: Equatable, Sendable {

@@ -13,7 +13,27 @@ public enum RolesText {
     public static let emailPrivacy =
         "Off: replies are read by the on-device model and never leave this Mac. On: the text of each reply to an application is sent to \(cloudEmailRoute) to classify it."
 
-    /// The routes offered for a role (the current one always among them).
+    public static func provider(_ route: String) -> String { String(route.split(separator: ":", maxSplits: 1).first ?? "") }
+    public static func model(_ route: String) -> String {
+        let parts = route.split(separator: ":", maxSplits: 1)
+        return parts.count == 2 ? String(parts[1]) : "Default"
+    }
+
+    public static func providers(for role: RoleRoute) -> [String] {
+        var providers = ["claude", "codex"]
+        if decisionRoles.contains(role.role) { providers.insert("jev", at: 0) }
+        if role.role == emailRole { providers.insert("apple", at: 0) }
+        return providers
+    }
+
+    /// Switching providers uses that provider's default, except Claude's familiar role default.
+    public static func defaultRoute(for provider: String, role: RoleRoute) -> String {
+        if self.provider(role.defaultRoute) == provider { return role.defaultRoute }
+        if provider == "claude" { return role.role == emailRole ? cloudEmailRoute : "claude:sonnet" }
+        return provider
+    }
+
+    /// Existing single-menu choices for Jev and the on-device email model.
     public static func routes(for role: RoleRoute) -> [String] {
         var routes: [String]
         if role.role == emailRole {
@@ -22,7 +42,23 @@ public enum RolesText {
             routes = ["claude:haiku", "claude:sonnet", "claude:opus", "codex"]
             if decisionRoles.contains(role.role) { routes.insert("jev", at: 0) }
         }
-        for r in [role.route, role.defaultRoute] where !r.isEmpty && !routes.contains(r) { routes.append(r) }
+        for route in [role.route, role.defaultRoute] where !route.isEmpty && !routes.contains(route) {
+            routes.append(route)
+        }
+        return routes
+    }
+
+    /// Models offered under one provider; preserve an existing custom route in the menu.
+    public static func routes(for role: RoleRoute, provider: String, codexModels: [String]) -> [String] {
+        var routes: [String]
+        switch provider {
+        case "claude": routes = ["claude:haiku", "claude:sonnet", "claude:opus"]
+        case "codex": routes = ["codex"] + codexModels.map { "codex:\($0)" }
+        default: routes = [provider]
+        }
+        for route in [role.route, role.defaultRoute] where self.provider(route) == provider && !routes.contains(route) {
+            routes.append(route)
+        }
         return routes
     }
 
@@ -52,6 +88,28 @@ public enum RolesText {
     public static func cloudEmail(_ roles: [RoleRoute]) -> Bool {
         guard let email = roles.first(where: { $0.role == emailRole }) else { return false }
         return !email.route.hasPrefix("apple")
+    }
+}
+
+public enum CodexModels {
+    /// Codex maintains this catalog for the signed-in account. Only models visible in its picker.
+    public static func available(
+        home: URL = FileManager.default.homeDirectoryForCurrentUser,
+        env: [String: String] = ProcessInfo.processInfo.environment
+    ) -> [String] {
+        let directory = env["CODEX_HOME"].flatMap { $0.isEmpty ? nil : URL(fileURLWithPath: $0) }
+            ?? home.appendingPathComponent(".codex")
+        guard let data = try? Data(contentsOf: directory.appendingPathComponent("models_cache.json")),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let models = json["models"] as? [[String: Any]]
+        else { return [] }
+        var seen = Set<String>()
+        return models.compactMap { entry in
+            guard entry["visibility"] as? String == "list",
+                  let slug = entry["slug"] as? String, !slug.isEmpty, seen.insert(slug).inserted
+            else { return nil }
+            return slug
+        }
     }
 }
 

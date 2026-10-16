@@ -1184,3 +1184,12 @@ export type RoleRouteRow = typeof roleRoutes.$inferSelect;
 export type CompanyRow = typeof companies.$inferSelect;
 export type MailboxRow = typeof mailboxes.$inferSelect;
 export type EmailRow = typeof emails.$inferSelect;
+
+export const chatMessages = sqliteTable('chat_messages', {
+  id: integer('id').primaryKey(),
+  role: text('role', { enum: ['user', 'assistant'] }).notNull(),
+  text: text('text').notNull(),
+  factIds: text('fact_ids', { mode: 'json' }).$type<number[]>().notNull().default(sql`'[]'`),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull().default(now),
+});
+export type ChatMessageRow = typeof chatMessages.$inferSelect;

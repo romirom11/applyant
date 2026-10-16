@@ -27,6 +27,7 @@ export const ROLES = [
   // Is this posting one of the roles the candidate is after? One decision per posting.
   'role_fit',
   'email_classify',
+  'candidate_chat',
 ] as const;
 export type Role = (typeof ROLES)[number];
 
@@ -64,6 +65,7 @@ export const DEFAULT_ROLES: Record<Role, RoleConfig> = {
   role_fit: { route: r('jev'), minConfidence: 0.8, timeoutMs: MIN },
   // On-device; never falls back to a cloud model unless the candidate routes it there.
   email_classify: { route: r('apple'), minConfidence: 0.7, timeoutMs: MIN },
+  candidate_chat: { route: r('codex'), minConfidence: null, timeoutMs: 5 * MIN },
 };
 
 /** What each role does, for `applyant config roles`. */
@@ -84,6 +86,7 @@ export const ROLE_INFO: Record<Role, string> = {
   role_fit: "whether a posting is one of the roles you're after",
   email_classify:
     'reads replies to applications (on-device; a cloud model only if you route it there)',
+  candidate_chat: 'answers your questions using your profile, projects and confirmed facts',
 };
 
 /** Roles that are Choice decisions (AgentRunner.decide): the only ones Jev can answer. */
