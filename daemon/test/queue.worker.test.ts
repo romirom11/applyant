@@ -384,7 +384,9 @@ describe('queue worker', () => {
   it('leases nothing but what runs while paused, and catches up on resume', async () => {
     pause(true);
     const { postingId, taskId } = addPosting();
-    const turnId = runInTx(t.db, bus, { now: clock.now() }, (tx) => tx.enqueue('interview_turn', 1));
+    const turnId = runInTx(t.db, bus, { now: clock.now() }, (tx) =>
+      tx.enqueue('interview_turn', 1),
+    );
     const w = worker(markVerified('ok'), {
       handlers: handlers({
         verify_posting: markVerified('ok'),
