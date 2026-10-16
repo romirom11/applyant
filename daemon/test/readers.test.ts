@@ -109,6 +109,64 @@ describe('ATS list APIs (recorded)', () => {
     });
   });
 
+  describe('SmartRecruiters', () => {
+    const api = (offset: number) =>
+      `https://api.smartrecruiters.com/v1/companies/Acme/postings?limit=100&offset=${offset}`;
+    const job = (i: number, over: Record<string, unknown> = {}) => ({
+      id: String(744000100000000 + i),
+      name: `Engineer ${i}`,
+      company: { identifier: 'Acme', name: 'Acme Corp' },
+      releasedDate: '2026-10-01T10:00:00.000Z',
+      location: { city: 'Berlin', country: 'de', fullLocation: 'Berlin, Germany', remote: false },
+      department: { label: 'Engineering' },
+      ...over,
+    });
+
+    it('reads every page of the list; jobs have their id, company and place', async () => {
+      const first = Array.from({ length: 100 }, (_, i) => job(i));
+      const fetch = recordedFetch({
+        [api(0)]: { totalFound: 101, content: first },
+        [api(100)]: {
+          totalFound: 101,
+          content: [job(100, { location: { fullLocation: 'Lisbon, Portugal', remote: true } })],
+        },
+      });
+      const run = await readAtsBoard('smartrecruiters', 'Acme', ctx(fetch));
+      expect(run.complete).toBe(true);
+      expect(run.company).toBe('Acme Corp');
+      expect(run.note).toBe('Acme Corp on SmartRecruiters: 101 jobs');
+      expect(run.listings).toHaveLength(101);
+      expect(run.listings[0]).toMatchObject({
+        url: 'https://jobs.smartrecruiters.com/Acme/744000100000000',
+        externalId: '744000100000000',
+        title: 'Engineer 0',
+        company: 'Acme Corp',
+        location: 'Berlin, Germany',
+        remote: null,
+        team: 'Engineering',
+        postedAt: '2026-10-01T10:00:00.000Z',
+      });
+      expect(run.listings[100]).toMatchObject({
+        location: 'Remote (Lisbon, Portugal)',
+        remote: true,
+      });
+    });
+
+    it('an empty list is a company with no jobs only if its careers page exists', async () => {
+      const empty = { totalFound: 0, content: [] };
+      const known = recordedFetch({
+        [api(0)]: empty,
+        'https://careers.smartrecruiters.com/Acme': '<html>Acme careers</html>',
+      });
+      const run = await readAtsBoard('smartrecruiters', 'Acme', ctx(known));
+      expect(run).toMatchObject({ complete: true, listings: [] });
+      // The API answers an unknown company with an empty list too.
+      await expect(
+        readAtsBoard('smartrecruiters', 'Acme', ctx(recordedFetch({ [api(0)]: empty }))),
+      ).rejects.toThrow(/HTTP 404/);
+    });
+  });
+
   it('a board that does not exist fails the read', async () => {
     await expect(readAtsBoard('greenhouse', 'no-such-board', ctx(recordedFetch()))).rejects.toThrow(
       /HTTP 404/,
@@ -254,6 +312,14 @@ describe('the known-ATS detector', () => {
         '<a href="https://jobs.lever.co/partner">x</a><script src="//boards.greenhouse.io/embed/job_board/js?for=acmeai"></script>',
       ),
     ).toEqual({ ats: 'greenhouse', token: 'acmeai' });
+    expect(
+      detectAtsBoard('<a href="https://careers.smartrecruiters.com/Ubisoft2">Open roles</a>'),
+    ).toEqual({ ats: 'smartrecruiters', token: 'Ubisoft2' });
+    expect(
+      detectAtsBoard(
+        '<script src="https://static.smartrecruiters.com/job-widget/1.6.1/script/smart_widget.min.js"></script><script>widget({"company_code":"Ubisoft2"})</script>',
+      ),
+    ).toEqual({ ats: 'smartrecruiters', token: 'Ubisoft2' });
     expect(detectAtsBoard('<a href="https://example.com/jobs">Jobs</a>')).toBeNull();
     expect(boardFromUrl('https://apply.workable.com/j/F4C096B22E')).toBeNull();
     expect(boardFromUrl('https://boards-api.greenhouse.io/v1/boards/gitlab/jobs')).toEqual({
@@ -281,6 +347,17 @@ describe('the known-ATS detector', () => {
     expect(atsJobKey('https://apply.workable.com/modash/j/c1507b65c3/')).toBe(
       'workable:C1507B65C3',
     );
+    expect(
+      atsJobKey('https://jobs.smartrecruiters.com/Ubisoft2/744000156048035-development-executive'),
+    ).toBe('smartrecruiters:744000156048035');
+    expect(boardFromUrl('https://jobs.smartrecruiters.com/Ubisoft2/744000156048035')).toEqual({
+      ats: 'smartrecruiters',
+      token: 'Ubisoft2',
+    });
+    expect(boardFromUrl('https://api.smartrecruiters.com/v1/companies/Ubisoft2/postings')).toEqual({
+      ats: 'smartrecruiters',
+      token: 'Ubisoft2',
+    });
     expect(atsJobKey('https://acme.example/careers/42')).toBeNull();
     expect(
       atsJobPage('https://jobs.ashbyhq.com/a/7458d4e9-da2e-47bd-98cb-adfda43d42b2/application'),

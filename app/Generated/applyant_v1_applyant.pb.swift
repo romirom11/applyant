@@ -988,7 +988,7 @@ public nonisolated struct Applyant_V1_PostingSource: Sendable {
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  /// manual | share | greenhouse | ashby | lever | workable | page | board
+  /// manual | share | greenhouse | ashby | lever | workable | smartrecruiters | page | board
   public var kind: String = String()
 
   public var url: String = String()
@@ -5983,7 +5983,7 @@ public nonisolated struct Applyant_V1_SearchSource: @unchecked Sendable {
     set {_uniqueStorage()._key = newValue}
   }
 
-  /// greenhouse | ashby | lever | workable | page | board
+  /// greenhouse | ashby | lever | workable | smartrecruiters | page | board
   public var kind: String {
     get {_storage._kind}
     set {_uniqueStorage()._kind = newValue}
@@ -6663,7 +6663,7 @@ public nonisolated struct Applyant_V1_AddSearchSourceRequest: Sendable {
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  /// greenhouse | ashby | lever | workable | board | page; empty: `locator` is a URL (a board's
+  /// greenhouse | ashby | lever | workable | smartrecruiters | board | page; empty: `locator` is a URL (a board's
   /// own page becomes that board, anything else a career page / feed).
   public var kind: String = String()
 

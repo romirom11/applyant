@@ -1,4 +1,4 @@
-// The four public ATS list APIs. Each returns a board's whole published list, so a finished
+// The five public ATS list APIs. Each returns a board's whole published list, so a finished
 // read is complete: a job missing from it has been unpublished.
 //
 //   greenhouse  boards-api.greenhouse.io/v1/boards/<token>/jobs?content=true   (meta.total)
@@ -6,8 +6,10 @@
 //   lever       api.lever.co/v0/postings/<site>?mode=json, else api.eu.lever.co (EU boards
 //               answer 404 or [] on the global host)
 //   workable    apply.workable.com/api/v1/widget/accounts/<account>?details=true
+//   smartrecruiters  api.smartrecruiters.com/v1/companies/<company>/postings (pages of 100,
+//               totalFound; no descriptions: verification reads the job page)
 import type { Ats } from './ats-embed.ts';
-import { getJson, HttpError } from './http.ts';
+import { get, getJson, HttpError } from './http.ts';
 import { type Listing, plainText, type ReaderContext, type ReaderRun, str } from './types.ts';
 
 type Node = Record<string, unknown>;
@@ -227,6 +229,70 @@ async function workable(account: string, ctx: ReaderContext): Promise<AtsRun> {
   };
 }
 
+const SR_PAGE = 100;
+/** Big employers list thousands of jobs: past this many the list is read as partial. */
+const SR_MAX = 1000;
+
+async function smartrecruiters(company: string, ctx: ReaderContext): Promise<AtsRun> {
+  const c = encodeURIComponent(company);
+  const jobs: Node[] = [];
+  let total = 0;
+  for (let offset = 0; offset < SR_MAX; offset += SR_PAGE) {
+    const { data } = await getJson<Node>(
+      ctx.fetch,
+      `https://api.smartrecruiters.com/v1/companies/${c}/postings?limit=${SR_PAGE}&offset=${offset}`,
+      ctx.signal,
+    );
+    if (!data || !Array.isArray(data.content))
+      throw new Error(`SmartRecruiters company ${company}: no job list`);
+    total = Number(data.totalFound ?? 0);
+    const page = arr(data.content);
+    jobs.push(...page);
+    if (page.length < SR_PAGE || jobs.length >= total) break;
+  }
+  if (total === 0) {
+    // The API answers an unknown company with an empty list; its careers page tells them apart
+    // (an unknown company redirects to the SmartRecruiters home page).
+    const page = await get(ctx.fetch, `https://careers.smartrecruiters.com/${c}`, ctx.signal, {
+      allow: [404],
+    });
+    const known = page.status < 400 && new URL(page.url).pathname.replace(/\/$/, '') !== '';
+    if (!known) throw new HttpError(404, `https://careers.smartrecruiters.com/${company}`);
+  }
+  let boardCompany: string | null = null;
+  const listings = jobs.flatMap((j) => {
+    const id = str(j.id);
+    const title = str(j.name);
+    if (!id || !title) return [];
+    const co = (j.company ?? {}) as Node;
+    boardCompany ??= str(co.name);
+    const loc = (j.location ?? {}) as Node;
+    const where =
+      str(loc.fullLocation) ??
+      ([str(loc.city), str(loc.region), str(loc.country)].filter(Boolean).join(', ') || null);
+    const remote = loc.remote === true;
+    return [
+      base({
+        url: `https://jobs.smartrecruiters.com/${encodeURIComponent(str(co.identifier) ?? company)}/${id}`,
+        title,
+        externalId: id,
+        company: str(co.name),
+        location: remote ? `Remote${where ? ` (${where})` : ''}` : where,
+        remote: remote ? true : loc.hybrid === true ? false : null,
+        team: str((j.department as Node | undefined)?.label),
+        postedAt: str(j.releasedDate),
+      }),
+    ];
+  });
+  const complete = listings.length === total;
+  return {
+    listings,
+    complete,
+    company: boardCompany,
+    note: `${boardCompany ?? company} on SmartRecruiters: ${listings.length} jobs${complete ? '' : ` of ${total} (partial)`}`,
+  };
+}
+
 /** Reads one ATS board's public list. `apiHost` is Lever's host that answered last time. */
 export function readAtsBoard(
   ats: Ats,
@@ -243,5 +309,7 @@ export function readAtsBoard(
       return lever(token, ctx, o.apiHost);
     case 'workable':
       return workable(token, ctx);
+    case 'smartrecruiters':
+      return smartrecruiters(token, ctx);
   }
 }

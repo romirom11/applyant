@@ -27,6 +27,7 @@ export const KIND_LABELS: Record<SearchSourceKind, string> = {
   ashby: 'Ashby',
   lever: 'Lever',
   workable: 'Workable',
+  smartrecruiters: 'SmartRecruiters',
   page: 'Career pages and feeds',
   board: 'Job boards',
   linkedin: 'LinkedIn',

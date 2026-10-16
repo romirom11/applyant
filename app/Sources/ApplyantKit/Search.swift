@@ -22,6 +22,7 @@ public struct SearchRow: Identifiable, Equatable, Sendable {
 public enum SearchText {
     public static let kindTitles: [String: String] = [
         "greenhouse": "Greenhouse", "ashby": "Ashby", "lever": "Lever", "workable": "Workable",
+        "smartrecruiters": "SmartRecruiters",
         "page": "Career pages and feeds", "board": "Job boards",
         "linkedin": "LinkedIn", "xing": "Xing", "telegram": "Telegram channels",
     ]

@@ -119,6 +119,7 @@ describe('search from the CLI', () => {
       'ashby',
       'lever',
       'workable',
+      'smartrecruiters',
       'page',
       'board',
       'linkedin',

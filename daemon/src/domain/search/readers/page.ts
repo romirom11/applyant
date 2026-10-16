@@ -12,7 +12,7 @@ import { checkInvariants, runRecipe, toReaderRun } from '../recipes/run.ts';
 import type { RecipeForRun } from '../recipes/store.ts';
 import type { RecipeListing } from '../recipes/types.ts';
 import { type AtsRun, readAtsBoard } from './ats-api.ts';
-import { detectAtsBoard } from './ats-embed.ts';
+import { type AtsBoard, detectAtsBoard } from './ats-embed.ts';
 import { feedLinks, parseFeed, readFeed } from './feed.ts';
 import { get } from './http.ts';
 import type { ReaderContext, ReaderRun } from './types.ts';
@@ -36,7 +36,7 @@ export class NeedsRecipeError extends Error {
 }
 
 const NO_WAY =
-  'no feed, JobPosting data or known ATS board (Greenhouse, Ashby, Lever, Workable) on this page';
+  'no feed, JobPosting data or known ATS board (Greenhouse, Ashby, Lever, Workable, SmartRecruiters) on this page';
 
 /** Reads the page with its recipe; the invariants decide whether the result can be trusted. */
 async function viaRecipe(url: string, ctx: ReaderContext, recipe: RecipeForRun): Promise<PageRun> {
@@ -79,11 +79,7 @@ function fromAts(run: AtsRun, resolved: ResolvedSource, how: string): PageRun {
   return { ...run, resolved, company: run.company, note: `${how}: ${run.note ?? ''}`.trim() };
 }
 
-async function viaAts(
-  board: { ats: 'greenhouse' | 'ashby' | 'lever' | 'workable'; token: string },
-  ctx: ReaderContext,
-  how: string,
-): Promise<PageRun> {
+async function viaAts(board: AtsBoard, ctx: ReaderContext, how: string): Promise<PageRun> {
   const run = await readAtsBoard(board.ats, board.token, ctx);
   return fromAts(run, { via: 'ats', ats: board.ats, token: board.token }, how);
 }

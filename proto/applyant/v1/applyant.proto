@@ -411,7 +411,7 @@ message RequirementMatch {
 }
 
 message PostingSource {
-  // manual | share | greenhouse | ashby | lever | workable | page | board
+  // manual | share | greenhouse | ashby | lever | workable | smartrecruiters | page | board
   string kind = 1;
   string url = 2;
   google.protobuf.Timestamp first_seen_at = 3;
@@ -1771,7 +1771,7 @@ message SearchSource {
   int64 id = 1;
   // <kind>:<locator>, e.g. greenhouse:gitlab · board:hn · page:https://acme.com/careers
   string key = 2;
-  // greenhouse | ashby | lever | workable | page | board
+  // greenhouse | ashby | lever | workable | smartrecruiters | page | board
   string kind = 3;
   string locator = 4;
   string label = 5;
@@ -1947,7 +1947,7 @@ message RunStrategyResponse {
 }
 
 message AddSearchSourceRequest {
-  // greenhouse | ashby | lever | workable | board | page; empty: `locator` is a URL (a board's
+  // greenhouse | ashby | lever | workable | smartrecruiters | board | page; empty: `locator` is a URL (a board's
   // own page becomes that board, anything else a career page / feed).
   string kind = 1;
   // Board token / slug / site / account, a board id (hn, remoteok, …) or a URL.

@@ -1,10 +1,16 @@
 // The known-ATS detector, for listings only: a career page that embeds a Greenhouse, Ashby,
-// Lever or Workable board is read through that ATS's public list API, with no recipe. The
+// Lever, Workable or SmartRecruiters board is read through that ATS's public list API, with no recipe. The
 // board's token (or slug, site, account) comes from the embed's script or iframe src, or from
 // links to the board. Application forms stay generic; this is only about finding the list.
 
-export type Ats = 'greenhouse' | 'ashby' | 'lever' | 'workable';
-export const ATS_KINDS: readonly Ats[] = ['greenhouse', 'ashby', 'lever', 'workable'];
+export type Ats = 'greenhouse' | 'ashby' | 'lever' | 'workable' | 'smartrecruiters';
+export const ATS_KINDS: readonly Ats[] = [
+  'greenhouse',
+  'ashby',
+  'lever',
+  'workable',
+  'smartrecruiters',
+];
 
 export interface AtsBoard {
   ats: Ats;
@@ -91,11 +97,21 @@ export function boardFromUrl(raw: string): AtsBoard | null {
     const token = clean(sub);
     return token && sub !== 'www' && sub !== 'apply' ? { ats: 'workable', token } : null;
   }
+  if (host === 'careers.smartrecruiters.com' || host === 'jobs.smartrecruiters.com') {
+    // careers.smartrecruiters.com/<company> · jobs.smartrecruiters.com/<company>/<id>-<slug>
+    const token = clean(path[0]);
+    return token ? { ats: 'smartrecruiters', token } : null;
+  }
+  if (host === 'api.smartrecruiters.com' && path[0] === 'v1' && path[1] === 'companies') {
+    // api.smartrecruiters.com/v1/companies/<company>/postings
+    const token = clean(path[2]);
+    return token ? { ats: 'smartrecruiters', token } : null;
+  }
   return null;
 }
 
 const URL_IN_HTML =
-  /https?:\/\/[^\s"'<>()\\]+|\/\/(?:[a-z0-9-]+\.)*(?:greenhouse\.io|ashbyhq\.com|lever\.co|workable\.com)[^\s"'<>()\\]*/gi;
+  /https?:\/\/[^\s"'<>()\\]+|\/\/(?:[a-z0-9-]+\.)*(?:greenhouse\.io|ashbyhq\.com|lever\.co|workable\.com|smartrecruiters\.com)[^\s"'<>()\\]*/gi;
 
 /**
  * The ATS board a page embeds or links to. Embed scripts and iframes count most, then links;
@@ -115,7 +131,10 @@ export function detectAtsBoard(html: string, extraUrls: string[] = []): AtsBoard
   for (const url of extraUrls) add(url, 5);
   for (const match of html.matchAll(URL_IN_HTML)) {
     const raw = match[0];
-    const embed = /\/embed\b|job_board|mode=iframe|widget|posting-api|boards-api/i.test(raw);
+    const embed =
+      /\/embed\b|job_board|mode=iframe|widget|posting-api|boards-api|api\.smartrecruiters/i.test(
+        raw,
+      );
     add(raw, embed ? 5 : 1);
   }
   // Ashby's script embed names the board in a data attribute or a variable.
@@ -124,6 +143,13 @@ export function detectAtsBoard(html: string, extraUrls: string[] = []): AtsBoard
   )) {
     const token = clean(m[1]);
     if (token) add(`https://jobs.ashbyhq.com/${token}`, 5);
+  }
+  // SmartRecruiters' job widget names the company in its config: company_code: "Acme".
+  if (/smartrecruiters/i.test(html)) {
+    for (const m of html.matchAll(/company_code["'\s:=]+["']([a-z0-9._-]+)["']/gi)) {
+      const token = clean(m[1]);
+      if (token) add(`https://careers.smartrecruiters.com/${token}`, 5);
+    }
   }
   let best: { board: AtsBoard; weight: number } | null = null;
   for (const v of votes.values()) if (!best || v.weight > best.weight) best = v;
@@ -171,6 +197,11 @@ export function atsJobKey(raw: string | null | undefined): string | null {
     const code = i >= 0 ? path[i + 1] : undefined;
     return code && /^[0-9a-z]{6,12}$/i.test(code) ? `workable:${code.toUpperCase()}` : null;
   }
+  if (host === 'jobs.smartrecruiters.com') {
+    // jobs.smartrecruiters.com/<company>/<id>[-<slug>]
+    const id = path[1]?.match(/^(\d{6,})(?:-|$)/)?.[1];
+    return id ? `smartrecruiters:${id}` : null;
+  }
   return null;
 }
 
@@ -183,7 +214,10 @@ export function atsJobPage(raw: string | null | undefined): string | null {
   try {
     const url = new URL(raw);
     const host = url.hostname.toLowerCase();
-    const onAts = /(^|\.)(greenhouse\.io|ashbyhq\.com|lever\.co|workable\.com)$/.test(host);
+    const onAts =
+      /(^|\.)(greenhouse\.io|ashbyhq\.com|lever\.co|workable\.com|smartrecruiters\.com)$/.test(
+        host,
+      );
     if (!onAts) return null;
     url.pathname = url.pathname.replace(/\/(apply|application)\/?$/, '');
     url.hash = '';

@@ -327,7 +327,7 @@ export function registerSearch(program: Command, client: () => ApplyantClient): 
     )
     .option(
       '-s, --sources <list>',
-      'comma-separated: all, a kind (greenhouse, ashby, lever, workable, page, board) or source keys (board:hn)',
+      'comma-separated: all, a kind (greenhouse, ashby, lever, workable, smartrecruiters, page, board) or source keys (board:hn)',
       'all',
     )
     .option('-e, --every <interval>', 'how often: 6h, 90m, 1d', '6h')
@@ -556,7 +556,7 @@ export function registerSearch(program: Command, client: () => ApplyantClient): 
   sources
     .command('add <what> [locator]')
     .description(
-      'add a company board (`greenhouse gitlab`, `lever acme`, `ashby acme`, `workable acme`) or a career page / feed URL',
+      'add a company board (`greenhouse gitlab`, `lever acme`, `ashby acme`, `workable acme`, `smartrecruiters Acme`) or a career page / feed URL',
     )
     .option('--label <label>', 'how it is shown (the company name)')
     .option('--json', 'print JSON')

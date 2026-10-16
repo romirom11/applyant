@@ -99,7 +99,7 @@ export const postingSources = sqliteTable(
     postingId: integer('posting_id')
       .notNull()
       .references(() => postings.id, { onDelete: 'cascade' }),
-    // manual | share | greenhouse | ashby | lever | workable | page | board
+    // manual | share | greenhouse | ashby | lever | workable | smartrecruiters | page | board
     kind: text('kind').notNull(),
     url: text('url').notNull(),
     firstSeenAt: integer('first_seen_at', { mode: 'timestamp_ms' }).notNull().default(now),
@@ -122,7 +122,7 @@ export const postingSources = sqliteTable(
 // ---- Search (phase 10) ------------------------------------------------------------------
 
 /**
- * greenhouse · ashby · lever · workable: a company's board, read through that ATS's public
+ * greenhouse · ashby · lever · workable · smartrecruiters: a company's board, read through that ATS's public
  * list API (complete lists). page: a career page or feed URL, read by the generic reader (a
  * feed or JSON-LD first, then a known ATS embed). board: a job board (HN, RemoteOK, …).
  * linkedin · xing: the platform's job search, read under the candidate's session in Applyant's
@@ -135,6 +135,7 @@ export const SEARCH_SOURCE_KINDS = [
   'ashby',
   'lever',
   'workable',
+  'smartrecruiters',
   'page',
   'board',
   'linkedin',
@@ -146,7 +147,11 @@ export type SearchSourceKind = (typeof SEARCH_SOURCE_KINDS)[number];
 /** How a page source was last read: cached so later runs go straight to it. */
 export type ResolvedSource =
   | { via: 'feed'; url: string; format: string }
-  | { via: 'ats'; ats: 'greenhouse' | 'ashby' | 'lever' | 'workable'; token: string }
+  | {
+      via: 'ats';
+      ats: 'greenhouse' | 'ashby' | 'lever' | 'workable' | 'smartrecruiters';
+      token: string;
+    }
   | { via: 'lever'; apiHost: string }
   // Its listing recipe (phase 11): a partial list, never complete.
   | { via: 'recipe' }

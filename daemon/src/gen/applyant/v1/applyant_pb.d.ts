@@ -527,7 +527,7 @@ export declare const RequirementMatchSchema: GenMessage<RequirementMatch>;
  */
 export declare type PostingSource = Message<"applyant.v1.PostingSource"> & {
   /**
-   * manual | share | greenhouse | ashby | lever | workable | page | board
+   * manual | share | greenhouse | ashby | lever | workable | smartrecruiters | page | board
    *
    * @generated from field: string kind = 1;
    */
@@ -5570,7 +5570,7 @@ export declare type SearchSource = Message<"applyant.v1.SearchSource"> & {
   key: string;
 
   /**
-   * greenhouse | ashby | lever | workable | page | board
+   * greenhouse | ashby | lever | workable | smartrecruiters | page | board
    *
    * @generated from field: string kind = 3;
    */
@@ -6282,7 +6282,7 @@ export declare const RunStrategyResponseSchema: GenMessage<RunStrategyResponse>;
  */
 export declare type AddSearchSourceRequest = Message<"applyant.v1.AddSearchSourceRequest"> & {
   /**
-   * greenhouse | ashby | lever | workable | board | page; empty: `locator` is a URL (a board's
+   * greenhouse | ashby | lever | workable | smartrecruiters | board | page; empty: `locator` is a URL (a board's
    * own page becomes that board, anything else a career page / feed).
    *
    * @generated from field: string kind = 1;
