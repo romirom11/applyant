@@ -4,8 +4,9 @@
 // Not SMAppService: it takes the ad-hoc signed bundle, but trusts the launcher by its hash
 // (launchd's launch constraint), and after a rebuild launchd refuses to spawn the new one
 // ("spawn failed", EX_CONFIG, "needs LWCR update"), even after unregister + register. A plain
-// agent file has no such constraint. The agent still shows in System Settings → Login Items,
-// grouped under Applyant (AssociatedBundleIdentifiers).
+// agent file gets the same constraint, but loading it again (bootout + bootstrap) records the
+// new hash: scripts/bundle.sh does that after installing a rebuild. The agent still shows in
+// System Settings → Login Items, grouped under Applyant (AssociatedBundleIdentifiers).
 import Foundation
 import ServiceManagement
 

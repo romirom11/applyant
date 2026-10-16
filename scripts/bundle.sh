@@ -159,9 +159,16 @@ fi
 # them about this build, so a changed icon shows in notifications too.
 LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
 [ -x "$LSREGISTER" ] && "$LSREGISTER" -f "$DEST" || true
-if launchctl print "gui/$(id -u)/com.applyant.daemon" >/dev/null 2>&1; then
-  launchctl kickstart -k "gui/$(id -u)/com.applyant.daemon"
-  echo "restarted the running daemon"
+# Not `kickstart -k`: launchd keeps the old launcher's cdhash as the job's launch constraint
+# (LWCR), refuses the rebuilt one (EX_CONFIG, "spawn failed") and retries forever. Loading the
+# agent again records the new hash.
+SERVICE="gui/$(id -u)/com.applyant.daemon"
+AGENT="$HOME/Library/LaunchAgents/com.applyant.daemon.plist"
+if launchctl print "$SERVICE" >/dev/null 2>&1 && [ -f "$AGENT" ]; then
+  launchctl bootout "$SERVICE" 2>/dev/null || true
+  for _ in 1 2 3 4 5 6 7 8 9 10; do launchctl print "$SERVICE" >/dev/null 2>&1 || break; sleep 0.5; done
+  launchctl bootstrap "gui/$(id -u)" "$AGENT"
+  echo "restarted the daemon on the new build"
 fi
 if [ "$OPEN" = 1 ]; then
   open "$DEST"
