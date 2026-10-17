@@ -78,7 +78,15 @@ public enum Section: String, CaseIterable, Identifiable, Sendable {
     public var isSinglePane: Bool { self == .overview || self == .settings || self == .chat }
 
     /// Home's name in the rail: the Overview is where the window opens.
-    public var railTitle: String { self == .overview ? "Home" : title }
+    /// The rail's label: short enough to fit beside a badge (the list header keeps the full title).
+    public var railTitle: String {
+        switch self {
+        case .overview: "Home"
+        case .whichApplication: "Replies"
+        case .interview: "Questions"
+        default: title
+        }
+    }
 
     /// The section after this one in the rail (⌥⌘↓), or before it (⌥⌘↑); nil past either end.
     public func neighbour(_ step: Int) -> Section? {
@@ -114,6 +122,14 @@ public struct Navigation: Equatable, Sendable {
     /// The project open in Projects.
     public var project: Int64?
     public init() {}
+
+    /// Opens a section (the rail, the Go menu) with nothing picked in it yet.
+    public mutating func go(to section: Section) {
+        guard section != self.section else { return }
+        self.section = section
+        postingId = nil
+        reviewing = nil
+    }
 
     public mutating func showInterview(_ target: InterviewTarget) {
         section = .interview
@@ -170,6 +186,25 @@ public struct Navigation: Equatable, Sendable {
         if posting.stage == .skipped || posting.decision == "skipped" { return .skipped }
         if let application { return section(for: application) }
         return posting.decision == "interested" ? .saved : .new
+    }
+}
+
+extension ActivityText {
+    /// The title bar's capsule while background work is paused: "Paused since Oct 16, 23:16"
+    /// (the time alone today); the whole line is its tooltip.
+    public static func pausedSince(_ since: Date, now: Date = Date()) -> String {
+        let time = Calendar.current.isDate(since, inSameDayAs: now)
+            ? since.formatted(date: .omitted, time: .shortened)
+            : since.formatted(.dateTime.month(.abbreviated).day().hour().minute())
+        return "Paused since \(time)"
+    }
+
+    /// The title bar's capsule for the work running now: the status line's first part, and
+    /// how many more there are ("Scoring 3 postings +2"); the whole line is its tooltip.
+    public static func pill(_ line: String) -> String {
+        let parts = line.components(separatedBy: " · ")
+        let first = parts[0].prefix(1).uppercased() + parts[0].dropFirst()
+        return parts.count > 1 ? "\(first) +\(parts.count - 1)" : first
     }
 }
 

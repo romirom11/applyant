@@ -1,8 +1,10 @@
-// One job, whichever list it was picked from: a hero tile with what it is and the one next step
-// (lit like CleanMyMac's working tile, in the list's world and the company's colour), then tabs:
-// the posting itself (what it asks for, how you match, its text), its application once there
-// is one, and its company. When Approve and send is the step, it's the big round Send button at
-// the foot of the page. The page's glass tiles come in one after another.
+// One job, whichever list it was picked from: a hero tile with what it is and its one next
+// step (lit like CleanMyMac's working tile, in the list's world and the company's colour), then
+// tabs: the posting itself (what it asks for, how you match, its text), its application once
+// there is one, and its company. When Approve and Send… is the step, it's the big round Send
+// button at the foot of the page. The header's buttons, the Job menu and their shortcuts all
+// run the same JobCommands.
+import AppKit
 import ApplyantAPI
 import ApplyantKit
 import SwiftUI
@@ -14,7 +16,17 @@ struct JobDetail: View {
     let applicationId: Int64?
     /// The tab picked last stays picked from job to job.
     @AppStorage("jobDetailTab") private var pickedTab: DetailTab = .job
+    @Environment(Toasts.self) private var toasts
+    @Environment(\.openURL) private var openURL
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var skipping = false
+    @State private var skipReason = ""
+    @State private var confirmRegenerate = false
+    @State private var confirmSend = false
+    /// Prepare or Approve is on its way to the daemon: a second ⌘↩ doesn't send it again.
+    @State private var working = false
+    /// What Re-score said ("Re-scoring 1 posting"), for a few seconds.
+    @State private var note: String?
 
     var body: some View {
         let posting = store.postingDetails[postingId] ?? store.postings[postingId]
@@ -26,20 +38,19 @@ struct JobDetail: View {
         )
         let tab = DetailTab.shown(pickedTab, in: tabs)
         let primary = JobAction.primary(posting: posting, application: app)
+        let commands = commands(posting: posting, app: app, primary: primary, tab: tab)
         let sending = app.flatMap { store.deliveries[$0.id] } != nil
         let roundSend = app != nil && (sending || { if case .approve = primary { return true }; return false }())
         VStack(spacing: 0) {
             if posting != nil || app != nil {
                 DetailHeader(
                     store: store, posting: posting, app: app, tab: tab, tabs: tabs,
-                    showTab: { asked in
-                        withAnimation(Theme.Motion.pick(Theme.Motion.snappy, reduceMotion: reduceMotion)) { pickedTab = asked }
-                    }
+                    primary: primary, commands: commands, note: note, showTab: showTab
                 )
                 // The header takes the height it needs first (else a narrow window cuts its title
                 // and buttons short); the tab's page scrolls in what's left.
                 .layoutPriority(1)
-                // The picked tab's page replaces the last one out of a blur.
+                // The picked tab's page replaces the last one out of a quick blur.
                 ZStack {
                     switch tab {
                     case .job: JobTab(store: store, postingId: postingId)
@@ -58,12 +69,39 @@ struct JobDetail: View {
         }
         .overlay(alignment: .bottom) {
             if roundSend, let app {
-                SendButton(store: store, app: app, primary: primary, title: posting.flatMap { $0.hasCompany ? $0.company : nil } ?? ApproveText.company(app))
+                SendButton(store: store, app: app, primary: primary, approve: commands.approve)
                     .padding(.bottom, 14)
                     .transition(.scale(scale: 0.6).combined(with: .opacity))
             }
         }
         .animation(Theme.Motion.bouncy, value: roundSend)
+        // The Job menu: off while a sheet or a question is open over the job.
+        .focusedSceneValue(\.jobCommands, skipping || confirmRegenerate || confirmSend ? JobCommands() : commands)
+        .sheet(isPresented: $skipping) {
+            SkipPostingSheet(reason: $skipReason) { reason in
+                guard let id = posting?.id ?? app?.postingID else { return }
+                skip(posting: id, reason: reason, title: Self.title(posting: posting, app: app))
+            }
+            .worldSheet()
+        }
+        .confirmationDialog("Write every answer and the CV again?", isPresented: $confirmRegenerate) {
+            Button("Regenerate") {
+                guard let id = app?.id else { return }
+                Task { await store.regenerate(application: id) }
+            }
+        } message: {
+            Text("Your edits are redrafted too; your per-application values stay.")
+        }
+        .confirmationDialog(app.map(ApproveText.title) ?? "", isPresented: $confirmSend, presenting: app) { app in
+            Button("Send") { send(app, to: posting.flatMap { $0.hasCompany ? $0.company : nil } ?? ApproveText.company(app)) }
+        } message: { app in
+            Text(ApproveText.message(app))
+        }
+        .task(id: note) {
+            // A newer note cancels this wait; only an uninterrupted one clears it.
+            guard note != nil, (try? await Task.sleep(for: .seconds(4))) != nil else { return }
+            note = nil
+        }
         // Both load whatever the tab: the header and the Job tab need the full posting, the
         // header the application's blockers.
         .task(id: postingId) { await store.openPosting(postingId) }
@@ -75,29 +113,119 @@ struct JobDetail: View {
             store.navigation.tab = nil
         }
     }
+
+    /// The job's title, else its application's, else its link.
+    static func title(posting: Posting?, app: Application?) -> String {
+        if let posting, posting.hasTitle { return posting.title }
+        if let app, app.hasTitle { return app.title }
+        return posting?.canonicalURL ?? app?.postingURL ?? ""
+    }
+
+    private func showTab(_ asked: DetailTab) {
+        withAnimation(Theme.Motion.fade) { pickedTab = asked }
+    }
+
+    // MARK: What it can do
+
+    /// The job's commands for where it stands: nil where one doesn't apply.
+    private func commands(posting: Posting?, app: Application?, primary: JobAction, tab: DetailTab) -> JobCommands {
+        var c = JobCommands()
+        let sending = app.flatMap { store.deliveries[$0.id] } != nil
+        switch primary {
+        case .prepare:
+            if let id = posting?.id, !working { c.prepare = { prepare(posting: id) } }
+        case let .approve(enabled, _):
+            if enabled, app != nil, !sending, !working { c.approve = { confirmSend = true } }
+        case .review:
+            if tab != .application { c.review = { showTab(.application) } }
+        case .none:
+            break
+        }
+        if let posting {
+            let skipped = posting.stage == .skipped || posting.decision == "skipped"
+            if app == nil, posting.decision.isEmpty, !skipped {
+                c.save = { Task { await store.markInterested(posting: posting.id) } }
+            } else if posting.decision == "interested" {
+                c.saved = true
+                c.save = { Task { await store.undoDecision(posting: posting.id) } }
+            }
+            if skipped {
+                // Where it goes back to: New, or its application's list when it has one.
+                c.unskipTitle = "Back to \((app.map(Navigation.section(for:)) ?? .new).title)"
+                c.unskip = { Task { await store.undoDecision(posting: posting.id) } }
+            } else if app.map({ $0.stage != .approved && !StageRules.isSent($0.stage) }) ?? true {
+                // Before approval: once it's on its way or sent, Set Status is what's left.
+                c.skip = { skipping = true }
+            }
+            if Score.canRescore(posting) { c.rescore = { Task { note = await store.rescore([posting.id]) } } }
+        }
+        if let app, app.stage == .readyForReview || app.stage == .needsCandidate {
+            c.regenerate = { confirmRegenerate = true }
+        }
+        if let url = URL(string: posting?.canonicalURL ?? app?.postingURL ?? ""), url.scheme != nil {
+            c.openPosting = { openURL(url) }
+        }
+        return c
+    }
+
+    private func prepare(posting id: Int64) {
+        guard !working else { return }
+        working = true
+        Task {
+            defer { working = false }
+            if let app = await store.prepare(posting: id) {
+                store.navigation.reviewing = app
+                showTab(.application)
+            }
+        }
+    }
+
+    private func send(_ app: Application, to company: String) {
+        guard !working else { return }
+        let id = app.id
+        working = true
+        Task {
+            defer { working = false }
+            await store.advancing {
+                let approved = await store.approve(application: id)
+                if approved {
+                    toasts.show(.init(systemImage: "paperplane.fill", title: "Sent to \(company)", detail: "Applyant fills the form and sends it now", celebrates: true))
+                }
+                return approved
+            }
+        }
+    }
+
+    private func skip(posting id: Int64, reason: String, title: String) {
+        Task {
+            await store.advancing {
+                let skipped = await store.skip(posting: id, reason: reason)
+                if skipped {
+                    toasts.show(.init(systemImage: "xmark.circle", title: "Skipped", detail: title) {
+                        Task { await store.undoDecision(posting: id) }
+                    })
+                }
+                return skipped
+            }
+        }
+    }
 }
 
 // MARK: - The header
 
-/// What the job is, where it stands, and its next step (one primary action), with the rest
-/// beside it, over the job's glow; the tabs at its foot.
+/// What the job is, where it stands, and its next step: one prominent action, Save and Skip…
+/// beside it, the rest in More; the tabs at its foot.
 struct DetailHeader: View {
     let store: AppStore
     let posting: Posting?
     let app: Application?
     let tab: DetailTab
     let tabs: [DetailTab]
+    let primary: JobAction
+    let commands: JobCommands
+    /// What Re-score said, for a few seconds.
+    let note: String?
     let showTab: (DetailTab) -> Void
-    @Environment(Toasts.self) private var toasts
-    @Environment(\.openURL) private var openURL
-    @State private var skipping = false
-    @State private var skipReason = ""
-    @State private var confirmRegenerate = false
-    /// Prepare is on its way to the daemon: a second ⌘↩ doesn't send it again.
-    @State private var working = false
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    /// What Re-score said ("Re-scoring 1 posting"), for a few seconds.
-    @State private var note: String?
 
     var body: some View {
         let world = Theme.world(store.navigation.section)
@@ -105,7 +233,6 @@ struct DetailHeader: View {
             VStack(alignment: .leading, spacing: 16) {
                 HStack(alignment: .top, spacing: 18) {
                     CompanyAvatar(name: company ?? title, size: 64)
-                        .popIn(0)
                     VStack(alignment: .leading, spacing: 6) {
                         Text(title)
                             .font(Theme.heroTitle)
@@ -116,20 +243,19 @@ struct DetailHeader: View {
                             Text(subtitle)
                                 .font(.system(size: 15, weight: .medium))
                                 .foregroundStyle(.white.opacity(0.75))
+                                .lineLimit(2)
                                 .textSelection(.enabled)
                         }
                         HStack(spacing: 6) {
-                            ForEach(Array(chips.enumerated()), id: \.element.text) { index, chip in
-                                ChipView(chip: chip).popIn(index + 1)
-                            }
+                            ForEach(chips, id: \.text) { ChipView(chip: $0) }
                             if let dates {
-                                Text(dates).font(.system(size: 12, weight: .medium)).foregroundStyle(.white.opacity(0.6)).popIn(chips.count + 1)
+                                Text(dates).font(.system(size: 12, weight: .medium)).foregroundStyle(.white.opacity(0.6))
                             }
                         }
                         .padding(.top, 2)
                     }
                     Spacer(minLength: 0)
-                    ScoreRing(score: score, size: 84, sweepsIn: true)
+                    ScoreRing(score: score, size: 84)
                 }
                 if let hint = app.flatMap(SignInHint.of) { SignInBanner(store: store, hint: hint) }
                 if let app, let delivery = store.deliveries[app.id] { DeliveryStrip(progress: delivery) }
@@ -164,46 +290,11 @@ struct DetailHeader: View {
         .padding(.top, 2)
         .padding(.bottom, 4)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .sheet(isPresented: $skipping) {
-            SkipPostingSheet(reason: $skipReason) { reason in
-                guard let id = posting?.id ?? app?.postingID else { return }
-                let what = title
-                Task {
-                    await store.advancing {
-                        let skipped = await store.skip(posting: id, reason: reason)
-                        if skipped {
-                            toasts.show(.init(systemImage: "xmark.circle", title: "Skipped", detail: what) {
-                                Task { await store.undoDecision(posting: id) }
-                            })
-                        }
-                        return skipped
-                    }
-                }
-            }
-            .worldSheet()
-        }
-        .confirmationDialog("Write every answer and the CV again?", isPresented: $confirmRegenerate) {
-            Button("Regenerate") {
-                guard let id = app?.id else { return }
-                Task { await store.regenerate(application: id) }
-            }
-        } message: {
-            Text("Your edits are redrafted too; your per-application values stay.")
-        }
-        .task(id: note) {
-            // A newer note cancels this wait; only an uninterrupted one clears it.
-            guard note != nil, (try? await Task.sleep(for: .seconds(4))) != nil else { return }
-            note = nil
-        }
     }
 
     // MARK: What it is
 
-    private var title: String {
-        if let posting, posting.hasTitle { return posting.title }
-        if let app, app.hasTitle { return app.title }
-        return posting?.canonicalURL ?? app?.postingURL ?? ""
-    }
+    private var title: String { JobDetail.title(posting: posting, app: app) }
 
     private var company: String? {
         posting.flatMap { $0.hasCompany ? $0.company : nil } ?? app.flatMap { $0.hasCompany ? $0.company : nil }
@@ -249,63 +340,22 @@ struct DetailHeader: View {
 
     // MARK: What to do
 
-    private var primary: JobAction { JobAction.primary(posting: posting, application: app) }
-
-    /// Nobody decided on it and nothing was started: Save keeps it.
-    private var undecided: Bool {
-        guard let posting, app == nil else { return false }
-        return posting.decision.isEmpty && posting.stage != .skipped
-    }
-
-    private var skipped: Bool { posting.map { $0.stage == .skipped || $0.decision == "skipped" } ?? false }
-
-    /// Before approval: once it's on its way or sent, Set status is what's left.
-    private var unsent: Bool { app.map { $0.stage != .approved && !StageRules.isSent($0.stage) } ?? true }
-
     private var actions: some View {
         FlowRow(spacing: 8) {
             primaryButton
-            if let posting {
-                if undecided {
-                    Button { Task { await store.markInterested(posting: posting.id) } } label: {
-                        Label("Save", systemImage: "bookmark")
-                    }
-                    .help("Keep it in Saved. Applyant starts its application too.")
-                } else if posting.decision == "interested" {
-                    Button { Task { await store.undoDecision(posting: posting.id) } } label: {
-                        Label("Unsave", systemImage: "bookmark.slash")
-                    }
-                    .help("Takes it out of Saved; its application stays")
+            if let save = commands.save {
+                Button(action: save) {
+                    Label(commands.saved ? "Unsave" : "Save", systemImage: commands.saved ? "bookmark.slash" : "bookmark")
                 }
-                if skipped {
-                    // Where it goes back to: New, or its application's list when it has one.
-                    let back = app.map(Navigation.section(for:)) ?? .new
-                    Button { Task { await store.undoDecision(posting: posting.id) } } label: {
-                        Label("Back to \(back.title)", systemImage: "arrow.uturn.backward")
-                    }
-                    .help("Takes the skip back; the job is undecided again")
-                } else if unsent {
-                    Button { skipping = true } label: { Label("Skip…", systemImage: "xmark") }
-                        .keyboardShortcut("k", modifiers: .command)
-                        .help("Not for you: it moves to Skipped (⌘K)")
-                }
+                .help(commands.saved ? "Takes it out of Saved; its application stays (⌘D)" : "Keep it in Saved. Applyant starts its application too (⌘D)")
             }
-            if let app, app.stage == .readyForReview || app.stage == .needsCandidate {
-                Button { confirmRegenerate = true } label: { Label("Regenerate…", systemImage: "arrow.triangle.2.circlepath") }
+            if let skip = commands.skip {
+                Button(action: skip) { Label("Skip…", systemImage: "xmark") }
+                    // ⌘⌫ is the Job menu's; ⌘K stays as it was.
+                    .keyboardShortcut("k", modifiers: .command)
+                    .help("Not for you: it moves to Skipped (⌘⌫)")
             }
-            if let app {
-                SetStatusMenu(store: store, app: app)
-                    .menuStyle(.button)
-                    .fixedSize()
-            }
-            if let posting, Score.canRescore(posting) {
-                Button { Task { note = await store.rescore([posting.id]) } } label: { Label("Re-score", systemImage: "gauge.with.dots.needle.67percent") }
-                    .help("Score it again against your current profile and preferences")
-            }
-            if let url = URL(string: posting?.canonicalURL ?? app?.postingURL ?? ""), url.scheme != nil {
-                Button { openURL(url) } label: { Label("Open posting", systemImage: "arrow.up.right.square") }
-                    .help(url.absoluteString)
-            }
+            more
             if let note {
                 Text(note).font(.callout).foregroundStyle(.secondary)
                     .transition(.opacity.combined(with: .move(edge: .leading)))
@@ -315,42 +365,83 @@ struct DetailHeader: View {
         .animation(Theme.Motion.snappy, value: note)
     }
 
+    /// The one prominent action by where the job stands. Approve and Send… is the round Send
+    /// button at the foot of the page instead.
     @ViewBuilder
     private var primaryButton: some View {
         switch primary {
         case .prepare:
-            Button {
-                guard let id = posting?.id, !working else { return }
-                working = true
-                Task {
-                    defer { working = false }
-                    if let app = await store.prepare(posting: id) {
-                        store.navigation.reviewing = app
-                        showTab(.application)
-                    }
-                }
-            } label: {
-                Label("Prepare application", systemImage: "sparkles")
+            Button { commands.prepare?() } label: {
+                Label("Prepare Application", systemImage: "sparkles")
             }
             .buttonStyle(.primary)
             .controlSize(.large)
-            .disabled(working)
+            .disabled(commands.prepare == nil)
             .keyboardShortcut(.return, modifiers: .command)
-            .help("Applyant drafts the answers and the CV for this job (⌘↩)")
+            .help("Applyant drafts the answers and the CV for this job (⌘↩ or ⇧⌘P)")
         case .approve:
-            // THE action: the round Send button at the foot of the page.
             EmptyView()
         case .review:
-            if tab != .application {
-                Button { showTab(.application) } label: {
-                    Label("Review application", systemImage: "doc.text.magnifyingglass")
+            if let review = commands.review {
+                Button(action: review) {
+                    Label("Review Application", systemImage: "doc.text.magnifyingglass")
                 }
                 .buttonStyle(.primary)
                 .controlSize(.large)
                 .keyboardShortcut(.return, modifiers: .command)
             }
         case .none:
-            EmptyView()
+            if let unskip = commands.unskip {
+                Button(action: unskip) { Label(commands.unskipTitle, systemImage: "arrow.uturn.backward") }
+                    .buttonStyle(.primary)
+                    .controlSize(.large)
+                    .help("Takes the skip back; the job is undecided again")
+            }
+        }
+    }
+
+    /// Everything else the job can do, out of the way.
+    @ViewBuilder
+    private var more: some View {
+        let statuses = app.map { !StageRules.targets(from: $0.stage).isEmpty } ?? false
+        if commands.regenerate != nil || commands.rescore != nil || commands.openPosting != nil || statuses {
+            Menu {
+                if let regenerate = commands.regenerate { Button("Regenerate…", action: regenerate) }
+                if let rescore = commands.rescore { Button("Re-score", action: rescore) }
+                if let app, statuses {
+                    Menu("Set Status") { SetStatusItems(store: store, app: app) }
+                }
+                if let open = commands.openPosting {
+                    Divider()
+                    Button("Open Posting", action: open)
+                }
+            } label: {
+                Image(systemName: "ellipsis.circle")
+            }
+            .menuStyle(.button)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .accessibilityLabel("More")
+            .help("More")
+        }
+    }
+}
+
+/// Set Status's items, for the job's More menu and a row's menu: the status corrected by hand
+/// (a reply Applyant missed, or one sent outside it).
+struct SetStatusItems: View {
+    let store: AppStore
+    let app: Application
+
+    var body: some View {
+        if ApproveText.canReturnToReview(app) {
+            Button("Back to Review (Nothing Is Sent)") { Task { await store.returnToReview(application: app.id) } }
+            Divider()
+        }
+        ForEach(StageRules.targets(from: app.stage), id: \.self) { stage in
+            Button(StageText.statusItem(stage, from: app.stage)) {
+                Task { await store.setStage(application: app.id, to: stage) }
+            }
         }
     }
 }
@@ -370,9 +461,10 @@ struct HeroBackground: View {
                 base: NSColor(hue: world.tone.hue, saturation: 0.75, brightness: 0.26, alpha: 0.9),
                 colors: [
                     world.glow,
-                    NSColor(hue: companyHue, saturation: 0.65, brightness: 0.55, alpha: 1),
+                    // The company's colour stays a muted hint, so no job turns the header pink.
+                    NSColor(hue: companyHue, saturation: 0.35, brightness: 0.42, alpha: 1),
                     world.secondGlow,
-                    NSColor(srgbRed: 0.45, green: 0.16, blue: 0.75, alpha: 1),
+                    NSColor(srgbRed: 0.118, green: 0.227, blue: 0.541, alpha: 1),
                 ],
                 moving: motion.ambient,
                 intensity: 1
@@ -382,23 +474,20 @@ struct HeroBackground: View {
     }
 }
 
-/// Approve and send, when it's THE thing to do: a big round glowing button at the foot of the
-/// job (ClearVPN's power button), asking once before it sends. While the application goes out,
-/// a ring fills around it to how far the form is (or circles, until that's known).
+/// Approve and Send…, when it's THE thing to do: a big round glowing button at the foot of
+/// the job (ClearVPN's power button); JobDetail asks once before it sends. While the
+/// application goes out, a ring fills around it to how far the form is (or circles, until
+/// that's known).
 struct SendButton: View {
     let store: AppStore
     let app: Application
     let primary: JobAction
-    /// Who it goes to: "Kalepa".
-    let title: String
-    @Environment(Toasts.self) private var toasts
-    @State private var confirming = false
-    /// Approve is on its way to the daemon: a second ⌘↩ doesn't send it again.
-    @State private var working = false
+    /// The job's Approve and Send… (the Job menu's ⌘↩); nil while it's off.
+    let approve: (() -> Void)?
 
     var body: some View {
         let delivery = store.deliveries[app.id]
-        let (enabled, help): (Bool, String) = if case let .approve(on, why) = primary { (on, why) } else { (false, "") }
+        let help: String = if case let .approve(_, why) = primary { why } else { "" }
         VStack(spacing: 6) {
             RoundActionButton(
                 title: delivery != nil ? "Sending" : "Send",
@@ -406,14 +495,13 @@ struct SendButton: View {
                 size: 76,
                 working: delivery != nil && delivery?.fraction == nil,
                 progress: delivery?.fraction,
-                enabled: delivery != nil || (enabled && !working)
+                enabled: delivery != nil || approve != nil
             ) {
                 guard delivery == nil else { return }
-                confirming = true
+                approve?()
             }
-            .keyboardShortcut(.return, modifiers: .command)
-            .help(delivery?.line ?? (enabled ? "Approve and send… (⌘↩)" : help))
-            .accessibilityLabel(delivery != nil ? "Sending" : "Approve and send")
+            .help(delivery?.line ?? (approve != nil ? "Approve and Send… (⌘↩)" : help))
+            .accessibilityLabel(delivery != nil ? "Sending" : "Approve and Send…")
             if let delivery {
                 Text(delivery.line)
                     .font(.system(size: 12, weight: .semibold))
@@ -422,26 +510,6 @@ struct SendButton: View {
                     .padding(.horizontal, 10).padding(.vertical, 4)
                     .background(Theme.toastFill, in: Capsule())
             }
-        }
-        .confirmationDialog(ApproveText.title(app), isPresented: $confirming) {
-            Button("Send it") {
-                guard !working else { return }
-                let id = app.id
-                let to = title
-                working = true
-                Task {
-                    defer { working = false }
-                    await store.advancing {
-                        let approved = await store.approve(application: id)
-                        if approved {
-                            toasts.show(.init(systemImage: "paperplane.fill", title: "Sent to \(to)", detail: "Applyant fills the form and sends it now", celebrates: true))
-                        }
-                        return approved
-                    }
-                }
-            }
-        } message: {
-            Text(ApproveText.message(app))
         }
     }
 }
@@ -549,13 +617,14 @@ struct JobTab: View {
     var body: some View {
         if let p = store.postingDetails[postingId] {
             let description = DescriptionCache.description(p)
+            // Picked often: the page is simply there, no tiles coming in one after another.
             ScrollView {
                 VStack(alignment: .leading, spacing: Theme.blockSpacing) {
-                    if p.hasSummary { SummaryLine(text: p.summary).entrance(0) }
-                    KeyFactsGrid(facts: KeyFacts.rows(p, description: description)).entrance(1)
-                    MatchCard(posting: p).entrance(2)
-                    DescriptionCard(description: description, text: p.hasText ? p.text : "", url: p.canonicalURL).entrance(3)
-                    PostingNotes(posting: p).entrance(4)
+                    if p.hasSummary { SummaryLine(text: p.summary) }
+                    KeyFactsGrid(facts: KeyFacts.rows(p, description: description))
+                    MatchCard(posting: p, projects: projectNames)
+                    DescriptionCard(description: description, text: p.hasText ? p.text : "", url: p.canonicalURL)
+                    PostingNotes(posting: p)
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 10)
@@ -566,6 +635,11 @@ struct JobTab: View {
         } else {
             ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+    }
+
+    /// The candidate's projects by slug, so a fact says which project it's from by name.
+    private var projectNames: [String: String] {
+        Dictionary((store.candidateProfile?.projects ?? []).map { ($0.slug, $0.name) }, uniquingKeysWith: { first, _ in first })
     }
 }
 
@@ -589,53 +663,40 @@ struct SummaryLine: View {
     }
 }
 
-/// The posting's facts at a glance, as small bento tiles: a label over a big value.
+/// The posting's facts at a glance, as small bento tiles: a label over a value of at most
+/// two lines (a long one is summed up; all of it is the tile's tooltip).
 struct KeyFactsGrid: View {
     let facts: [KeyFact]
-
-    private static let symbols: [String: String] = [
-        "Workplace": "laptopcomputer", "Location": "mappin.and.ellipse", "Employment": "briefcase.fill",
-        "Seniority": "chart.bar.fill", "Salary": "banknote.fill", "Language": "character.bubble.fill", "Posted": "calendar",
-    ]
-
-    private static let hues: [String: Double] = [
-        "Workplace": 0.55, "Location": 0.5, "Employment": 0.75, "Seniority": 0.85, "Salary": 0.38, "Language": 0.62, "Posted": 0.1,
-    ]
 
     var body: some View {
         if !facts.isEmpty {
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 175), spacing: 10, alignment: .top)], alignment: .leading, spacing: 10) {
-                ForEach(Array(facts.enumerated()), id: \.element.label) { index, fact in
-                    let tint = Color(hue: Self.hues[fact.label] ?? 0.75, saturation: 0.55, brightness: 1)
+                ForEach(facts, id: \.label) { fact in
                     VStack(alignment: .leading, spacing: 6) {
-                        HStack {
-                            Text(fact.label.uppercased()).font(Theme.eyebrow).tracking(1).foregroundStyle(Theme.secondaryText)
-                            Spacer()
-                            Image(systemName: Self.symbols[fact.label] ?? "info.circle")
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundStyle(tint)
-                                .shadow(color: tint.opacity(0.7), radius: 4)
-                        }
+                        Text(fact.label.uppercased()).font(Theme.eyebrow).tracking(1).foregroundStyle(Theme.secondaryText)
                         Text(fact.value)
                             .font(.system(size: 16, weight: .bold))
                             .foregroundStyle(.white)
+                            .lineLimit(2)
                             .textSelection(.enabled)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     .padding(14)
                     .frame(maxWidth: .infinity, minHeight: 70, alignment: .topLeading)
                     .glass(radius: 16)
-                    .popIn(index)
+                    .help(fact.full)
                 }
             }
         }
     }
 }
 
-/// How you match: the requirements by kind with the facts behind each verdict, the score's
-/// parts and what might be a problem.
+/// How you match: the requirements by kind, each with its verdict, one line of why and the
+/// facts behind it folded away; the score's parts and what might be a problem.
 struct MatchCard: View {
     let posting: Posting
+    /// The candidate's projects by slug.
+    var projects: [String: String] = [:]
 
     var body: some View {
         let groups = MatchText.requirementGroups(posting)
@@ -643,16 +704,16 @@ struct MatchCard: View {
         let issues = MatchText.issues(posting)
         if !groups.isEmpty || !parts.isEmpty || !issues.isEmpty {
             Card(title: "How you match", systemImage: "checklist") {
-                ForEach(Array(groups.enumerated()), id: \.element.id) { groupIndex, group in
-                    VStack(alignment: .leading, spacing: Theme.rowSpacing + 4) {
+                ForEach(groups) { group in
+                    VStack(alignment: .leading, spacing: Theme.rowSpacing + 2) {
                         HStack(alignment: .firstTextBaseline, spacing: 8) {
                             Text(group.title).font(.system(size: 13.5, weight: .bold)).foregroundStyle(.white)
                             if let note = group.note { Text(note).font(.system(size: 12)).foregroundStyle(Theme.secondaryText) }
                         }
                         VerdictBar(verdicts: group.requirements.map(\.verdict))
                             .padding(.bottom, 2)
-                        ForEach(Array(group.requirements.enumerated()), id: \.offset) { index, r in
-                            RequirementRow(requirement: r).entrance(groupIndex * 3 + index + 1)
+                        ForEach(Array(group.requirements.enumerated()), id: \.offset) { _, r in
+                            RequirementRow(requirement: r, projects: projects)
                         }
                     }
                     .padding(.bottom, 8)
@@ -693,15 +754,21 @@ private struct VerdictBar: View {
             .scaleEffect(x: grown || reduceMotion ? 1 : 0, anchor: .leading)
         }
         .frame(height: 6)
-        .onAppear { withAnimation(Theme.Motion.gauge.delay(0.25)) { grown = true } }
+        .onAppear { withAnimation(Theme.Motion.fade) { grown = true } }
         .accessibilityHidden(true)
     }
 }
 
+/// A requirement: its verdict, what it asks, one line of why, and the facts behind it behind
+/// a disclosure ("2 facts"), each under its project's name.
 struct RequirementRow: View {
     let requirement: RequirementMatch
+    var projects: [String: String] = [:]
+    @State private var open = false
 
     var body: some View {
+        let evidence = MatchText.evidence(requirement, projects: projects)
+        let reason = requirement.hasNote ? requirement.note : ""
         HStack(alignment: .firstTextBaseline, spacing: 10) {
             VerdictMark(verdict: requirement.verdict)
             VStack(alignment: .leading, spacing: 3) {
@@ -710,12 +777,45 @@ struct RequirementRow: View {
                     .foregroundStyle(.white.opacity(0.94))
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
-                let evidence = MatchText.evidence(requirement)
-                if !evidence.isEmpty {
-                    Text(evidence.prefix(2).joined(separator: " · ")).font(.system(size: 12)).foregroundStyle(Theme.secondaryText).lineLimit(2)
-                        .help(evidence.joined(separator: "\n"))
+                if !reason.isEmpty || !evidence.isEmpty {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        if !reason.isEmpty {
+                            Text(reason).foregroundStyle(Theme.secondaryText).lineLimit(1).help(reason)
+                        }
+                        if !evidence.isEmpty {
+                            Button {
+                                withAnimation(Theme.Motion.fade) { open.toggle() }
+                            } label: {
+                                HStack(spacing: 3) {
+                                    Text(MatchText.factsLabel(evidence.count))
+                                    Image(systemName: "chevron.right")
+                                        .font(.system(size: 8.5, weight: .bold))
+                                        .rotationEffect(.degrees(open ? 90 : 0))
+                                }
+                                .foregroundStyle(Theme.tertiaryText)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .fixedSize()
+                            .accessibilityLabel(open ? "Hide \(MatchText.factsLabel(evidence.count))" : "Show \(MatchText.factsLabel(evidence.count))")
+                        }
+                    }
+                    .font(.system(size: 12))
                 }
-                if requirement.hasNote { Text(requirement.note).font(.system(size: 12)).foregroundStyle(Theme.tertiaryText) }
+                if open {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(Array(evidence.enumerated()), id: \.offset) { _, line in
+                            Text(line)
+                                .font(.system(size: 12))
+                                .foregroundStyle(Theme.secondaryText)
+                                .textSelection(.enabled)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    .padding(.leading, 8)
+                    .overlay(alignment: .leading) { Capsule().fill(Theme.hairline).frame(width: 2) }
+                    .transition(.opacity)
+                }
             }
         }
     }
@@ -796,7 +896,7 @@ struct DescriptionCard: View {
         FoldingCard(title: "Description", systemImage: "doc.text", surface: Theme.readingFill) {
             VStack(alignment: .leading, spacing: 0) {
                 if description.blocks.isEmpty {
-                    Text(text.isEmpty ? "The posting's text wasn't captured. Open posting ↗ shows it on its site." : "Nothing readable was left after taking the page's own parts out: “Show the captured text” has all of it.")
+                    Text(text.isEmpty ? "The posting's text wasn't captured. Open Posting (in More) shows it on its site." : "Nothing readable was left after taking the page's own parts out: “Show the captured text” has all of it.")
                         .foregroundStyle(Theme.secondaryText)
                 } else {
                     DescriptionBlocks(blocks: description.blocks)
@@ -911,10 +1011,10 @@ struct CompanyTab: View {
         let full = research.flatMap { store.companyDetails[$0.id] }
         ScrollView {
             VStack(alignment: .leading, spacing: Theme.blockSpacing) {
-                CompanyCard(store: store, company: full ?? research, postingId: posting?.id ?? app?.postingID).entrance(0)
+                CompanyCard(store: store, company: full ?? research, postingId: posting?.id ?? app?.postingID)
                 if let full {
-                    ForEach(Array(full.sections.enumerated()), id: \.element.key) { index, section in
-                        CompanyFindings(section: section).entrance(index + 1)
+                    ForEach(full.sections, id: \.key) { section in
+                        CompanyFindings(section: section)
                     }
                 }
             }

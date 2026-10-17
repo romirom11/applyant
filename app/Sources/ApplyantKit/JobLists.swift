@@ -89,4 +89,13 @@ public enum ListSelection {
         let pick = after ?? earlier
         return pick.flatMap { p in now.first { $0.postingId == p.postingId } } ?? now.first
     }
+
+    /// The row after the open one (1) or before it (-1), for Next Job and Previous Job: the
+    /// first (or the last) when nothing in the list is open; nil past either end.
+    public static func step(_ step: Int, from postingId: Int64?, in items: [ListItem]) -> ListItem? {
+        guard let index = postingId.flatMap({ id in items.firstIndex { $0.postingId == id } }) else {
+            return step > 0 ? items.first : items.last
+        }
+        return items.indices.contains(index + step) ? items[index + step] : nil
+    }
 }

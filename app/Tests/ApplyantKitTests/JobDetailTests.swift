@@ -174,7 +174,8 @@ private func list(after heading: String, in blocks: [Block]) -> [String]? {
         bare.salaryText = "€80k–110k"
         let workable = PostingDescription.parse(PostingSamples.workable, title: bare.title, company: bare.company)
         let rows = KeyFacts.rows(bare, description: workable) { _ in "1 Jul 2025" }
-        #expect(rows.first == KeyFact("Workplace", "Remote (Estonia, Latvia, Romania, Slovakia, Lithuania, Poland)"))
+        // A tile keeps two places and counts the rest; its tooltip has them all.
+        #expect(rows.first == KeyFact("Workplace", "Remote (Estonia, Latvia +4)", full: "Remote (Estonia, Latvia, Romania, Slovakia, Lithuania, Poland)"))
         #expect(rows.contains(KeyFact("Employment", "Full-time")))
         #expect(rows.contains(KeyFact("Salary", "€80k–110k")))
         let arbeitnow = PostingDescription.parse(PostingSamples.arbeitnow)
@@ -221,6 +222,64 @@ private func list(after heading: String, in blocks: [Block]) -> [String]? {
         #expect(SignInHint.of(other) == SignInHint(host: "example.com", url: "https://www.example.com"))
         other.formURL = "https://jobs.lever.co/acme/42/apply"
         #expect(SignInHint.of(other)?.url == "https://jobs.lever.co")
+    }
+
+    @Test func longPlaceListsAreSummedUpForTheirTile() {
+        #expect(KeyFacts.shortened("Remote (europe, UA)") == "Remote (europe, UA)")
+        #expect(KeyFacts.shortened("Remote (A, B, C)") == "Remote (A, B +1)")
+        let many = (1...71).map { "Country \($0)" }.joined(separator: ", ")
+        #expect(KeyFacts.shortened("Remote (\(many))") == "Remote · 71 countries")
+        #expect(KeyFacts.shortened("Hybrid") == "Hybrid")
+    }
+
+    @Test func evidenceNamesTheProjectNotItsSlug() {
+        let r = RequirementMatch.with {
+            $0.text = "Led a team"
+            $0.facts = [
+                .with { $0.projectSlug = "tech-lead-at-nda"; $0.text = "Led 6 engineers"; $0.status = .confirmed },
+                .with { $0.projectSlug = "acme-api"; $0.text = "Built billing"; $0.status = .unconfirmed },
+                .with { $0.text = "10 years of Go"; $0.status = .confirmed },
+            ]
+        }
+        #expect(MatchText.evidence(r, projects: ["acme-api": "Acme API"]) == [
+            "Tech lead at nda: Led 6 engineers", "Acme API: Built billing (unconfirmed)", "10 years of Go",
+        ])
+        #expect(MatchText.factsLabel(1) == "1 fact")
+        #expect(MatchText.factsLabel(2) == "2 facts")
+    }
+
+    @Test func nextAndPreviousJobStepThroughTheList() {
+        let rows = [posting(1, score: 90, title: "A"), posting(2, score: 80, title: "B"), posting(3, score: 70, title: "C")]
+            .map { ListItem(posting: $0, application: nil) }
+        #expect(ListSelection.step(1, from: 1, in: rows)?.postingId == 2)
+        #expect(ListSelection.step(-1, from: 2, in: rows)?.postingId == 1)
+        #expect(ListSelection.step(1, from: 3, in: rows) == nil)
+        #expect(ListSelection.step(-1, from: 1, in: rows) == nil)
+        // Nothing open (or the open one isn't in this list): the first, or the last.
+        #expect(ListSelection.step(1, from: nil, in: rows)?.postingId == 1)
+        #expect(ListSelection.step(-1, from: 99, in: rows)?.postingId == 3)
+        #expect(ListSelection.step(1, from: nil, in: []) == nil)
+    }
+
+    @Test func goingToASectionLeavesNothingPicked() {
+        var nav = Navigation()
+        nav.section = .new
+        nav.postingId = 4
+        nav.reviewing = 9
+        nav.go(to: .new)
+        #expect(nav.postingId == 4)
+        nav.go(to: .saved)
+        #expect(nav.section == .saved && nav.postingId == nil && nav.reviewing == nil)
+    }
+
+    @Test func theTitleBarsCapsuleStaysShort() {
+        let now = Date()
+        #expect(ActivityText.pausedSince(now, now: now) == "Paused since " + now.formatted(date: .omitted, time: .shortened))
+        let earlier = now.addingTimeInterval(-3 * 86_400)
+        #expect(ActivityText.pausedSince(earlier, now: now).hasPrefix("Paused since "))
+        #expect(ActivityText.pausedSince(earlier, now: now) != ActivityText.pausedSince(now, now: now))
+        #expect(ActivityText.pill("scoring 3 postings") == "Scoring 3 postings")
+        #expect(ActivityText.pill("scoring 3 postings · reading a source · sending Acme") == "Scoring 3 postings +2")
     }
 
     @Test func theNextJobIsTheOneThatTookItsPlace() {

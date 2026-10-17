@@ -1,6 +1,6 @@
 // Home: the greeting, the line under it, the tile that lights up while Applyant works and what
-// it says, the tiles' numbers, the round button, and the grid making room for the live tile.
-// Also the rail's order and every section's colour world.
+// it says, the tiles' numbers and what they count, the round button, the compact grid, Up next
+// and the funnel's tile. Also the rail's order and every section's colour world.
 import ApplyantAPI
 import Foundation
 import Testing
@@ -111,6 +111,10 @@ import Testing
         #expect(HomeText.figure(.ready, input) == HomeFigure(value: 80, caption: "applications to send"))
         #expect(HomeText.figure(.new, input) == HomeFigure(value: 1, caption: "good match"))
         #expect(HomeText.figure(.needsYou, input).done == "Nothing waits")
+        input.needsYou = 19
+        #expect(HomeText.figure(.needsYou, input).caption == "applications need you")
+        input.applied = 1
+        #expect(HomeText.figure(.applied, input).caption == "application sent")
         #expect(HomeText.figure(.questions, input).done == "All answered")
         input.ready = 0
         #expect(HomeText.figure(.ready, input).done == "All sent")
@@ -118,8 +122,42 @@ import Testing
         #expect(HomeText.figure(.ready, input).done == nil)
         input.searches = 2
         #expect(HomeText.figure(.search, input).caption == "searches on their schedule")
+        // The number says what it counts: "14 searches · paused", never "14 / paused".
+        input.searches = 14
         input.pausedAt = Date()
-        #expect(HomeText.figure(.search, input).caption == "paused")
+        #expect(HomeText.figure(.search, input).caption == "searches · paused")
+        input.searches = 1
+        #expect(HomeText.figure(.search, input).caption == "search · paused")
+    }
+
+    @Test func upNextIsTheFirstFewReadyToSendInTheListsOrder() {
+        var input = HomeInput()
+        #expect(HomeText.upNext(input).isEmpty)
+        #expect(HomeText.upNextLine(shown: 0, total: 0) == nil)
+        #expect(HomeText.upNextEmpty(input) == "Nothing is ready to send.")
+        input.needsYou = 2
+        #expect(HomeText.upNextEmpty(input) == "Nothing is ready to send: 2 applications need you first.")
+        let jobs = (1...6).map { i in
+            ListItem(posting: Posting.with { $0.id = Int64(i); $0.title = "Job \(i)"; $0.company = "Co \(i)"; $0.salaryText = "€\(i)0k"; $0.score = Int32(90 - i) }, application: nil)
+        }
+        input.upNext = jobs
+        input.ready = 80
+        let shown = HomeText.upNext(input)
+        #expect(shown.map(\.title) == ["Job 1", "Job 2", "Job 3", "Job 4"])
+        #expect(shown.first?.subtitle == "Co 1 · €10k")
+        #expect(HomeText.upNext(input, limit: 5).count == 5)
+        #expect(HomeText.upNextLine(shown: 4, total: 80) == "4 of 80 ready to send")
+        #expect(HomeText.upNextLine(shown: 3, total: 3) == "All 3 ready to send")
+        #expect(HomeText.upNextLine(shown: 1, total: 1) == "The one ready to send")
+    }
+
+    @Test func theFunnelsTileShowsTheFirstStepAndTheLastOnes() {
+        let rows = ["found", "verified", "interested", "prepared", "applied", "interview", "offer"].enumerated().map { i, key in
+            FunnelRow(id: key, label: key.capitalized, count: Int64(100 - i * 10), conversion: nil)
+        }
+        #expect(HomeText.funnelSummary(rows).map(\.id) == ["found", "applied", "interview", "offer"])
+        #expect(HomeText.funnelSummary(Array(rows.prefix(3))).map(\.id) == ["found", "verified", "interested"])
+        #expect(HomeText.funnelSummary([]).isEmpty)
     }
 
     @Test func theRoundButtonReviewsThenBrowsesThenSearches() {
@@ -133,19 +171,25 @@ import Testing
         #expect(HomeTile.questions.section == .interview && HomeTile.needsYou.section == .toReview)
     }
 
-    @Test func theGridMakesRoomForTheLiveTile() {
-        let even = Bento.widths([.ready, .needsYou, .new], live: nil, total: 920, spacing: 10)
-        #expect(even == [300, 300, 300])
-        let grown = Bento.widths([.ready, .needsYou, .new], live: .needsYou, total: 920, spacing: 10)
-        #expect(grown == [225, 450, 225])
-        #expect(abs(grown.reduce(0, +) - 900) < 0.001)
-        // Narrow: the others keep their minimum.
-        let narrow = Bento.widths([.ready, .needsYou, .new], live: .ready, total: 520, spacing: 10, minimum: 150)
-        #expect(narrow == [200, 150, 150])
-        #expect(Bento.heights(live: nil, total: 410, spacing: 10) == [200, 200])
-        let tall = Bento.heights(live: .search, total: 410, spacing: 10, share: 0.6)
-        #expect(abs(tall[0] - 160) < 0.001 && abs(tall[1] - 240) < 0.001)
-        #expect(Bento.rows.flatMap { $0 }.count == HomeTile.allCases.count)
+    @Test func theGridIsThreeColumnsOrFourWithTheFunnelWhenWide() {
+        #expect(HomeGrid.columns(width: 900) == 3)
+        #expect(HomeGrid.columns(width: 1300) == 4)
+        let narrow = HomeGrid.rows(columns: 3)
+        #expect(narrow.map(\.count) == [3, 3])
+        #expect(narrow.flatMap { $0 } == HomeTile.allCases.map(HomeGrid.Slot.tile))
+        let wide = HomeGrid.rows(columns: 4)
+        #expect(wide.map { $0.map(HomeGrid.span).reduce(0, +) } == [4, 4])
+        #expect(wide.last?.last == .funnel)
+        // Every tile once, whatever the width.
+        #expect(Set(wide.flatMap { $0 }).count == HomeTile.allCases.count + 1)
+        // A column's share of the row, and the funnel's two with the gap between them.
+        #expect(HomeGrid.width(.tile(.ready), columns: 4, total: 1042, spacing: 14) == 250)
+        #expect(HomeGrid.width(.funnel, columns: 4, total: 1042, spacing: 14) == 514)
+        // Compact: tiles 150–170 points tall, so the grid stays under about 360.
+        #expect(HomeGrid.tileHeight(window: 600) == 150)
+        #expect(HomeGrid.tileHeight(window: 900) == 162)
+        #expect(HomeGrid.tileHeight(window: 2000) == 170)
+        #expect(HomeGrid.tileHeight(window: 2000) * 2 + 14 <= 360)
     }
 
     @Test func theRailStepsThroughTheSectionsAndOpensOnHome() {
@@ -167,6 +211,11 @@ import Testing
         #expect(Set(lists.map { WorldTone.of($0).hue }).count == lists.count)
         #expect(WorldTone.of(.search) == WorldTone.of(.settings))
         #expect(WorldTone.of(.skipped).saturation < WorldTone.of(.new).saturation)
+        // No pink, magenta or violet world: the chrome stays in the blues.
+        for section in Section.allCases {
+            let tone = WorldTone.of(section)
+            #expect(!(0.7...0.97).contains(tone.hue) && !(0.7...0.97).contains(tone.secondHue), "\(section)")
+        }
     }
 
     @Test func homeReadsTheStore() async throws {
@@ -181,6 +230,7 @@ import Testing
         let input = store.homeInput
         #expect(input.ready == 1 && input.needsYou == 0 && input.newMatches == 1)
         #expect(input.preparing.map(\.company) == ["Acme"])
+        #expect(input.upNext.map(\.postingId) == [1])
         #expect(HomeText.live(input)?.title == "Writing answers for Acme…")
     }
 }

@@ -73,11 +73,12 @@ extension DeliveryProgress {
     }
 }
 
-/// Each section's colour world: the window's background glows in it, and its art, tiles and
-/// selection pick it up. Two hues (the glow's main one and the one it drifts towards) and how
-/// saturated they are: To review is magenta-violet, New teal, Saved amber, Skipped slate,
-/// Applied azure, Interviews emerald, Offers gold, Which application? coral, Home and the
-/// candidate's own sections violet, the system ones a quiet indigo.
+/// Each section's colour world: one soft glow of it drifts in the window's navy, and its art and
+/// small accents pick it up. Two hues (the glow's main one and the one it drifts towards) and
+/// how saturated they are: To review is cobalt, New teal, Saved amber, Skipped slate, Applied
+/// azure, Interviews emerald, Offers gold, Which application? coral, Home and the candidate's
+/// own sections a deep blue, the system ones a quiet slate-blue. No pink or violet: the chrome
+/// stays in the blues.
 public struct WorldTone: Equatable, Sendable {
     public let hue: Double
     public let secondHue: Double
@@ -91,16 +92,16 @@ public struct WorldTone: Equatable, Sendable {
 
     public static func of(_ section: Section) -> WorldTone {
         switch section {
-        case .toReview: WorldTone(hue: 0.87, secondHue: 0.76, saturation: 0.82)
-        case .new: WorldTone(hue: 0.49, secondHue: 0.55, saturation: 0.78)
-        case .saved: WorldTone(hue: 0.09, secondHue: 0.04, saturation: 0.85)
-        case .skipped: WorldTone(hue: 0.62, secondHue: 0.66, saturation: 0.32)
-        case .applied: WorldTone(hue: 0.58, secondHue: 0.64, saturation: 0.8)
-        case .interviews: WorldTone(hue: 0.40, secondHue: 0.46, saturation: 0.75)
-        case .offers: WorldTone(hue: 0.13, secondHue: 0.09, saturation: 0.85)
-        case .whichApplication: WorldTone(hue: 0.02, secondHue: 0.95, saturation: 0.75)
-        case .overview, .profile, .projects, .interview, .chat: WorldTone(hue: 0.77, secondHue: 0.84, saturation: 0.78)
-        case .search, .agentRuns, .companies, .settings: WorldTone(hue: 0.68, secondHue: 0.62, saturation: 0.5)
+        case .toReview: WorldTone(hue: 0.64, secondHue: 0.60, saturation: 0.78)
+        case .new: WorldTone(hue: 0.49, secondHue: 0.54, saturation: 0.78)
+        case .saved: WorldTone(hue: 0.09, secondHue: 0.06, saturation: 0.8)
+        case .skipped: WorldTone(hue: 0.61, secondHue: 0.63, saturation: 0.3)
+        case .applied: WorldTone(hue: 0.56, secondHue: 0.60, saturation: 0.78)
+        case .interviews: WorldTone(hue: 0.42, secondHue: 0.47, saturation: 0.72)
+        case .offers: WorldTone(hue: 0.13, secondHue: 0.10, saturation: 0.8)
+        case .whichApplication: WorldTone(hue: 0.02, secondHue: 0.04, saturation: 0.7)
+        case .overview, .profile, .projects, .interview, .chat: WorldTone(hue: 0.62, secondHue: 0.53, saturation: 0.72)
+        case .search, .agentRuns, .companies, .settings: WorldTone(hue: 0.63, secondHue: 0.58, saturation: 0.45)
         }
     }
 }

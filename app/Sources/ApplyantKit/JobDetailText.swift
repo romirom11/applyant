@@ -60,11 +60,15 @@ public enum JobAction: Equatable, Sendable {
 
 public struct KeyFact: Equatable, Sendable {
     public let label: String
+    /// Short enough for its tile ("Remote · 71 countries").
     public let value: String
+    /// All of it, for the tile's tooltip; the value itself when nothing was cut.
+    public let full: String
 
-    public init(_ label: String, _ value: String) {
+    public init(_ label: String, _ value: String, full: String? = nil) {
         self.label = label
         self.value = value
+        self.full = full ?? value
     }
 }
 
@@ -78,10 +82,13 @@ public enum KeyFacts {
     ) -> [KeyFact] {
         let fields = description.structured
         var rows: [KeyFact] = []
-        if let workplace = firstPart(note(p, "location")) ?? structuredWorkplace(fields) {
-            rows.append(KeyFact("Workplace", shortened(capitalized(workplace))))
+        if let workplace = (firstPart(note(p, "location")) ?? structuredWorkplace(fields)).map(capitalized) {
+            rows.append(KeyFact("Workplace", shortened(workplace), full: workplace))
         }
-        if let place = fields["jobLocation"].flatMap(place) { rows.append(KeyFact("Location", place)) }
+        if let places = fields["jobLocation"].flatMap(places) {
+            let first = places.prefix(2).joined(separator: "; ")
+            rows.append(KeyFact("Location", places.count > 2 ? "\(places[0]) +\(places.count - 1)" : first, full: places.joined(separator: "; ")))
+        }
         if let employment = note(p, "employment") ?? fields["employmentType"].map(employmentName) {
             rows.append(KeyFact("Employment", capitalized(employment)))
         }
@@ -110,12 +117,16 @@ public enum KeyFacts {
 
     private static func capitalized(_ s: String) -> String { s.prefix(1).uppercased() + s.dropFirst() }
 
-    /// A long list of countries in parentheses, cut to its first few.
-    private static func shortened(_ s: String, keep: Int = 8) -> String {
+    /// A list of places in parentheses, short enough for a tile's two lines: two are kept,
+    /// a few more are counted ("Remote (Estonia, Latvia +4)"), a long list is only counted
+    /// ("Remote · 71 countries").
+    static func shortened(_ s: String) -> String {
         guard let open = s.firstIndex(of: "("), let close = s.lastIndex(of: ")"), open < close else { return s }
         let items = s[s.index(after: open)..<close].components(separatedBy: ", ")
-        guard items.count > keep else { return s }
-        return s[..<open] + "(" + items.prefix(keep).joined(separator: ", ") + " +\(items.count - keep) more)"
+        let head = s[..<open].trimmingCharacters(in: .whitespaces)
+        if items.count > 6 { return "\(head) · \(items.count) countries" }
+        guard items.count > 2 else { return s }
+        return "\(head) (" + items.prefix(2).joined(separator: ", ") + " +\(items.count - 2))"
     }
 
     /// "AdministrativeArea, address: PostalAddress, addressRegion: Europe" → [["addressRegion": "Europe"]].
@@ -140,15 +151,15 @@ public enum KeyFacts {
         return remote ? (regions.isEmpty ? "Remote" : "Remote (\(joined))") : "Open to \(joined)"
     }
 
-    /// "Place, address: PostalAddress, addressLocality: Hamburg, addressCountry: DE" → "Hamburg, DE".
-    private static func place(_ flat: String) -> String? {
+    /// "Place, address: PostalAddress, addressLocality: Hamburg, addressCountry: DE" → ["Hamburg, DE"].
+    private static func places(_ flat: String) -> [String]? {
         let places = entries(flat).compactMap { e -> String? in
             let parts = [e["addressLocality"], e["addressCountry"]].compactMap { $0 }.filter { !$0.isEmpty }
             return parts.isEmpty ? nil : parts.joined(separator: ", ")
         }
         var seen = Set<String>()
         let unique = places.filter { seen.insert($0).inserted }
-        return unique.isEmpty ? nil : unique.joined(separator: "; ")
+        return unique.isEmpty ? nil : unique
     }
 
     static func employmentName(_ raw: String) -> String {
@@ -214,12 +225,23 @@ public enum MatchText {
         ].filter { !$0.requirements.isEmpty }
     }
 
-    /// The facts a requirement rests on, as one line each ("acme-api: Built the billing service").
-    public static func evidence(_ r: RequirementMatch) -> [String] {
+    /// The facts a requirement rests on, one line each, under their project's name
+    /// ("Acme API: Built the billing service"). `projects`: the candidate's projects by slug.
+    public static func evidence(_ r: RequirementMatch, projects: [String: String] = [:]) -> [String] {
         r.facts.map { f in
-            (f.hasProjectSlug ? "\(f.projectSlug): " : "") + f.text + (f.status == .unconfirmed ? " (unconfirmed)" : "")
+            (f.hasProjectSlug ? projectName(f.projectSlug, projects: projects) + ": " : "") + f.text + (f.status == .unconfirmed ? " (unconfirmed)" : "")
         }
     }
+
+    /// A project by its name, else its slug in words ("tech-lead-at-nda" → "Tech lead at nda").
+    public static func projectName(_ slug: String, projects: [String: String]) -> String {
+        if let name = projects[slug], !name.isEmpty { return name }
+        let words = slug.split(whereSeparator: { $0 == "-" || $0 == "_" }).joined(separator: " ")
+        return words.prefix(1).uppercased() + words.dropFirst()
+    }
+
+    /// The disclosure over a requirement's facts: "1 fact", "3 facts".
+    public static func factsLabel(_ count: Int) -> String { "\(count) fact\(count == 1 ? "" : "s")" }
 
     /// The score's parts that count or couldn't be judged.
     public static func breakdown(_ p: Posting) -> [Applyant_V1_ScoreComponent] {

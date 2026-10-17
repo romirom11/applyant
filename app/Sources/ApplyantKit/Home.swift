@@ -1,8 +1,8 @@
-// Home, the screen the window opens on: a greeting, a grid of tiles (what's ready to send,
-// what needs you, the new good matches, questions, what was sent, the searches) and the one
-// tile that lights up while Applyant works on it, with its live line and what it's working
-// through. Plain values from the store's data, tested without SwiftUI; Home.swift in the app
-// draws them.
+// Home, the screen the window opens on: a greeting, a compact grid of tiles (what's ready to
+// send, what needs you, the new good matches, questions, what was sent, the searches, and on a
+// wide window how it's going), the one tile that lights up while Applyant works on it with a
+// strip saying what it's working through, and the next few jobs ready to send. Plain values
+// from the store's data, tested without SwiftUI; Overview.swift in the app draws them.
 import ApplyantAPI
 import Foundation
 
@@ -61,7 +61,8 @@ public struct HomeLive: Equatable, Sendable {
     public var items: [HomeLiveItem] = []
 }
 
-/// A tile at rest: its big number and the caption under it ("19" · "applications to send").
+/// A tile at rest: its big number and the caption under it that says what it counts ("19" ·
+/// "applications to send", "14" · "searches · paused").
 public struct HomeFigure: Equatable, Sendable {
     public let value: Int
     public let caption: String
@@ -95,6 +96,8 @@ public struct HomeInput: Equatable, Sendable {
     public var pausedAt: Date?
     /// A limit's pause: "Waiting for claude limit · resumes 15:45".
     public var waiting: String?
+    /// To review's jobs ready to send, in its order: Up next shows the first few.
+    public var upNext: [ListItem] = []
 
     public init() {}
 
@@ -106,7 +109,7 @@ public struct HomeInput: Equatable, Sendable {
             && a.searching.map(\.name) == b.searching.map(\.name)
             && a.searching.map { $0.sources.map { "\($0.label)|\($0.done ?? "")" } } == b.searching.map { $0.sources.map { "\($0.label)|\($0.done ?? "")" } }
             && a.running.sorted() == b.running.sorted() && a.pausedAt == b.pausedAt && a.waiting == b.waiting
-            && a.names == b.names
+            && a.names == b.names && a.upNext == b.upNext
     }
 }
 
@@ -247,7 +250,8 @@ public enum HomeText {
             return HomeFigure(value: input.ready, caption: input.ready == 1 ? "application to send" : "applications to send",
                               done: input.ready == 0 && input.preparing.isEmpty ? "All sent" : nil)
         case .needsYou:
-            return HomeFigure(value: input.needsYou, caption: "to answer", done: input.needsYou == 0 ? "Nothing waits" : nil)
+            return HomeFigure(value: input.needsYou, caption: input.needsYou == 1 ? "application needs you" : "applications need you",
+                              done: input.needsYou == 0 ? "Nothing waits" : nil)
         case .new:
             return HomeFigure(value: input.newMatches, caption: input.newMatches == 1 ? "good match" : "good matches",
                               done: input.newMatches == 0 ? "All looked at" : nil)
@@ -255,10 +259,41 @@ public enum HomeText {
             return HomeFigure(value: input.questions, caption: input.questions == 1 ? "question waits" : "questions wait",
                               done: input.questions == 0 ? "All answered" : nil)
         case .applied:
-            return HomeFigure(value: input.applied, caption: "sent")
+            return HomeFigure(value: input.applied, caption: input.applied == 1 ? "application sent" : "applications sent")
         case .search:
-            return HomeFigure(value: input.searches, caption: input.pausedAt != nil ? "searches, paused" : input.searches == 1 ? "search on its schedule" : "searches on their schedule")
+            let searches = input.searches == 1 ? "search" : "searches"
+            return HomeFigure(value: input.searches, caption: input.pausedAt != nil ? "\(searches) · paused" : input.searches == 1 ? "search on its schedule" : "searches on their schedule")
         }
+    }
+
+    /// Up next's jobs: the first few ready to send, in To review's order (a click opens one
+    /// there, and sending moves on to the next as it does in the list).
+    public static func upNext(_ input: HomeInput, limit: Int = 4) -> [ListItem] {
+        Array(input.upNext.prefix(max(limit, 0)))
+    }
+
+    /// The line beside Up next's title: "4 of 80 ready to send", "All 3 ready to send"; nil
+    /// when nothing is.
+    public static func upNextLine(shown: Int, total: Int) -> String? {
+        guard shown > 0, total > 0 else { return nil }
+        return shown < total ? "\(shown) of \(total) ready to send" : total == 1 ? "The one ready to send" : "All \(total) ready to send"
+    }
+
+    /// Up next with nothing ready: what comes first instead.
+    public static func upNextEmpty(_ input: HomeInput) -> String {
+        if input.needsYou > 0 {
+            return "Nothing is ready to send: \(input.needsYou) application\(input.needsYou == 1 ? " needs" : "s need") you first."
+        }
+        if !input.preparing.isEmpty { return "Nothing is ready to send yet: answers are being written." }
+        return "Nothing is ready to send."
+    }
+
+    /// The funnel's tile on Home: the first step and the last ones (found → applied →
+    /// interview → offer), so a few numbers say how far the postings got; every step when
+    /// there are only a few.
+    public static func funnelSummary(_ rows: [FunnelRow], limit: Int = 4) -> [FunnelRow] {
+        guard rows.count > limit, let first = rows.first else { return rows }
+        return [first] + rows.suffix(limit - 1)
     }
 
     public static func action(_ input: HomeInput) -> HomeAction {
@@ -274,40 +309,40 @@ public enum HomeText {
     }
 }
 
-/// The grid's geometry: the working tile takes a bigger share of its row, and its row more of
-/// the height, so the grid makes room for it the way the tiles around it give way.
-public enum Bento {
-    /// The tiles in their rows, top to bottom.
-    public static let rows: [[HomeTile]] = [[.ready, .needsYou, .new], [.questions, .applied, .search]]
-
-    /// Widths for a row's tiles: shares of what's left after the gaps, the live one counted as
-    /// `grow` tiles. Every tile keeps at least `minimum`.
-    public static func widths(_ tiles: [HomeTile], live: HomeTile?, total: Double, spacing: Double, grow: Double = 2, minimum: Double = 150) -> [Double] {
-        guard !tiles.isEmpty else { return [] }
-        let free = max(total - spacing * Double(tiles.count - 1), 0)
-        let weights = tiles.map { $0 == live ? grow : 1 }
-        var widths = weights.map { free * $0 / weights.reduce(0, +) }
-        // Too narrow for the big one: the others keep their minimum, it takes the rest.
-        if let i = tiles.firstIndex(where: { $0 == live }), widths.enumerated().contains(where: { $0.offset != i && $0.element < minimum }) {
-            let others = Double(tiles.count - 1) * minimum
-            if free > others + minimum {
-                widths = tiles.indices.map { $0 == i ? free - others : minimum }
-            } else {
-                widths = Array(repeating: free / Double(tiles.count), count: tiles.count)
-            }
-        }
-        return widths
+/// The grid's shape: the six tiles in three columns, or, from `wideWidth` on, in four with the
+/// funnel's tile taking the last two places, every tile the same height (no tile grows: the
+/// live one says what it does in the strip under the grid).
+public enum HomeGrid {
+    public enum Slot: Hashable, Sendable {
+        case tile(HomeTile)
+        /// How it's going: the funnel in a few numbers.
+        case funnel
     }
 
-    /// The rows' heights: even, or the live tile's row taller.
-    public static func heights(live: HomeTile?, total: Double, spacing: Double, share: Double = 0.62) -> [Double] {
-        let free = max(total - spacing * Double(rows.count - 1), 0)
-        guard let live, let row = rows.firstIndex(where: { $0.contains(live) }) else {
-            return Array(repeating: free / Double(rows.count), count: rows.count)
-        }
-        let rest = (1 - share) / Double(rows.count - 1)
-        return rows.indices.map { free * ($0 == row ? share : rest) }
+    /// From this width on, four columns.
+    public static let wideWidth: Double = 1060
+
+    public static func columns(width: Double) -> Int { width >= wideWidth ? 4 : 3 }
+
+    /// The slots in their rows, top to bottom.
+    public static func rows(columns: Int) -> [[Slot]] {
+        let tiles = HomeTile.allCases.map(Slot.tile)
+        guard columns >= 4 else { return [Array(tiles[0..<3]), Array(tiles[3...])] }
+        return [Array(tiles[0..<4]), Array(tiles[4...]) + [.funnel]]
     }
+
+    /// How many columns a slot takes: the funnel two, a tile one.
+    public static func span(_ slot: Slot) -> Int { slot == .funnel ? 2 : 1 }
+
+    /// A slot's width in a row `total` wide: its columns and the gaps between them.
+    public static func width(_ slot: Slot, columns: Int, total: Double, spacing: Double) -> Double {
+        let column = max(total - spacing * Double(columns - 1), 0) / Double(max(columns, 1))
+        let span = Double(span(slot))
+        return column * span + spacing * (span - 1)
+    }
+
+    /// The tiles' height: 150 to 170 points, a little taller on a taller window.
+    public static func tileHeight(window: Double) -> Double { min(max(window * 0.18, 150), 170) }
 }
 
 extension AppStore {
@@ -354,6 +389,7 @@ extension AppStore {
         ]
         input.pausedAt = backgroundPausedAt
         input.waiting = activity.paused
+        input.upNext = Array(review(.ready).prefix(8))
         return input
     }
 }

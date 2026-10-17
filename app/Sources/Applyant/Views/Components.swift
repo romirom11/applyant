@@ -1,6 +1,6 @@
 // The pieces every screen is built from, in Theme's language: glass tiles, chips, the score
 // ring, a company's glossy monogram, a section's module header, page headers, empty states with
-// their 3D art, the pill picker, the buttons (a glowing pill, a glass pill, the big round one)
+// their 3D art, the pill picker, the buttons (an accent pill, a glass pill, the big round one)
 // and the list of glass cards the list columns are made of.
 import ApplyantKit
 import SwiftUI
@@ -46,7 +46,7 @@ private struct Glass: ViewModifier {
                     .overlay { if let tint { shape.fill(tint.opacity(0.13)) } }
                     .overlay {
                         // Light falling on the glass from above.
-                        shape.fill(LinearGradient(colors: [.white.opacity(0.06), .clear], startPoint: .top, endPoint: .init(x: 0.5, y: 0.35)))
+                        shape.fill(LinearGradient(colors: [.white.opacity(0.035), .clear], startPoint: .top, endPoint: .init(x: 0.5, y: 0.35)))
                     }
             }
             .overlay { shape.strokeBorder(tint.map { AnyShapeStyle($0.opacity(0.45)) } ?? AnyShapeStyle(Theme.glassEdge), lineWidth: 1) }
@@ -141,7 +141,7 @@ struct FoldingCard<Content: View>: View {
     }
 }
 
-/// Small capitals over a group of rows ("NEEDS YOU · 19"), its count glowing.
+/// Small capitals over a group of rows ("NEEDS YOU · 19"), its count in a capsule.
 struct Eyebrow: View {
     let text: String
     var count: Int?
@@ -158,7 +158,6 @@ struct Eyebrow: View {
                     .padding(.horizontal, 6).padding(.vertical, 1.5)
                     .background(tint.opacity(0.32), in: Capsule())
                     .overlay(Capsule().strokeBorder(tint.opacity(0.55), lineWidth: 0.75))
-                    .shadow(color: tint.opacity(0.6), radius: 5)
             }
         }
         .font(Theme.eyebrow)
@@ -168,7 +167,8 @@ struct Eyebrow: View {
 
 // MARK: - Chips, marks, avatars
 
-/// A glass capsule with a word or two ("Needs you", "Greenhouse") in its tone.
+/// A capsule with a word or two ("Needs you", "Greenhouse") in its tone: a tinted fill, and the
+/// words in a lighter shade of it that reads at 11 points (6.8:1 or more on any card).
 struct ChipView: View {
     let chip: Chip
 
@@ -176,7 +176,7 @@ struct ChipView: View {
         let tint = Theme.tint(chip.tone)
         let neutral = chip.tone == .neutral
         HStack(spacing: 5) {
-            if chip.live { LiveDot(color: tint, size: 4.5) }
+            if chip.live { LiveDot(color: neutral ? Theme.chipText(.neutral) : tint, size: 4.5) }
             Text(chip.text)
                 .contentTransition(.numericText())
                 .lineLimit(1)
@@ -184,16 +184,16 @@ struct ChipView: View {
         .font(.system(size: 11, weight: .semibold))
         .padding(.horizontal, 8)
         .padding(.vertical, 3)
-        .background(neutral ? Color.white.opacity(0.08) : tint.opacity(0.16), in: Capsule())
-        .overlay(Capsule().strokeBorder(neutral ? Color.white.opacity(0.12) : tint.opacity(0.35), lineWidth: 0.75))
-        .foregroundStyle(neutral ? Color.white.opacity(0.75) : tint)
+        .background(neutral ? Color.white.opacity(0.07) : tint.opacity(0.16), in: Capsule())
+        .overlay(Capsule().strokeBorder(neutral ? Theme.hairline : tint.opacity(0.32), lineWidth: 0.75))
+        .foregroundStyle(Theme.chipText(chip.tone))
         .animation(Theme.Motion.snappy, value: chip.text)
     }
 }
 
 /// A score as a ring that fills to it: small in the lists, large in the job's hero, where it
-/// sweeps in and counts up as it appears. A changed score animates either way. The ring glows:
-/// a wide faint stroke under it in the lists (cheap), a real glow in the hero.
+/// sweeps in and counts up as it appears. A changed score animates either way. Only the hero's
+/// ring glows; a list's rings stay flat and quiet.
 struct ScoreRing: View {
     let score: Int32?
     var size: CGFloat = 36
@@ -216,7 +216,7 @@ struct ScoreRing: View {
             Circle().stroke(Color.white.opacity(0.1), lineWidth: line)
             Circle()
                 .trim(from: 0, to: shown)
-                .stroke(color.opacity(big ? 0 : 0.22), style: StrokeStyle(lineWidth: line * 2.6, lineCap: .round))
+                .stroke(color.opacity(big ? 0.18 : 0), style: StrokeStyle(lineWidth: line * 2.2, lineCap: .round))
                 .rotationEffect(.degrees(-90))
             Circle()
                 .trim(from: 0, to: shown)
@@ -260,7 +260,7 @@ private struct RingNumber: View, @preconcurrency Animatable {
     var body: some View { Text("\(Int(value.rounded()))") }
 }
 
-/// A requirement's verdict as a mark that glows: met, partly, missing, unknown.
+/// A requirement's verdict as a mark: met, partly, missing, unknown.
 struct VerdictMark: View {
     let verdict: String
 
@@ -271,7 +271,6 @@ struct VerdictMark: View {
             // A white mark on the verdict's colour; "partly" is a half-filled circle of it.
             .symbolRenderingMode(verdict == "strong" || verdict == "missing" ? .palette : .monochrome)
             .foregroundStyle(verdict == "strong" || verdict == "missing" ? Color.white : color, color)
-            .shadow(color: color.opacity(verdict == "unknown" ? 0 : 0.7), radius: 5)
             .frame(width: 18)
             .help(Score.verdictMark(verdict) == "?" ? "Not known" : verdict.capitalized)
     }
@@ -336,7 +335,8 @@ struct GlossyTile<Content: View>: View {
             .overlay { shape.strokeBorder(LinearGradient(colors: [.white.opacity(0.65), .white.opacity(0.08)], startPoint: .top, endPoint: .bottom), lineWidth: max(1, size * 0.02)) }
             .clipShape(shape)
             .frame(width: size, height: size)
-            .shadow(color: (colors.last ?? Theme.accent).opacity(size > 40 ? 0.55 : 0.3), radius: size > 40 ? 14 : 4, y: size > 40 ? 6 : 2)
+            // A big tile glows a little of its colour; a row's small one only casts a shadow.
+            .shadow(color: size > 40 ? (colors.last ?? Theme.accent).opacity(0.4) : .black.opacity(0.3), radius: size > 40 ? 12 : 3, y: size > 40 ? 5 : 1.5)
     }
 }
 
@@ -475,9 +475,9 @@ struct LiveSymbol: View {
     var body: some View {
         ZStack {
             Circle()
-                .fill(RadialGradient(colors: [Theme.violet.opacity(0.5), .clear], center: .center, startRadius: 4, endRadius: 60))
+                .fill(RadialGradient(colors: [Theme.cobalt.opacity(0.6), .clear], center: .center, startRadius: 4, endRadius: 60))
                 .frame(width: 120, height: 120)
-            GlossyTile(colors: [Theme.violet, Theme.magenta], size: 76) {
+            GlossyTile(colors: [Theme.accent, Theme.accentFill], size: 76) {
                 Image(systemName: systemImage)
                     .font(.system(size: 32, weight: .semibold))
                     .foregroundStyle(.white)
@@ -490,15 +490,16 @@ struct LiveSymbol: View {
 
 // MARK: - The pill picker
 
-/// A glass segmented control whose glowing pill slides to the picked item: the job's tabs,
-/// New's filter, the Overview's window.
+/// A glass segmented control whose pill slides to the picked item: the job's tabs, New's
+/// filter, the Overview's window. The pill is the interaction accent with white words (5.5:1);
+/// `tint`, the world's colour, only shows in its soft shadow.
 struct PillPicker<Value: Hashable>: View {
     let items: [Value]
     let title: (Value) -> String
     @Binding var selection: Value
     /// ⌘1, ⌘2… pick the items (the job's tabs).
     var numberShortcuts = false
-    var tint: Color = Theme.magenta
+    var tint: Color = Theme.accentFill
     var large = false
     @Namespace private var pill
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -519,12 +520,12 @@ struct PillPicker<Value: Hashable>: View {
                         .background {
                             if picked {
                                 Capsule()
-                                    .fill(LinearGradient(colors: [tint.opacity(0.85), Theme.violet.opacity(0.75)], startPoint: .topLeading, endPoint: .bottomTrailing))
-                                    .overlay(Capsule().strokeBorder(.white.opacity(0.35), lineWidth: 0.75))
-                                    .shadow(color: tint.opacity(0.55), radius: 8)
+                                    .fill(Theme.accentFill)
+                                    .overlay(Capsule().strokeBorder(.white.opacity(0.22), lineWidth: 0.75))
+                                    .shadow(color: tint.opacity(0.3), radius: 6)
                                     .matchedGeometryEffect(id: "pill", in: pill)
                             } else if hovered == item {
-                                Capsule().fill(Color.white.opacity(0.07))
+                                Capsule().fill(Theme.glassFillHover)
                             }
                         }
                         .contentShape(Capsule())
@@ -536,7 +537,7 @@ struct PillPicker<Value: Hashable>: View {
             }
         }
         .padding(3)
-        .background(Color.black.opacity(0.18), in: Capsule())
+        .background(Theme.deepest.opacity(0.35), in: Capsule())
         .background(Theme.glassFill, in: Capsule())
         .overlay(Capsule().strokeBorder(Theme.glassEdge, lineWidth: 0.75))
         .fixedSize()
@@ -557,7 +558,8 @@ private struct NumberShortcut: ViewModifier {
 
 // MARK: - Buttons
 
-/// The one thing to do next: a glowing pill on the brand gradient, lifting under the pointer.
+/// The one thing to do next: a pill of the interaction accent with white words (5.5:1),
+/// brightening a little under the pointer.
 struct PrimaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View { Styled(configuration: configuration) }
 
@@ -572,19 +574,19 @@ struct PrimaryButtonStyle: ButtonStyle {
             let large = controlSize == .large
             configuration.label
                 .font(.system(size: small ? 12 : large ? 15 : 13.5, weight: .bold))
-                .foregroundStyle(.white.opacity(enabled ? 1 : 0.6))
+                .foregroundStyle(enabled ? Color.white : Theme.tertiaryText)
                 .padding(.horizontal, small ? 11 : large ? 22 : 16)
                 .padding(.vertical, small ? 4 : large ? 10 : 7)
                 .background {
-                    Capsule().fill(enabled ? AnyShapeStyle(Theme.brandFill) : AnyShapeStyle(Color.white.opacity(0.12)))
+                    Capsule().fill(enabled ? Theme.accentFill : Theme.glassFillHover)
                         .overlay {
-                            // A light edge along the top, like a lit surface.
-                            Capsule().fill(LinearGradient(colors: [.white.opacity(hovering ? 0.32 : 0.22), .clear], startPoint: .top, endPoint: .center))
+                            // A faint lit edge along the top; a little more under the pointer.
+                            Capsule().fill(LinearGradient(colors: [.white.opacity(hovering ? 0.16 : 0.1), .clear], startPoint: .top, endPoint: .center))
                         }
                 }
-                .overlay { Capsule().strokeBorder(.white.opacity(enabled ? 0.35 : 0.12), lineWidth: 0.75) }
-                .shadow(color: Theme.magenta.opacity(enabled ? (hovering ? 0.7 : 0.45) : 0), radius: hovering ? 14 : 9, y: 2)
-                .scaleEffect(configuration.isPressed ? 0.96 : hovering ? 1.02 : 1)
+                .overlay { Capsule().strokeBorder(.white.opacity(enabled ? 0.2 : 0.1), lineWidth: 0.75) }
+                .shadow(color: Theme.accentFill.opacity(enabled && hovering ? 0.45 : 0), radius: 10, y: 2)
+                .scaleEffect(configuration.isPressed ? 0.97 : 1)
                 .brightness(configuration.isPressed ? -0.05 : 0)
                 .animation(Theme.Motion.snappy, value: configuration.isPressed)
                 .animation(Theme.Motion.snappy, value: hovering)
@@ -608,11 +610,11 @@ struct SecondaryButtonStyle: ButtonStyle {
             let small = controlSize == .small || controlSize == .mini
             configuration.label
                 .font(.system(size: small ? 12 : 13, weight: .semibold))
-                .foregroundStyle(enabled ? (configuration.role == .destructive ? Theme.bad : Color.white.opacity(0.92)) : Theme.tertiaryText)
+                .foregroundStyle(enabled ? (configuration.role == .destructive ? Theme.bad : Theme.text) : Theme.tertiaryText)
                 .padding(.horizontal, small ? 10 : 14)
                 .padding(.vertical, small ? 4 : 7)
                 .background {
-                    Capsule().fill(Color.white.opacity(configuration.isPressed ? 0.18 : hovering ? 0.14 : 0.08))
+                    Capsule().fill(Color.white.opacity(configuration.isPressed ? 0.16 : hovering ? 0.12 : 0.08))
                 }
                 .overlay { Capsule().strokeBorder(Theme.glassEdge, lineWidth: 0.75) }
                 .scaleEffect(configuration.isPressed ? 0.96 : 1)
@@ -632,14 +634,14 @@ extension ButtonStyle where Self == SecondaryButtonStyle {
     static var secondary: SecondaryButtonStyle { SecondaryButtonStyle() }
 }
 
-/// The big round button (CleanMyMac's Scan, ClearVPN's power button): a glowing disc with a
-/// light rim and a soft halo that breathes; while work runs a bright arc circles it, or a ring
-/// fills to how far it is.
+/// The big round button (CleanMyMac's Scan, ClearVPN's power button): a disc of the interaction
+/// accent with a light rim and a soft halo that breathes slowly; while work runs a bright arc
+/// circles it, or a ring fills to how far it is.
 struct RoundActionButton: View {
     let title: String
     var systemImage: String?
     var size: CGFloat = 92
-    var colors: [Color] = [Theme.magenta, Theme.violet]
+    var colors: [Color] = [Color(hex: 0x3D68F0), Color(hex: 0x2448C8)]
     /// Work under way: the arc circles it.
     var working = false
     /// How far it is, when that's known: a ring fills to it instead.
@@ -653,25 +655,25 @@ struct RoundActionButton: View {
         Button(action: action) {
             ZStack {
                 if enabled {
-                    Halo(color: NSColor(colors.first ?? Theme.magenta), breathing: motion.ambient)
+                    Halo(color: NSColor(colors.first ?? Theme.accentFill), breathing: motion.ambient)
                         .frame(width: size * 1.9, height: size * 1.9)
                 }
                 // The rim: a ring of light around the disc.
                 Circle()
-                    .fill(Color.white.opacity(enabled ? 0.22 : 0.08))
+                    .fill(Color.white.opacity(enabled ? 0.14 : 0.06))
                     .frame(width: size + 12, height: size + 12)
-                    .overlay(Circle().strokeBorder(.white.opacity(enabled ? 0.55 : 0.15), lineWidth: 1))
+                    .overlay(Circle().strokeBorder(.white.opacity(enabled ? 0.35 : 0.12), lineWidth: 1))
                 Circle()
                     .fill(enabled
-                        ? AnyShapeStyle(RadialGradient(colors: [colors.first ?? Theme.magenta, colors.last ?? Theme.violet], center: .init(x: 0.35, y: 0.25), startRadius: 2, endRadius: size * 0.75))
+                        ? AnyShapeStyle(RadialGradient(colors: [colors.first ?? Theme.accentFill, colors.last ?? Theme.accentFill], center: .init(x: 0.35, y: 0.25), startRadius: 2, endRadius: size * 0.75))
                         : AnyShapeStyle(Color.white.opacity(0.1)))
                     .overlay {
-                        Circle().fill(LinearGradient(colors: [.white.opacity(0.35), .clear], startPoint: .top, endPoint: .center))
+                        Circle().fill(LinearGradient(colors: [.white.opacity(0.2), .clear], startPoint: .top, endPoint: .center))
                             .padding(size * 0.06)
                             .blendMode(.plusLighter)
                     }
                     .frame(width: size, height: size)
-                    .shadow(color: (colors.first ?? Theme.magenta).opacity(enabled ? 0.6 : 0), radius: 16, y: 4)
+                    .shadow(color: (colors.first ?? Theme.accentFill).opacity(enabled ? 0.4 : 0), radius: 12, y: 4)
                 if let progress {
                     Circle()
                         .trim(from: 0, to: progress)
@@ -695,7 +697,7 @@ struct RoundActionButton: View {
             }
             .frame(width: size + 14, height: size + 14)
             .contentShape(Circle())
-            .scaleEffect(hovering && enabled ? 1.05 : 1)
+            .scaleEffect(hovering && enabled ? 1.03 : 1)
             .animation(Theme.Motion.bouncy, value: hovering)
         }
         .buttonStyle(RoundPress())
@@ -730,7 +732,6 @@ struct Meter: View {
                 Capsule()
                     .fill(LinearGradient(colors: [color.opacity(0.65), color], startPoint: .leading, endPoint: .trailing))
                     .frame(width: max(shown > 0 ? height : 0, geo.size.width * shown))
-                    .shadow(color: color.opacity(0.55), radius: 4)
             }
         }
         .frame(height: height)
@@ -816,7 +817,7 @@ struct FlowRow: Layout {
 struct CardListContext {
     var selected: AnyHashable?
     var select: (AnyHashable) -> Void = { _ in }
-    var tint: Color = Theme.magenta
+    var tint: Color = Theme.accentFill
 }
 
 private struct CardListContextKey: EnvironmentKey {
@@ -837,7 +838,7 @@ struct CardList<ID: Hashable, Content: View>: View {
     @Binding var selection: ID?
     /// Every row's id, top to bottom, for the arrow keys.
     let order: [ID]
-    var tint: Color = Theme.magenta
+    var tint: Color = Theme.accentFill
     var spacing: CGFloat = 6
     @ViewBuilder var content: Content
     @FocusState private var focused: Bool
@@ -888,8 +889,9 @@ struct CardList<ID: Hashable, Content: View>: View {
     }
 }
 
-/// A row of a CardList: a soft glass card that brightens under the pointer and, picked, glows
-/// with the world's colour along its edge.
+/// A row of a CardList: a soft glass card that brightens under the pointer and, picked, is
+/// washed in the interaction accent with its edge in it (the world's colour only in a faint
+/// shadow under it).
 struct SelectableCard<ID: Hashable, Label: View>: View {
     let id: ID
     var padding: CGFloat = 12
@@ -904,18 +906,17 @@ struct SelectableCard<ID: Hashable, Label: View>: View {
             .padding(padding)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background {
-                shape.fill(picked ? AnyShapeStyle(LinearGradient(colors: [list.tint.opacity(0.32), list.tint.opacity(0.12)], startPoint: .topLeading, endPoint: .bottomTrailing))
-                    : AnyShapeStyle(Color.white.opacity(hovering ? 0.095 : 0.05)))
+                shape.fill(picked ? Theme.accentFill.opacity(0.26) : hovering ? Theme.glassFillHover : Theme.glassFill)
             }
             .overlay {
                 if picked {
-                    shape.strokeBorder(LinearGradient(colors: [.white.opacity(0.75), list.tint, list.tint.opacity(0.5)], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1.5)
+                    shape.strokeBorder(Theme.accentFill, lineWidth: 1.5)
                 } else {
-                    shape.strokeBorder(Color.white.opacity(hovering ? 0.16 : 0.07), lineWidth: 1)
+                    shape.strokeBorder(hovering ? Theme.hairline : Theme.hairline.opacity(0.7), lineWidth: 1)
                 }
             }
-            // Only the picked card glows: one shadow, not one per row.
-            .shadow(color: list.tint.opacity(picked ? 0.45 : 0), radius: picked ? 12 : 0)
+            // Only the picked card has a shadow: one, not one per row.
+            .shadow(color: list.tint.opacity(picked ? 0.25 : 0), radius: picked ? 10 : 0)
             .scaleEffect(hovering && !picked ? 1.008 : 1)
             .contentShape(shape)
             .onTapGesture { list.select(AnyHashable(id)) }
@@ -944,7 +945,7 @@ struct CardListHeader: View {
 // MARK: - Messages
 
 extension View {
-    /// A message in a conversation: the candidate's on the brand gradient, Applyant's on glass.
+    /// A message in a conversation: the candidate's on the accent, Applyant's on glass.
     func bubble(mine: Bool) -> some View {
         modifier(Bubble(mine: mine))
     }
@@ -964,9 +965,8 @@ private struct Bubble: ViewModifier {
                 .tint(.white)
                 .padding(.horizontal, 15)
                 .padding(.vertical, 11)
-                .background(Theme.brandFill, in: shape)
-                .overlay(shape.strokeBorder(.white.opacity(0.25), lineWidth: 0.75))
-                .shadow(color: Theme.magenta.opacity(0.35), radius: 10, y: 3)
+                .background(Theme.accentFill, in: shape)
+                .overlay(shape.strokeBorder(.white.opacity(0.18), lineWidth: 0.75))
         } else {
             content
                 .foregroundStyle(Theme.text)
@@ -991,12 +991,12 @@ extension View {
 // MARK: - Sheets
 
 extension View {
-    /// A sheet in the window's world: dark, on the deep base with a violet glow.
+    /// A sheet in the window's world: dark, on the navy base with a cobalt glow.
     func worldSheet() -> some View {
         environment(\.colorScheme, .dark)
             .presentationBackground {
                 ZStack {
-                    GlowField(base: NSColor(Theme.base), colors: [NSColor(srgbRed: 0.38, green: 0.14, blue: 0.70, alpha: 1), NSColor(srgbRed: 0.55, green: 0.12, blue: 0.62, alpha: 1)], moving: false, intensity: 0.8)
+                    GlowField(base: NSColor(Theme.base), colors: [NSColor(Theme.cobalt).withAlphaComponent(0.8), NSColor(Theme.indigo).withAlphaComponent(0.5)], moving: false, intensity: 0.8)
                     Grain()
                 }
             }

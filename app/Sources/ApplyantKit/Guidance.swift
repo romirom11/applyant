@@ -84,7 +84,7 @@ public enum ActivityText {
         switch section {
         case .new:
             if backgroundPaused != nil {
-                return Empty(title: "Paused", detail: "Background work is paused: nothing is searched or scored until you resume it (Resume above the sidebar, or in the menu bar).")
+                return Empty(title: "Paused", detail: "Background work is paused: nothing is searched or scored until you resume it (Resume at the top right of the window).")
             }
             if let paused = activity.paused {
                 return Empty(title: "Waiting", detail: paused + ". Postings are scored again once the limit is over.")

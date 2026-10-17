@@ -64,7 +64,8 @@ private func drift(_ keyPath: String, from: Any, to: Any, duration: Double, dela
 // MARK: - The glow
 
 /// Soft light blobs on a deep base, drifting slowly: the window's world behind every column
-/// (`GlowField(world:)`), or a live tile's own vivid one. A new world's colours fade in.
+/// (`GlowField(world:)`), or a live tile's own vivid one. A new world's colours fade in. Each
+/// colour's alpha is how strong its blob is.
 struct GlowField: NSViewRepresentable {
     var base: NSColor = NSColor(Theme.base)
     /// The blobs' colours, brightest first.
@@ -74,10 +75,14 @@ struct GlowField: NSViewRepresentable {
     var intensity: Double = 1
 
     init(world: Theme.World, moving: Bool) {
-        // The world's two glows and, always, a little of Applyant's violet-magenta.
-        let violet = NSColor(srgbRed: 0.42, green: 0.16, blue: 0.78, alpha: 1)
-        let magenta = NSColor(srgbRed: 0.62, green: 0.14, blue: 0.70, alpha: 1)
-        colors = [world.glow, violet, world.secondGlow, magenta]
+        // Navy lit by cobalt, a little teal and indigo, and one soft glow of the section's own
+        // colour: the colour lives in the art, not in the chrome.
+        colors = [
+            NSColor(Theme.cobalt).withAlphaComponent(0.75),
+            world.glow.withAlphaComponent(0.3),
+            NSColor(Theme.teal).withAlphaComponent(0.3),
+            NSColor(Theme.indigo).withAlphaComponent(0.5),
+        ]
         self.moving = moving
     }
 
@@ -104,12 +109,13 @@ final class GlowFieldView: AmbientView {
     private var drifting = false
 
     /// Where each blob sits (its centre, in the view's unit square) and how big it is (of the
-    /// view's longer side), and how far and how slowly it wanders.
+    /// view's longer side), and how far and how slowly it wanders: about a minute a sway, so it
+    /// reads as light shifting, never as something moving.
     private static let places: [(x: CGFloat, y: CGFloat, size: CGFloat, wander: CGFloat, period: Double)] = [
-        (0.18, 0.05, 1.25, 0.10, 23),
-        (0.92, 0.12, 1.0, 0.12, 29),
-        (0.80, 1.0, 1.15, 0.09, 31),
-        (0.05, 0.92, 0.9, 0.11, 37),
+        (0.15, 0.0, 1.25, 0.06, 47),
+        (0.92, 0.10, 0.95, 0.07, 59),
+        (0.80, 1.0, 1.15, 0.05, 53),
+        (0.05, 0.92, 0.9, 0.06, 67),
     ]
 
     override init(frame: NSRect) {
@@ -156,7 +162,8 @@ final class GlowFieldView: AmbientView {
             // A fade held half-way (the window went to the back) mustn't hide the new colours.
             if !animated { blob.removeAnimation(forKey: "colors") }
             let color = colors[i % max(colors.count, 1)]
-            let strength = (i == 0 ? 0.95 : i == 1 ? 0.7 : 0.75) * intensity
+            // The first blob leads; the colour's alpha scales its blob from there.
+            let strength = color.alphaComponent * (i == 0 ? 0.95 : i == 1 ? 0.7 : 0.75) * intensity
             blob.colors = [
                 color.withAlphaComponent(strength).cgColor,
                 color.withAlphaComponent(strength * 0.55).cgColor,
@@ -177,7 +184,7 @@ final class GlowFieldView: AmbientView {
                 let d = side * place.wander
                 blob.add(drift("transform.translation.x", from: -d, to: d, duration: place.period, delay: Double(i) * 5), forKey: "x")
                 blob.add(drift("transform.translation.y", from: d * 0.7, to: -d * 0.7, duration: place.period * 1.37, delay: Double(i) * 3), forKey: "y")
-                blob.add(drift("transform.scale", from: 0.92, to: 1.1, duration: place.period * 0.83, delay: Double(i) * 7), forKey: "scale")
+                blob.add(drift("transform.scale", from: 0.96, to: 1.05, duration: place.period * 0.83, delay: Double(i) * 7), forKey: "scale")
             }
         }
         layer?.setAnimations(running: moving)
@@ -222,7 +229,9 @@ struct Grain: View {
     }()
 }
 
-/// The whole window's world: the section's glow drifting on the deep base, and the grain.
+/// The whole window's world: the navy base with its glows drifting, settling into the deepest
+/// navy at the foot, and the grain. The drift holds while the window isn't in front, and with
+/// Reduce Motion a new section's glow simply fades in.
 struct WorldBackground: View {
     let section: ApplyantKit.Section
     private let motion = EndlessMotion()
@@ -231,8 +240,8 @@ struct WorldBackground: View {
         ZStack {
             GlowField(world: Theme.world(section), moving: motion.ambient)
             // The bottom of the window settles darker, the way a lit room does.
-            LinearGradient(colors: [.clear, Theme.base.opacity(0.35)], startPoint: .center, endPoint: .bottom)
-            Grain()
+            LinearGradient(colors: [.clear, Theme.deepest.opacity(0.6)], startPoint: .center, endPoint: .bottom)
+            Grain(opacity: 0.035)
         }
         .ignoresSafeArea()
         .accessibilityHidden(true)
@@ -353,9 +362,9 @@ struct Halo: NSViewRepresentable {
 final class HaloView: AmbientView {
     private let glow = CAGradientLayer()
     private var started = false
-    var color: NSColor = .magenta {
+    var color: NSColor = .systemBlue {
         didSet {
-            glow.colors = [color.withAlphaComponent(0.75).cgColor, color.withAlphaComponent(0.32).cgColor, color.withAlphaComponent(0).cgColor]
+            glow.colors = [color.withAlphaComponent(0.5).cgColor, color.withAlphaComponent(0.2).cgColor, color.withAlphaComponent(0).cgColor]
         }
     }
 
@@ -379,8 +388,8 @@ final class HaloView: AmbientView {
     func setBreathing(_ on: Bool) {
         if on && !started {
             started = true
-            glow.add(drift("transform.scale", from: 0.9, to: 1.06, duration: 2.2), forKey: "breathe")
-            glow.add(drift("opacity", from: 0.65, to: 1, duration: 2.2), forKey: "glow")
+            glow.add(drift("transform.scale", from: 0.95, to: 1.03, duration: 3.2), forKey: "breathe")
+            glow.add(drift("opacity", from: 0.7, to: 1, duration: 3.2), forKey: "glow")
         }
         layer?.setAnimations(running: on)
     }
@@ -533,9 +542,9 @@ final class SheenBandView: AmbientView {
         band.endPoint = CGPoint(x: 1, y: 0.5)
         band.colors = [
             NSColor.clear.cgColor,
-            NSColor(Theme.magenta).withAlphaComponent(0.16).cgColor,
-            NSColor.white.withAlphaComponent(0.12).cgColor,
-            NSColor(Theme.violet).withAlphaComponent(0.14).cgColor,
+            NSColor(Theme.accent).withAlphaComponent(0.10).cgColor,
+            NSColor.white.withAlphaComponent(0.10).cgColor,
+            NSColor(Theme.accent).withAlphaComponent(0.08).cgColor,
             NSColor.clear.cgColor,
         ]
         band.transform = CATransform3DMakeRotation(-0.2, 0, 0, 1)

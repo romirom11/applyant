@@ -1,8 +1,8 @@
 // The main window, CleanMyMac-style: one deep colour world behind everything (the open
 // section's), a slim rail of section icons on the left, the section's list in a glass panel
 // and the picked item beside it. Home, Chat and Settings use the whole window beside the rail.
-// No system chrome: the traffic lights sit over the world, with the section's name small in
-// the middle of the title bar and what Applyant is doing at its right.
+// No system chrome: the traffic lights sit over the world, and what Applyant is doing (with
+// Pause and Resume) at the title bar's right.
 import AppKit
 import ApplyantKit
 import SwiftUI
@@ -79,25 +79,32 @@ struct MainView: View {
     }
 
     private var columns: some View {
-        HStack(spacing: 0) {
-            Group {
-                switch store.navigation.section {
-                case .interview: InterviewList(store: store)
-                case .search: SearchList(store: store)
-                case .agentRuns: RunsList(store: store)
-                case .companies: CompaniesList(store: store)
-                case .whichApplication: WhichApplicationList(store: store)
-                case .profile: ProfileColumn(store: store)
-                case .projects: ProjectsList(store: store)
-                default: PostingList(store: store)
-                }
+        GeometryReader { geo in
+            // However wide it was dragged, the list leaves the detail room for its header.
+            let width = min(CGFloat(listWidth), max(290, geo.size.width - 12 - 470))
+            HStack(spacing: 0) {
+                listColumn
+                    .frame(width: width)
+                    .frame(maxHeight: .infinity)
+                    .listPanel()
+                    .padding(.bottom, 12)
+                ColumnHandle(width: $listWidth)
+                Detail(store: store)
             }
-            .frame(width: listWidth)
-            .frame(maxHeight: .infinity)
-            .listPanel()
-            .padding(.bottom, 12)
-            ColumnHandle(width: $listWidth)
-            Detail(store: store)
+        }
+    }
+
+    @ViewBuilder
+    private var listColumn: some View {
+        switch store.navigation.section {
+        case .interview: InterviewList(store: store)
+        case .search: SearchList(store: store)
+        case .agentRuns: RunsList(store: store)
+        case .companies: CompaniesList(store: store)
+        case .whichApplication: WhichApplicationList(store: store)
+        case .profile: ProfileColumn(store: store)
+        case .projects: ProjectsList(store: store)
+        default: PostingList(store: store)
         }
     }
 
@@ -156,71 +163,87 @@ private struct ColumnHandle: View {
     }
 }
 
-/// The window's top: the section's name in the middle (CleanMyMac's "Smart Care"), and what
-/// Applyant is doing now at the right.
+/// The window's top: what Applyant is doing now at the right, with Pause or Resume. The
+/// section's name isn't repeated here: the list's own header says it.
 private struct TitleBar: View {
     let store: AppStore
 
     var body: some View {
         VStack {
-            ZStack {
-                Text(store.navigation.section.railTitle)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.78))
-                    .contentTransition(.opacity)
-                    .animation(Theme.Motion.fade, value: store.navigation.section)
-                    // The title bar stays the window's handle.
-                    .allowsHitTesting(false)
-                HStack {
-                    Spacer()
+            HStack(spacing: 8) {
+                Spacer()
+                if store.connection == .connected {
                     ActivityPill(store: store)
+                    if store.backgroundPausedAt == nil { PauseButton(store: store) }
                 }
-                .padding(.trailing, 14)
             }
+            .padding(.trailing, 14)
             .frame(height: MainView.titleBar)
+            .animation(Theme.Motion.snappy, value: store.backgroundPausedAt)
             Spacer()
         }
     }
 }
 
-/// What Applyant is doing now, or what it waits for: a small glass capsule in the title bar.
-/// Hidden on Home, which says it in its tiles.
+/// What Applyant is doing now, or that it's paused, in a small glass capsule short enough
+/// never to be cut (the whole line is its tooltip). Paused, it says since when and offers
+/// Resume, on every section; the work under way is left to Home's tiles there.
 struct ActivityPill: View {
     let store: AppStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        if store.connection == .connected, store.navigation.section != .overview, let line = store.activityLine {
-            let paused = store.activity.paused != nil || store.backgroundPausedAt != nil
+        if let since = store.backgroundPausedAt {
+            HStack(spacing: 8) {
+                Image(systemName: "pause.circle.fill").foregroundStyle(Theme.warning).font(.system(size: 11))
+                Text(ActivityText.pausedSince(since))
+                    .font(.system(size: 11.5, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.8))
+                Button("Resume") { Task { await store.setBackgroundPaused(false) } }
+                    .buttonStyle(.secondary)
+                    .controlSize(.mini)
+                    .help("Resume background work: whatever came due while paused runs now")
+            }
+            .fixedSize()
+            .padding(.leading, 11)
+            .padding(.trailing, 4)
+            .padding(.vertical, 3)
+            .capsule()
+            .help(store.activityLine ?? "")
+            .transition(.opacity.combined(with: .scale(scale: 0.9)))
+        } else if store.navigation.section != .overview, let line = store.activityLine {
+            // A limit's pause says only that; the rest of the line is its tooltip.
+            let short = ActivityText.pill(store.activity.paused ?? line)
             HStack(spacing: 7) {
-                if paused {
+                if store.activity.paused != nil {
                     Image(systemName: "pause.circle.fill").foregroundStyle(Theme.warning).font(.system(size: 11))
                 } else {
                     LiveDot(color: Theme.magenta, size: 5)
                 }
-                Text(line)
+                Text(short)
                     .font(.system(size: 11.5, weight: .medium))
                     .foregroundStyle(.white.opacity(0.8))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .id(line)
+                    .id(short)
                     .transition(reduceMotion ? .opacity : .push(from: .bottom))
             }
-            .frame(maxWidth: 380, alignment: .leading)
-            .fixedSize(horizontal: false, vertical: true)
+            .fixedSize()
             .padding(.horizontal, 11)
             .padding(.vertical, 5)
-            .background(Color.black.opacity(0.22), in: Capsule())
-            .overlay(Capsule().strokeBorder(Theme.glassEdge, lineWidth: 0.75))
-            .clipShape(Capsule())
-            .animation(Theme.Motion.smooth, value: line)
+            .capsule()
+            .animation(Theme.Motion.smooth, value: short)
             .help(line)
-            .onTapGesture {
-                store.navigation.section = .overview
-                store.navigation.select(nil)
-            }
+            .onTapGesture { store.navigation.go(to: .overview) }
             .transition(.opacity.combined(with: .scale(scale: 0.9)))
         }
+    }
+}
+
+private extension View {
+    /// The title bar's dark glass capsule.
+    func capsule() -> some View {
+        background(Color.black.opacity(0.22), in: Capsule())
+            .overlay(Capsule().strokeBorder(Theme.glassEdge, lineWidth: 0.75))
+            .clipShape(Capsule())
     }
 }
 
@@ -264,54 +287,68 @@ struct ServiceDown: View {
 
 // MARK: - The rail
 
-/// The sections as a slim rail of icons in their groups (Jobs, Applications, Me, System): the
-/// picked one sits in a glowing glass pill that slides from section to section, counts glow
-/// as small badges, and a label comes out beside an icon under the pointer. ⌥⌘↑ and ⌥⌘↓ step
-/// through the sections, ⌥⌘1…9 jump to the first nine. Pause and Resume are at its foot.
+/// The sections in their groups (Jobs, Applications, Me, System), as icons with their names
+/// beside them, or as icons alone (View › Hide Labels; a name then comes out beside the icon
+/// under the pointer). The picked one sits in a glowing glass pill that slides from section to
+/// section; counts are small neutral badges, orange only for what needs the candidate. The Go
+/// menu steps through them (⌥⌘↑, ⌥⌘↓) and jumps to the first nine (⌥⌘1…9).
 struct IconRail: View {
     @Bindable var store: AppStore
+    @AppStorage("railLabels") private var labels = true
     @Namespace private var pill
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    /// The rail with its labels; Theme.railWidth without.
+    static let labelledWidth: CGFloat = 192
+
     var body: some View {
-        VStack(spacing: 0) {
-            ScrollView(.vertical) {
-                VStack(spacing: 3) {
-                    ForEach(Section.Group.allCases, id: \.self) { group in
-                        if group != .top {
+        ScrollView(.vertical) {
+            VStack(alignment: labels ? .leading : .center, spacing: labels ? 1 : 3) {
+                ForEach(Section.Group.allCases, id: \.self) { group in
+                    if group != .top {
+                        if labels {
+                            Text(group.rawValue.uppercased())
+                                .font(Theme.eyebrow)
+                                .tracking(1)
+                                .foregroundStyle(Theme.tertiaryText)
+                                .padding(.leading, 10)
+                                .padding(.top, 12)
+                                .padding(.bottom, 3)
+                        } else {
                             Capsule().fill(Color.white.opacity(0.12)).frame(width: 18, height: 2).padding(.vertical, 7)
                         }
-                        ForEach(Section.allCases.filter { $0.group == group }) { section in
-                            RailItem(
-                                section: section,
-                                picked: store.navigation.section == section,
-                                count: section == .skipped ? 0 : store.count(section),
-                                pill: pill
-                            ) { go(section) }
-                        }
+                    }
+                    ForEach(Section.allCases.filter { $0.group == group }) { section in
+                        RailItem(
+                            section: section,
+                            picked: store.navigation.section == section,
+                            count: section == .skipped ? 0 : store.count(section),
+                            urgent: section == .toReview && !store.review(.needsYou).isEmpty,
+                            labelled: labels,
+                            pill: pill
+                        ) { go(section) }
                     }
                 }
-                .padding(.vertical, 6)
-                .frame(maxWidth: .infinity)
             }
-            .scrollIndicators(.never)
-            PauseButton(store: store)
-                .padding(.top, 8)
-                .padding(.bottom, 16)
+            .padding(.horizontal, labels ? 10 : 0)
+            .padding(.top, 6)
+            .padding(.bottom, 16)
+            .frame(maxWidth: .infinity)
         }
-        .frame(width: Theme.railWidth)
+        .scrollIndicators(.never)
+        .frame(width: labels ? Self.labelledWidth : Theme.railWidth)
         .padding(.top, MainView.titleBar + 6)
         .background(alignment: .trailing) {
             // The rail's own strip: a little darker than the world, with a hairline.
             LinearGradient(colors: [Color.black.opacity(0.2), Color.black.opacity(0.08)], startPoint: .leading, endPoint: .trailing)
                 .overlay(alignment: .trailing) { Rectangle().fill(Color.white.opacity(0.06)).frame(width: 1) }
         }
-        .background { shortcuts }
-        // The label of the icon under the pointer comes out beside the rail, over the list:
-        // drawn here, outside the rail's scroll view, so nothing cuts it off.
+        .animation(Theme.Motion.pick(Theme.Motion.snappy, reduceMotion: reduceMotion), value: labels)
+        // Icons alone: the label of the one under the pointer comes out beside the rail, over
+        // the list, drawn here outside the rail's scroll view so nothing cuts it off.
         .overlayPreferenceValue(RailHover.self) { hovered in
             GeometryReader { geo in
-                if let hovered {
+                if !labels, let hovered {
                     let frame = geo[hovered.bounds]
                     RailLabel(title: hovered.section.railTitle)
                         .frame(height: 26)
@@ -325,28 +362,9 @@ struct IconRail: View {
     }
 
     private func go(_ section: ApplyantKit.Section) {
-        guard section != store.navigation.section else { return }
         withAnimation(Theme.Motion.pick(Theme.Motion.snappy, reduceMotion: reduceMotion)) {
-            store.navigation.section = section
+            store.navigation.go(to: section)
         }
-        store.navigation.postingId = nil
-        store.navigation.reviewing = nil
-    }
-
-    private var shortcuts: some View {
-        ZStack {
-            Button("Previous section") { store.navigation.section.neighbour(-1).map(go) }
-                .keyboardShortcut(.upArrow, modifiers: [.command, .option])
-            Button("Next section") { store.navigation.section.neighbour(1).map(go) }
-                .keyboardShortcut(.downArrow, modifiers: [.command, .option])
-            ForEach(Array(Section.allCases.prefix(9).enumerated()), id: \.offset) { i, section in
-                Button(section.railTitle) { go(section) }
-                    .keyboardShortcut(KeyEquivalent(Character("\(i + 1)")), modifiers: [.command, .option])
-            }
-        }
-        .opacity(0)
-        .frame(width: 0, height: 0)
-        .accessibilityHidden(true)
     }
 }
 
@@ -354,6 +372,9 @@ private struct RailItem: View {
     let section: ApplyantKit.Section
     let picked: Bool
     let count: Int
+    /// To review while something in it needs the candidate: its badge is orange.
+    let urgent: Bool
+    let labelled: Bool
     let pill: Namespace.ID
     let action: () -> Void
     @State private var hovering = false
@@ -361,42 +382,29 @@ private struct RailItem: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        let world = Theme.world(section)
         Button(action: action) {
-            ZStack {
-                if picked {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(LinearGradient(colors: [world.main.opacity(0.55), world.second.opacity(0.3)], startPoint: .topLeading, endPoint: .bottomTrailing))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .strokeBorder(LinearGradient(colors: [.white.opacity(0.7), .white.opacity(0.1)], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1)
+            Group {
+                if labelled {
+                    HStack(spacing: 10) {
+                        icon.frame(width: 22)
+                        Text(section.railTitle)
+                            .font(.system(size: 13, weight: picked ? .semibold : .medium))
+                            .foregroundStyle(picked ? AnyShapeStyle(.white) : AnyShapeStyle(Color.white.opacity(hovering ? 0.92 : 0.72)))
+                            .lineLimit(1)
+                        Spacer(minLength: 4)
+                        if count > 0 { badge }
+                    }
+                    .padding(.horizontal, 10)
+                    .frame(height: 32)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background { highlight(radius: 10) }
+                } else {
+                    icon
+                        .frame(width: 48, height: 40)
+                        .background { highlight(radius: 14) }
+                        .overlay(alignment: .topTrailing) {
+                            if count > 0 { badge.offset(x: 7, y: -4) }
                         }
-                        .shadow(color: world.main.opacity(0.7), radius: 12)
-                        .matchedGeometryEffect(id: "pill", in: pill)
-                } else if hovering {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color.white.opacity(0.08))
-                }
-                Image(systemName: Self.symbol(section))
-                    .symbolVariant(picked ? .fill : .none)
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(picked ? AnyShapeStyle(.white) : AnyShapeStyle(Color.white.opacity(hovering ? 0.9 : 0.6)))
-                    .shadow(color: picked ? .white.opacity(0.5) : .clear, radius: 4)
-                    .symbolEffect(.bounce, value: reduceMotion ? 0 : arrivals)
-            }
-            .frame(width: 48, height: 40)
-            .overlay(alignment: .topTrailing) {
-                if count > 0 {
-                    Text(count > 99 ? "99+" : "\(count)")
-                        .font(Theme.number(9.5, weight: .heavy))
-                        .foregroundStyle(.white)
-                        .contentTransition(.numericText(value: Double(count)))
-                        .padding(.horizontal, 4.5)
-                        .frame(minWidth: 17, minHeight: 15)
-                        .background(Capsule().fill(LinearGradient(colors: [world.main, world.second], startPoint: .top, endPoint: .bottom)))
-                        .overlay(Capsule().strokeBorder(.white.opacity(0.5), lineWidth: 0.75))
-                        .shadow(color: world.main.opacity(0.8), radius: 4)
-                        .offset(x: 7, y: -4)
-                        .transition(.scale.combined(with: .opacity))
                 }
             }
             .contentShape(Rectangle())
@@ -411,6 +419,46 @@ private struct RailItem: View {
         }
         .accessibilityLabel(section.railTitle + (count > 0 ? ", \(count)" : ""))
         .accessibilityAddTraits(picked ? .isSelected : [])
+    }
+
+    private var icon: some View {
+        Image(systemName: Self.symbol(section))
+            .symbolVariant(picked ? .fill : .none)
+            .font(.system(size: labelled ? 15 : 17, weight: .semibold))
+            .foregroundStyle(picked ? AnyShapeStyle(.white) : AnyShapeStyle(Color.white.opacity(hovering ? 0.9 : 0.6)))
+            .shadow(color: picked ? .white.opacity(0.5) : .clear, radius: 4)
+            .symbolEffect(.bounce, value: reduceMotion ? 0 : arrivals)
+    }
+
+    /// The picked section's glowing pill (it slides to the next one), or the pointer's glass.
+    @ViewBuilder
+    private func highlight(radius: CGFloat) -> some View {
+        let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
+        if picked {
+            let world = Theme.world(section)
+            shape
+                .fill(LinearGradient(colors: [world.main.opacity(0.55), world.second.opacity(0.3)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                .overlay {
+                    shape.strokeBorder(LinearGradient(colors: [.white.opacity(0.7), .white.opacity(0.1)], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1)
+                }
+                .shadow(color: world.main.opacity(0.7), radius: 12)
+                .matchedGeometryEffect(id: "pill", in: pill)
+        } else if hovering {
+            shape.fill(Color.white.opacity(0.08))
+        }
+    }
+
+    /// One neutral style for every count; orange only for what needs the candidate.
+    private var badge: some View {
+        Text(count > 99 ? "99+" : "\(count)")
+            .font(Theme.number(10, weight: .bold))
+            .foregroundStyle(urgent ? Theme.warning : Theme.secondaryText)
+            .contentTransition(.numericText(value: Double(count)))
+            .padding(.horizontal, 5)
+            .frame(minWidth: 18, minHeight: 16)
+            .background(Capsule().fill(urgent ? Theme.warning.opacity(0.2) : Color.white.opacity(0.13)))
+            .background(Capsule().fill(Theme.base))
+            .transition(.scale.combined(with: .opacity))
     }
 
     /// The rail's glyph: Home is the house the window opens on, the rest their own symbol.
@@ -454,31 +502,27 @@ private struct RailLabel: View {
     }
 }
 
-/// Pauses or resumes search, scoring and the rest of the background work, without quitting: a
-/// small round glass button at the rail's foot, ringed in orange while paused.
+/// Pauses search, scoring and the rest of the background work, without quitting: a small
+/// round glass button in the title bar. Paused, the status capsule beside it offers Resume.
 struct PauseButton: View {
     let store: AppStore
     @State private var hovering = false
 
     var body: some View {
-        let paused = store.backgroundPausedAt != nil
-        Button { Task { await store.setBackgroundPaused(!paused) } } label: {
-            Image(systemName: paused ? "play.fill" : "pause.fill")
-                .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(paused ? Theme.warning : Color.white.opacity(0.85))
-                .frame(width: 38, height: 38)
+        Button { Task { await store.setBackgroundPaused(true) } } label: {
+            Image(systemName: "pause.fill")
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(Color.white.opacity(0.85))
+                .frame(width: 26, height: 26)
                 .background(Circle().fill(Color.white.opacity(hovering ? 0.16 : 0.09)))
-                .overlay(Circle().strokeBorder(paused ? AnyShapeStyle(Theme.warning.opacity(0.8)) : AnyShapeStyle(Theme.glassEdge), lineWidth: paused ? 1.5 : 1))
-                .shadow(color: paused ? Theme.warning.opacity(0.5) : .clear, radius: 8)
-                .contentTransition(.symbolEffect(.replace))
+                .overlay(Circle().strokeBorder(Theme.glassEdge, lineWidth: 1))
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
-        .accessibilityLabel(paused ? "Resume" : "Pause")
-        .help(paused
-            ? "Resume background work: whatever came due while paused runs now"
-            : "Pause searching, scoring, research and mail until you resume (interview answers and approved applications still go through)")
+        .accessibilityLabel("Pause")
+        .help("Pause searching, scoring, research and mail until you resume (interview answers and approved applications still go through)")
+        .transition(.opacity.combined(with: .scale(scale: 0.8)))
     }
 }
 
@@ -519,13 +563,13 @@ extension View {
 
 struct Detail: View {
     let store: AppStore
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        // A newly picked job comes in from a little below, out of a blur; the one before fades.
+        // Picking jobs is what the window is for: the next one fades in quickly (0.2 s) and the
+        // one before goes at once, so ↓↓↓ never waits for the motion or stacks it up.
         ZStack { content }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .animation(Theme.Motion.pick(Theme.Motion.smooth, reduceMotion: reduceMotion), value: store.navigation.postingId)
+            .animation(Theme.Motion.fade, value: store.navigation.postingId)
     }
 
     @ViewBuilder
@@ -557,7 +601,7 @@ struct Detail: View {
         } else if let posting = store.navigation.postingId {
             JobDetail(store: store, postingId: posting, applicationId: store.navigation.reviewing)
                 .id(posting)
-                .transition(.page(reduceMotion: reduceMotion))
+                .transition(.asymmetric(insertion: .opacity, removal: .identity))
         } else {
             let section = store.navigation.section
             if store.items(section).isEmpty {
@@ -630,6 +674,10 @@ struct PostingList: View {
             }
         }
         .navigationTitle(section.title)
+        .focusedSceneValue(\.listCommands, ListCommands(
+            next: ListSelection.step(1, from: store.navigation.postingId, in: items).map { item in { store.navigation.select(item) } },
+            previous: ListSelection.step(-1, from: store.navigation.postingId, in: items).map { item in { store.navigation.select(item) } }
+        ))
         .task(id: note) {
             // A newer note cancels this wait; only an uninterrupted one clears it.
             guard note != nil, (try? await Task.sleep(for: .seconds(4))) != nil else { return }
@@ -657,10 +705,10 @@ struct PostingList: View {
         HStack(spacing: 6) {
             Button { addingPosting = true } label: { Image(systemName: "plus") }
                 .help("Add a job posting by its URL: it's verified and scored like any other")
-                .accessibilityLabel("Add posting…")
+                .accessibilityLabel("Add Posting…")
             Button { Task { note = await store.rescore() } } label: { Image(systemName: "arrow.clockwise") }
                 .help("Score every verified or scored posting again (what was read before is reused)")
-                .accessibilityLabel("Re-score all")
+                .accessibilityLabel("Re-score All")
         }
         .buttonStyle(.secondary)
         .controlSize(.small)
@@ -686,20 +734,20 @@ struct PostingList: View {
             artSize: alone ? 220 : 150
         ) {
             if section == .new {
-                if hidden > 0 { Button("Show all") { store.navigation.newFilter = .all }.buttonStyle(.primary) }
-                Button("Add posting…") { addingPosting = true }.buttonStyle(.secondary)
+                if hidden > 0 { Button("Show All") { store.navigation.newFilter = .all }.buttonStyle(.primary) }
+                Button("Add Posting…") { addingPosting = true }.buttonStyle(.secondary)
                 if store.search.strategies.isEmpty {
-                    Button("Open Search") { store.navigation.section = .search }.buttonStyle(.secondary)
+                    Button("Open Search") { store.navigation.go(to: .search) }.buttonStyle(.secondary)
                 }
             }
         }
     }
 
-    /// A row's menu: Set status for an application, Re-score in the posting sections.
+    /// A row's menu: Set Status for an application, Re-score in the posting sections.
     @ViewBuilder
     private func rowMenu(_ item: ListItem, section: ApplyantKit.Section) -> some View {
-        if let id = item.applicationId, let app = store.applications[id] {
-            SetStatusMenu(store: store, app: app)
+        if let id = item.applicationId, let app = store.applications[id], !StageRules.targets(from: app.stage).isEmpty {
+            Menu("Set Status") { SetStatusItems(store: store, app: app) }
         }
         if [.new, .saved, .skipped].contains(section), let p = store.postings[item.postingId], Score.canRescore(p) {
             Button("Re-score") { Task { note = await store.rescore([p.id]) } }
@@ -781,7 +829,7 @@ struct AddPostingSheet: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 12) {
                 ArtView(.newJobs, size: 48)
-                Text("Add a posting").font(.system(size: 20, weight: .bold))
+                Text("Add a Posting").font(.system(size: 20, weight: .bold))
             }
             Text("Paste a job posting's link. It's verified, read and scored like the ones search finds.")
                 .font(.callout).foregroundStyle(Theme.secondaryText)

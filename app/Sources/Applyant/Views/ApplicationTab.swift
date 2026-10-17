@@ -1,7 +1,7 @@
 // The job detail's Application tab: reviewing an application, answers first. Routine fields
 // fold into one line, the CV has its card, each answer shows its flagged sentences, and the
-// evidence for the selected answer sits on the right. Approve, Skip and Regenerate are in the
-// detail's header; this says what still blocks Approve.
+// evidence for the selected answer sits on the right. Approve and Send…, Skip… and Regenerate…
+// are the detail's (its header, the Job menu); this says what still blocks Approve.
 import AppKit
 import ApplyantAPI
 import ApplyantKit
@@ -28,21 +28,21 @@ struct ApplicationTab: View {
                     HStack(spacing: 0) {
                         ScrollView {
                             VStack(alignment: .leading, spacing: Theme.blockSpacing) {
-                                status(app).entrance(0)
-                                if app.hasHandOff { HandOffCard(store: store, app: app).entrance(1) }
-                                if app.hasReceipt { receipt(app.receipt).entrance(1) }
-                                if !app.emails.isEmpty { ApplicationReplies(app: app).entrance(2) }
+                                status(app)
+                                if app.hasHandOff { HandOffCard(store: store, app: app) }
+                                if app.hasReceipt { receipt(app.receipt) }
+                                if !app.emails.isEmpty { ApplicationReplies(app: app) }
                                 if app.hasNote && !app.hasHandOff && app.stage != .needsCandidate { note(app.note) }
-                                needsYou(app).entrance(2)
-                                if InterviewPrep.applies(app) { InterviewPrepCard(store: store, app: app).entrance(3) }
+                                needsYou(app)
+                                if InterviewPrep.applies(app) { InterviewPrepCard(store: store, app: app) }
                                 // Sent: notes and contacts matter more than the answers; before
                                 // that, they follow the review.
                                 let sent = StageRules.isSent(app.stage)
-                                if sent { notesAndContacts(app).entrance(3) }
-                                standardFields(app).entrance(3)
-                                if app.hasCv { CvCard(store: store, app: app).entrance(4) }
+                                if sent { notesAndContacts(app) }
+                                standardFields(app)
+                                if app.hasCv { CvCard(store: store, app: app) }
                                 questions(app)
-                                if !sent { notesAndContacts(app).entrance(6) }
+                                if !sent { notesAndContacts(app) }
                                 if !side {
                                     Divider()
                                     EvidencePanel(store: store, app: app, answer: selected(app), scrolls: false)
@@ -92,11 +92,10 @@ struct ApplicationTab: View {
             if !app.blockers.isEmpty && app.stage != .approved && !StageRules.isSent(app.stage) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Approve waits for").font(.subheadline.weight(.semibold))
-                    ForEach(Array(app.blockers.enumerated()), id: \.offset) { index, blocker in
+                    ForEach(Array(app.blockers.enumerated()), id: \.offset) { _, blocker in
                         Label(blocker, systemImage: "exclamationmark.circle.fill")
                             .foregroundStyle(Theme.warning)
                             .lineLimit(3)
-                            .popIn(index)
                     }
                 }
                 .font(.callout)
@@ -109,7 +108,7 @@ struct ApplicationTab: View {
                 HStack(spacing: 8) {
                     Text(ReviewRules.formText(app)).font(.callout).foregroundStyle(.secondary)
                     if ReviewRules.canSwitchForm(app) {
-                        Button(app.applyForm == .platform ? "Use the company's form" : "Use the platform's form") {
+                        Button(app.applyForm == .platform ? "Use Company's Form" : "Use Platform's Form") {
                             Task { await store.setApplyForm(application: app.id, form: app.applyForm == .platform ? .company : .platform) }
                         }
                         .help("The form is read again and the application prepared for it")
@@ -139,7 +138,7 @@ struct ApplicationTab: View {
                 }
                 Text("\(r.fieldValues.count) values sent" + (r.hasSalaryValue ? " · salary \(r.salaryValue)" : ""))
                 if r.hasCvPath {
-                    Button("Show the CV that was sent") { NSWorkspace.shared.open(URL(fileURLWithPath: r.cvPath)) }
+                    Button("Show Sent CV") { NSWorkspace.shared.open(URL(fileURLWithPath: r.cvPath)) }
                         .buttonStyle(.link)
                 }
             }
@@ -181,7 +180,7 @@ struct ApplicationTab: View {
                 }
                 .lineLimit(1)
                 Spacer()
-                Button(showAllFields ? "Hide" : "Show all") {
+                Button(showAllFields ? "Hide" : "Show All") {
                     withAnimation(Theme.Motion.snappy) { showAllFields.toggle() }
                 }
                 .buttonStyle(.secondary)
@@ -215,8 +214,7 @@ struct ApplicationTab: View {
                     .background(Color.white.opacity(0.1), in: Capsule())
             }
             .padding(.top, 4)
-            .entrance(4)
-            ForEach(Array(answers.enumerated()), id: \.element.id) { index, answer in
+            ForEach(answers, id: \.id) { answer in
                 AnswerCard(
                     answer: answer,
                     editable: app.stage != .approved && app.stage != .applied,
@@ -252,7 +250,6 @@ struct ApplicationTab: View {
                         : nil,
                     projects: (store.candidateProfile?.projects ?? []).map { (slug: $0.slug, name: $0.name) }
                 )
-                .entrance(5 + index)
             }
         }
     }
@@ -371,7 +368,7 @@ struct FieldRow: View {
                 if !editable {
                     EmptyView()
                 } else if field.source == "override" {
-                    Button("Use profile value") { set(nil) }.buttonStyle(.link)
+                    Button("Use Profile Value") { set(nil) }.buttonStyle(.link)
                 }
                 if editable {
                     Button("Change") {
@@ -397,9 +394,10 @@ struct AnswerCard: View {
     let editSentence: (Sentence) -> Void
     let confirmSentence: (Sentence) -> Void
     let confirmFacts: ([Int64]) -> Void
-    /// Quick actions: "Shorter" (true) and/or "Use another project…" (the project's slug).
+    /// Quick actions: "Shorter" (true) and/or "Use Another Project" (the project's slug).
     var redraft: ((Bool, String?) -> Void)?
-    /// The projects "Use another project…" offers (slug, name).
+    /// The candidate's projects (slug, name): "Use Another Project" offers them, and "Based
+    /// on" names them.
     var projects: [(slug: String, name: String)] = []
 
     var body: some View {
@@ -410,11 +408,11 @@ struct AnswerCard: View {
                     .foregroundStyle(.orange)
                 HStack {
                     if let interview {
-                        Button("Answer in Questions for you", action: interview)
+                        Button("Answer in Questions for You", action: interview)
                             .buttonStyle(.primary)
                             .help("Your answer is saved as facts, then this application is prepared again")
                     }
-                    Button("Write the answer…", action: write).buttonStyle(.secondary)
+                    Button("Write Answer…", action: write).buttonStyle(.secondary)
                 }
             } else {
                 if answer.kind == "choice" && answer.hasChoice {
@@ -434,7 +432,7 @@ struct AnswerCard: View {
                     if editable, let redraft, answer.kind == "text", ReviewActions.pending(answer) == nil {
                         Button("Shorter") { redraft(true, nil) }.buttonStyle(.link)
                             .help("Draft this answer again, about half as long, from the same facts")
-                        Menu("Use another project…") {
+                        Menu("Use Another Project") {
                             ForEach(projects, id: \.slug) { p in
                                 Button(p.name) { redraft(false, p.slug) }
                             }
@@ -495,10 +493,10 @@ struct AnswerCard: View {
                 Spacer()
                 let unconfirmed = s.facts.filter { $0.status == .unconfirmed }.map(\.id)
                 if s.flag == "unconfirmed" && !unconfirmed.isEmpty {
-                    Button("Confirm facts") { confirmFacts(unconfirmed) }
+                    Button("Confirm Facts") { confirmFacts(unconfirmed) }
                 }
                 if ReviewRules.canConfirmAsWritten(s) {
-                    Button("It's true") { confirmSentence(s) }
+                    Button("It's True") { confirmSentence(s) }
                         .help("Keep it as written: it's saved as a fact you stand behind")
                 }
                 Button("Edit…") { editSentence(s) }
@@ -508,9 +506,10 @@ struct AnswerCard: View {
     }
 
     private var basedOn: String {
-        let projects = Set(answer.sentences.flatMap { $0.facts.compactMap { $0.hasProjectSlug ? $0.projectSlug : nil } })
+        let names = Dictionary(projects.map { ($0.slug, $0.name) }, uniquingKeysWith: { first, _ in first })
+        let used = Set(answer.sentences.flatMap { $0.facts.compactMap { $0.hasProjectSlug ? $0.projectSlug : nil } })
         let facts = Set(answer.sentences.flatMap(\.factIds)).count
-        var parts = projects.sorted()
+        var parts = used.map { MatchText.projectName($0, projects: names) }.sorted()
         parts.append("\(facts) fact\(facts == 1 ? "" : "s")")
         if answer.edited { parts.append("your edit") }
         if let adapted = ReviewActions.adaptedFrom(answer) { parts.append(adapted) }
@@ -547,9 +546,9 @@ struct EvidencePanel: View {
                 CardTitle(title: "Evidence", systemImage: "link")
                 if !app.unconfirmedFactIds.isEmpty {
                     let n = app.unconfirmedFactIds.count
-                    Button("Confirm all \(n) unconfirmed…") { confirmingAll = true }
+                    Button("Confirm All \(n) Unconfirmed…") { confirmingAll = true }
                         .confirmationDialog("Mark \(n) fact\(n == 1 ? "" : "s") as true?", isPresented: $confirmingAll) {
-                            Button("Confirm \(n) fact\(n == 1 ? "" : "s")") {
+                            Button("Confirm \(n) Fact\(n == 1 ? "" : "s")") {
                                 Task { await store.confirmFacts(application: app.id, factIds: []) }
                             }
                         } message: {
@@ -670,11 +669,11 @@ struct CvCard: View {
                     if app.stage == .approved || StageRules.isSent(app.stage) {
                         EmptyView()  // already sent or on its way: nothing to change
                     } else if cv.mode == "tailored" && cv.status == "skipped" {
-                        Button("Try the tailored CV again") { Task { await store.setCvMode(application: app.id, mode: "tailored") } }
+                        Button("Try Tailored CV Again") { Task { await store.setCvMode(application: app.id, mode: "tailored") } }
                     } else if cv.mode == "tailored" {
-                        Button("Use base CV instead") { Task { await store.setCvMode(application: app.id, mode: "base") } }
+                        Button("Use Base CV Instead") { Task { await store.setCvMode(application: app.id, mode: "base") } }
                     } else {
-                        Button("Use the tailored CV") { Task { await store.setCvMode(application: app.id, mode: "tailored") } }
+                        Button("Use Tailored CV") { Task { await store.setCvMode(application: app.id, mode: "tailored") } }
                     }
                 }
                 .buttonStyle(.secondary)
@@ -718,7 +717,7 @@ struct CvEditSheet: View {
                             Text(line.section).font(.caption.weight(.semibold)).foregroundStyle(line.dropped ? .orange : .secondary)
                             Spacer()
                             if editingLine != line.handle, app.map(CvText.canEdit) == true {
-                                Button(line.dropped ? "Put back…" : "Edit") { text = line.text; editingLine = line.handle }
+                                Button(line.dropped ? "Put Back" : "Edit") { text = line.text; editingLine = line.handle }
                                     .controlSize(.small)
                                 if !line.dropped {
                                     Button("Remove…", role: .destructive) { removing = line }
@@ -757,7 +756,7 @@ struct CvEditSheet: View {
             isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }),
             presenting: removing
         ) { line in
-            Button("Remove the line", role: .destructive) {
+            Button("Remove Line", role: .destructive) {
                 Task { await store.editCv(application: appId, line: line.handle, text: nil) }
             }
         } message: { line in

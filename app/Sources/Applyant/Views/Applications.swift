@@ -258,9 +258,9 @@ struct SetStatusMenu: View {
     var body: some View {
         let targets = StageRules.targets(from: app.stage)
         if !targets.isEmpty {
-            Menu("Set status") {
+            Menu("Set Status") {
                 if ApproveText.canReturnToReview(app) {
-                    Button("Back to review (nothing is sent)") { Task { await store.returnToReview(application: app.id) } }
+                    Button("Back to Review (Nothing Is Sent)") { Task { await store.returnToReview(application: app.id) } }
                     Divider()
                 }
                 ForEach(targets, id: \.self) { stage in

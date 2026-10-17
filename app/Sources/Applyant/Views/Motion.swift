@@ -167,7 +167,7 @@ struct CountingNumber: View {
 
 // MARK: - The activity line
 
-/// A line of the brand colours flowing while Applyant works (a delivery's progress without a
+/// A line of the accent's blues flowing while Applyant works (a delivery's progress without a
 /// count). Still, and orange, while paused.
 struct FlowLine: View {
     let flowing: Bool
@@ -194,7 +194,7 @@ struct FlowLine: View {
 
         var body: some View {
             // Two periods side by side, slid one period along and started over: no seam.
-            let period: [Color] = [Theme.violet, Theme.magenta, Theme.pink, Theme.violet]
+            let period: [Color] = [Theme.accentFill, Theme.accent, Theme.pink, Theme.accentFill]
             LinearGradient(colors: period + period.dropFirst(), startPoint: .leading, endPoint: .trailing)
                 .frame(width: width * 2)
                 .offset(x: -width * offset)
@@ -279,7 +279,7 @@ struct Sparks: View {
     }
 }
 
-/// A symbol on the brand gradient with sparks flying out of it (the toast's).
+/// A symbol on the accent with sparks flying out of it (the toast's).
 struct SparkBurst: View {
     let systemImage: String
     var size: CGFloat = 30
@@ -289,9 +289,9 @@ struct SparkBurst: View {
         ZStack {
             Sparks(size: size)
             Circle()
-                .fill(Theme.brandFill)
+                .fill(Theme.accentFill)
                 .frame(width: size, height: size)
-                .shadow(color: Theme.magenta.opacity(0.5), radius: 6, y: 2)
+                .shadow(color: Theme.accentFill.opacity(0.4), radius: 5, y: 2)
             Image(systemName: systemImage)
                 .font(.system(size: size * 0.45, weight: .bold))
                 .foregroundStyle(.white)
