@@ -338,6 +338,28 @@ public protocol Applyant_V1_ApplyantServiceClientInterface: Sendable {
     @available(iOS 13, *)
     func `rebuildRecipe`(request: Applyant_V1_RebuildRecipeRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_RebuildRecipeResponse>
 
+    /// The ATS index: every company board Applyant knows on the ATSs (found in Common Crawl's
+    /// index, behind postings, by the planner and the cross-company job searches), each read on
+    /// its own schedule into a local store of open jobs. Strategies search those jobs through the
+    /// built-in source board:ats-index, so a search covers every known company, not a watch list.
+    /// A kind's switch (SetSearchSourceEnabled "greenhouse") also takes that ATS out of the index.
+    /// GetAtsIndex returns the index per ATS and its latest discovery runs.
+    @available(iOS 13, *)
+    func `getAtsIndex`(request: Applyant_V1_GetAtsIndexRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_GetAtsIndexResponse>
+
+    /// ListIndexCompanies pages through the index's companies, filtered.
+    @available(iOS 13, *)
+    func `listIndexCompanies`(request: Applyant_V1_ListIndexCompaniesRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_ListIndexCompaniesResponse>
+
+    /// SetIndexCompanyEnabled leaves one company out of the index (it's not read or searched) or
+    /// takes it back.
+    @available(iOS 13, *)
+    func `setIndexCompanyEnabled`(request: Applyant_V1_SetIndexCompanyEnabledRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_SetIndexCompanyEnabledResponse>
+
+    /// DiscoverIndexCompanies looks for more company boards now (it also runs weekly by itself).
+    @available(iOS 13, *)
+    func `discoverIndexCompanies`(request: Applyant_V1_DiscoverIndexCompaniesRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_DiscoverIndexCompaniesResponse>
+
     /// Model roles: which provider and model answer each role. Changes apply to the next run.
     @available(iOS 13, *)
     func `listRoles`(request: Applyant_V1_ListRolesRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_ListRolesResponse>
@@ -804,6 +826,26 @@ public final class Applyant_V1_ApplyantServiceClient: Applyant_V1_ApplyantServic
     }
 
     @available(iOS 13, *)
+    public func `getAtsIndex`(request: Applyant_V1_GetAtsIndexRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_GetAtsIndexResponse> {
+        return await self.client.unary(path: "/applyant.v1.ApplyantService/GetAtsIndex", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
+    public func `listIndexCompanies`(request: Applyant_V1_ListIndexCompaniesRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_ListIndexCompaniesResponse> {
+        return await self.client.unary(path: "/applyant.v1.ApplyantService/ListIndexCompanies", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
+    public func `setIndexCompanyEnabled`(request: Applyant_V1_SetIndexCompanyEnabledRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_SetIndexCompanyEnabledResponse> {
+        return await self.client.unary(path: "/applyant.v1.ApplyantService/SetIndexCompanyEnabled", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
+    public func `discoverIndexCompanies`(request: Applyant_V1_DiscoverIndexCompaniesRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_DiscoverIndexCompaniesResponse> {
+        return await self.client.unary(path: "/applyant.v1.ApplyantService/DiscoverIndexCompanies", idempotencyLevel: .unknown, request: request, headers: headers)
+    }
+
+    @available(iOS 13, *)
     public func `listRoles`(request: Applyant_V1_ListRolesRequest, headers: Connect.Headers = [:]) async -> ResponseMessage<Applyant_V1_ListRolesResponse> {
         return await self.client.unary(path: "/applyant.v1.ApplyantService/ListRoles", idempotencyLevel: .unknown, request: request, headers: headers)
     }
@@ -991,6 +1033,10 @@ public final class Applyant_V1_ApplyantServiceClient: Applyant_V1_ApplyantServic
             public static let planSearch = Connect.MethodSpec(name: "PlanSearch", service: "applyant.v1.ApplyantService", type: .unary)
             public static let getSearchSource = Connect.MethodSpec(name: "GetSearchSource", service: "applyant.v1.ApplyantService", type: .unary)
             public static let rebuildRecipe = Connect.MethodSpec(name: "RebuildRecipe", service: "applyant.v1.ApplyantService", type: .unary)
+            public static let getAtsIndex = Connect.MethodSpec(name: "GetAtsIndex", service: "applyant.v1.ApplyantService", type: .unary)
+            public static let listIndexCompanies = Connect.MethodSpec(name: "ListIndexCompanies", service: "applyant.v1.ApplyantService", type: .unary)
+            public static let setIndexCompanyEnabled = Connect.MethodSpec(name: "SetIndexCompanyEnabled", service: "applyant.v1.ApplyantService", type: .unary)
+            public static let discoverIndexCompanies = Connect.MethodSpec(name: "DiscoverIndexCompanies", service: "applyant.v1.ApplyantService", type: .unary)
             public static let listRoles = Connect.MethodSpec(name: "ListRoles", service: "applyant.v1.ApplyantService", type: .unary)
             public static let setRole = Connect.MethodSpec(name: "SetRole", service: "applyant.v1.ApplyantService", type: .unary)
             public static let resetRoles = Connect.MethodSpec(name: "ResetRoles", service: "applyant.v1.ApplyantService", type: .unary)
