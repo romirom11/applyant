@@ -1,6 +1,6 @@
-// Search: the strategies that find postings on their own and the sources they read, each with
-// what it found, verified and what you marked interested. Every strategy can be paused or run
-// now, and every source (or a whole kind) switched off: a source that's off is never queried.
+// Search: the strategies that find postings on their own, each with what it found, verified and
+// what you marked interested. Every strategy can be paused or run now. The sources they read,
+// each with its switch, are a section of their own (Sources.swift).
 import ApplyantAPI
 import ApplyantKit
 import SwiftUI
@@ -11,11 +11,9 @@ struct SearchList: View {
 
     var body: some View {
         let strategies = store.strategyRows
-        let groups = SearchText.sourceGroups(store.search)
         let world = Theme.world(.search)
-        let on = store.search.sources.filter { $0.enabled && $0.kindEnabled }.count
         VStack(alignment: .leading, spacing: 0) {
-            ModuleHeader(section: .search, subtitle: "\(strategies.count) search\(strategies.count == 1 ? "" : "es") · \(on) of \(store.search.sources.count) sources on")
+            ModuleHeader(section: .search, subtitle: "\(strategies.count) search\(strategies.count == 1 ? "" : "es") · \(SourcesText.onLine(store.search))")
                 .columnHeader()
             HStack(spacing: 6) {
                 Button { creating = true } label: { Label("New Search", systemImage: "plus") }
@@ -34,7 +32,7 @@ struct SearchList: View {
             .padding(.bottom, 4)
             CardList(
                 selection: Binding(get: { store.navigation.search }, set: { store.navigation.search = $0 }),
-                order: strategies.map(\.selection) + groups.flatMap { $0.rows.map(\.selection) },
+                order: strategies.map(\.selection),
                 tint: world.main
             ) {
                 if let plan = store.search.plans.first {
@@ -55,43 +53,8 @@ struct SearchList: View {
                 ForEach(strategies) { row in
                     SelectableCard(id: row.selection) { SearchRowView(row: row) }
                 }
-                CardListHeader(title: "Sources", tint: world.main)
-                AddBoardOrPage(store: store).padding(.horizontal, 4)
-                ForEach(groups, id: \.kind.kind) { group in
-                    HStack {
-                        CardListHeader(title: group.kind.label, count: group.rows.count)
-                        Spacer()
-                        Toggle("All \(group.kind.label) sources", isOn: Binding(
-                            get: { group.kind.enabled },
-                            set: { on in Task { await store.setSource(group.kind.kind, enabled: on) } }
-                        ))
-                        .toggleStyle(.switch)
-                        .controlSize(.mini)
-                        .labelsHidden()
-                        .padding(.top, 10)
-                        .padding(.trailing, 6)
-                        .help(group.kind.enabled ? "Switch every \(group.kind.label) source off" : "Switch \(group.kind.label) back on")
-                    }
-                    ForEach(group.rows) { row in
-                        SelectableCard(id: row.selection, padding: 10) {
-                            HStack {
-                                SearchRowView(row: row)
-                                Spacer()
-                                if case let .source(key) = row.selection, let source = store.source(key) {
-                                    Toggle(source.label, isOn: Binding(
-                                        get: { source.enabled },
-                                        set: { on in Task { await store.setSource(key, enabled: on) } }
-                                    ))
-                                    .toggleStyle(.switch)
-                                    .controlSize(.mini)
-                                    .labelsHidden()
-                                    .help(source.enabled ? "Turn \(source.label) off" : "Turn \(source.label) on")
-                                }
-                            }
-                        }
-                    }
-                    if group.kind.kind == "telegram" { FollowChannel(store: store).padding(.horizontal, 4) }
-                }
+                // What they read is in Sources, each with its switch.
+                SourcesLink(store: store).padding(.horizontal, 2).padding(.top, 8)
             }
         }
         .navigationTitle("Search")
@@ -127,25 +90,27 @@ private struct PlanLine: View {
     }
 }
 
-/// Telegram channels (phase 15): follow one by its @name or t.me link; its public preview is read.
-struct FollowChannel: View {
+/// Search's one line about its sources: how many are on, and the way to Sources.
+struct SourcesLink: View {
     let store: AppStore
-    @State private var channel = ""
 
     var body: some View {
-        HStack {
-            TextField("Follow a channel: @name or t.me/name", text: $channel)
-                .textFieldStyle(.glass)
-                .onSubmit(follow)
-            Button("Follow", action: follow)
-                .controlSize(.small)
-                .disabled(TelegramText.channelLocator(channel) == nil)
+        Button { store.navigation.go(to: .sources) } label: {
+            HStack(spacing: 6) {
+                Image(systemName: ApplyantKit.Section.sources.symbol)
+                    .font(.system(size: 11, weight: .semibold))
+                Text("Sources · " + SourcesText.onLine(store.search))
+                Image(systemName: "chevron.right").font(.system(size: 9, weight: .bold))
+            }
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(Theme.accent)
+            .padding(.vertical, 4)
+            .padding(.horizontal, 4)
+            .frame(minHeight: 22)
+            .contentShape(Rectangle())
         }
-    }
-
-    private func follow() {
-        let value = channel
-        Task { if await store.followChannel(value) { channel = "" } }
+        .buttonStyle(.plain)
+        .help("Every place searches read jobs from, each with its switch")
     }
 }
 
@@ -200,7 +165,7 @@ private struct SearchOverview: View {
                 }
                 StatStrip(SearchText.summary(store.search, runs: store.searchRuns).map { StatStrip.Item(label: $0.label, value: $0.value) })
                     .entrance(1)
-                Prose("A search looks for job titles in the sources it reads. Pick one on the left to see what it looks for and how it's doing, or a source to switch it off.")
+                Prose("A search looks for job titles in the sources it reads. Pick one on the left to see what it looks for and how it's doing. Every source it can read, each with its switch, is in Sources.")
                     .entrance(2)
                 HStack(spacing: 8) {
                     Button { creating = true } label: { Label("New Search", systemImage: "plus") }
@@ -210,6 +175,11 @@ private struct SearchOverview: View {
                     }
                     .buttonStyle(.secondary)
                     .disabled(store.planning)
+                    Button { store.navigation.go(to: .sources) } label: {
+                        Label("Sources", systemImage: ApplyantKit.Section.sources.symbol)
+                    }
+                    .buttonStyle(.secondary)
+                    .help(SourcesText.onLine(store.search))
                 }
                 .entrance(3)
             }
@@ -345,108 +315,5 @@ struct RunSummary: View {
         }
         .padding(12)
         .cardSurface(radius: Theme.innerRadius + 3)
-    }
-}
-
-struct SourceDetail: View {
-    let store: AppStore
-    let source: SearchSource
-
-    var body: some View {
-        let s = source
-        ScrollView {
-            VStack(alignment: .leading, spacing: Theme.blockSpacing) {
-                PageHeader(title: s.label, subtitle: SearchText.kindTitles[s.kind] ?? s.kind) {
-                    IconTile(systemImage: "dot.radiowaves.left.and.right", size: 56, colors: s.enabled && s.kindEnabled ? [Theme.world(.new).main, Theme.world(.applied).main] : [Theme.glyph, Theme.raised])
-                        .help(s.key)
-                } trailing: {
-                    if s.origin == "agent" { ChipView(chip: Chip(text: "Found by the agent", tone: .accent)) }
-                }
-                if s.hasNote { Prose(s.note, size: .compact) }
-                Toggle(isOn: Binding(
-                    get: { s.enabled },
-                    set: { on in Task { await store.setSource(s.key, enabled: on) } }
-                )) {
-                    Text(s.enabled ? "On: searches that include it read it" : "Off: never read").textRole(.body)
-                }
-                .toggleStyle(.switch)
-                .entrance(1)
-                if !s.kindEnabled {
-                    Callout(.warning, title: "All \(SearchText.kindTitles[s.kind] ?? s.kind) sources are off", detail: "So this one isn't read either.")
-                }
-                Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: Theme.Space.l, verticalSpacing: Theme.Space.s) {
-                    fact("Results", SearchText.stats(s.stats))
-                    fact("Its list", s.completeList
-                        ? "complete: a posting it stops listing is closed"
-                        : "the latest jobs only: a posting it stops listing is checked again, never closed")
-                    if s.hasResolved { fact("Read as", s.resolved) }
-                    fact("Last read", s.hasLastRunAt
-                        ? s.lastRunAt.date.formatted(.relative(presentation: .named)) + (s.hasLastNote ? " · \(s.lastNote)" : "")
-                        : "not yet")
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(Theme.cardPadding)
-                .cardSurface()
-                .entrance(2)
-                if let detail = store.sourceDetails[s.key], detail.hasRecipe {
-                    RecipeView(store: store, source: detail).entrance(3)
-                }
-            }
-            .pageColumn()
-        }
-        .task(id: source.key) { await store.openSource(source.key) }
-    }
-
-    private func fact(_ label: String, _ value: String) -> some View {
-        GridRow {
-            Text(label).textRole(.body, color: Theme.secondaryText)
-            Text(value).textRole(.body).fixedSize(horizontal: false, vertical: true)
-        }
-    }
-}
-
-/// A career page's listing recipe: how it reads the page, and the jobs it read when it was built,
-/// to check against the page itself.
-struct RecipeView: View {
-    let store: AppStore
-    let source: SearchSource
-
-    var body: some View {
-        let r = source.recipe
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Text("How this page is read").textRole(.heading)
-                ChipView(chip: SearchText.recipeChip(r))
-                Spacer()
-                Button("Rebuild") { Task { await store.rebuildRecipe(source.key) } }
-                    .buttonStyle(.secondary)
-                    .disabled(r.status == "building")
-                    .help("This page has no feed, so Applyant worked out where its job list is. Rebuild makes it work that out again, for when the page changed")
-            }
-            if r.hasNote { Prose(r.note, size: .compact) }
-            if r.hasBuiltAt {
-                MetaLine("Built \(r.builtAt.date.formatted(.relative(presentation: .named))) · \(r.builds) build\(r.builds == 1 ? "" : "s")"
-                    + (r.hasLastCount ? " · last read \(r.lastCount) jobs" : ""))
-            }
-            ForEach(r.description_p, id: \.self) { line in
-                Text(line).font(.system(size: 11).monospaced()).foregroundStyle(Theme.secondaryText).textSelection(.enabled)
-            }
-            if !r.listings.isEmpty {
-                Text("Read when it was built (\(r.listings.count), first page)").textRole(.itemTitle)
-                ForEach(r.listings, id: \.url) { l in
-                    VStack(alignment: .leading, spacing: 1) {
-                        if let url = URL(string: l.url) {
-                            Link(l.title, destination: url)
-                        } else {
-                            Text(l.title)
-                        }
-                        let meta = [l.hasLocation ? l.location : nil, l.hasTeam ? l.team : nil].compactMap { $0 }
-                        if !meta.isEmpty { Text(meta.joined(separator: " · ")).textRole(.meta) }
-                    }
-                }
-            }
-        }
-        .padding(Theme.cardPadding)
-        .cardSurface()
     }
 }

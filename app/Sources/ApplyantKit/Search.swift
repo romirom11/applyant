@@ -22,7 +22,8 @@ public struct SearchRow: Identifiable, Equatable, Sendable {
 public enum SearchText {
     public static let kindTitles: [String: String] = [
         "greenhouse": "Greenhouse", "ashby": "Ashby", "lever": "Lever", "workable": "Workable",
-        "smartrecruiters": "SmartRecruiters",
+        "smartrecruiters": "SmartRecruiters", "personio": "Personio", "recruitee": "Recruitee",
+        "teamtailor": "Teamtailor", "join": "JOIN", "breezy": "Breezy HR",
         "page": "Career pages and feeds", "board": "Job boards",
         "linkedin": "LinkedIn", "xing": "Xing", "telegram": "Telegram channels",
     ]
@@ -146,19 +147,10 @@ public enum SearchText {
         }
     }
 
-    /// Sources grouped by kind, in the daemon's order, each kind with its own switch.
-    public static func sourceGroups(_ list: SearchList) -> [(kind: Applyant_V1_SearchSourceKind, rows: [SearchRow])] {
-        list.kinds.compactMap { kind in
-            let rows = list.sources.filter { $0.kind == kind.kind }.map { sourceRow($0) }
-            // Telegram channels stay listed with none followed yet: that's where one is followed.
-            return rows.isEmpty && kind.kind != "telegram" ? nil : (kind, rows)
-        }
-    }
-
     public static func sourceRow(_ s: SearchSource) -> SearchRow {
         var chips: [Chip] = []
         if !s.enabled { chips.append(Chip(text: "Off", tone: .neutral)) }
-        else if !s.kindEnabled { chips.append(Chip(text: "Off (\(kindTitles[s.kind] ?? s.kind))", tone: .neutral)) }
+        else if !s.kindEnabled { chips.append(Chip(text: "Off (\(SourcesText.kindTitle(s.kind)))", tone: .neutral)) }
         chips.append(s.completeList ? Chip(text: "Complete list", tone: .good) : Chip(text: "Latest jobs", tone: .neutral))
         if s.hasRecipe { chips.append(recipeChip(s.recipe)) }
         if s.origin == "agent" { chips.append(Chip(text: "Found by the agent", tone: .accent)) }
@@ -166,7 +158,8 @@ public enum SearchText {
         return SearchRow(
             selection: .source(s.key),
             title: s.label,
-            subtitle: s.found > 0 || s.hasLastRunAt ? stats(s.stats) : s.key,
+            // Not read yet: what its last note says (why it's off), else its key.
+            subtitle: s.found > 0 || s.hasLastRunAt ? stats(s.stats) : s.hasLastNote && !s.lastNote.isEmpty ? s.lastNote : s.key,
             chips: chips,
             on: s.enabled && s.kindEnabled
         )

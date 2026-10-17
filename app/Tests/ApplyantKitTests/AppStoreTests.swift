@@ -163,6 +163,12 @@ final class FakeDaemon: DaemonAPI, @unchecked Sendable {
                 searchList.sources[j].kindEnabled = enabled
             }
         }
+        // The index follows its own source's switch and each ATS's kind switch.
+        if target == SourcesText.indexKey { atsIndexResponse?.enabled = enabled }
+        if var index = atsIndexResponse {
+            for i in index.ats.indices where index.ats[i].ats == target { index.ats[i].enabled = enabled }
+            atsIndexResponse = index
+        }
     }
     func runEvents(_ runId: Int64) async throws -> [DaemonEvent] { log("runEvents \(runId)"); return eventsByRun[runId] ?? [] }
     /// Sources with their recipe's listings (GetSearchSource).
@@ -188,6 +194,37 @@ final class FakeDaemon: DaemonAPI, @unchecked Sendable {
         }
         sourceDetails[key]?.recipe.status = "building"
         return true
+    }
+
+    /// The ATS index (GetAtsIndex and the rest); nil: an older daemon without it.
+    var atsIndexResponse: AtsIndex?
+    var indexCompanyList: [IndexCompany] = []
+    func atsIndex() async throws -> AtsIndex {
+        log("atsIndex")
+        guard let atsIndexResponse else { throw APIError("this needs a newer Applyant (its background service is older than the app)") }
+        return atsIndexResponse
+    }
+    func listIndexCompanies(_ filter: IndexCompanyFilter) async throws -> (companies: [IndexCompany], total: Int32) {
+        log("listIndexCompanies \(filter.ats ?? "all") '\(filter.query)' \(filter.matchingOnly) \(filter.offset)")
+        guard atsIndexResponse != nil else { throw APIError("this needs a newer Applyant (its background service is older than the app)") }
+        let picked = indexCompanyList.filter {
+            (filter.ats == nil || $0.ats == filter.ats) && (!filter.matchingOnly || $0.matching > 0)
+                && (filter.query.isEmpty || $0.token.contains(filter.query.lowercased()))
+        }
+        let page = picked.dropFirst(Int(filter.offset)).prefix(Int(IndexCompanyFilter.pageSize))
+        return (Array(page), Int32(picked.count))
+    }
+    func setIndexCompany(_ id: Int64, enabled: Bool) async throws -> IndexCompany {
+        log("setIndexCompany \(id) \(enabled)")
+        guard let i = indexCompanyList.firstIndex(where: { $0.id == id }) else { throw APIError("no company \(id)") }
+        indexCompanyList[i].enabled = enabled
+        return indexCompanyList[i]
+    }
+    func discoverIndexCompanies() async throws -> Int64? {
+        log("discoverIndexCompanies")
+        if atsIndexResponse?.discoveries.first?.status == "queued" { return nil }
+        atsIndexResponse?.discoveries.insert(.with { $0.id = 9; $0.status = "queued"; $0.trigger = "manual" }, at: 0)
+        return 9
     }
 
     /// Companies (ListCompanies / GetCompany); researchCompany marks one researching.

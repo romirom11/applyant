@@ -102,6 +102,7 @@ struct MainView: View {
         switch store.navigation.section {
         case .interview: InterviewList(store: store)
         case .search: SearchList(store: store)
+        case .sources: SourcesList(store: store)
         case .agentRuns: RunsList(store: store)
         case .companies: CompaniesList(store: store)
         case .whichApplication: WhichApplicationList(store: store)
@@ -588,6 +589,8 @@ struct Detail: View {
             ProjectDetail(store: store)
         } else if store.navigation.section == .search {
             SearchDetail(store: store)
+        } else if store.navigation.section == .sources {
+            SourcesDetail(store: store)
         } else if store.navigation.section == .agentRuns {
             RunDetail(store: store)
         } else if store.navigation.section == .companies {

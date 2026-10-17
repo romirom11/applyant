@@ -236,6 +236,15 @@ public protocol DaemonAPI: Sendable {
     func listChat() async throws -> [ChatMessage]
     func sendChat(_ text: String) async throws -> (user: ChatMessage, assistant: ChatMessage)
     func clearChat() async throws
+
+    /// The ATS index per ATS, its totals and its latest discovery runs (Sources).
+    func atsIndex() async throws -> AtsIndex
+    /// A page of the index's companies under a filter, and how many the filter selects.
+    func listIndexCompanies(_ filter: IndexCompanyFilter) async throws -> (companies: [IndexCompany], total: Int32)
+    /// Leaves one company out of the index, or takes it back.
+    func setIndexCompany(_ id: Int64, enabled: Bool) async throws -> IndexCompany
+    /// Looks for more company boards now; nil when a discovery is already waiting or running.
+    func discoverIndexCompanies() async throws -> Int64?
 }
 
 /// Older fakes and daemons: the setup RPCs answer "not available" unless implemented.
@@ -243,6 +252,10 @@ public extension DaemonAPI {
     func listChat() async throws -> [ChatMessage] { throw APIError("chat needs a newer Applyant") }
     func sendChat(_ text: String) async throws -> (user: ChatMessage, assistant: ChatMessage) { throw APIError("chat needs a newer Applyant") }
     func clearChat() async throws { throw APIError("chat needs a newer Applyant") }
+    func atsIndex() async throws -> AtsIndex { throw APIError(indexNeedsNewer) }
+    func listIndexCompanies(_ filter: IndexCompanyFilter) async throws -> (companies: [IndexCompany], total: Int32) { throw APIError(indexNeedsNewer) }
+    func setIndexCompany(_ id: Int64, enabled: Bool) async throws -> IndexCompany { throw APIError(indexNeedsNewer) }
+    func discoverIndexCompanies() async throws -> Int64? { throw APIError(indexNeedsNewer) }
     func addPosting(url: String) async throws -> (posting: Posting, created: Bool) {
         throw APIError("adding a posting needs a newer Applyant (its background service is older than the app)")
     }
@@ -332,6 +345,8 @@ public extension DaemonAPI {
     }
     func deleteStrategy(_ id: Int64) async throws { throw APIError("deleting a strategy isn't available") }
 }
+
+let indexNeedsNewer = "the ATS index needs a newer Applyant (its background service is older than the app)"
 
 /// Unary answers → value or APIError.
 func unwrap<T>(_ response: ResponseMessage<T>) throws -> T {
@@ -593,6 +608,28 @@ public final class ConnectDaemonAPI: DaemonAPI {
             $0.limit = 500
         }
         return try unwrap(await unary.listEvents(request: request, headers: headers)).events
+    }
+
+    public func atsIndex() async throws -> AtsIndex {
+        try unwrap(await unary.getAtsIndex(request: .init(), headers: headers))
+    }
+
+    public func listIndexCompanies(_ filter: IndexCompanyFilter) async throws -> (companies: [IndexCompany], total: Int32) {
+        let response = try unwrap(await unary.listIndexCompanies(request: filter.request, headers: headers))
+        return (response.companies, response.total)
+    }
+
+    public func setIndexCompany(_ id: Int64, enabled: Bool) async throws -> IndexCompany {
+        let request = Applyant_V1_SetIndexCompanyEnabledRequest.with {
+            $0.id = id
+            $0.enabled = enabled
+        }
+        return try unwrap(await unary.setIndexCompanyEnabled(request: request, headers: headers)).company
+    }
+
+    public func discoverIndexCompanies() async throws -> Int64? {
+        let response = try unwrap(await unary.discoverIndexCompanies(request: .init(), headers: headers))
+        return response.hasDiscoveryID ? response.discoveryID : nil
     }
 
     public func listCompanies() async throws -> [Company] {

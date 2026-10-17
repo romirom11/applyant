@@ -141,7 +141,7 @@ struct StrategyEditorSheet: View {
 
 // MARK: Search sources
 
-/// A job board or a career page by URL (Search → Sources).
+/// A job board or a career page by URL (Sources → Watched companies).
 struct AddBoardOrPage: View {
     let store: AppStore
     @State private var input = ""

@@ -59,8 +59,17 @@ public final class AppStore {
     public private(set) var search = SearchList()
     /// Recent search runs, newest first.
     public private(set) var searchRuns: [SearchRun] = []
-    /// Sources open in the Search detail pane, with their recipe's listings.
+    /// Sources open in the Sources detail pane, with their recipe's listings.
     public private(set) var sourceDetails: [String: SearchSource] = [:]
+    /// The ATS index (Sources), once loaded; nil before, or while the daemon can't give it.
+    public private(set) var atsIndex: AtsIndex?
+    /// Why the index couldn't be loaded (an older daemon, an error); nil when it was.
+    public private(set) var atsIndexProblem: String?
+    /// The page of the index's companies on screen, and why the last one couldn't be loaded.
+    public private(set) var indexCompanies: IndexCompanyPage?
+    public private(set) var indexCompaniesProblem: String?
+    /// The filter asked for last: a slower answer for an older one is dropped.
+    private var indexCompaniesAsked: IndexCompanyFilter?
     /// The events of the runs open on screen (Agent runs).
     public private(set) var runEvents: [Int64: [DaemonEvent]] = [:]
     /// Researched companies (the Companies section).
@@ -242,6 +251,7 @@ public final class AppStore {
         for run in runEvents.keys { await refreshRunEvents(run, api) }
         for id in companyDetails.keys { await refreshCompany(id, api) }
         if overview != nil { await refreshOverview(api) }
+        if atsIndex != nil || atsIndexProblem != nil { await refreshAtsIndex(api) }
     }
 
     // MARK: Events
@@ -263,6 +273,10 @@ public final class AppStore {
             // Agent runs on screen: a finished task may have run a model.
             if navigation.section == .agentRuns, [.done, .failed, .retry, .providerPaused].contains(task.type) {
                 await refreshAgentRuns(api)
+            }
+            // The index's discovery and crawler: Sources on screen follows their counts.
+            if task.taskKind.hasPrefix("index_"), [.queued, .done, .failed].contains(task.type), navigation.section == .sources {
+                await refreshAtsIndex(api)
             }
         case let .posting(p)?:
             await refreshPosting(p.postingID, api)
@@ -635,10 +649,12 @@ public final class AppStore {
         return run
     }
 
-    /// Switches a source (by key) or a whole kind on or off.
+    /// Switches a source (by key) or a whole kind on or off (an ATS's kind takes it out of the
+    /// index too).
     public func setSource(_ target: String, enabled: Bool) async {
         guard let api, await attempt({ try await api.setSource(target, enabled: enabled) }) != nil else { return }
         await refreshSearch(api)
+        if atsIndex != nil { await refreshAtsIndex(api) }
     }
 
     /// Starts the search planner: new strategies (agent-generated) and boards for the watch list.
@@ -679,6 +695,57 @@ public final class AppStore {
     public func source(_ key: String) -> SearchSource? { search.sources.first { $0.key == key } }
 
     public func runs(of strategy: Int64) -> [SearchRun] { searchRuns.filter { $0.strategyID == strategy } }
+
+    // MARK: Sources: the ATS index
+
+    private func refreshAtsIndex(_ api: DaemonAPI) async {
+        do {
+            atsIndex = try await api.atsIndex()
+            atsIndexProblem = nil
+        } catch {
+            // An older daemon has no index: Sources says so in place, no alert.
+            atsIndex = nil
+            atsIndexProblem = error.localizedDescription
+        }
+    }
+
+    /// Fresh sources and the index for the Sources screen.
+    public func openSources() async {
+        guard let api else { return }
+        await refreshSearch(api)
+        await refreshAtsIndex(api)
+    }
+
+    /// Loads a page of the index's companies. A slower answer for a filter no longer asked for
+    /// is dropped; a failure is kept as `indexCompaniesProblem` (no alert).
+    public func loadIndexCompanies(_ filter: IndexCompanyFilter) async {
+        guard let api else { return }
+        indexCompaniesAsked = filter
+        do {
+            let page = try await api.listIndexCompanies(filter)
+            guard indexCompaniesAsked == filter else { return }
+            indexCompanies = IndexCompanyPage(filter: filter, companies: page.companies, total: page.total)
+            indexCompaniesProblem = nil
+        } catch {
+            guard indexCompaniesAsked == filter, !(error is CancellationError) else { return }
+            indexCompaniesProblem = error.localizedDescription
+        }
+    }
+
+    /// Leaves one company out of the index (not read, not searched) or takes it back.
+    public func setIndexCompany(_ id: Int64, enabled: Bool) async {
+        guard let api, let company = await attempt({ try await api.setIndexCompany(id, enabled: enabled) }) else { return }
+        indexCompanies?.replace(company)
+        await refreshAtsIndex(api)
+    }
+
+    /// Looks for more company boards now; false when a discovery was already going.
+    @discardableResult
+    public func discoverIndexCompanies() async -> Bool {
+        guard let api, let started = await attempt({ try await api.discoverIndexCompanies() }) else { return false }
+        await refreshAtsIndex(api)
+        return started != nil
+    }
 
     // MARK: Companies
 
@@ -1465,7 +1532,7 @@ public final class AppStore {
     }
 
     /// A job board or a career page by URL: the daemon finds its feed or ATS board, or builds a
-    /// listing recipe. The source, opened in Search; nil when refused.
+    /// listing recipe. The source, opened in Sources; nil when refused.
     @discardableResult
     public func addBoardOrPage(_ input: String) async -> SearchSource? {
         guard let url = SourceInput.url(input) else {
@@ -1474,7 +1541,7 @@ public final class AppStore {
         }
         guard let api, let source = await attempt({ try await api.addSearchSource(kind: "", locator: url) }) else { return nil }
         await refreshSearch(api)
-        navigation.search = .source(source.key)
+        navigation.sources = .source(source.key)
         return source
     }
 
@@ -1637,6 +1704,8 @@ public final class AppStore {
         case .interview: return openInterviewCount
         // A badge on Search only while a run is going.
         case .search: return search.strategies.filter(\.running).count + (planning ? 1 : 0)
+        // A badge on Sources only while a discovery is going.
+        case .sources: return SourcesText.discovering(atsIndex) ? 1 : 0
         case .agentRuns, .skipped: return 0
         // A badge on Companies only while research is going.
         case .companies: return companies.filter(\.researching).count

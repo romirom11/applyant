@@ -10,7 +10,7 @@ public enum Section: String, CaseIterable, Identifiable, Sendable {
     case toReview = "readyToReview", new = "inbox", saved = "interested", skipped
     case applied, interviews, offers, whichApplication
     case profile, projects, interview, chat
-    case search, agentRuns, companies, settings
+    case search, sources, agentRuns, companies, settings
 
     public var id: String { rawValue }
 
@@ -22,7 +22,7 @@ public enum Section: String, CaseIterable, Identifiable, Sendable {
         case .toReview, .new, .saved, .skipped: .jobs
         case .applied, .interviews, .offers, .whichApplication: .applications
         case .profile, .projects, .interview, .chat: .me
-        case .search, .agentRuns, .companies, .settings: .system
+        case .search, .sources, .agentRuns, .companies, .settings: .system
         }
     }
 
@@ -42,6 +42,7 @@ public enum Section: String, CaseIterable, Identifiable, Sendable {
         case .interview: "Questions for you"
         case .chat: "Chat"
         case .search: "Search"
+        case .sources: "Sources"
         case .agentRuns: "Agent runs"
         case .companies: "Companies"
         case .settings: "Settings"
@@ -64,6 +65,7 @@ public enum Section: String, CaseIterable, Identifiable, Sendable {
         case .interview: "bubble.left.and.bubble.right"
         case .chat: "message"
         case .search: "magnifyingglass"
+        case .sources: "dot.radiowaves.left.and.right"
         case .agentRuns: "arrow.triangle.2.circlepath"
         case .companies: "building.2"
         case .settings: "gearshape"
@@ -109,8 +111,10 @@ public struct Navigation: Equatable, Sendable {
     public var newFilter: NewFilter = .good
     /// The interview thread open in the Interview section.
     public var interview: InterviewTarget?
-    /// The strategy or source open in the Search section.
+    /// The strategy open in the Search section.
     public var search: SearchSelection?
+    /// The index, an ATS or a source open in the Sources section.
+    public var sources: SourcesSelection?
     /// The run open in the Agent runs section.
     public var run: Int64?
     /// Agent runs lists the model runs instead of the search runs.
@@ -442,6 +446,7 @@ public enum Source {
             ("greenhouse.io", "Greenhouse"), ("ashbyhq.com", "Ashby"), ("lever.co", "Lever"),
             ("workable.com", "Workable"), ("myworkdayjobs.com", "Workday"), ("smartrecruiters.com", "SmartRecruiters"),
             ("recruitee.com", "Recruitee"), ("personio.", "Personio"), ("teamtailor.com", "Teamtailor"),
+            ("join.com", "JOIN"), ("breezy.hr", "Breezy HR"),
         ]
         return known.first { host.contains($0.0) }?.1
     }
