@@ -9,15 +9,18 @@ struct RunsList: View {
     let store: AppStore
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(alignment: .leading, spacing: 0) {
+            ModuleHeader(
+                section: .agentRuns,
+                subtitle: store.navigation.modelRuns ? "\(store.agentRuns.count) recent model runs" : "\(store.searchRuns.count) recent search runs"
+            )
+            .columnHeader()
             PillPicker(items: [false, true], title: { $0 ? "Model runs" : "Search runs" }, selection: Binding(
                 get: { store.navigation.modelRuns },
                 set: { store.navigation.modelRuns = $0 }
-            ))
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            Divider().opacity(0.6)
+            ), tint: Theme.world(.agentRuns).main)
+            .padding(.horizontal, 16)
+            .padding(.bottom, 6)
             if store.navigation.modelRuns {
                 ModelRunsList(store: store)
             } else {
@@ -37,21 +40,26 @@ struct RunsList: View {
             EmptyState(
                 title: "No runs yet",
                 systemImage: ApplyantKit.Section.agentRuns.symbol,
-                detail: "Every run of a search shows here, with what it found. Add a search in Search to get the first one."
+                detail: "Every run of a search shows here, with what it found. Add a search in Search to get the first one.",
+                art: .agentRuns
             )
         } else {
-            List(store.searchRuns, id: \.id, selection: Binding(
-                get: { store.navigation.run },
-                set: { store.navigation.run = $0 }
-            )) { run in
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(SearchText.runTitle(run)).font(.headline).lineLimit(1)
-                    Text(run.startedAt.date.formatted(date: .abbreviated, time: .shortened) + " · " + SearchText.trigger(run.trigger))
-                        .font(.subheadline).foregroundStyle(.secondary)
-                    HStack(spacing: 4) { ForEach(SearchText.runChips(run), id: \.text) { ChipView(chip: $0) } }
+            CardList(
+                selection: Binding(get: { store.navigation.run }, set: { store.navigation.run = $0 }),
+                order: store.searchRuns.map(\.id),
+                tint: Theme.world(.agentRuns).main
+            ) {
+                ForEach(store.searchRuns, id: \.id) { run in
+                    SelectableCard(id: run.id, padding: 11) {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(SearchText.runTitle(run)).font(.system(size: 13.5, weight: .bold)).foregroundStyle(Theme.text).lineLimit(1)
+                            Text(run.startedAt.date.formatted(date: .abbreviated, time: .shortened) + " · " + SearchText.trigger(run.trigger))
+                                .font(.system(size: 12)).foregroundStyle(Theme.secondaryText)
+                            HStack(spacing: 4) { ForEach(SearchText.runChips(run), id: \.text) { ChipView(chip: $0) } }.padding(.top, 2)
+                        }
+                    }
+                    .sheen(run.status == "queued", radius: 15)
                 }
-                .padding(.vertical, 3)
-                .tag(run.id)
             }
         }
     }
@@ -67,27 +75,34 @@ struct ModelRunsList: View {
             EmptyState(
                 title: "No model runs yet",
                 systemImage: "cpu",
-                detail: "Every call to Claude, Codex or the on-device model shows here: verifying, scoring, writing, research."
+                detail: "Every call to Claude, Codex or the on-device model shows here: verifying, scoring, writing, research.",
+                art: .agentRuns
             )
         } else {
-            List(store.agentRuns, id: \.id) { run in
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(alignment: .firstTextBaseline) {
-                        Text(AgentRunText.role(run)).font(.headline).lineLimit(1)
-                        Spacer()
-                        ChipView(chip: AgentRunText.outcome(run))
+            // Read-only cards: nothing to pick.
+            CardList(selection: .constant(Int64?.none), order: [], tint: Theme.world(.agentRuns).main) {
+                ForEach(store.agentRuns, id: \.id) { run in
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack(alignment: .firstTextBaseline) {
+                            Text(AgentRunText.role(run)).font(.system(size: 13.5, weight: .bold)).foregroundStyle(Theme.text).lineLimit(1)
+                            Spacer()
+                            ChipView(chip: AgentRunText.outcome(run))
+                        }
+                        Text(AgentRunText.line(run)).font(.system(size: 12).monospacedDigit()).foregroundStyle(Theme.secondaryText).lineLimit(2)
+                        if let entity = AgentRunText.entity(run) {
+                            Text(entity).font(.system(size: 12.5, weight: .medium)).foregroundStyle(.white.opacity(0.85)).lineLimit(1)
+                        }
+                        if let problem = AgentRunText.problem(run) {
+                            Text(problem).font(.caption).foregroundStyle(Theme.warning).lineLimit(3).textSelection(.enabled)
+                        }
+                        Text(Ago.text(run.startedAt.date) + " · " + run.startedAt.date.formatted(date: .abbreviated, time: .shortened))
+                            .font(.caption).foregroundStyle(Theme.tertiaryText)
                     }
-                    Text(AgentRunText.line(run)).font(.subheadline.monospacedDigit()).foregroundStyle(.secondary).lineLimit(2)
-                    if let entity = AgentRunText.entity(run) {
-                        Text(entity).font(.subheadline).lineLimit(1)
-                    }
-                    if let problem = AgentRunText.problem(run) {
-                        Text(problem).font(.caption).foregroundStyle(.orange).lineLimit(3).textSelection(.enabled)
-                    }
-                    Text(Ago.text(run.startedAt.date) + " · " + run.startedAt.date.formatted(date: .abbreviated, time: .shortened))
-                        .font(.caption).foregroundStyle(.secondary)
+                    .padding(11)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 15, style: .continuous).strokeBorder(Color.white.opacity(0.07), lineWidth: 1))
                 }
-                .padding(.vertical, 3)
             }
         }
     }
@@ -101,16 +116,18 @@ struct RunDetail: View {
             EmptyState(
                 title: "Model runs",
                 systemImage: "cpu",
-                detail: "\(store.agentRuns.count) recent runs on the left: what each model call was for, how long it took and whether it worked."
+                detail: "\(store.agentRuns.count) recent runs on the left: what each model call was for, how long it took and whether it worked.",
+                art: .agentRuns
             )
         } else if let id = store.navigation.run, let run = store.searchRuns.first(where: { $0.id == id }) {
             ScrollView {
                 VStack(alignment: .leading, spacing: Theme.blockSpacing) {
                     PageHeader(
                         title: SearchText.runTitle(run),
-                        subtitle: run.startedAt.date.formatted(date: .abbreviated, time: .shortened) + " · " + SearchText.trigger(run.trigger),
-                        systemImage: ApplyantKit.Section.agentRuns.symbol
-                    )
+                        subtitle: run.startedAt.date.formatted(date: .abbreviated, time: .shortened) + " · " + SearchText.trigger(run.trigger)
+                    ) {
+                        ArtView(.agentRuns, size: 64)
+                    }
                     RunSummary(store: store, run: run).entrance(1)
                     CardTitle(title: "Events", systemImage: "list.bullet.rectangle").padding(.top, 4)
                     if let events = store.runEvents[id] {
@@ -118,8 +135,8 @@ struct RunDetail: View {
                             ForEach(events, id: \.id) { e in
                                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                                     Text(e.at.date.formatted(date: .omitted, time: .standard))
-                                        .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
-                                    Text(SearchText.eventLine(e)).font(.caption).textSelection(.enabled)
+                                        .font(.caption.monospacedDigit()).foregroundStyle(Theme.tertiaryText)
+                                    Text(SearchText.eventLine(e)).font(.system(size: 12)).foregroundStyle(.white.opacity(0.85)).textSelection(.enabled)
                                 }
                             }
                         }
@@ -137,7 +154,7 @@ struct RunDetail: View {
             }
             .task(id: id) { await store.openRun(id) }
         } else {
-            EmptyState(title: "Pick a run", systemImage: ApplyantKit.Section.agentRuns.symbol)
+            EmptyState(title: "Pick a run", systemImage: ApplyantKit.Section.agentRuns.symbol, art: .agentRuns)
         }
     }
 }

@@ -1,7 +1,8 @@
-// One job, whichever list it was picked from: a header with what it is and the one next step,
-// then tabs: the posting itself (what it asks for, how you match, its text), its application
-// once there is one, and its company. The header sits on a slowly drifting glow in the score's
-// and the company's colours; the page's blocks come in one after another.
+// One job, whichever list it was picked from: a hero tile with what it is and the one next step
+// (lit like CleanMyMac's working tile, in the list's world and the company's colour), then tabs:
+// the posting itself (what it asks for, how you match, its text), its application once there
+// is one, and its company. When Approve and send is the step, it's the big round Send button at
+// the foot of the page. The page's glass tiles come in one after another.
 import ApplyantAPI
 import ApplyantKit
 import SwiftUI
@@ -24,6 +25,9 @@ struct JobDetail: View {
             hasCompany: posting?.hasCompany == true || app?.hasCompany == true
         )
         let tab = DetailTab.shown(pickedTab, in: tabs)
+        let primary = JobAction.primary(posting: posting, application: app)
+        let sending = app.flatMap { store.deliveries[$0.id] } != nil
+        let roundSend = app != nil && (sending || { if case .approve = primary { return true }; return false }())
         VStack(spacing: 0) {
             if posting != nil || app != nil {
                 DetailHeader(
@@ -35,7 +39,6 @@ struct JobDetail: View {
                 // The header takes the height it needs first (else a narrow window cuts its title
                 // and buttons short); the tab's page scrolls in what's left.
                 .layoutPriority(1)
-                Divider().opacity(0.6)
                 // The picked tab's page replaces the last one out of a blur.
                 ZStack {
                     switch tab {
@@ -47,10 +50,20 @@ struct JobDetail: View {
                 .id(tab)
                 .transition(.blurIn(reduceMotion: reduceMotion))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                // Room at the foot for the round Send button, so the last tile isn't under it.
+                .contentMargins(.bottom, roundSend ? 130 : 0, for: .scrollContent)
             } else {
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
+        .overlay(alignment: .bottom) {
+            if roundSend, let app {
+                SendButton(store: store, app: app, primary: primary, title: posting.flatMap { $0.hasCompany ? $0.company : nil } ?? ApproveText.company(app))
+                    .padding(.bottom, 14)
+                    .transition(.scale(scale: 0.6).combined(with: .opacity))
+            }
+        }
+        .animation(Theme.Motion.bouncy, value: roundSend)
         // Both load whatever the tab: the header and the Job tab need the full posting, the
         // header the application's blockers.
         .task(id: postingId) { await store.openPosting(postingId) }
@@ -79,68 +92,78 @@ struct DetailHeader: View {
     @Environment(\.openURL) private var openURL
     @State private var skipping = false
     @State private var skipReason = ""
-    @State private var confirmApprove = false
     @State private var confirmRegenerate = false
-    /// Prepare or Approve is on its way to the daemon: a second ⌘↩ doesn't send it again.
+    /// Prepare is on its way to the daemon: a second ⌘↩ doesn't send it again.
     @State private var working = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// What Re-score said ("Re-scoring 1 posting"), for a few seconds.
     @State private var note: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .top, spacing: 16) {
-                CompanyAvatar(name: company ?? title, size: 56)
-                    .popIn(0)
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(title)
-                        .font(Theme.heroTitle)
-                        .textSelection(.enabled)
-                    if !subtitle.isEmpty {
-                        Text(subtitle).font(.title3).foregroundStyle(.secondary).textSelection(.enabled)
-                    }
-                    HStack(spacing: 6) {
-                        ForEach(Array(chips.enumerated()), id: \.element.text) { index, chip in
-                            ChipView(chip: chip).popIn(index + 1)
+        let world = Theme.world(store.navigation.section)
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack(alignment: .top, spacing: 18) {
+                    CompanyAvatar(name: company ?? title, size: 64)
+                        .popIn(0)
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(title)
+                            .font(Theme.heroTitle)
+                            .foregroundStyle(.white)
+                            .lineLimit(3)
+                            .textSelection(.enabled)
+                        if !subtitle.isEmpty {
+                            Text(subtitle)
+                                .font(.system(size: 15, weight: .medium))
+                                .foregroundStyle(.white.opacity(0.75))
+                                .textSelection(.enabled)
                         }
-                        if let dates {
-                            Text(dates).font(Theme.caption).foregroundStyle(.secondary).popIn(chips.count + 1)
+                        HStack(spacing: 6) {
+                            ForEach(Array(chips.enumerated()), id: \.element.text) { index, chip in
+                                ChipView(chip: chip).popIn(index + 1)
+                            }
+                            if let dates {
+                                Text(dates).font(.system(size: 12, weight: .medium)).foregroundStyle(.white.opacity(0.6)).popIn(chips.count + 1)
+                            }
                         }
+                        .padding(.top, 2)
                     }
-                    .padding(.top, 2)
+                    Spacer(minLength: 0)
+                    ScoreRing(score: score, size: 84, sweepsIn: true)
                 }
-                Spacer(minLength: 0)
-                ScoreRing(score: score, size: 68, sweepsIn: true)
-            }
-            if let hint = app.flatMap(SignInHint.of) { SignInBanner(store: store, hint: hint) }
-            if let app, let delivery = store.deliveries[app.id] { DeliveryStrip(progress: delivery) }
-            actions
-            // Why Approve is off, the first reason; the Application tab lists them all.
-            if case let .approve(false, help) = primary {
-                Button { showTab(.application) } label: {
-                    Label(help.components(separatedBy: "\n").first ?? help, systemImage: "exclamationmark.circle.fill")
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
+                if let hint = app.flatMap(SignInHint.of) { SignInBanner(store: store, hint: hint) }
+                if let app, let delivery = store.deliveries[app.id] { DeliveryStrip(progress: delivery) }
+                actions
+                // Why Approve is off, the first reason; the Application tab lists them all.
+                if case let .approve(false, help) = primary {
+                    Button { showTab(.application) } label: {
+                        Label(help.components(separatedBy: "\n").first ?? help, systemImage: "exclamationmark.circle.fill")
+                            .lineLimit(2)
+                            .multilineTextAlignment(.leading)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Theme.warning)
+                    .font(.system(size: 13, weight: .semibold))
+                    .help(help)
                 }
-                .buttonStyle(.plain)
-                .foregroundStyle(Theme.warning)
-                .font(.callout)
-                .help(help)
             }
+            .padding(22)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background { HeroBackground(world: world, company: company ?? title, score: score) }
+            .clipShape(RoundedRectangle(cornerRadius: Theme.panelRadius, style: .continuous))
+            .overlay { RoundedRectangle(cornerRadius: Theme.panelRadius, style: .continuous).strokeBorder(Theme.glassEdge, lineWidth: 1) }
+            .shadow(color: world.main.opacity(0.25), radius: 24, y: 10)
             if tabs.count > 1 {
-                PillPicker(items: tabs, title: \.title, selection: Binding(get: { tab }, set: { showTab($0) }), numberShortcuts: true)
+                PillPicker(items: tabs, title: \.title, selection: Binding(get: { tab }, set: { showTab($0) }), numberShortcuts: true, tint: world.main, large: true)
                     .help("⌘1, ⌘2, ⌘3 switch tabs")
-                    .padding(.top, 2)
+                    .padding(.top, 14)
+                    .padding(.leading, 4)
             }
         }
-        .padding(.horizontal, Theme.pagePadding)
-        .padding(.top, 18)
-        .padding(.bottom, 12)
+        .padding(.horizontal, 20)
+        .padding(.top, 2)
+        .padding(.bottom, 4)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background {
-            // Under the toolbar too: the glow starts at the window's top edge.
-            HeroGlow(score: Theme.score(score), company: Theme.company(company ?? title))
-                .ignoresSafeArea(edges: .top)
-        }
         .sheet(isPresented: $skipping) {
             SkipPostingSheet(reason: $skipReason) { reason in
                 guard let id = posting?.id ?? app?.postingID else { return }
@@ -157,25 +180,7 @@ struct DetailHeader: View {
                     }
                 }
             }
-        }
-        .confirmationDialog(app.map(ApproveText.title) ?? "", isPresented: $confirmApprove) {
-            Button("Send it") {
-                guard let id = app?.id, !working else { return }
-                let to = company ?? title
-                working = true
-                Task {
-                    defer { working = false }
-                    await store.advancing {
-                        let approved = await store.approve(application: id)
-                        if approved {
-                            toasts.show(.init(systemImage: "paperplane.fill", title: "Approved: on its way to \(to)", detail: "Applyant fills the form and sends it now", celebrates: true))
-                        }
-                        return approved
-                    }
-                }
-            }
-        } message: {
-            Text(app.map(ApproveText.message) ?? "")
+            .worldSheet()
         }
         .confirmationDialog("Write every answer and the CV again?", isPresented: $confirmRegenerate) {
             Button("Regenerate") {
@@ -328,27 +333,115 @@ struct DetailHeader: View {
                 Label("Prepare application", systemImage: "sparkles")
             }
             .buttonStyle(.primary)
+            .controlSize(.large)
             .disabled(working)
             .keyboardShortcut(.return, modifiers: .command)
             .help("Applyant drafts the answers and the CV for this job (⌘↩)")
-        case let .approve(enabled, help):
-            Button { confirmApprove = true } label: {
-                Label("Approve and send…", systemImage: "paperplane.fill")
-            }
-            .buttonStyle(.primary)
-            .disabled(!enabled || working)
-            .keyboardShortcut(.return, modifiers: .command)
-            .help(help)
+        case .approve:
+            // THE action: the round Send button at the foot of the page.
+            EmptyView()
         case .review:
             if tab != .application {
                 Button { showTab(.application) } label: {
                     Label("Review application", systemImage: "doc.text.magnifyingglass")
                 }
                 .buttonStyle(.primary)
+                .controlSize(.large)
                 .keyboardShortcut(.return, modifiers: .command)
             }
         case .none:
             EmptyView()
+        }
+    }
+}
+
+/// The hero's colour: the list's world and the company's own glowing on a deep base, drifting
+/// slowly, with a lit glass edge over it.
+struct HeroBackground: View {
+    let world: Theme.World
+    let company: String
+    let score: Int32?
+    private let motion = EndlessMotion()
+
+    var body: some View {
+        let companyHue = Monogram.hue(company)
+        ZStack {
+            GlowField(
+                base: NSColor(hue: world.tone.hue, saturation: 0.75, brightness: 0.26, alpha: 0.9),
+                colors: [
+                    world.glow,
+                    NSColor(hue: companyHue, saturation: 0.65, brightness: 0.55, alpha: 1),
+                    world.secondGlow,
+                    NSColor(srgbRed: 0.45, green: 0.16, blue: 0.75, alpha: 1),
+                ],
+                moving: motion.ambient,
+                intensity: 1
+            )
+            LinearGradient(colors: [.white.opacity(0.08), .clear, Theme.base.opacity(0.25)], startPoint: .top, endPoint: .bottom)
+        }
+    }
+}
+
+/// Approve and send, when it's THE thing to do: a big round glowing button at the foot of the
+/// job (ClearVPN's power button), asking once before it sends. While the application goes out,
+/// a ring fills around it to how far the form is (or circles, until that's known).
+struct SendButton: View {
+    let store: AppStore
+    let app: Application
+    let primary: JobAction
+    /// Who it goes to: "Kalepa".
+    let title: String
+    @Environment(Toasts.self) private var toasts
+    @State private var confirming = false
+    /// Approve is on its way to the daemon: a second ⌘↩ doesn't send it again.
+    @State private var working = false
+
+    var body: some View {
+        let delivery = store.deliveries[app.id]
+        let (enabled, help): (Bool, String) = if case let .approve(on, why) = primary { (on, why) } else { (false, "") }
+        VStack(spacing: 6) {
+            RoundActionButton(
+                title: delivery != nil ? "Sending" : "Send",
+                systemImage: "paperplane.fill",
+                size: 76,
+                working: delivery != nil && delivery?.fraction == nil,
+                progress: delivery?.fraction,
+                enabled: delivery != nil || (enabled && !working)
+            ) {
+                guard delivery == nil else { return }
+                confirming = true
+            }
+            .keyboardShortcut(.return, modifiers: .command)
+            .help(delivery?.line ?? (enabled ? "Approve and send… (⌘↩)" : help))
+            .accessibilityLabel(delivery != nil ? "Sending" : "Approve and send")
+            if let delivery {
+                Text(delivery.line)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.85))
+                    .contentTransition(.numericText())
+                    .padding(.horizontal, 10).padding(.vertical, 4)
+                    .background(Theme.toastFill, in: Capsule())
+            }
+        }
+        .confirmationDialog(ApproveText.title(app), isPresented: $confirming) {
+            Button("Send it") {
+                guard !working else { return }
+                let id = app.id
+                let to = title
+                working = true
+                Task {
+                    defer { working = false }
+                    await store.advancing {
+                        let approved = await store.approve(application: id)
+                        if approved {
+                            toasts.show(.init(systemImage: "paperplane.fill", title: "Sent to \(to)", detail: "Applyant fills the form and sends it now", celebrates: true))
+                        }
+                        return approved
+                    }
+                }
+            }
+        } message: {
+            Text(ApproveText.message(app))
         }
     }
 }
@@ -361,22 +454,23 @@ struct DeliveryStrip: View {
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: "paperplane.fill")
-                .foregroundStyle(Theme.brand)
+                .foregroundStyle(.white)
                 .symbolEffect(.pulse, options: .repeating, isActive: motion.allowed)
             VStack(alignment: .leading, spacing: 6) {
                 Text(progress.line)
-                    .font(.callout.weight(.medium))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white)
                     .contentTransition(.numericText())
                     .animation(Theme.Motion.snappy, value: progress.line)
                 if let fraction = progress.fraction {
-                    Meter(value: fraction, color: Theme.accent, height: 5)
+                    Meter(value: fraction, color: .white, height: 5)
                 } else {
                     FlowLine(flowing: true).clipShape(Capsule()).frame(height: 3)
                 }
             }
         }
         .padding(12)
-        .insetSurface(radius: Theme.innerRadius + 2, tint: Theme.accent)
+        .insetSurface(radius: Theme.innerRadius + 2, tint: .white)
         .transition(.opacity.combined(with: .move(edge: .top)))
     }
 }
@@ -394,6 +488,7 @@ struct SignInBanner: View {
                 .foregroundStyle(Theme.warning)
                 .symbolEffect(.wiggle, options: .repeat(.periodic(delay: 4)), isActive: motion.allowed)
             Text("\(hint.host) wants you signed in before this application can go through.")
+                .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(Theme.warning)
             Spacer()
             Button(hint.title) { Task { await store.signIn(hint.url) } }
@@ -404,6 +499,7 @@ struct SignInBanner: View {
                 )
         }
         .padding(12)
+        .background(Color.black.opacity(0.2), in: RoundedRectangle(cornerRadius: Theme.innerRadius + 2, style: .continuous))
         .insetSurface(radius: Theme.innerRadius + 2, tint: Theme.warning)
     }
 }
@@ -415,15 +511,19 @@ struct SkipPostingSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Skip this job").font(.headline)
+            HStack(spacing: 12) {
+                ArtView(.skipped, size: 44)
+                Text("Skip this job").font(.system(size: 20, weight: .bold))
+            }
             Text("Say why in a few words. Applyant uses it to score similar postings a little lower next time (for example, “salary too low” makes salary count more).")
-                .font(.callout).foregroundStyle(.secondary)
+                .font(.callout).foregroundStyle(Theme.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
             TextField("e.g. application link opens the homepage", text: $reason)
                 .textFieldStyle(.roundedBorder)
-                .frame(width: 360)
+                .frame(width: 380)
             HStack {
                 Spacer()
-                Button("Cancel") { dismiss() }
+                Button("Cancel") { dismiss() }.buttonStyle(.secondary)
                 Button("Skip") {
                     let value = reason
                     reason = ""
@@ -434,7 +534,8 @@ struct SkipPostingSheet: View {
                 .keyboardShortcut(.defaultAction)
             }
         }
-        .padding(20)
+        .padding(22)
+        .frame(width: 430)
     }
 }
 
@@ -456,7 +557,9 @@ struct JobTab: View {
                     DescriptionCard(description: description, text: p.hasText ? p.text : "", url: p.canonicalURL).entrance(3)
                     PostingNotes(posting: p).entrance(4)
                 }
-                .padding(Theme.pagePadding)
+                .padding(.horizontal, 20)
+                .padding(.top, 10)
+                .padding(.bottom, 20)
                 .frame(maxWidth: Theme.readableWidth, alignment: .leading)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -466,54 +569,62 @@ struct JobTab: View {
     }
 }
 
-/// The scorer's one-line take, set off by the brand's bar.
+/// The scorer's one-line take, large, set off by the brand's glowing bar.
 struct SummaryLine: View {
     let text: String
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Capsule().fill(Theme.brand).frame(width: 3)
+        HStack(alignment: .top, spacing: 14) {
+            Capsule().fill(Theme.brand).frame(width: 4)
+                .shadow(color: Theme.magenta.opacity(0.7), radius: 5)
             Text(text)
-                .font(.title3)
-                .lineSpacing(2)
+                .font(.system(size: 17, weight: .medium))
+                .foregroundStyle(.white.opacity(0.94))
+                .lineSpacing(4)
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .fixedSize(horizontal: false, vertical: true)
+        .padding(.vertical, 4)
     }
 }
 
-/// The posting's facts at a glance, as tiles.
+/// The posting's facts at a glance, as small bento tiles: a label over a big value.
 struct KeyFactsGrid: View {
     let facts: [KeyFact]
 
     private static let symbols: [String: String] = [
-        "Workplace": "laptopcomputer", "Location": "mappin.and.ellipse", "Employment": "briefcase",
-        "Seniority": "chart.bar", "Salary": "banknote", "Language": "character.bubble", "Posted": "calendar",
+        "Workplace": "laptopcomputer", "Location": "mappin.and.ellipse", "Employment": "briefcase.fill",
+        "Seniority": "chart.bar.fill", "Salary": "banknote.fill", "Language": "character.bubble.fill", "Posted": "calendar",
+    ]
+
+    private static let hues: [String: Double] = [
+        "Workplace": 0.55, "Location": 0.5, "Employment": 0.75, "Seniority": 0.85, "Salary": 0.38, "Language": 0.62, "Posted": 0.1,
     ]
 
     var body: some View {
         if !facts.isEmpty {
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 190), spacing: 10, alignment: .top)], alignment: .leading, spacing: 10) {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 175), spacing: 10, alignment: .top)], alignment: .leading, spacing: 10) {
                 ForEach(Array(facts.enumerated()), id: \.element.label) { index, fact in
-                    HStack(alignment: .top, spacing: 10) {
-                        Image(systemName: Self.symbols[fact.label] ?? "info.circle")
-                            .font(.callout.weight(.medium))
-                            .foregroundStyle(Theme.accent)
-                            .frame(width: 30, height: 30)
-                            .background(Theme.accent.opacity(0.1), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(fact.label.uppercased()).font(Theme.eyebrow).tracking(0.6).foregroundStyle(.secondary)
-                            Text(fact.value)
-                                .font(.callout.weight(.medium))
-                                .textSelection(.enabled)
-                                .fixedSize(horizontal: false, vertical: true)
+                    let tint = Color(hue: Self.hues[fact.label] ?? 0.75, saturation: 0.55, brightness: 1)
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Text(fact.label.uppercased()).font(Theme.eyebrow).tracking(1).foregroundStyle(Theme.secondaryText)
+                            Spacer()
+                            Image(systemName: Self.symbols[fact.label] ?? "info.circle")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(tint)
+                                .shadow(color: tint.opacity(0.7), radius: 4)
                         }
-                        Spacer(minLength: 0)
+                        Text(fact.value)
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundStyle(.white)
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
-                    .padding(10)
-                    .frame(maxWidth: .infinity, minHeight: 52, alignment: .topLeading)
-                    .cardSurface(radius: 11)
+                    .padding(14)
+                    .frame(maxWidth: .infinity, minHeight: 70, alignment: .topLeading)
+                    .glass(radius: 16)
                     .popIn(index)
                 }
             }
@@ -533,17 +644,18 @@ struct MatchCard: View {
         if !groups.isEmpty || !parts.isEmpty || !issues.isEmpty {
             Card(title: "How you match", systemImage: "checklist") {
                 ForEach(Array(groups.enumerated()), id: \.element.id) { groupIndex, group in
-                    VStack(alignment: .leading, spacing: Theme.rowSpacing + 2) {
+                    VStack(alignment: .leading, spacing: Theme.rowSpacing + 4) {
                         HStack(alignment: .firstTextBaseline, spacing: 8) {
-                            Text(group.title).font(.subheadline.weight(.semibold))
-                            if let note = group.note { Text(note).font(Theme.caption).foregroundStyle(.secondary) }
+                            Text(group.title).font(.system(size: 13.5, weight: .bold)).foregroundStyle(.white)
+                            if let note = group.note { Text(note).font(.system(size: 12)).foregroundStyle(Theme.secondaryText) }
                         }
                         VerdictBar(verdicts: group.requirements.map(\.verdict))
+                            .padding(.bottom, 2)
                         ForEach(Array(group.requirements.enumerated()), id: \.offset) { index, r in
                             RequirementRow(requirement: r).entrance(groupIndex * 3 + index + 1)
                         }
                     }
-                    .padding(.bottom, 6)
+                    .padding(.bottom, 8)
                 }
                 if !issues.isEmpty { IssuesList(issues: issues) }
                 if !parts.isEmpty { ScoreBreakdown(posting: posting, parts: parts) }
@@ -552,7 +664,7 @@ struct MatchCard: View {
     }
 }
 
-/// The group's verdicts as one bar: met, partly, missing, unknown, in their colours.
+/// The group's verdicts as one segmented bar that glows: met, partly, missing, unknown.
 private struct VerdictBar: View {
     let verdicts: [String]
     @State private var grown = false
@@ -567,17 +679,20 @@ private struct VerdictBar: View {
         let total = max(verdicts.count, 1)
         GeometryReader { geo in
             let shown = counts.enumerated().filter { $0.element > 0 }
-            let gaps = CGFloat(max(shown.count - 1, 0)) * 2
-            HStack(spacing: 2) {
+            let gaps = CGFloat(max(shown.count - 1, 0)) * 3
+            HStack(spacing: 3) {
                 ForEach(shown, id: \.offset) { i, n in
+                    let color = Theme.verdict(Self.order[i])
                     Capsule()
-                        .fill(Theme.verdict(Self.order[i]).opacity(Self.order[i] == "unknown" ? 0.35 : 0.85))
+                        .fill(LinearGradient(colors: [color.opacity(0.75), color], startPoint: .leading, endPoint: .trailing))
+                        .opacity(Self.order[i] == "unknown" ? 0.45 : 1)
+                        .shadow(color: color.opacity(Self.order[i] == "unknown" ? 0 : 0.6), radius: 4)
                         .frame(width: max(0, (geo.size.width - gaps) * CGFloat(n) / CGFloat(total)))
                 }
             }
             .scaleEffect(x: grown || reduceMotion ? 1 : 0, anchor: .leading)
         }
-        .frame(height: 4)
+        .frame(height: 6)
         .onAppear { withAnimation(Theme.Motion.gauge.delay(0.25)) { grown = true } }
         .accessibilityHidden(true)
     }
@@ -587,16 +702,20 @@ struct RequirementRow: View {
     let requirement: RequirementMatch
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
             VerdictMark(verdict: requirement.verdict)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(requirement.text).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(requirement.text)
+                    .font(.system(size: 13.5, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.94))
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
                 let evidence = MatchText.evidence(requirement)
                 if !evidence.isEmpty {
-                    Text(evidence.prefix(2).joined(separator: " · ")).font(Theme.caption).foregroundStyle(.secondary).lineLimit(2)
+                    Text(evidence.prefix(2).joined(separator: " · ")).font(.system(size: 12)).foregroundStyle(Theme.secondaryText).lineLimit(2)
                         .help(evidence.joined(separator: "\n"))
                 }
-                if requirement.hasNote { Text(requirement.note).font(Theme.caption).foregroundStyle(.secondary) }
+                if requirement.hasNote { Text(requirement.note).font(.system(size: 12)).foregroundStyle(Theme.tertiaryText) }
             }
         }
     }
@@ -606,16 +725,16 @@ struct IssuesList: View {
     let issues: [String]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text("Potential issues").font(.subheadline.weight(.semibold))
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Potential issues").font(.system(size: 13.5, weight: .bold)).foregroundStyle(.white)
             ForEach(issues, id: \.self) { issue in
                 Label(issue, systemImage: "exclamationmark.triangle.fill")
                     .symbolRenderingMode(.hierarchical)
                     .foregroundStyle(Theme.warning)
-                    .font(.callout)
+                    .font(.system(size: 13, weight: .medium))
             }
         }
-        .padding(10)
+        .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .insetSurface(tint: Theme.warning)
         .padding(.bottom, 4)
@@ -637,24 +756,24 @@ struct ScoreBreakdown: View {
                 HStack(spacing: 6) {
                     Image(systemName: "chevron.right")
                         .font(.caption.weight(.bold))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.secondaryText)
                         .rotationEffect(.degrees(open ? 90 : 0))
-                    Text("Score \(posting.hasScore ? "\(posting.score)" : "–") of 100").font(.subheadline.weight(.semibold))
+                    Text("Score \(posting.hasScore ? "\(posting.score)" : "–") of 100").font(.system(size: 13.5, weight: .bold)).foregroundStyle(.white)
                 }
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             if open {
-                Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 12, verticalSpacing: 7) {
+                Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 12, verticalSpacing: 8) {
                     ForEach(Array(parts.enumerated()), id: \.element.key) { index, c in
                         let points = Score.points(c)
                         GridRow {
-                            Text(Score.componentTitles[c.key] ?? c.key).font(.callout)
-                            Meter(value: c.value, color: c.uncertain ? .secondary : Theme.score(Int32((c.value * 100).rounded())), height: 5, delay: Stagger.delay(index, step: 0.03))
+                            Text(Score.componentTitles[c.key] ?? c.key).font(.callout).foregroundStyle(.white.opacity(0.9))
+                            Meter(value: c.value, color: c.uncertain ? Theme.secondaryText : Theme.score(Int32((c.value * 100).rounded())), height: 5, delay: Stagger.delay(index, step: 0.03))
                                 .frame(width: 100)
                                 .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 4 }
-                            Text(c.uncertain ? "?" : "\(points.earned)/\(points.of)").font(.callout).monospacedDigit()
-                            Text(c.hasNote ? c.note : "").font(.callout).foregroundStyle(.secondary).lineLimit(2)
+                            Text(c.uncertain ? "?" : "\(points.earned)/\(points.of)").font(.callout).monospacedDigit().foregroundStyle(.white)
+                            Text(c.hasNote ? c.note : "").font(.callout).foregroundStyle(Theme.secondaryText).lineLimit(2)
                         }
                     }
                 }
@@ -665,7 +784,8 @@ struct ScoreBreakdown: View {
     }
 }
 
-/// The posting's text, read as headings, paragraphs and lists; the capture itself on request.
+/// The posting's text, read as headings, paragraphs and lists on darker glass, at a size and
+/// line length made for reading; the capture itself on request.
 struct DescriptionCard: View {
     let description: PostingDescription
     let text: String
@@ -673,24 +793,29 @@ struct DescriptionCard: View {
     @State private var showCapture = false
 
     var body: some View {
-        FoldingCard(title: "Description", systemImage: "doc.text") {
-            if description.blocks.isEmpty {
-                Text(text.isEmpty ? "The posting's text wasn't captured. Open posting ↗ shows it on its site." : "Nothing readable was left after taking the page's own parts out: “Show the captured text” has all of it.")
-                    .foregroundStyle(.secondary)
-            } else {
-                DescriptionBlocks(blocks: description.blocks)
-            }
-            if !text.isEmpty {
-                Toggle("Show the captured text", isOn: $showCapture).toggleStyle(.checkbox).font(Theme.caption).padding(.top, 6)
-                if showCapture {
-                    Text(text)
-                        .font(.system(.caption, design: .monospaced))
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(10)
-                        .insetSurface()
+        FoldingCard(title: "Description", systemImage: "doc.text", surface: Theme.readingFill) {
+            VStack(alignment: .leading, spacing: 0) {
+                if description.blocks.isEmpty {
+                    Text(text.isEmpty ? "The posting's text wasn't captured. Open posting ↗ shows it on its site." : "Nothing readable was left after taking the page's own parts out: “Show the captured text” has all of it.")
+                        .foregroundStyle(Theme.secondaryText)
+                } else {
+                    DescriptionBlocks(blocks: description.blocks)
+                }
+                if !text.isEmpty {
+                    Toggle("Show the captured text", isOn: $showCapture).toggleStyle(.checkbox).font(Theme.caption).padding(.top, 14)
+                        .foregroundStyle(Theme.secondaryText)
+                    if showCapture {
+                        Text(text)
+                            .font(.system(.caption, design: .monospaced))
+                            .foregroundStyle(.white.opacity(0.8))
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(10)
+                            .insetSurface()
+                    }
                 }
             }
+            .frame(maxWidth: Theme.proseWidth, alignment: .leading)
         }
     }
 }
@@ -699,30 +824,43 @@ struct DescriptionBlocks: View {
     let blocks: [PostingDescription.Block]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
             ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
                 switch block {
                 case let .heading(text):
-                    Text(PostingDescription.inline(text)).font(.headline).padding(.top, 6)
+                    Text(PostingDescription.inline(text))
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(.white)
+                        .padding(.top, 8)
                 case let .paragraph(text):
-                    Text(PostingDescription.inline(text)).lineSpacing(2).fixedSize(horizontal: false, vertical: true)
+                    Text(PostingDescription.inline(text))
+                        .font(Theme.prose)
+                        .foregroundStyle(.white.opacity(0.88))
+                        .lineSpacing(5)
+                        .fixedSize(horizontal: false, vertical: true)
                 case let .list(items, start):
-                    VStack(alignment: .leading, spacing: 5) {
+                    VStack(alignment: .leading, spacing: 8) {
                         ForEach(Array(items.enumerated()), id: \.offset) { i, item in
-                            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            HStack(alignment: .firstTextBaseline, spacing: 10) {
                                 if let start {
-                                    Text("\(start + i).").foregroundStyle(Theme.accent).monospacedDigit()
+                                    Text("\(start + i).").font(Theme.prose.weight(.semibold)).foregroundStyle(Theme.accent).monospacedDigit()
                                 } else {
-                                    Circle().fill(Theme.accent.opacity(0.7)).frame(width: 5, height: 5)
-                                        .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 4 }
+                                    Circle().fill(Theme.brand).frame(width: 6, height: 6)
+                                        .shadow(color: Theme.magenta.opacity(0.7), radius: 3)
+                                        .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 4.5 }
                                 }
-                                Text(PostingDescription.inline(item)).lineSpacing(2).fixedSize(horizontal: false, vertical: true)
+                                Text(PostingDescription.inline(item))
+                                    .font(Theme.prose)
+                                    .foregroundStyle(.white.opacity(0.88))
+                                    .lineSpacing(5)
+                                    .fixedSize(horizontal: false, vertical: true)
                             }
                         }
                     }
                 }
             }
         }
+        .tint(Theme.accent)
         .textSelection(.enabled)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -733,15 +871,16 @@ struct PostingNotes: View {
     let posting: Posting
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 3) {
             if posting.hasVerifyNote { Text("Verification: \(posting.verifyNote)") }
             if let verified = PostingText.formVerified(posting) { Text(verified) }
             if posting.hasFormNote { Text("Form: \(posting.formNote)") }
             if posting.hasDecisionReason { Text("Your note: \(posting.decisionReason)") }
         }
         .font(Theme.caption)
-        .foregroundStyle(.secondary)
+        .foregroundStyle(Theme.tertiaryText)
         .textSelection(.enabled)
+        .padding(.horizontal, 4)
     }
 }
 

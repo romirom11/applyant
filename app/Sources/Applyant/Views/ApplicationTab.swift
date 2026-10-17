@@ -48,15 +48,18 @@ struct ApplicationTab: View {
                                     EvidencePanel(store: store, app: app, answer: selected(app), scrolls: false)
                                 }
                             }
-                            .padding(Theme.pagePadding)
+                            .padding(.horizontal, 20)
+                            .padding(.top, 10)
+                            .padding(.bottom, 20)
                             .frame(maxWidth: Theme.readableWidth, alignment: .leading)
                             .frame(maxWidth: .infinity, alignment: .leading)
                         }
                         if side {
-                            Divider().opacity(0.6)
                             EvidencePanel(store: store, app: app, answer: selected(app))
-                                .frame(width: 300)
-                                .background(Theme.cardFill.opacity(0.5))
+                                .frame(width: 310)
+                                .listPanel()
+                                .padding(.trailing, 12)
+                                .padding(.vertical, 8)
                         }
                     }
                 }
@@ -69,6 +72,7 @@ struct ApplicationTab: View {
             EditSheet(request: request) { text in
                 Task { await request.save(text) }
             }
+            .worldSheet()
         }
     }
 
@@ -208,7 +212,7 @@ struct ApplicationTab: View {
                     .font(.caption.weight(.semibold)).monospacedDigit()
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 6).padding(.vertical, 1)
-                    .background(Color.primary.opacity(0.07), in: Capsule())
+                    .background(Color.white.opacity(0.1), in: Capsule())
             }
             .padding(.top, 4)
             .entrance(4)
@@ -277,12 +281,12 @@ struct EditSheet: View {
             TextEditor(text: $text)
                 .font(.body)
                 .frame(width: 520, height: 180)
-                .border(.separator)
+                .composerField()
             Text("Saved as a confirmed fact, so later applications can use it too.")
                 .font(.caption).foregroundStyle(.secondary)
             HStack {
                 Spacer()
-                Button("Cancel") { dismiss() }
+                Button("Cancel") { dismiss() }.buttonStyle(.secondary)
                 Button("Save") {
                     onSave(text)
                     dismiss()
@@ -461,7 +465,11 @@ struct AnswerCard: View {
         for s in answer.sentences {
             var part = AttributedString(s.text + " ")
             if ReviewRules.flagText(s) != nil {
-                part.backgroundColor = s.flag == "contradiction" ? .red.opacity(0.25) : .yellow.opacity(0.35)
+                // A warm glow behind what to check; red where it contradicts the facts.
+                part.backgroundColor = s.flag == "contradiction" ? Theme.bad.opacity(0.32) : Theme.warning.opacity(0.26)
+                part.foregroundColor = Color(.sRGB, red: 1, green: 0.95, blue: 0.86)
+                part.underlineStyle = .single
+                part.underlineColor = NSColor(s.flag == "contradiction" ? Theme.bad : Theme.warning)
             }
             out += part
         }
@@ -530,6 +538,7 @@ struct EvidencePanel: View {
             EditSheet(request: request) { text in
                 Task { await request.save(text) }
             }
+            .worldSheet()
         }
     }
 
@@ -672,7 +681,7 @@ struct CvCard: View {
                 .padding(.top, 2)
             }
         }
-        .sheet(isPresented: $editing) { CvEditSheet(store: store, appId: app.id) { editing = false } }
+        .sheet(isPresented: $editing) { CvEditSheet(store: store, appId: app.id) { editing = false }.worldSheet() }
     }
 }
 

@@ -63,6 +63,7 @@ struct ProfileEditor: View {
             }
         }
         .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
         .fileImporter(isPresented: $pickingCv, allowedContentTypes: [.pdf, UTType(filenameExtension: "docx") ?? .data]) { result in
             if case let .success(url) = result {
                 let scoped = url.startAccessingSecurityScopedResource()
@@ -84,6 +85,20 @@ struct ProfileEditor: View {
     }
 }
 
+/// The Profile section's list column: its header over the profile form.
+struct ProfileColumn: View {
+    let store: AppStore
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ModuleHeader(section: .profile, subtitle: "What application forms ask for")
+                .columnHeader()
+            ProfileEditor(store: store)
+        }
+        .navigationTitle("Profile")
+    }
+}
+
 /// The Profile section's detail: the sources that belong to no single project (a CV, LinkedIn).
 struct ProfileSourcesPane: View {
     let store: AppStore
@@ -93,9 +108,10 @@ struct ProfileSourcesPane: View {
             VStack(alignment: .leading, spacing: Theme.blockSpacing) {
                 PageHeader(
                     title: "Profile sources",
-                    subtitle: "Your CV, LinkedIn PDF and other documents about you as a whole: their facts are sorted into projects.",
-                    systemImage: "person.text.rectangle"
-                )
+                    subtitle: "Your CV, LinkedIn PDF and other documents about you as a whole: their facts are sorted into projects."
+                ) {
+                    ArtView(.profile, size: 64)
+                }
                 KnowledgeSourcesSection(store: store, project: nil, sources: store.candidateProfile?.profileSources ?? [])
                     .padding(Theme.cardPadding).cardSurface().entrance(1)
                 FactsSection(store: store, project: nil)
@@ -114,71 +130,96 @@ struct ProjectsList: View {
     @State private var adding = false
     @State private var newName = ""
 
+    /// The "Facts to confirm" card's place in the list's selection (no project picked).
+    private static let factsToConfirm: Int64 = -1
+
     var body: some View {
-        List(selection: $store.navigation.project) {
-            if !store.unconfirmedFacts.isEmpty {
-                SwiftUI.Section {
-                    Button {
-                        store.navigation.project = nil
-                    } label: {
-                        Label("Facts to confirm", systemImage: "checkmark.circle")
-                            .badge(store.unconfirmedFacts.count)
-                            .fontWeight(store.navigation.project == nil ? .semibold : .regular)
-                    }
-                    .buttonStyle(.plain)
-                    .help("Every fact waiting for your confirmation, across all projects, in one list")
-                }
-            }
-            if store.knowledgeProjects.isEmpty {
-                Text("No projects yet. Add one, or import a CV: projects are drafted from it.")
-                    .font(.callout).foregroundStyle(.secondary)
-            }
-            let groups = store.projectGroups
-            if !groups.jobs.isEmpty {
-                SwiftUI.Section("Work") { ForEach(groups.jobs, id: \.id) { row($0) } }
-            }
-            if !groups.built.isEmpty {
-                SwiftUI.Section("Projects") { ForEach(groups.built, id: \.id) { row($0) } }
-            }
+        VStack(alignment: .leading, spacing: 0) {
+            header.columnHeader()
+            list
         }
         .navigationTitle("Projects")
-        .safeAreaInset(edge: .bottom) {
-            HStack {
-                Button {
-                    adding = true
-                } label: {
-                    Label("New Project", systemImage: "plus")
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
-                .popover(isPresented: $adding, arrowEdge: .top) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("New project").font(.headline)
-                        TextField("Name", text: $newName, prompt: Text("Solovei, Ordi, a position…"))
-                            .textFieldStyle(.roundedBorder)
-                            .frame(width: 240)
-                            .onSubmit(add)
-                        HStack {
-                            Spacer()
-                            Button("Cancel") { adding = false }.keyboardShortcut(.cancelAction)
-                            Button("Add", action: add)
-                                .keyboardShortcut(.defaultAction)
-                                .disabled(newName.trimmingCharacters(in: .whitespaces).isEmpty)
-                        }
-                    }
-                    .padding(14)
-                }
-                .help("A position, a product or a side project: anything your experience is told through")
-                Spacer()
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(.bar)
-        }
         .task {
             await store.openProfile()
             await store.openUnconfirmedFacts()
         }
+    }
+
+    private var header: some View {
+        let count = store.knowledgeProjects.count
+        let toConfirm = store.unconfirmedFacts.isEmpty ? "" : " · \(store.unconfirmedFacts.count) facts to confirm"
+        return ModuleHeader(section: .projects, subtitle: "\(count) project\(count == 1 ? "" : "s")\(toConfirm)") {
+            Button { adding = true } label: { Image(systemName: "plus") }
+                .buttonStyle(.secondary)
+                .controlSize(.small)
+                .accessibilityLabel("New Project")
+                .help("A position, a product or a side project: anything your experience is told through")
+                .popover(isPresented: $adding, arrowEdge: .bottom) { newProject }
+        }
+    }
+
+    private var newProject: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("New project").font(.headline)
+            TextField("Name", text: $newName, prompt: Text("Solovei, Ordi, a position…"))
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 240)
+                .onSubmit(add)
+            HStack {
+                Spacer()
+                Button("Cancel") { adding = false }.keyboardShortcut(.cancelAction)
+                Button("Add", action: add)
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(newName.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+        }
+        .padding(14)
+    }
+
+    private var list: some View {
+        let groups = store.projectGroups
+        let pending = !store.unconfirmedFacts.isEmpty
+        let tint = Theme.world(.projects).main
+        let ids: [Int64] = (groups.jobs + groups.built).map(\.id)
+        return CardList(
+            selection: Binding(
+                get: { store.navigation.project ?? (pending ? Self.factsToConfirm : nil) },
+                set: { store.navigation.project = $0 == Self.factsToConfirm ? nil : $0 }
+            ),
+            order: (pending ? [Self.factsToConfirm] : []) + ids,
+            tint: tint
+        ) {
+            if pending { factsToConfirmCard }
+            if store.knowledgeProjects.isEmpty {
+                Text("No projects yet. Add one, or import a CV: projects are drafted from it.")
+                    .font(.callout).foregroundStyle(Theme.secondaryText).padding(.horizontal, 6)
+            }
+            if !groups.jobs.isEmpty {
+                CardListHeader(title: "Work", count: groups.jobs.count, tint: tint)
+                ForEach(groups.jobs, id: \.id) { row($0) }
+            }
+            if !groups.built.isEmpty {
+                CardListHeader(title: "Projects", count: groups.built.count, tint: tint)
+                ForEach(groups.built, id: \.id) { row($0) }
+            }
+        }
+    }
+
+    private var factsToConfirmCard: some View {
+        SelectableCard(id: Self.factsToConfirm, padding: 11) {
+            HStack {
+                Label("Facts to confirm", systemImage: "checkmark.circle")
+                    .font(.system(size: 13.5, weight: .bold))
+                    .foregroundStyle(Theme.text)
+                Spacer()
+                Text("\(store.unconfirmedFacts.count)")
+                    .font(Theme.number(11, weight: .heavy))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 6).padding(.vertical, 1.5)
+                    .background(Theme.warning.opacity(0.4), in: Capsule())
+            }
+        }
+        .help("Every fact waiting for your confirmation, across all projects, in one list")
     }
 
     private func add() {
@@ -193,18 +234,18 @@ struct ProjectsList: View {
     }
 
     private func row(_ p: KnowledgeProject) -> some View {
-        HStack {
-            Text(p.name).lineLimit(1)
-            Spacer()
-            if p.unconfirmedCount > 0 {
-                Text("\(p.unconfirmedCount)")
-                    .font(.caption).monospacedDigit()
-                    .foregroundStyle(.secondary)
-                    .help("\(p.unconfirmedCount) facts to confirm")
+        SelectableCard(id: p.id, padding: 11) {
+            HStack {
+                Text(p.name).font(.system(size: 13.5, weight: .semibold)).foregroundStyle(Theme.text).lineLimit(1)
+                Spacer()
+                if p.unconfirmedCount > 0 {
+                    Text("\(p.unconfirmedCount)")
+                        .font(Theme.number(11))
+                        .foregroundStyle(Theme.warning)
+                        .help("\(p.unconfirmedCount) facts to confirm")
+                }
             }
         }
-        .padding(.vertical, 2)
-        .tag(p.id)
     }
 }
 
@@ -480,6 +521,7 @@ struct KnowledgeSourcesSection: View {
                 RepoPickerSheet(store: store, project: id, projectName: store.knowledgeProject(id)?.name ?? "this project") {
                     pickingRepo = false
                 }
+                .worldSheet()
             }
         }
         .confirmationDialog(
@@ -634,6 +676,7 @@ struct RepoPickerSheet: View {
                             }
                         }
                         .listStyle(.inset)
+                        .scrollContentBackground(.hidden)
                     }
                 }
             } else {

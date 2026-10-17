@@ -40,7 +40,7 @@ struct MailboxRows: View {
             }
         }
         .sheet(isPresented: $connecting) {
-            MailboxConnectSheet(store: store) { connecting = false }
+            MailboxConnectSheet(store: store) { connecting = false }.worldSheet()
         }
     }
 }
@@ -80,6 +80,7 @@ struct MailboxConnectSheet: View {
                 }
             }
             .formStyle(.grouped)
+            .scrollContentBackground(.hidden)
 
             if let error {
                 Label(error, systemImage: "exclamationmark.triangle.fill")

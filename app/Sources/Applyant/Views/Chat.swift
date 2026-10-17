@@ -11,6 +11,16 @@ struct ChatView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            ModuleHeader(section: .chat, subtitle: "Answers from your profile, projects and confirmed facts") {
+                Button("New conversation") { confirmingClear = true }
+                    .buttonStyle(.secondary)
+                    .controlSize(.small)
+                    .disabled(store.chatMessages.isEmpty || store.chatSending)
+            }
+            .padding(.horizontal, 28)
+            .padding(.top, 10)
+            .padding(.bottom, 4)
+            .frame(maxWidth: 900)
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 16) {
@@ -18,7 +28,8 @@ struct ChatView: View {
                             EmptyState(
                                 title: "Ask about your experience",
                                 systemImage: "bubble.left.and.text.bubble.right",
-                                detail: "Chat uses your profile, projects and confirmed facts. You can ask what supports a claim, compare your experience with a role, or work through how to describe a project."
+                                detail: "Chat uses your profile, projects and confirmed facts. You can ask what supports a claim, compare your experience with a role, or work through how to describe a project.",
+                                art: .chat
                             )
                             .frame(maxWidth: .infinity, minHeight: 300)
                         }
@@ -47,29 +58,27 @@ struct ChatView: View {
                 }
             }
 
-            Divider().opacity(0.6)
             HStack(alignment: .bottom, spacing: 12) {
                 TextEditor(text: $draft)
                     .font(.body)
-                    .frame(minHeight: 65, maxHeight: 115)
+                    .frame(minHeight: 52, maxHeight: 115)
                     .composerField()
                     .accessibilityLabel("Message")
                 Button(action: send) { Label("Send", systemImage: "arrow.up") }
                     .buttonStyle(.primary)
+                    .controlSize(.large)
                     .keyboardShortcut(.return, modifiers: .command)
                     .help("Send (⌘↩)")
                     .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || store.chatSending)
             }
-            .padding(16)
-            .frame(maxWidth: 850)
+            .padding(14)
+            .glass(radius: Theme.panelRadius)
+            .padding(.horizontal, 16)
+            .padding(.bottom, 14)
+            .frame(maxWidth: 880)
             .frame(maxWidth: .infinity)
         }
-        .pageBackground()
         .navigationTitle("Chat")
-        .toolbar {
-            Button("New conversation") { confirmingClear = true }
-                .disabled(store.chatMessages.isEmpty || store.chatSending)
-        }
         .confirmationDialog("Clear this conversation?", isPresented: $confirmingClear) {
             Button("Clear conversation", role: .destructive) { Task { await store.clearChat() } }
         } message: {
@@ -95,7 +104,7 @@ private struct ChatBubble: View {
                 Text(message.role == "user" ? "You" : "Applyant")
                     .font(.caption.weight(.semibold))
                     .opacity(0.7)
-                Text(message.text).textSelection(.enabled)
+                Text(message.text).font(Theme.prose).lineSpacing(3).textSelection(.enabled)
                 if !message.factIds.isEmpty {
                     DisclosureGroup("Confirmed facts used (\(message.factIds.count))") {
                         VStack(alignment: .leading, spacing: 6) {

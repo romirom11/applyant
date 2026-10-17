@@ -80,6 +80,12 @@ enum Art: String, CaseIterable, Sendable {
     }
 
     @MainActor var image: NSImage? { ArtLibrary.shared.image(rawValue) }
+
+    /// The picture for Core Animation (floating art): the PNG, or the fallback drawn once.
+    @MainActor var cgImage: CGImage? { ArtLibrary.shared.cgImage(self) }
+
+    /// Its world: the hue the art is made in, vivid.
+    var world: Theme.World { Theme.world(hue: hue) }
 }
 
 /// Loads each picture once.
@@ -88,6 +94,7 @@ final class ArtLibrary {
     static let shared = ArtLibrary()
     private var cache: [String: NSImage] = [:]
     private var missing: Set<String> = []
+    private var bitmaps: [String: CGImage] = [:]
 
     /// Contents/Resources/Art in the app; app/Bundle/Art when run from the build directory.
     private let folders: [URL] = {
@@ -112,6 +119,62 @@ final class ArtLibrary {
         }
         missing.insert(name)
         return nil
+    }
+
+    func cgImage(_ art: Art) -> CGImage? {
+        if let cached = bitmaps[art.rawValue] { return cached }
+        let made: CGImage?
+        if let image = image(art.rawValue) {
+            made = image.cgImage(forProposedRect: nil, context: nil, hints: nil)
+        } else {
+            let renderer = ImageRenderer(content: ArtFallback(art: art, size: 256))
+            renderer.scale = 2
+            made = renderer.cgImage
+        }
+        bitmaps[art.rawValue] = made
+        return made
+    }
+}
+
+/// A 3D illustration that floats gently and, when `tilts`, leans a few degrees towards the
+/// pointer over it. Still with Reduce Motion and while the window isn't in front.
+struct ArtView: View {
+    let art: Art
+    var size: CGFloat = 96
+    var floats = true
+    var tilts = true
+    /// Where the pointer is (-1…1) when a bigger area than the picture tracks it (a tile).
+    var tilt: CGPoint?
+    @State private var pointer: CGPoint = .zero
+    private let motion = EndlessMotion()
+
+    init(_ art: Art, size: CGFloat = 96, floats: Bool = true, tilts: Bool = true, tilt: CGPoint? = nil) {
+        self.art = art
+        self.size = size
+        self.floats = floats
+        self.tilts = tilts
+        self.tilt = tilt
+    }
+
+    var body: some View {
+        Group {
+            if let image = art.cgImage {
+                FloatingImage(image: image, floats: floats && motion.ambient, tilt: motion.allowed && tilts ? (tilt ?? pointer) : .zero)
+            } else {
+                ArtImage(art, size: size)
+            }
+        }
+        .frame(width: size, height: size)
+        .onContinuousHover { phase in
+            guard tilts, tilt == nil else { return }
+            switch phase {
+            case let .active(at):
+                pointer = CGPoint(x: (at.x / size - 0.5) * 2, y: (at.y / size - 0.5) * 2)
+            case .ended:
+                pointer = .zero
+            }
+        }
+        .accessibilityHidden(true)
     }
 }
 
@@ -139,7 +202,7 @@ struct ArtImage: View {
 }
 
 /// The section's symbol on a glossy blob of its colour.
-private struct ArtFallback: View {
+struct ArtFallback: View {
     let art: Art
     let size: CGFloat
 

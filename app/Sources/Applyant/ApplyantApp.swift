@@ -64,6 +64,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // nothing is registered and no notifications are posted.
         if let script = ScriptRunner(arguments: CommandLine.arguments, store: store, toasts: toasts) {
             script.showWindow = { [weak self] in self?.showMainWindow() }
+            script.openWindowQuietly = { [weak self] in
+                NSApp.setActivationPolicy(.regular)
+                self?.openMainWindow?()
+            }
             running = Task { await store.run() }
             Task { await script.run() }
             return
@@ -135,10 +139,14 @@ struct ApplyantApp: App {
     var body: some Scene {
         Window("Applyant", id: "main") {
             MainView(store: delegate.store, toasts: delegate.toasts)
-                .frame(minWidth: 1000, minHeight: 620)
+                .frame(minWidth: 1040, minHeight: 640)
                 .onAppear { NSApp.setActivationPolicy(.regular) }
                 .onDisappear { NSApp.setActivationPolicy(.accessory) }
         }
+        // No title bar of its own: the traffic lights sit over the window's world, and the
+        // world's empty parts move the window.
+        .windowStyle(.hiddenTitleBar)
+        .windowBackgroundDragBehavior(.enabled)
         .defaultSize(width: 1440, height: 900)
         // Started at login as a menu bar app: the window opens on request, not at every login.
         .defaultLaunchBehavior(.suppressed)

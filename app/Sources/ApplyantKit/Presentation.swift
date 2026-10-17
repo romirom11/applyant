@@ -73,12 +73,24 @@ public enum Section: String, CaseIterable, Identifiable, Sendable {
     /// Every section has content.
     public var isBuilt: Bool { true }
 
-    /// Sections that are one page: no list to pick from, so they take the whole window.
-    public var isSinglePane: Bool { self == .settings || self == .chat }
+    /// Sections that are one page: no list to pick from, so they take the whole window (Home
+    /// is its grid of tiles).
+    public var isSinglePane: Bool { self == .overview || self == .settings || self == .chat }
+
+    /// Home's name in the rail: the Overview is where the window opens.
+    public var railTitle: String { self == .overview ? "Home" : title }
+
+    /// The section after this one in the rail (⌥⌘↓), or before it (⌥⌘↑); nil past either end.
+    public func neighbour(_ step: Int) -> Section? {
+        let all = Section.allCases
+        guard let i = all.firstIndex(of: self), all.indices.contains(i + step) else { return nil }
+        return all[i + step]
+    }
 }
 
 public struct Navigation: Equatable, Sendable {
-    public var section: Section = .toReview
+    /// The window opens on Home.
+    public var section: Section = .overview
     public var postingId: Int64?
     /// The application open with the posting (its Application tab).
     public var reviewing: Int64?

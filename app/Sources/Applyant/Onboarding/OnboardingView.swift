@@ -138,6 +138,7 @@ private struct ConnectionsStep: View {
             CaptchaSection(store: store)
         }
         .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
         // Telegram's state, the captcha key's and the mailbox's (Settings loads the same).
         .task { await store.openSettings() }
     }
@@ -436,6 +437,7 @@ private struct ImportStep: View {
             }
         }
         .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
         // The list is the profile's sources: load them (sync events keep them current).
         .task { await store.openProfile() }
         .fileImporter(isPresented: $picking, allowedContentTypes: [.pdf, .plainText, UTType(filenameExtension: "docx") ?? .data]) { result in
@@ -444,12 +446,13 @@ private struct ImportStep: View {
             case let .failure(error): store.lastError = "Couldn't open the file: \(error.localizedDescription)"
             }
         }
-        .sheet(isPresented: $editingProfile) { ProfileSheet(store: store) { editingProfile = false } }
+        .sheet(isPresented: $editingProfile) { ProfileSheet(store: store) { editingProfile = false }.worldSheet() }
         .sheet(isPresented: $editingProjects) {
             ProjectsSheet(store: store) {
                 editingProjects = false
                 Task { await store.refreshSetup() }
             }
+            .worldSheet()
         }
     }
 
@@ -577,6 +580,7 @@ private struct PreferencesStep: View {
             }
         }
         .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
         .task {
             guard !loaded else { return }
             await fill()

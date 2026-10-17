@@ -14,6 +14,34 @@ struct SettingsView: View {
     @State private var editingPreferences = false
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ModuleHeader(section: .settings, subtitle: "The setup, your profile and preferences, connections, sites and models")
+                .padding(.horizontal, 24)
+                .padding(.top, 10)
+                .padding(.bottom, 4)
+            form
+        }
+        // One readable column in the middle of the pane, however wide the window is.
+        .frame(maxWidth: 860)
+        .frame(maxWidth: .infinity)
+        .navigationTitle("Settings")
+        .task {
+            await store.openSettings()
+            await store.openProfile()
+            await store.openPreferences()
+        }
+        .sheet(isPresented: $editingProfile) { ProfileSheet(store: store) { editingProfile = false }.worldSheet() }
+        .sheet(isPresented: $editingProjects) { ProjectsSheet(store: store) { editingProjects = false }.worldSheet() }
+        .sheet(isPresented: $editingPreferences) {
+            PreferencesSheet(store: store) {
+                editingPreferences = false
+                Task { await store.openPreferences() }
+            }
+            .worldSheet()
+        }
+    }
+
+    private var form: some View {
         Form {
             SwiftUI.Section("Setup") {
                 HStack {
@@ -63,23 +91,8 @@ struct SettingsView: View {
             StoredKeysSection(store: store)
         }
         .formStyle(.grouped)
-        // One readable column in the middle of the pane, however wide the window is.
-        .frame(maxWidth: 820)
-        .frame(maxWidth: .infinity)
-        .navigationTitle("Settings")
-        .task {
-            await store.openSettings()
-            await store.openProfile()
-            await store.openPreferences()
-        }
-        .sheet(isPresented: $editingProfile) { ProfileSheet(store: store) { editingProfile = false } }
-        .sheet(isPresented: $editingProjects) { ProjectsSheet(store: store) { editingProjects = false } }
-        .sheet(isPresented: $editingPreferences) {
-            PreferencesSheet(store: store) {
-                editingPreferences = false
-                Task { await store.openPreferences() }
-            }
-        }
+        .scrollContentBackground(.hidden)
+        .buttonStyle(.secondary)
     }
 
     private var profileLine: String {

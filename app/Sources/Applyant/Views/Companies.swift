@@ -9,33 +9,41 @@ struct CompaniesList: View {
     let store: AppStore
 
     var body: some View {
-        Group {
+        let researching = store.companies.filter(\.researching).count
+        VStack(alignment: .leading, spacing: 0) {
+            ModuleHeader(section: .companies, subtitle: "\(store.companies.count) researched" + (researching > 0 ? " · \(researching) researching now" : ""))
+                .columnHeader()
             if store.companies.isEmpty {
                 EmptyState(
                     title: "No company researched yet",
                     systemImage: ApplyantKit.Section.companies.symbol,
-                    detail: "Preparing an application researches its company. Company research on a posting does it now."
+                    detail: "Preparing an application researches its company. Company research on a posting does it now.",
+                    art: .companies
                 )
             } else {
-                List(store.companies, id: \.id, selection: Binding(
-                    get: { store.navigation.company },
-                    set: { store.navigation.company = $0 }
-                )) { c in
-                    HStack(alignment: .top, spacing: 10) {
-                        CompanyAvatar(name: c.name, size: 32)
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(c.name).font(.headline)
-                            Text(CompanyText.state(c) + " · \(c.postings.count) posting\(c.postings.count == 1 ? "" : "s")")
-                                .font(.subheadline).foregroundStyle(.secondary)
-                            let chips = CompanyText.chips(c)
-                            if !chips.isEmpty {
-                                HStack(spacing: 4) { ForEach(chips, id: \.text) { ChipView(chip: $0) } }
+                CardList(
+                    selection: Binding(get: { store.navigation.company }, set: { store.navigation.company = $0 }),
+                    order: store.companies.map(\.id),
+                    tint: Theme.world(.companies).main
+                ) {
+                    ForEach(store.companies, id: \.id) { c in
+                        SelectableCard(id: c.id) {
+                            HStack(alignment: .top, spacing: 12) {
+                                CompanyAvatar(name: c.name, size: 34)
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(c.name).font(.system(size: 13.5, weight: .bold)).foregroundStyle(Theme.text)
+                                    Text(CompanyText.state(c) + " · \(c.postings.count) posting\(c.postings.count == 1 ? "" : "s")")
+                                        .font(.system(size: 12)).foregroundStyle(Theme.secondaryText)
+                                    let chips = CompanyText.chips(c)
+                                    if !chips.isEmpty {
+                                        HStack(spacing: 4) { ForEach(chips, id: \.text) { ChipView(chip: $0) } }.padding(.top, 2)
+                                    }
+                                }
+                                .shimmer(c.researching)
                             }
                         }
-                        .shimmer(c.researching)
+                        .sheen(c.researching, radius: 15)
                     }
-                    .padding(.vertical, 4)
-                    .tag(c.id)
                 }
             }
         }
@@ -53,7 +61,8 @@ struct CompanyDetail: View {
             EmptyState(
                 title: "Companies",
                 systemImage: ApplyantKit.Section.companies.symbol,
-                detail: "Pick a company on the left: what it does, its red flags, and where each finding comes from."
+                detail: "Pick a company on the left: what it does, its red flags, and where each finding comes from.",
+                art: .companies
             )
         }
     }
@@ -92,20 +101,21 @@ struct CompanyProfile: View {
 
     private func header(_ c: Company) -> some View {
         HStack(alignment: .center, spacing: 14) {
-            CompanyAvatar(name: c.name, size: 52).popIn(0)
+            CompanyAvatar(name: c.name, size: 60).popIn(0)
             VStack(alignment: .leading, spacing: 4) {
-                Text(c.name).font(Theme.pageTitle)
+                Text(c.name).font(Theme.pageTitle).foregroundStyle(Theme.text)
                 HStack(spacing: 8) {
-                    Text(CompanyText.state(c)).foregroundStyle(.secondary)
+                    Text(CompanyText.state(c)).foregroundStyle(Theme.secondaryText)
                     if c.hasWebsite, let url = URL(string: c.website) { Link(CompanyText.sourceLabel(c.website), destination: url) }
                 }
             }
             Spacer()
             if c.researching {
                 HStack(spacing: 6) {
-                    ProgressView().controlSize(.small)
-                    Text("Researching…").foregroundStyle(.secondary)
+                    LiveDot(color: Theme.world(.companies).main, size: 6)
+                    Text("Researching…").foregroundStyle(Theme.secondaryText)
                 }
+                .shimmer()
             } else {
                 Button {
                     Task { await store.researchCompany(.id(c.id), refresh: true) }
@@ -126,7 +136,7 @@ struct CompanyProfile: View {
                     } label: {
                         HStack(spacing: 10) {
                             ScoreRing(score: p.hasScore ? p.score : nil, size: 26)
-                            Text(p.hasTitle ? p.title : "Posting \(p.id)").foregroundStyle(Theme.accent)
+                            Text(p.hasTitle ? p.title : "Posting \(p.id)").font(.system(size: 13.5, weight: .semibold)).foregroundStyle(Theme.text)
                             Spacer(minLength: 0)
                         }
                         .contentShape(Rectangle())
@@ -164,7 +174,7 @@ struct RedFlagsBox: View {
             VStack(alignment: .leading, spacing: 8) {
                 Label(flags.isEmpty ? "No red flags found" : "Red flags", systemImage: flags.isEmpty ? "checkmark.shield.fill" : "exclamationmark.triangle.fill")
                     .font(.headline)
-                    .foregroundStyle(flags.isEmpty ? .green : .orange)
+                    .foregroundStyle(flags.isEmpty ? Theme.good : Theme.warning)
                 ForEach(Array(flags.enumerated()), id: \.offset) { _, f in
                     VStack(alignment: .leading, spacing: 2) {
                         Text(CompanyText.flagTitle(f)).font(.callout.weight(.semibold))
@@ -210,10 +220,10 @@ struct CompanyCard: View {
                 if let c = company, c.hasSummary {
                     Text(c.summary).lineLimit(compact ? 5 : nil).textSelection(.enabled)
                     if c.redFlags.isEmpty {
-                        Text("No red flags found").font(.caption).foregroundStyle(.green)
+                        Text("No red flags found").font(.caption).foregroundStyle(Theme.good)
                     } else {
                         ForEach(Array(c.redFlags.enumerated()), id: \.offset) { _, f in
-                            Text("! \(CompanyText.flagTitle(f)): \(f.text)").font(.caption).foregroundStyle(.orange)
+                            Text("! \(CompanyText.flagTitle(f)): \(f.text)").font(.caption).foregroundStyle(Theme.warning)
                         }
                     }
                 } else if company?.researching == true {

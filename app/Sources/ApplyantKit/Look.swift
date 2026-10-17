@@ -72,3 +72,35 @@ extension DeliveryProgress {
         return min(Double(filled ?? 0) / Double(total), 1)
     }
 }
+
+/// Each section's colour world: the window's background glows in it, and its art, tiles and
+/// selection pick it up. Two hues (the glow's main one and the one it drifts towards) and how
+/// saturated they are: To review is magenta-violet, New teal, Saved amber, Skipped slate,
+/// Applied azure, Interviews emerald, Offers gold, Which application? coral, Home and the
+/// candidate's own sections violet, the system ones a quiet indigo.
+public struct WorldTone: Equatable, Sendable {
+    public let hue: Double
+    public let secondHue: Double
+    public let saturation: Double
+
+    public init(hue: Double, secondHue: Double, saturation: Double) {
+        self.hue = hue
+        self.secondHue = secondHue
+        self.saturation = saturation
+    }
+
+    public static func of(_ section: Section) -> WorldTone {
+        switch section {
+        case .toReview: WorldTone(hue: 0.87, secondHue: 0.76, saturation: 0.82)
+        case .new: WorldTone(hue: 0.49, secondHue: 0.55, saturation: 0.78)
+        case .saved: WorldTone(hue: 0.09, secondHue: 0.04, saturation: 0.85)
+        case .skipped: WorldTone(hue: 0.62, secondHue: 0.66, saturation: 0.32)
+        case .applied: WorldTone(hue: 0.58, secondHue: 0.64, saturation: 0.8)
+        case .interviews: WorldTone(hue: 0.40, secondHue: 0.46, saturation: 0.75)
+        case .offers: WorldTone(hue: 0.13, secondHue: 0.09, saturation: 0.85)
+        case .whichApplication: WorldTone(hue: 0.02, secondHue: 0.95, saturation: 0.75)
+        case .overview, .profile, .projects, .interview, .chat: WorldTone(hue: 0.77, secondHue: 0.84, saturation: 0.78)
+        case .search, .agentRuns, .companies, .settings: WorldTone(hue: 0.68, secondHue: 0.62, saturation: 0.5)
+        }
+    }
+}

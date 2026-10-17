@@ -131,7 +131,7 @@ struct SitesSection: View {
         } header: {
             Text("Sites")
         }
-        .sheet(isPresented: $signingIn) { SiteSignInSheet(store: store) { signingIn = false } }
+        .sheet(isPresented: $signingIn) { SiteSignInSheet(store: store) { signingIn = false }.worldSheet() }
     }
 }
 

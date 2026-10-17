@@ -55,6 +55,7 @@ struct PreferencesEditor: View {
             }
         }
         .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
         .task {
             guard !loaded else { return }
             await store.openPreferences()
@@ -120,6 +121,7 @@ struct StrategyEditorSheet: View {
                 Toggle("Paused (doesn't run until resumed)", isOn: $form.paused)
             }
             .formStyle(.grouped)
+            .scrollContentBackground(.hidden)
             HStack {
                 Spacer()
                 Button("Cancel", action: close).keyboardShortcut(.cancelAction)

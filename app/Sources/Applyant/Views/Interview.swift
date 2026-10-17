@@ -9,12 +9,16 @@ struct InterviewList: View {
 
     var body: some View {
         let rows = store.interviewRows
-        Group {
+        let world = Theme.world(.interview)
+        VStack(alignment: .leading, spacing: 0) {
+            ModuleHeader(section: .interview, subtitle: rows.waiting.isEmpty ? "Nothing waits for an answer" : "\(rows.waiting.count) waiting for your answer")
+                .columnHeader()
             if rows.waiting.isEmpty && rows.projects.isEmpty {
                 EmptyState(
                     title: "No projects yet",
                     systemImage: ApplyantKit.Section.interview.symbol,
-                    detail: "Questions are asked about your projects. Import your CV or add a project first."
+                    detail: "Questions are asked about your projects. Import your CV or add a project first.",
+                    art: .projects
                 ) {
                     Button("Open Projects") {
                         store.showOnboarding = false
@@ -26,18 +30,21 @@ struct InterviewList: View {
                     }
                 }
             } else {
-                List(selection: Binding(
-                    get: { store.navigation.interview },
-                    set: { store.navigation.interview = $0 }
-                )) {
+                CardList(
+                    selection: Binding(get: { store.navigation.interview }, set: { store.navigation.interview = $0 }),
+                    order: rows.waiting.map(\.target) + rows.projects.map(\.target),
+                    tint: world.main
+                ) {
                     if !rows.waiting.isEmpty {
-                        SwiftUI.Section("Waiting for you") {
-                            ForEach(rows.waiting) { InterviewRowView(row: $0).tag($0.target) }
+                        CardListHeader(title: "Waiting for you", count: rows.waiting.count, tint: Theme.warning)
+                        ForEach(rows.waiting) { row in
+                            SelectableCard(id: row.target) { InterviewRowView(row: row) }
                         }
                     }
                     if !rows.projects.isEmpty {
-                        SwiftUI.Section("Projects") {
-                            ForEach(rows.projects) { InterviewRowView(row: $0).tag($0.target) }
+                        CardListHeader(title: "Projects", count: rows.projects.count, tint: world.main)
+                        ForEach(rows.projects) { row in
+                            SelectableCard(id: row.target) { InterviewRowView(row: row) }
                         }
                     }
                 }
@@ -52,13 +59,12 @@ struct InterviewRowView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(row.title).font(.headline).lineLimit(2)
-            Text(row.subtitle).font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
+            Text(row.title).font(.system(size: 13.5, weight: .bold)).foregroundStyle(Theme.text).lineLimit(2)
+            Text(row.subtitle).font(.system(size: 12)).foregroundStyle(Theme.secondaryText).lineLimit(2)
             if !row.chips.isEmpty {
-                HStack(spacing: 4) { ForEach(row.chips, id: \.text) { ChipView(chip: $0) } }
+                HStack(spacing: 4) { ForEach(row.chips, id: \.text) { ChipView(chip: $0) } }.padding(.top, 2)
             }
         }
-        .padding(.vertical, 3)
     }
 }
 
@@ -92,7 +98,6 @@ struct InterviewThreadView: View {
                         }
                     }
                     if let open = InterviewText.openQuestion(thread) {
-                        Divider().opacity(0.6)
                         composer(open)
                     }
                 }
@@ -131,6 +136,7 @@ struct InterviewThreadView: View {
                 Image(systemName: "sparkles")
                     .font(.callout.weight(.semibold))
                     .foregroundStyle(Theme.brand)
+                    .shadow(color: Theme.magenta.opacity(0.6), radius: 4)
                     .padding(.top, 2)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(q.text).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
@@ -231,7 +237,7 @@ struct InterviewThreadView: View {
                 .overlay(alignment: .topLeading) {
                     if answer.isEmpty {
                         Text("Your answer, in your own words: it's saved as a fact you stand behind")
-                            .foregroundStyle(.tertiary).padding(.top, 1).padding(.leading, 5).allowsHitTesting(false)
+                            .foregroundStyle(Theme.tertiaryText).padding(.top, 1).padding(.leading, 5).allowsHitTesting(false)
                     }
                 }
                 .composerField()
@@ -256,7 +262,11 @@ struct InterviewThreadView: View {
                     .disabled(answer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
-        .padding(14)
+        .padding(16)
+        .glass(radius: Theme.panelRadius)
+        .padding(.horizontal, 16)
+        .padding(.bottom, 14)
+        .frame(maxWidth: 800)
         .onAppear { answering = true }
         .task { await store.loadSpokenLanguages() }
         .onDisappear { dictation.stop() }

@@ -15,23 +15,25 @@ struct MailboxStatus: View {
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: MailText.isConnected(store.mailbox) ? "envelope" : "envelope.badge.shield.half.filled")
-                .foregroundStyle(MailText.isConnected(store.mailbox) ? Color.secondary : Color.orange)
+                .foregroundStyle(MailText.isConnected(store.mailbox) ? Theme.secondaryText : Theme.warning)
             Text(MailText.connection(store.mailbox).replacingOccurrences(of: "Mailbox: ", with: ""))
                 .font(.callout)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.secondaryText)
                 .lineLimit(1)
                 .truncationMode(.middle)
             Spacer()
             if MailText.isConnected(store.mailbox) {
                 Button("Sync now") { Task { await store.syncMailbox() } }
+                    .buttonStyle(.secondary)
                     .controlSize(.small)
             } else {
                 Button(store.mailbox == nil ? "Connect mailbox…" : "Reconnect…") { connecting = true }
+                    .buttonStyle(.secondary)
                     .controlSize(.small)
             }
         }
         .sheet(isPresented: $connecting) {
-            MailboxConnectSheet(store: store) { connecting = false }
+            MailboxConnectSheet(store: store) { connecting = false }.worldSheet()
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
@@ -45,31 +47,38 @@ struct WhichApplicationList: View {
     let store: AppStore
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(alignment: .leading, spacing: 0) {
+            ModuleHeader(section: .whichApplication, subtitle: store.mailQueue.isEmpty ? "Nothing to sort" : "\(store.mailQueue.count) repl\(store.mailQueue.count == 1 ? "y" : "ies") to place")
+                .columnHeader()
             MailboxStatus(store: store)
-            Divider()
+                .padding(.horizontal, 6)
             if store.mailQueue.isEmpty {
                 EmptyState(
                     title: "Nothing to sort",
                     systemImage: ApplyantKit.Section.whichApplication.symbol,
-                    detail: "Replies Applyant can't place on its own, or can't tell what they are, wait here."
+                    detail: "Replies Applyant can't place on its own, or can't tell what they are, wait here.",
+                    art: .allCaughtUp
                 )
             } else {
-                List(store.mailQueue, id: \.id, selection: Binding(
-                    get: { store.navigation.email },
-                    set: { store.navigation.email = $0 }
-                )) { e in
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(e.subject.isEmpty ? "(no subject)" : e.subject).font(.headline).lineLimit(2)
-                        Text(MailText.sender(e)).font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
-                        HStack(spacing: 4) {
-                            ChipView(chip: MailText.labelChip(e))
-                            Text(e.receivedAt.date.formatted(.dateTime.day().month(.abbreviated).hour().minute()))
-                                .font(.caption).foregroundStyle(.secondary)
+                CardList(
+                    selection: Binding(get: { store.navigation.email }, set: { store.navigation.email = $0 }),
+                    order: store.mailQueue.map(\.id),
+                    tint: Theme.world(.whichApplication).main
+                ) {
+                    ForEach(store.mailQueue, id: \.id) { e in
+                        SelectableCard(id: e.id) {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(e.subject.isEmpty ? "(no subject)" : e.subject).font(.system(size: 13.5, weight: .bold)).foregroundStyle(Theme.text).lineLimit(2)
+                                Text(MailText.sender(e)).font(.system(size: 12)).foregroundStyle(Theme.secondaryText).lineLimit(1)
+                                HStack(spacing: 6) {
+                                    ChipView(chip: MailText.labelChip(e))
+                                    Text(e.receivedAt.date.formatted(.dateTime.day().month(.abbreviated).hour().minute()))
+                                        .font(.caption).foregroundStyle(Theme.tertiaryText)
+                                }
+                                .padding(.top, 2)
+                            }
                         }
                     }
-                    .padding(.vertical, 3)
-                    .tag(e.id)
                 }
             }
         }
@@ -92,7 +101,8 @@ struct WhichApplicationDetail: View {
             EmptyState(
                 title: "Which application is this?",
                 systemImage: ApplyantKit.Section.whichApplication.symbol,
-                detail: "Pick a reply on the left and say which application it's about, or that it's about none."
+                detail: "Pick a reply on the left and say which application it's about, or that it's about none.",
+                art: .whichApplication
             )
         }
     }
@@ -115,20 +125,23 @@ struct WhichApplication: View {
                 // The reply, read like a message.
                 PageHeader(
                     title: email.subject.isEmpty ? "(no subject)" : email.subject,
-                    subtitle: MailText.sender(email) + " · " + email.receivedAt.date.formatted(date: .abbreviated, time: .shortened),
-                    systemImage: "envelope.open"
-                )
+                    subtitle: MailText.sender(email) + " · " + email.receivedAt.date.formatted(date: .abbreviated, time: .shortened)
+                ) {
+                    ArtView(.whichApplication, size: 64)
+                }
                 Text(email.snippet)
+                    .font(Theme.prose)
+                    .foregroundStyle(.white.opacity(0.88))
                     .textSelection(.enabled)
-                    .lineSpacing(3)
+                    .lineSpacing(5)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(Theme.cardPadding)
-                    .cardSurface()
+                    .padding(Theme.cardPadding + 2)
+                    .readingSurface()
                     .entrance(1)
                 // What Applyant made of it, and what's left for you.
                 VStack(alignment: .leading, spacing: 12) {
                     HStack(spacing: 8) {
-                        Text("It is").foregroundStyle(.secondary)
+                        Text("It is").foregroundStyle(Theme.secondaryText)
                         Picker("It is", selection: $label) {
                             ForEach(MailText.pickableLabels, id: \.self) {
                                 Text(MailText.labelTitle($0)).tag($0)
@@ -145,7 +158,7 @@ struct WhichApplication: View {
                     if email.hasNote {
                         Text(MailText.noteSentence(email.note)).font(.callout).foregroundStyle(.secondary)
                     }
-                    Text("Which application is it about?").font(.headline).padding(.top, 4)
+                    Text("Which application is it about?").font(.system(size: 15, weight: .bold)).padding(.top, 4)
                     ForEach(email.candidates, id: \.applicationID) { c in
                         HStack {
                             Text(MailText.candidateTitle(c))
@@ -169,6 +182,7 @@ struct WhichApplication: View {
                             .fixedSize()
                         }
                         Button(email.candidates.isEmpty && otherApplications.isEmpty ? "Not one of mine" : "None of these") { assign(nil) }
+                            .buttonStyle(.secondary)
                             .help("It isn't about an application sent through Applyant; it's kept, and no status changes.")
                     }
                     if email.candidates.isEmpty && otherApplications.isEmpty {

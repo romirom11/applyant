@@ -1,7 +1,8 @@
-// How things move: blocks coming in one after another, chips popping in, the shimmer of work
-// under way, the activity line, the job header's slowly drifting glow, typing dots and the
-// celebration's sparks. Everything falls back to a plain fade with Reduce Motion, and nothing
-// keeps animating while the window is in the background.
+// How things move: blocks coming in one after another, chips popping in, the shimmer and the
+// sheen of work under way, numbers counting up, typing dots and the celebration's sparks.
+// Everything falls back to a plain fade with Reduce Motion, and nothing keeps animating while
+// the window is in the background. What moves all the time (the world's glow, floating art,
+// halos) is Core Animation's, in Ambient.swift.
 import ApplyantKit
 import SwiftUI
 
@@ -11,7 +12,13 @@ struct EndlessMotion: DynamicProperty {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.controlActiveState) private var activeState
 
-    var allowed: Bool { !reduceMotion && activeState != .inactive }
+    var allowed: Bool { !reduceMotion && (activeState != .inactive || Self.always) }
+    /// The ambient kind (the world drifting, art floating): only while the window is the key one.
+    var ambient: Bool { !reduceMotion && (activeState == .key || Self.always) }
+
+    /// A scripted run with `--ambient`: everything moves as in the window in front, for
+    /// measuring what that costs without taking the screen from whoever is using it.
+    nonisolated(unsafe) static var always = false
 }
 
 // MARK: - Coming in
@@ -25,6 +32,11 @@ extension View {
 
     /// Work under way: a soft light passes over it.
     func shimmer(_ active: Bool = true) -> some View { modifier(Shimmer(active: active)) }
+
+    /// Work under way on a whole card: a band of light sweeps across its glass.
+    func sheen(_ active: Bool = true, radius: CGFloat = Theme.innerRadius + 2) -> some View {
+        modifier(Sheen(active: active, radius: radius))
+    }
 }
 
 private struct Entrance: ViewModifier {
@@ -75,45 +87,88 @@ private struct Shimmer: ViewModifier {
         }
     }
 
-    /// Its own view, so the pass starts over from the left whenever the shimmer comes back (the
-    /// window in front again).
+    /// A pass every two seconds, drawn thirty times a second: smooth enough for a soft band, and
+    /// a quarter of what a display-rate animation would cost.
     private struct ShimmerBand: View {
-        @State private var phase: CGFloat = -1
-
         var body: some View {
-            GeometryReader { geo in
-                // A band of the page's own colour: it lightens dark text and dims light text.
-                LinearGradient(colors: [.clear, Theme.page.opacity(0.75), .clear], startPoint: .leading, endPoint: .trailing)
-                    .frame(width: geo.size.width * 0.45)
-                    .offset(x: phase * geo.size.width)
-            }
-            .onAppear {
-                withAnimation(.linear(duration: 1.8).delay(0.2).repeatForever(autoreverses: false)) { phase = 1.3 }
+            TimelineView(.animation(minimumInterval: 1 / 30)) { context in
+                let t = context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 2.2) / 2.2
+                GeometryReader { geo in
+                    // Light over the white text: it glints as the band passes.
+                    LinearGradient(colors: [.clear, .white.opacity(0.55), .clear], startPoint: .leading, endPoint: .trailing)
+                        .frame(width: geo.size.width * 0.45)
+                        .offset(x: (-1 + 2.3 * t) * geo.size.width)
+                }
             }
         }
     }
 }
 
-/// A small dot that breathes: something is happening right now.
+private struct Sheen: ViewModifier {
+    let active: Bool
+    let radius: CGFloat
+    private let motion = EndlessMotion()
+
+    func body(content: Content) -> some View {
+        content.overlay {
+            if active && motion.allowed {
+                // Core Animation sweeps the band (Ambient.swift): no redraw per frame.
+                SheenBand(radius: radius)
+                    .allowsHitTesting(false)
+            }
+        }
+    }
+}
+
+/// A small dot that breathes: something is happening right now. Core Animation breathes it
+/// (Ambient.swift), so a dot on screen for hours costs nothing.
 struct LiveDot: View {
     var color: Color = Theme.accent
+    var size: CGFloat = 5
     private let motion = EndlessMotion()
 
     var body: some View {
-        Circle()
-            .fill(color)
-            .frame(width: 5, height: 5)
-            .phaseAnimator(motion.allowed ? [1.0, 0.35] : [1.0]) { dot, value in
-                dot.opacity(value).scaleEffect(0.8 + 0.2 * value)
-            } animation: { _ in .easeInOut(duration: 0.8) }
+        BreathingDot(color: NSColor(color), breathing: motion.allowed)
+            .frame(width: size * 2.2, height: size * 2.2)
+            .frame(width: size, height: size)
             .accessibilityHidden(true)
+    }
+}
+
+// MARK: - Numbers
+
+/// A number that counts up to its value when it appears, and rolls to a new one.
+struct CountingNumber: View {
+    let value: Int
+    @State private var shown: Double = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        Counted(value: shown)
+            .onAppear {
+                if reduceMotion { shown = Double(value) } else { withAnimation(Theme.Motion.gauge.delay(0.1)) { shown = Double(value) } }
+            }
+            .onChange(of: value) { _, new in
+                withAnimation(Theme.Motion.pick(Theme.Motion.gauge, reduceMotion: reduceMotion)) { shown = Double(new) }
+            }
+            .accessibilityLabel("\(value)")
+    }
+
+    private struct Counted: View, @preconcurrency Animatable {
+        var value: Double
+        var animatableData: Double {
+            get { value }
+            set { value = newValue }
+        }
+
+        var body: some View { Text("\(Int(value.rounded()))") }
     }
 }
 
 // MARK: - The activity line
 
-/// The bottom bar's top edge while Applyant works: the brand colours flowing along it. Still,
-/// and orange, while paused.
+/// A line of the brand colours flowing while Applyant works (a delivery's progress without a
+/// count). Still, and orange, while paused.
 struct FlowLine: View {
     let flowing: Bool
     private let motion = EndlessMotion()
@@ -139,7 +194,7 @@ struct FlowLine: View {
 
         var body: some View {
             // Two periods side by side, slid one period along and started over: no seam.
-            let period: [Color] = [Theme.accent, Theme.violet, Theme.pink, Theme.accent]
+            let period: [Color] = [Theme.violet, Theme.magenta, Theme.pink, Theme.violet]
             LinearGradient(colors: period + period.dropFirst(), startPoint: .leading, endPoint: .trailing)
                 .frame(width: width * 2)
                 .offset(x: -width * offset)
@@ -148,49 +203,6 @@ struct FlowLine: View {
                     withAnimation(.linear(duration: 4).repeatForever(autoreverses: false)) { offset = 1 }
                 }
         }
-    }
-}
-
-// MARK: - The job header's glow
-
-/// A mesh of the score's colour, the company's and the accent, drifting slowly behind the job's
-/// header and fading into the page. It stops while the window isn't in front, and stays still
-/// with Reduce Motion.
-struct HeroGlow: View {
-    let score: Color
-    let company: Color
-    private let motion = EndlessMotion()
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.colorScheme) private var scheme
-
-    var body: some View {
-        // A slow drift: twenty frames a second are plenty, and cheap. Paused, it stays where it was.
-        TimelineView(.animation(minimumInterval: 1 / 20, paused: !motion.allowed)) { context in
-            let t = reduceMotion ? 0 : context.date.timeIntervalSinceReferenceDate
-            MeshGradient(
-                width: 3, height: 3,
-                points: Self.points(t),
-                colors: [
-                    company, Theme.accent, score,
-                    score.opacity(0.8), company.opacity(0.7), Theme.violet.opacity(0.8),
-                    Theme.page, Theme.page, Theme.page,
-                ],
-                smoothsColors: true
-            )
-        }
-        .opacity(scheme == .dark ? 0.42 : 0.3)
-        .mask(LinearGradient(colors: [.black, .black.opacity(0.7), .clear], startPoint: .top, endPoint: .bottom))
-        .accessibilityHidden(true)
-    }
-
-    /// The inner points wander on slow, unrelated circles; the corners stay put.
-    static func points(_ t: Double) -> [SIMD2<Float>] {
-        func wave(_ speed: Double, _ phase: Double, _ amount: Double) -> Float { Float(sin(t * speed + phase) * amount) }
-        return [
-            [0, 0], [0.5 + wave(0.21, 0, 0.18), 0], [1, 0],
-            [0, 0.45 + wave(0.17, 1, 0.12)], [0.5 + wave(0.13, 2, 0.2), 0.5 + wave(0.19, 3, 0.15)], [1, 0.5 + wave(0.15, 4, 0.12)],
-            [0, 1], [0.5 + wave(0.11, 5, 0.2), 1], [1, 1],
-        ]
     }
 }
 
@@ -204,7 +216,7 @@ struct TypingDots: View {
         HStack(spacing: 4) {
             ForEach(0..<3) { i in
                 Circle()
-                    .fill(.secondary)
+                    .fill(Theme.secondaryText)
                     .frame(width: 6, height: 6)
                     .phaseAnimator(motion.allowed ? [0.0, 1.0, 0.0] : [0.0]) { dot, lift in
                         dot.offset(y: -3 * lift).opacity(0.45 + 0.55 * lift)
@@ -215,10 +227,10 @@ struct TypingDots: View {
     }
 }
 
-/// A symbol on the brand gradient with sparks flying out of it, for a job well done.
-struct SparkBurst: View {
-    let systemImage: String
+/// Sparks flying out from the middle, once, when it appears (a job well done).
+struct Sparks: View {
     var size: CGFloat = 30
+    var count = 10
     @State private var trigger = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -233,13 +245,14 @@ struct SparkBurst: View {
             if !reduceMotion {
                 KeyframeAnimator(initialValue: Spark(), trigger: trigger) { spark in
                     ZStack {
-                        ForEach(0..<10, id: \.self) { i in
-                            let angle = Double(i) / 10 * 2 * .pi
+                        ForEach(0..<count, id: \.self) { i in
+                            let angle = Double(i) / Double(count) * 2 * .pi + (i.isMultiple(of: 2) ? 0 : 0.2)
+                            let reach = i.isMultiple(of: 3) ? 1.0 : 0.82
                             Circle()
                                 .fill(Theme.sparkColors[i % Theme.sparkColors.count])
-                                .frame(width: i.isMultiple(of: 2) ? 5 : 4, height: i.isMultiple(of: 2) ? 5 : 4)
+                                .frame(width: size * (i.isMultiple(of: 2) ? 0.17 : 0.12), height: size * (i.isMultiple(of: 2) ? 0.17 : 0.12))
                                 .scaleEffect(spark.scale)
-                                .offset(x: cos(angle) * spark.distance, y: sin(angle) * spark.distance)
+                                .offset(x: cos(angle) * spark.distance * reach, y: sin(angle) * spark.distance * reach)
                                 .opacity(spark.opacity)
                         }
                     }
@@ -259,10 +272,26 @@ struct SparkBurst: View {
                     }
                 }
             }
+        }
+        .frame(width: size, height: size)
+        .onAppear { trigger += 1 }
+        .allowsHitTesting(false)
+    }
+}
+
+/// A symbol on the brand gradient with sparks flying out of it (the toast's).
+struct SparkBurst: View {
+    let systemImage: String
+    var size: CGFloat = 30
+    @State private var trigger = 0
+
+    var body: some View {
+        ZStack {
+            Sparks(size: size)
             Circle()
                 .fill(Theme.brandFill)
                 .frame(width: size, height: size)
-                .shadow(color: Theme.accent.opacity(0.4), radius: 6, y: 2)
+                .shadow(color: Theme.magenta.opacity(0.5), radius: 6, y: 2)
             Image(systemName: systemImage)
                 .font(.system(size: size * 0.45, weight: .bold))
                 .foregroundStyle(.white)
@@ -285,5 +314,13 @@ extension AnyTransition {
     /// A newly picked job: up from a little below, out of a blur; the one before just fades.
     static func page(reduceMotion: Bool) -> AnyTransition {
         reduceMotion ? .opacity : .asymmetric(insertion: AnyTransition(.blurReplace).combined(with: .offset(y: 12)), removal: .opacity)
+    }
+
+    /// A row leaving its list (approved, skipped): it slides away to the side as it fades.
+    static func rowOut(reduceMotion: Bool) -> AnyTransition {
+        reduceMotion ? .opacity : .asymmetric(
+            insertion: .opacity.combined(with: .scale(scale: 0.96, anchor: .top)),
+            removal: .move(edge: .leading).combined(with: .opacity)
+        )
     }
 }

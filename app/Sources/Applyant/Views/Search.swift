@@ -12,65 +12,49 @@ struct SearchList: View {
     var body: some View {
         let strategies = store.strategyRows
         let groups = SearchText.sourceGroups(store.search)
-        List(selection: Binding(
-            get: { store.navigation.search },
-            set: { store.navigation.search = $0 }
-        )) {
-            SwiftUI.Section {
+        let world = Theme.world(.search)
+        let on = store.search.sources.filter { $0.enabled && $0.kindEnabled }.count
+        VStack(alignment: .leading, spacing: 0) {
+            ModuleHeader(section: .search, subtitle: "\(strategies.count) search\(strategies.count == 1 ? "" : "es") · \(on) of \(store.search.sources.count) sources on")
+                .columnHeader()
+            HStack(spacing: 6) {
+                Button { creating = true } label: { Label("New search", systemImage: "plus") }
+                Button { Task { await store.planSearch() } } label: {
+                    Label(store.planning ? "Planning…" : "Plan searches", systemImage: "sparkle.magnifyingglass")
+                }
+                .disabled(store.planning)
+                .help(store.planning
+                    ? "The planner is running"
+                    : "Applyant proposes searches from your profile and looks for new job boards on the web (2–4 minutes)")
+                if store.planning { ProgressView().controlSize(.mini) }
+            }
+            .buttonStyle(.secondary)
+            .controlSize(.small)
+            .padding(.horizontal, 16)
+            .padding(.bottom, 4)
+            CardList(
+                selection: Binding(get: { store.navigation.search }, set: { store.navigation.search = $0 }),
+                order: strategies.map(\.selection) + groups.flatMap { $0.rows.map(\.selection) },
+                tint: world.main
+            ) {
                 if let plan = store.search.plans.first {
                     Label(SearchText.planSummary(plan), systemImage: "sparkle.magnifyingglass")
-                        .font(.caption).foregroundStyle(.secondary).lineLimit(3)
+                        .font(.caption).foregroundStyle(Theme.secondaryText).lineLimit(3)
+                        .padding(.horizontal, 6).padding(.top, 6)
                 }
+                CardListHeader(title: "Searches", count: strategies.count, tint: world.main)
                 if strategies.isEmpty {
                     Text("No searches yet. Press Plan searches to have them proposed from your profile, or New search to write one yourself.")
-                        .font(.callout).foregroundStyle(.secondary)
+                        .font(.callout).foregroundStyle(Theme.secondaryText).padding(.horizontal, 6)
                 }
                 ForEach(strategies) { row in
-                    SearchRowView(row: row).tag(row.selection)
+                    SelectableCard(id: row.selection) { SearchRowView(row: row) }
                 }
-            } header: {
-                HStack {
-                    Text("Searches")
-                    Spacer()
-                    if store.planning { ProgressView().controlSize(.mini) }
-                    Button("New search") { creating = true }
-                        .buttonStyle(.link)
-                        .controlSize(.small)
-                    Button("Plan searches") { Task { await store.planSearch() } }
-                        .buttonStyle(.link)
-                        .controlSize(.small)
-                        .disabled(store.planning)
-                        .help(store.planning
-                            ? "The planner is running"
-                            : "Applyant proposes searches from your profile and looks for new job boards on the web (2–4 minutes)")
-                }
-            }
-            SwiftUI.Section("Sources") {
-                AddBoardOrPage(store: store)
-            }
-            ForEach(groups, id: \.kind.kind) { group in
-                SwiftUI.Section {
-                    ForEach(group.rows) { row in
-                        HStack {
-                            SearchRowView(row: row)
-                            Spacer()
-                            if case let .source(key) = row.selection, let source = store.source(key) {
-                                Toggle(source.enabled ? "Turn \(source.label) off" : "Turn \(source.label) on", isOn: Binding(
-                                    get: { source.enabled },
-                                    set: { on in Task { await store.setSource(key, enabled: on) } }
-                                ))
-                                .toggleStyle(.switch)
-                                .controlSize(.mini)
-                                .labelsHidden()
-                                .help(source.enabled ? "Turn \(source.label) off" : "Turn \(source.label) on")
-                            }
-                        }
-                        .tag(row.selection)
-                    }
-                    if group.kind.kind == "telegram" { FollowChannel(store: store) }
-                } header: {
+                CardListHeader(title: "Sources", tint: world.main)
+                AddBoardOrPage(store: store).padding(.horizontal, 4)
+                ForEach(groups, id: \.kind.kind) { group in
                     HStack {
-                        Text(group.kind.label)
+                        CardListHeader(title: group.kind.label, count: group.rows.count)
                         Spacer()
                         Toggle("", isOn: Binding(
                             get: { group.kind.enabled },
@@ -79,15 +63,36 @@ struct SearchList: View {
                         .toggleStyle(.switch)
                         .controlSize(.mini)
                         .labelsHidden()
+                        .padding(.top, 10)
+                        .padding(.trailing, 6)
                         .help(group.kind.enabled ? "Switch every \(group.kind.label) source off" : "Switch \(group.kind.label) back on")
                     }
+                    ForEach(group.rows) { row in
+                        SelectableCard(id: row.selection, padding: 10) {
+                            HStack {
+                                SearchRowView(row: row)
+                                Spacer()
+                                if case let .source(key) = row.selection, let source = store.source(key) {
+                                    Toggle(source.enabled ? "Turn \(source.label) off" : "Turn \(source.label) on", isOn: Binding(
+                                        get: { source.enabled },
+                                        set: { on in Task { await store.setSource(key, enabled: on) } }
+                                    ))
+                                    .toggleStyle(.switch)
+                                    .controlSize(.mini)
+                                    .labelsHidden()
+                                    .help(source.enabled ? "Turn \(source.label) off" : "Turn \(source.label) on")
+                                }
+                            }
+                        }
+                    }
+                    if group.kind.kind == "telegram" { FollowChannel(store: store).padding(.horizontal, 4) }
                 }
             }
         }
         .navigationTitle("Search")
         .task { await store.openSearch() }
         .sheet(isPresented: $creating) {
-            StrategyEditorSheet(store: store, strategy: nil) { creating = false }
+            StrategyEditorSheet(store: store, strategy: nil) { creating = false }.worldSheet()
         }
     }
 }
@@ -120,14 +125,14 @@ struct SearchRowView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(row.title).font(.headline).lineLimit(2)
-                .foregroundStyle(row.on ? .primary : .secondary)
-            Text(row.subtitle).font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
+            Text(row.title).font(.system(size: 13.5, weight: .bold)).lineLimit(2)
+                .foregroundStyle(row.on ? Theme.text : Theme.secondaryText)
+            Text(row.subtitle).font(.system(size: 12)).foregroundStyle(Theme.secondaryText).lineLimit(1)
             if !row.chips.isEmpty {
                 HStack(spacing: 4) { ForEach(row.chips, id: \.text) { ChipView(chip: $0) } }
+                    .padding(.top, 2)
             }
         }
-        .padding(.vertical, 3)
     }
 }
 
@@ -140,19 +145,20 @@ struct SearchDetail: View {
             if let s = store.strategy(id) {
                 StrategyDetail(store: store, strategy: s)
             } else {
-                EmptyState(title: "This search was deleted", systemImage: "magnifyingglass")
+                EmptyState(title: "This search was deleted", systemImage: "magnifyingglass", art: .search)
             }
         case let .source(key)?:
             if let s = store.source(key) {
                 SourceDetail(store: store, source: s)
             } else {
-                EmptyState(title: "Source gone", systemImage: "magnifyingglass")
+                EmptyState(title: "Source gone", systemImage: "magnifyingglass", art: .search)
             }
         case nil:
             EmptyState(
                 title: "Search",
                 systemImage: ApplyantKit.Section.search.symbol,
-                detail: "A search looks for job titles in the sources below, on its schedule, and puts what it finds in New. Pick a search to see what it looks for and how it's doing, or a source to switch it off."
+                detail: "A search looks for job titles in the sources below, on its schedule, and puts what it finds in New. Pick a search to see what it looks for and how it's doing, or a source to switch it off.",
+                art: .search
             )
         }
     }
@@ -161,7 +167,6 @@ struct SearchDetail: View {
 struct StrategyDetail: View {
     let store: AppStore
     let strategy: SearchStrategy
-    private let motion = EndlessMotion()
     @State private var editing = false
     @State private var confirmingDelete = false
 
@@ -170,8 +175,7 @@ struct StrategyDetail: View {
         ScrollView {
             VStack(alignment: .leading, spacing: Theme.blockSpacing) {
                 PageHeader(title: s.name, subtitle: SearchText.stats(s.stats)) {
-                    IconTile(systemImage: s.running ? "magnifyingglass" : "binoculars.fill")
-                        .symbolEffect(.pulse, options: .repeating, isActive: s.running && motion.allowed)
+                    ArtView(s.running ? .searching : .search, size: 64)
                 } trailing: {
                     if s.origin == "agent" { ChipView(chip: Chip(text: "Agent-generated", tone: .accent)) }
                 }
@@ -188,16 +192,17 @@ struct StrategyDetail: View {
                     Button(role: .destructive) { confirmingDelete = true } label: { Label("Delete…", systemImage: "trash") }
                     if s.running {
                         HStack(spacing: 6) {
-                            ProgressView().controlSize(.small)
-                            Text("Running…").foregroundStyle(.secondary)
+                            LiveDot(color: Theme.world(.search).main, size: 6)
+                            Text("Running…").foregroundStyle(Theme.secondaryText)
                         }
+                        .shimmer()
                     }
                 }
                 .buttonStyle(.secondary)
                 .entrance(1)
                 Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 14, verticalSpacing: 8) {
                     GridRow {
-                        Text("Looks for").foregroundStyle(.secondary)
+                        Text("Looks for").foregroundStyle(Theme.secondaryText)
                         Text(s.queries.isEmpty ? "every listing" : s.queries.map { "“\($0)”" }.joined(separator: ", "))
                     }
                     GridRow {
@@ -244,7 +249,7 @@ struct StrategyDetail: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .sheet(isPresented: $editing) {
-            StrategyEditorSheet(store: store, strategy: s) { editing = false }
+            StrategyEditorSheet(store: store, strategy: s) { editing = false }.worldSheet()
         }
         .confirmationDialog("Delete \(s.name)?", isPresented: $confirmingDelete) {
             Button("Delete the search", role: .destructive) { Task { await store.deleteStrategy(s.id) } }
@@ -302,7 +307,7 @@ struct SourceDetail: View {
         ScrollView {
             VStack(alignment: .leading, spacing: Theme.blockSpacing) {
                 PageHeader(title: s.label, subtitle: s.key) {
-                    IconTile(systemImage: "dot.radiowaves.left.and.right", colors: s.enabled && s.kindEnabled ? Theme.brandColors : [.gray, .secondary])
+                    IconTile(systemImage: "dot.radiowaves.left.and.right", size: 52, colors: s.enabled && s.kindEnabled ? [Theme.world(.new).main, Theme.world(.applied).main] : [.gray, Color(white: 0.35)])
                 } trailing: {
                     if s.origin == "agent" { ChipView(chip: Chip(text: "Found by the agent", tone: .accent)) }
                 }
