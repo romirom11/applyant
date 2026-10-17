@@ -34,11 +34,12 @@ enum Theme {
     static let innerRadius: CGFloat = 10
     /// The list column's panel, the job's hero and Home's metrics panel.
     static let panelRadius: CGFloat = 24
-    /// Pages, cards, grids and forms fill their pane. Only running text keeps a line length,
-    /// inside its card: at 14 pt about 105 Latin (90 Cyrillic) characters a line.
-    static let measure: CGFloat = 760
-    /// A lead sentence at 17 pt: about 85 characters.
-    static let leadMeasure: CGFloat = 760
+    /// Pages, cards, grids, forms and their text fill their pane: the user wants no empty band
+    /// beside a description (they chose full-width lines over a reading measure).
+    static let measure: CGFloat = .infinity
+    static let leadMeasure: CGFloat = .infinity
+    /// A message in a conversation still reads as a bubble, not a page-wide band.
+    static let bubbleWidth: CGFloat = 760
     /// EvidenceRow's right column ("4 facts ›", "Sep 2021").
     static let marginColumn: CGFloat = 132
     /// LabeledRow's label column.

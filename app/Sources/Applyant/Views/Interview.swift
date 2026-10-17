@@ -250,7 +250,7 @@ private struct QuestionExchange: View {
             }
             .bubble(mine: false)
             // The page is as wide as the window; a message keeps a reading measure.
-            .frame(maxWidth: Theme.measure, alignment: .leading)
+            .frame(maxWidth: Theme.bubbleWidth, alignment: .leading)
             .padding(.trailing, 60)
             .animation(Theme.Motion.pick(Theme.Motion.disclose, reduceMotion: reduceMotion), value: showsWhy)
 
@@ -262,7 +262,7 @@ private struct QuestionExchange: View {
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
                         .bubble(mine: true)
-                        .frame(maxWidth: Theme.measure, alignment: .trailing)
+                        .frame(maxWidth: Theme.bubbleWidth, alignment: .trailing)
                 }
             }
             switch q.status {
