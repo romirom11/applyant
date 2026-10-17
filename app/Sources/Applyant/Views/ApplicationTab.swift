@@ -1,6 +1,7 @@
-// Reviewing an application, answers first: routine fields fold into one line, the CV has its
-// card, each answer shows its flagged sentences, and the evidence for the selected answer sits
-// on the right. Approve is on only when the daemon reports nothing blocking it.
+// The job detail's Application tab: reviewing an application, answers first. Routine fields
+// fold into one line, the CV has its card, each answer shows its flagged sentences, and the
+// evidence for the selected answer sits on the right. Approve, Skip and Regenerate are in the
+// detail's header; this says what still blocks Approve.
 import AppKit
 import ApplyantAPI
 import ApplyantKit
@@ -11,16 +12,12 @@ typealias Answer = Applyant_V1_Answer
 typealias Sentence = Applyant_V1_AnswerSentence
 typealias FormFieldValue = Applyant_V1_ApplicationField
 
-struct ReviewApplication: View {
+struct ApplicationTab: View {
     let store: AppStore
     let applicationId: Int64
     @State private var selectedAnswer: Int32?
     @State private var editing: EditRequest?
     @State private var showAllFields = false
-    @State private var confirmRegenerate = false
-    @State private var confirmApprove = false
-    @State private var skipping = false
-    @State private var skipReason = ""
 
     var body: some View {
         Group {
@@ -30,57 +27,47 @@ struct ReviewApplication: View {
                     let side = geo.size.width >= 860
                     HStack(spacing: 0) {
                         ScrollView {
-                            VStack(alignment: .leading, spacing: 16) {
-                                header(app)
-                                if app.hasHandOff { HandOffCard(store: store, app: app) }
-                                if app.hasReceipt { receipt(app.receipt) }
-                                if !app.emails.isEmpty { ApplicationReplies(app: app) }
+                            VStack(alignment: .leading, spacing: Theme.blockSpacing) {
+                                status(app).entrance(0)
+                                if app.hasHandOff { HandOffCard(store: store, app: app).entrance(1) }
+                                if app.hasReceipt { receipt(app.receipt).entrance(1) }
+                                if !app.emails.isEmpty { ApplicationReplies(app: app).entrance(2) }
                                 if app.hasNote && !app.hasHandOff && app.stage != .needsCandidate { note(app.note) }
-                                needsYou(app)
-                                if InterviewPrep.applies(app) { InterviewPrepCard(store: store, app: app) }
+                                needsYou(app).entrance(2)
+                                if InterviewPrep.applies(app) { InterviewPrepCard(store: store, app: app).entrance(3) }
                                 // Sent: notes and contacts matter more than the answers; before
                                 // that, they follow the review.
                                 let sent = StageRules.isSent(app.stage)
-                                if sent { notesAndContacts(app) }
-                                standardFields(app)
-                                if app.hasCv { CvCard(store: store, app: app) }
+                                if sent { notesAndContacts(app).entrance(3) }
+                                standardFields(app).entrance(3)
+                                if app.hasCv { CvCard(store: store, app: app).entrance(4) }
                                 questions(app)
-                                postingTextCard(app)
-                                if !sent { notesAndContacts(app) }
+                                if !sent { notesAndContacts(app).entrance(6) }
                                 if !side {
                                     Divider()
                                     EvidencePanel(store: store, app: app, answer: selected(app), scrolls: false)
                                 }
                             }
-                            .padding(20)
-                            .frame(maxWidth: 820, alignment: .leading)
+                            .padding(Theme.pagePadding)
+                            .frame(maxWidth: Theme.readableWidth, alignment: .leading)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                         }
                         if side {
-                            Divider()
+                            Divider().opacity(0.6)
                             EvidencePanel(store: store, app: app, answer: selected(app))
-                                .frame(width: 290)
+                                .frame(width: 300)
+                                .background(Theme.cardFill.opacity(0.5))
                         }
                     }
                 }
             } else {
-                ProgressView()
+                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .task(id: applicationId) { await store.openApplication(applicationId) }
+        // JobDetail loads the application (its header needs it too): not again on every tab switch.
         .sheet(item: $editing) { request in
             EditSheet(request: request) { text in
                 Task { await request.save(text) }
-            }
-        }
-        .sheet(isPresented: $skipping) {
-            SkipPostingSheet(reason: $skipReason) { reason in
-                Task {
-                    guard let postingID = store.applicationDetails[applicationId]?.postingID else { return }
-                    if await store.skip(posting: postingID, reason: reason) {
-                        store.navigation.reviewing = nil
-                        store.navigation.section = .skipped
-                    }
-                }
             }
         }
     }
@@ -90,29 +77,28 @@ struct ReviewApplication: View {
         return answers.first { $0.number == selectedAnswer } ?? answers.first
     }
 
-    // MARK: Header
+    // MARK: Where it stands
 
-    private func header(_ app: Application) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(app.hasTitle ? app.title : "Application \(app.id)").font(.title2.weight(.semibold))
-                    Text([app.hasCompany ? app.company : nil, "sent through " + ApproveText.channel(app),
-                          app.hasScore ? "score \(app.score)" : nil].compactMap { $0 }.joined(separator: " · "))
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                ChipView(chip: StageText.chip(app, delivery: store.deliveries[app.id]))
-            }
+    /// How it's sent, what still blocks Approve, and which form it goes through.
+    @ViewBuilder
+    private func status(_ app: Application) -> some View {
+        VStack(alignment: .leading, spacing: Theme.rowSpacing + 4) {
+            Label((StageRules.isSent(app.stage) ? "Sent through " : "Goes through ") + ApproveText.channel(app), systemImage: "arrow.up.forward.app")
+                .foregroundStyle(.secondary)
             if !app.blockers.isEmpty && app.stage != .approved && !StageRules.isSent(app.stage) {
-                VStack(alignment: .leading, spacing: 2) {
-                    ForEach(app.blockers, id: \.self) { blocker in
-                        Label(blocker, systemImage: "exclamationmark.circle")
-                            .foregroundStyle(.orange)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Approve waits for").font(.subheadline.weight(.semibold))
+                    ForEach(Array(app.blockers.enumerated()), id: \.offset) { index, blocker in
+                        Label(blocker, systemImage: "exclamationmark.circle.fill")
+                            .foregroundStyle(Theme.warning)
                             .lineLimit(3)
+                            .popIn(index)
                     }
                 }
                 .font(.callout)
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .insetSurface(radius: Theme.innerRadius + 2, tint: Theme.warning)
             }
             if app.applyFormSwitchable {
                 // Found on LinkedIn/Xing and on the company's site: which form it goes through.
@@ -126,31 +112,6 @@ struct ReviewApplication: View {
                     }
                 }
             }
-            HStack(spacing: 8) {
-                Spacer()
-                if app.stage == .readyForReview || app.stage == .needsCandidate {
-                    Button("Skip…") { skipping = true }
-                    Button("Regenerate…") { confirmRegenerate = true }
-                    Button("Approve and send…") { confirmApprove = true }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(!ReviewRules.canApprove(app))
-                        .help(ReviewRules.canApprove(app)
-                            ? "Asks once more, then Applyant submits the application on its own"
-                            : app.blockers.joined(separator: "\n"))
-                }
-                SetStatusMenu(store: store, app: app).fixedSize()
-                if let url = URL(string: app.postingURL) { Link("Posting ↗", destination: url) }
-            }
-        }
-        .confirmationDialog("Write every answer and the CV again?", isPresented: $confirmRegenerate) {
-            Button("Regenerate") { Task { await store.regenerate(application: app.id) } }
-        } message: {
-            Text("Your edits are redrafted too; your per-application values stay.")
-        }
-        .confirmationDialog(ApproveText.title(app), isPresented: $confirmApprove) {
-            Button("Send it") { Task { await store.approve(application: app.id) } }
-        } message: {
-            Text(ApproveText.message(app))
         }
     }
 
@@ -165,7 +126,7 @@ struct ReviewApplication: View {
     }
 
     private func receipt(_ r: Applyant_V1_Receipt) -> some View {
-        GroupBox("Submission receipt") {
+        Card(title: "Submission receipt", systemImage: "checkmark.seal.fill", tint: Theme.good) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Submitted " + r.submittedAt.date.formatted(date: .abbreviated, time: .shortened))
                 if r.hasConfirmationText {
@@ -178,8 +139,6 @@ struct ReviewApplication: View {
                         .buttonStyle(.link)
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(6)
         }
     }
 
@@ -189,9 +148,8 @@ struct ReviewApplication: View {
     private func needsYou(_ app: Application) -> some View {
         let fields = ReviewRules.problemFields(app)
         if !fields.isEmpty {
-            GroupBox {
+            Card(title: "Needs a value", systemImage: "person.fill.questionmark", tint: Theme.warning) {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Needs a value").font(.headline)
                     ForEach(fields, id: \.ref) { field in
                         MissingFieldRow(store: store, field: field) { value in
                             Task { await store.setField(application: app.id, field: field.ref, value: value) }
@@ -200,8 +158,6 @@ struct ReviewApplication: View {
                     Text("For this application only; your profile stays as it is.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(6)
             }
         }
     }
@@ -212,15 +168,20 @@ struct ReviewApplication: View {
     private func standardFields(_ app: Application) -> some View {
         let routine = ReviewRules.routineFields(app)
         // Nothing to fold while the form is still being prepared.
-        if !routine.isEmpty { VStack(alignment: .leading, spacing: 6) {
+        if !routine.isEmpty { VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Label(
-                    "\(routine.count) standard field\(routine.count == 1 ? "" : "s") ready: " + routine.prefix(6).map { $0.label.lowercased() }.joined(separator: ", "),
-                    systemImage: "checkmark.circle"
-                )
+                Label {
+                    Text("\(routine.count) standard field\(routine.count == 1 ? "" : "s") ready: " + routine.prefix(6).map { $0.label.lowercased() }.joined(separator: ", "))
+                } icon: {
+                    Image(systemName: "checkmark.circle.fill").foregroundStyle(Theme.good)
+                }
                 .lineLimit(1)
                 Spacer()
-                Button(showAllFields ? "Hide" : "Show all") { showAllFields.toggle() }.buttonStyle(.link)
+                Button(showAllFields ? "Hide" : "Show all") {
+                    withAnimation(Theme.Motion.snappy) { showAllFields.toggle() }
+                }
+                .buttonStyle(.secondary)
+                .controlSize(.small)
             }
             if showAllFields {
                 ForEach(routine, id: \.ref) { f in
@@ -228,33 +189,11 @@ struct ReviewApplication: View {
                         Task { await store.setField(application: app.id, field: f.ref, value: value) }
                     }
                 }
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
-        } }
-    }
-
-    @ViewBuilder
-    private func postingTextCard(_ app: Application) -> some View {
-        if let posting = store.postings[app.postingID] ?? store.postingDetails[app.postingID],
-           posting.hasText, !posting.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            DisclosureGroup {
-                ScrollView {
-                    Text(posting.text)
-                        .font(.system(.callout, design: .monospaced))
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(8)
-                }
-                .frame(maxHeight: 420)
-                .background(Color(nsColor: .textBackgroundColor).opacity(0.6), in: RoundedRectangle(cornerRadius: 6))
-                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.secondary.opacity(0.2)))
-            } label: {
-                Label("Original posting", systemImage: "doc.text")
-                    .font(.headline)
-            }
-        } else if let posting = store.postingDetails[app.postingID], posting.hasText == false {
-            // Posting detail still loading — fetch it so the card appears.
-            Color.clear.onAppear { Task { await store.openPosting(app.postingID) } }
         }
+        .padding(12)
+        .cardSurface(radius: Theme.innerRadius + 3) }
     }
 
     // MARK: Questions
@@ -263,13 +202,22 @@ struct ReviewApplication: View {
     private func questions(_ app: Application) -> some View {
         let answers = ReviewRules.activeAnswers(app)
         if !answers.isEmpty {
-            Text("Questions · \(answers.count)").font(.headline)
-            ForEach(answers, id: \.id) { answer in
+            HStack(spacing: 8) {
+                CardTitle(title: "Questions", systemImage: "text.bubble")
+                Text("\(answers.count)")
+                    .font(.caption.weight(.semibold)).monospacedDigit()
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 6).padding(.vertical, 1)
+                    .background(Color.primary.opacity(0.07), in: Capsule())
+            }
+            .padding(.top, 4)
+            .entrance(4)
+            ForEach(Array(answers.enumerated()), id: \.element.id) { index, answer in
                 AnswerCard(
                     answer: answer,
                     editable: app.stage != .approved && app.stage != .applied,
                     selected: selected(app)?.number == answer.number,
-                    select: { selectedAnswer = answer.number },
+                    select: { withAnimation(Theme.Motion.snappy) { selectedAnswer = answer.number } },
                     interview: answer.hasInterviewQuestionID
                         ? { store.navigation.showInterview(.question(answer.interviewQuestionID)) }
                         : nil,
@@ -300,6 +248,7 @@ struct ReviewApplication: View {
                         : nil,
                     projects: (store.candidateProfile?.projects ?? []).map { (slug: $0.slug, name: $0.name) }
                 )
+                .entrance(5 + index)
             }
         }
     }
@@ -338,6 +287,7 @@ struct EditSheet: View {
                     onSave(text)
                     dismiss()
                 }
+                .buttonStyle(.primary)
                 .keyboardShortcut(.defaultAction)
                 .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
@@ -457,10 +407,10 @@ struct AnswerCard: View {
                 HStack {
                     if let interview {
                         Button("Answer in Questions for you", action: interview)
-                            .buttonStyle(.borderedProminent)
+                            .buttonStyle(.primary)
                             .help("Your answer is saved as facts, then this application is prepared again")
                     }
-                    Button("Write the answer…", action: write)
+                    Button("Write the answer…", action: write).buttonStyle(.secondary)
                 }
             } else {
                 if answer.kind == "choice" && answer.hasChoice {
@@ -492,9 +442,15 @@ struct AnswerCard: View {
                 }
             }
         }
-        .padding(12)
-        .background(selected ? Color.accentColor.opacity(0.07) : Color.clear, in: RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(selected ? Color.accentColor.opacity(0.5) : Color.secondary.opacity(0.2)))
+        .padding(14)
+        .cardSurface(tint: selected ? Theme.accent : nil)
+        .overlay {
+            // The picked answer: its evidence is on the right.
+            RoundedRectangle(cornerRadius: Theme.cornerRadius, style: .continuous)
+                .strokeBorder(Theme.accent.opacity(selected ? 0.55 : 0), lineWidth: 1.5)
+        }
+        .scaleEffect(selected ? 1 : 0.995)
+        .animation(Theme.Motion.snappy, value: selected)
         .contentShape(Rectangle())
         .onTapGesture(perform: select)
     }
@@ -579,7 +535,7 @@ struct EvidencePanel: View {
 
     private var content: some View {
             VStack(alignment: .leading, spacing: 12) {
-                Text("Evidence").font(.headline)
+                CardTitle(title: "Evidence", systemImage: "link")
                 if !app.unconfirmedFactIds.isEmpty {
                     let n = app.unconfirmedFactIds.count
                     Button("Confirm all \(n) unconfirmed…") { confirmingAll = true }
@@ -595,6 +551,8 @@ struct EvidencePanel: View {
                 }
                 if let answer {
                     Text(answer.question).font(.caption).foregroundStyle(.secondary)
+                        .id(answer.number)
+                        .transition(.opacity)
                     let facts = uniqueFacts(answer)
                     if facts.isEmpty { Text("No facts cited.").foregroundStyle(.secondary) }
                     ForEach(facts, id: \.id) { fact in
@@ -603,7 +561,7 @@ struct EvidencePanel: View {
                                 .font(.caption).foregroundStyle(.secondary)
                             Text(fact.text).font(.callout)
                             HStack {
-                                Text(statusText(fact.status))
+                                Label(statusText(fact.status), systemImage: fact.status == .confirmed ? "checkmark.seal.fill" : "questionmark.circle")
                                     .font(.caption)
                                     .foregroundStyle(fact.status == .confirmed ? .green : .orange)
                                 Spacer()
@@ -623,8 +581,9 @@ struct EvidencePanel: View {
                                 }
                             }
                         }
-                        .padding(8)
-                        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 6))
+                        .padding(10)
+                        .cardSurface(radius: Theme.innerRadius)
+                        .transition(.opacity.combined(with: .move(edge: .trailing)))
                     }
                 } else {
                     Text("Select an answer to see what it rests on.").foregroundStyle(.secondary)
@@ -666,13 +625,14 @@ struct CvCard: View {
 
     var body: some View {
         let cv = app.cv
-        GroupBox {
+        Card {
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
-                    Text(title(cv)).font(.headline)
+                    CardTitle(title: title(cv), systemImage: "doc.richtext")
                     Spacer()
                     if cv.status == "pending" || cv.status == "planned" { ProgressView().controlSize(.small) }
                 }
+                .shimmer(cv.status == "pending" || cv.status == "planned")
                 if cv.mode == "tailored" && cv.status == "ready" {
                     if !cv.projects.isEmpty {
                         Text("Projects in order: " + cv.projects.map(\.name).joined(separator: ", "))
@@ -708,10 +668,9 @@ struct CvCard: View {
                         Button("Use the tailored CV") { Task { await store.setCvMode(application: app.id, mode: "tailored") } }
                     }
                 }
+                .buttonStyle(.secondary)
                 .padding(.top, 2)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(6)
         }
         .sheet(isPresented: $editing) { CvEditSheet(store: store, appId: app.id) { editing = false } }
     }

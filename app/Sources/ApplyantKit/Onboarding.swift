@@ -145,7 +145,7 @@ public enum OnboardingText {
 
     public static func search(_ flow: OnboardingFlow) -> String {
         flow.searchStarted
-            ? "Search has started: searches are planned from your profile, and postings arrive in the Inbox."
+            ? "Search has started: searches are planned from your profile, and new postings arrive in New."
             : "Search starts when you finish Preferences."
     }
 

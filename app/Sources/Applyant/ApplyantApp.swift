@@ -1,5 +1,5 @@
 // Applyant.app: the menu bar (daemon status, counters, quick actions) and the main window
-// (Inbox → posting → review → approve). On launch it installs the daemon's launch agent and
+// (New → job → To review → approve). On launch it installs the daemon's launch agent and
 // registers itself as a login item. All data comes from the daemon through AppStore.
 import AppKit
 import ApplyantKit
@@ -52,6 +52,8 @@ final class StatusModel {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let store = AppStore(connector: EndpointConnector(dataDir: UserPaths().dataDir()))
     let status = StatusModel()
+    /// The main window's toasts (a scripted run shows them too).
+    let toasts = Toasts()
     private(set) var notifications: NotificationDelegate?
     private var running: Task<Void, Never>?
     /// Set by the SwiftUI scene, so notifications and the menu can open the main window.
@@ -60,7 +62,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         // `--script steps.json --out dir`: a scripted check of the app (ScriptRunner.swift);
         // nothing is registered and no notifications are posted.
-        if let script = ScriptRunner(arguments: CommandLine.arguments, store: store) {
+        if let script = ScriptRunner(arguments: CommandLine.arguments, store: store, toasts: toasts) {
+            script.showWindow = { [weak self] in self?.showMainWindow() }
             running = Task { await store.run() }
             Task { await script.run() }
             return
@@ -68,10 +71,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         status.start()
         // Google's consent (Settings → Mailbox) opens in the default browser.
         store.onOpenURL = { NSWorkspace.shared.open($0) }
-        let notifications = NotificationDelegate(store: store) { [weak self] in self?.showMainWindow() }
-        self.notifications = notifications
-        notifications.install()
-        store.onNotify = { notifications.post($0) }
+        // A checkout build (.build/debug/Applyant) isn't a bundle, and notifications need one.
+        if Bundle.main.bundleURL.pathExtension == "app" {
+            let notifications = NotificationDelegate(store: store) { [weak self] in self?.showMainWindow() }
+            self.notifications = notifications
+            notifications.install()
+            store.onNotify = { notifications.post($0) }
+        }
         running = Task { await store.run() }
         // Opened by hand (Finder, Spotlight, the first install): show the window right away, with
         // "Starting…" until the background service answers. At login it stays in the menu bar.
@@ -128,7 +134,7 @@ struct ApplyantApp: App {
 
     var body: some Scene {
         Window("Applyant", id: "main") {
-            MainView(store: delegate.store)
+            MainView(store: delegate.store, toasts: delegate.toasts)
                 .frame(minWidth: 1000, minHeight: 620)
                 .onAppear { NSApp.setActivationPolicy(.regular) }
                 .onDisappear { NSApp.setActivationPolicy(.accessory) }

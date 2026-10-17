@@ -5,7 +5,9 @@ import Foundation
 
 public enum Section: String, CaseIterable, Identifiable, Sendable {
     case overview
-    case inbox, readyToReview, preparing, interested, skipped
+    // The jobs lists keep the raw values of their first names: scripted runs (`--script`) name
+    // sections by them.
+    case toReview = "readyToReview", new = "inbox", saved = "interested", skipped
     case applied, interviews, offers, whichApplication
     case profile, projects, interview, chat
     case search, agentRuns, companies, settings
@@ -17,7 +19,7 @@ public enum Section: String, CaseIterable, Identifiable, Sendable {
     public var group: Group {
         switch self {
         case .overview: .top
-        case .inbox, .readyToReview, .preparing, .interested, .skipped: .jobs
+        case .toReview, .new, .saved, .skipped: .jobs
         case .applied, .interviews, .offers, .whichApplication: .applications
         case .profile, .projects, .interview, .chat: .me
         case .search, .agentRuns, .companies, .settings: .system
@@ -27,10 +29,9 @@ public enum Section: String, CaseIterable, Identifiable, Sendable {
     public var title: String {
         switch self {
         case .overview: "Overview"
-        case .inbox: "Inbox"
-        case .readyToReview: "Ready to review"
-        case .preparing: "Preparing"
-        case .interested: "Interested"
+        case .toReview: "To review"
+        case .new: "New"
+        case .saved: "Saved"
         case .skipped: "Skipped"
         case .applied: "Applied"
         case .interviews: "Interviews"
@@ -50,10 +51,9 @@ public enum Section: String, CaseIterable, Identifiable, Sendable {
     public var symbol: String {
         switch self {
         case .overview: "chart.pie"
-        case .inbox: "tray"
-        case .readyToReview: "pencil.and.list.clipboard"
-        case .preparing: "hourglass"
-        case .interested: "star"
+        case .toReview: "pencil.and.list.clipboard"
+        case .new: "tray"
+        case .saved: "bookmark"
         case .skipped: "xmark.circle"
         case .applied: "paperplane"
         case .interviews: "phone"
@@ -78,10 +78,15 @@ public enum Section: String, CaseIterable, Identifiable, Sendable {
 }
 
 public struct Navigation: Equatable, Sendable {
-    public var section: Section = .inbox
+    public var section: Section = .toReview
     public var postingId: Int64?
-    /// Set when the detail pane shows the application's review instead of the posting.
+    /// The application open with the posting (its Application tab).
     public var reviewing: Int64?
+    /// A tab the job detail switches to once: a review asked for from a notification, the
+    /// menu bar or another screen.
+    public var tab: DetailTab?
+    /// New lists the good matches only, or every scored posting.
+    public var newFilter: NewFilter = .good
     /// The interview thread open in the Interview section.
     public var interview: InterviewTarget?
     /// The strategy or source open in the Search section.
@@ -105,23 +110,54 @@ public struct Navigation: Equatable, Sendable {
         interview = target
     }
 
-    /// Opens an application's review in the list its stage puts it in (Ready to review when
-    /// the stage isn't known).
+    /// A list's row: its posting, with its application when it has one.
+    public mutating func select(_ item: ListItem?) {
+        postingId = item?.postingId
+        reviewing = item?.applicationId
+    }
+
+    /// Opens an application's review (its Application tab) in the list its stage puts it in
+    /// (To review when the stage isn't known).
     public mutating func showReview(application: Int64, posting: Int64, stage: ApplicationStage? = nil) {
-        section = stage.map(Navigation.section(for:)) ?? .readyToReview
+        section = stage.map(Navigation.section(for:)) ?? .toReview
         postingId = posting
         reviewing = application
+        tab = .application
+    }
+
+    /// The same, from the application itself: a delivery waiting on the candidate is in To review.
+    public mutating func showReview(_ app: Application) {
+        showReview(application: app.id, posting: app.postingID, stage: app.stage)
+        section = Navigation.section(for: app)
+    }
+
+    /// Opens a posting in the list it's in now (Companies, a posting link).
+    public mutating func showPosting(_ posting: Posting, application: Application?) {
+        section = Navigation.section(for: posting, application: application)
+        postingId = posting.id
+        reviewing = application?.id
     }
 
     /// The list an application is in, by its stage (AppStore.items follows the same split).
     public static func section(for stage: ApplicationStage) -> Section {
         switch stage {
-        case .preparing: .preparing
         case .approved, .applied, .rejected, .withdrawn: .applied
         case .interview: .interviews
         case .offer: .offers
-        default: .readyToReview
+        default: .toReview
         }
+    }
+
+    /// An approved application whose delivery stopped for the candidate (a hand-off) waits in
+    /// To review with the others that need them.
+    public static func section(for app: Application) -> Section {
+        app.stage == .approved && app.hasHandOff ? .toReview : section(for: app.stage)
+    }
+
+    public static func section(for posting: Posting, application: Application?) -> Section {
+        if posting.stage == .skipped || posting.decision == "skipped" { return .skipped }
+        if let application { return section(for: application) }
+        return posting.decision == "interested" ? .saved : .new
     }
 }
 
@@ -129,10 +165,13 @@ public struct Chip: Equatable, Sendable {
     public enum Tone: Sendable { case accent, warning, neutral, good }
     public let text: String
     public let tone: Tone
+    /// Work under way (preparing, delivering): the chip shows it's alive.
+    public let live: Bool
 
-    public init(text: String, tone: Tone) {
+    public init(text: String, tone: Tone, live: Bool = false) {
         self.text = text
         self.tone = tone
+        self.live = live
     }
 }
 
@@ -178,12 +217,12 @@ public enum StageText {
     /// `delivery`: what a delivery under way is doing, from live events ("Filling 14/16 fields").
     public static func chip(_ app: Application, delivery: DeliveryProgress? = nil) -> Chip {
         switch app.stage {
-        case .preparing: Chip(text: "Preparing…", tone: .neutral)
-        case .readyForReview: Chip(text: "Ready to review", tone: .accent)
+        case .preparing: Chip(text: "Preparing…", tone: .neutral, live: true)
+        case .readyForReview: Chip(text: "Ready to send", tone: .accent)
         case .needsCandidate: Chip(text: "Needs you", tone: .warning)
         case .approved: app.hasHandOff
             ? Chip(text: "Finish in browser", tone: .warning)
-            : Chip(text: delivery.map(\.line) ?? "Approved · delivering", tone: .good)
+            : Chip(text: delivery.map(\.line) ?? "Approved · delivering", tone: .good, live: true)
         case .applied: Chip(text: "Applied", tone: .good)
         case .interview: Chip(text: "Interview", tone: .good)
         case .offer: Chip(text: "Offer", tone: .good)
@@ -197,7 +236,7 @@ public enum StageText {
     public static func name(_ stage: ApplicationStage) -> String {
         switch stage {
         case .preparing: "Preparing"
-        case .readyForReview: "Ready to review"
+        case .readyForReview: "Ready to send"
         case .needsCandidate: "Needs you"
         case .approved: "Approved"
         case .applied: "Applied"
@@ -289,6 +328,22 @@ public enum Source {
             ("recruitee.com", "Recruitee"), ("personio.", "Personio"), ("teamtailor.com", "Teamtailor"),
         ]
         return known.first { host.contains($0.0) }?.1
+    }
+
+    /// Where a posting was found, for the detail's chip: a board or an ATS by name, else the
+    /// site's host ("Djinni", "Greenhouse", "elevenlabs.io").
+    public static func site(_ url: String) -> String? {
+        guard let host = URL(string: url)?.host?.lowercased() else { return nil }
+        let boards: [(String, String)] = [
+            ("djinni.co", "Djinni"), ("arbeitnow.", "Arbeitnow"), ("weworkremotely.com", "We Work Remotely"),
+            ("remoteok.com", "Remote OK"), ("remotive.com", "Remotive"), ("t.me", "Telegram"), ("linkedin.com", "LinkedIn"),
+            ("xing.com", "Xing"), ("jobico.io", "Jobico"), ("dou.ua", "DOU"), ("news.ycombinator.com", "Hacker News"),
+            ("workatastartup.com", "Work at a Startup"), ("grnh.se", "Greenhouse"),
+        ]
+        if let board = boards.first(where: { host == $0.0 || host.hasSuffix("." + $0.0) || ($0.0.hasSuffix(".") && host.contains($0.0)) }) {
+            return board.1
+        }
+        return ats(url) ?? (host.hasPrefix("www.") ? String(host.dropFirst(4)) : host)
     }
 }
 

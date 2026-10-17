@@ -30,31 +30,31 @@ import Testing
         activity.paused = "Waiting for claude limit · resumes 15:45"
         let line = ActivityText.line(activity, deliveries: [:], backgroundPaused: since) { _ in "" }
         #expect(line?.hasPrefix("Paused since ") == true && line?.contains("still running") == true)
-        let empty = ActivityText.empty(.inbox, activity: Activity(), postings: [], strategies: 1, searchStarted: true, backgroundPaused: since)
+        let empty = ActivityText.empty(.new, activity: Activity(), postings: [], strategies: 1, searchStarted: true, backgroundPaused: since)
         #expect(empty.title == "Paused")
     }
 
-    @Test func anEmptyInboxSaysWhatItWaitsFor() {
+    @Test func anEmptyNewListSaysWhatItWaitsFor() {
         let idle = Activity()
-        let none = ActivityText.empty(.inbox, activity: idle, postings: [], strategies: 0, searchStarted: true)
+        let none = ActivityText.empty(.new, activity: idle, postings: [], strategies: 0, searchStarted: true)
         #expect(none.title == "No postings yet")
         #expect(none.detail.contains("Add posting…") && none.detail.contains("Search"))
-        let beforeSetup = ActivityText.empty(.inbox, activity: idle, postings: [], strategies: 0, searchStarted: false)
+        let beforeSetup = ActivityText.empty(.new, activity: idle, postings: [], strategies: 0, searchStarted: false)
         #expect(beforeSetup.detail.contains("Preferences"))
 
         var found = Posting()
         found.stage = .found
         var verified = Posting()
         verified.stage = .verified
-        let pending = ActivityText.empty(.inbox, activity: idle, postings: [found, verified], strategies: 1, searchStarted: true)
+        let pending = ActivityText.empty(.new, activity: idle, postings: [found, verified], strategies: 1, searchStarted: true)
         #expect(pending.detail.hasPrefix("2 postings are being checked and scored"))
 
         var paused = Activity()
         paused.paused = "Waiting for claude limit · resumes 15:45"
-        let waiting = ActivityText.empty(.inbox, activity: paused, postings: [found], strategies: 1, searchStarted: true)
+        let waiting = ActivityText.empty(.new, activity: paused, postings: [found], strategies: 1, searchStarted: true)
         #expect(waiting.title == "Waiting" && waiting.detail.contains("resumes 15:45"))
         // Every list section explains itself.
-        for section in [Section.readyToReview, .preparing, .interested, .skipped, .applied, .interviews, .offers] {
+        for section in [Section.toReview, .saved, .skipped, .applied, .interviews, .offers] {
             #expect(!ActivityText.empty(section, activity: idle, postings: [], strategies: 0, searchStarted: true).detail.isEmpty, "\(section)")
         }
     }
@@ -97,11 +97,31 @@ import Testing
         nav.showReview(application: 1, posting: 2, stage: .offer)
         #expect(nav.section == .offers)
         nav.showReview(application: 1, posting: 2, stage: .preparing)
-        #expect(nav.section == .preparing)
+        #expect(nav.section == .toReview)
         nav.showReview(application: 1, posting: 2, stage: .needsCandidate)
-        #expect(nav.section == .readyToReview)
+        #expect(nav.section == .toReview)
         nav.showReview(application: 1, posting: 2)
-        #expect(nav.section == .readyToReview)
+        #expect(nav.section == .toReview && nav.tab == .application)
+        // An approved application whose delivery stopped for the candidate waits in To review.
+        var app = Application()
+        app.id = 1
+        app.postingID = 2
+        app.stage = .approved
+        app.handOff = .with { $0.reason = "captcha" }
+        nav.showReview(app)
+        #expect(nav.section == .toReview && nav.reviewing == 1)
+        // A posting opens in the list it's in: skipped, with its application, saved, or New.
+        var p = Posting()
+        p.id = 2
+        p.stage = .scored
+        #expect(Navigation.section(for: p, application: nil) == .new)
+        p.decision = "interested"
+        #expect(Navigation.section(for: p, application: nil) == .saved)
+        app.clearHandOff()
+        app.stage = .interview
+        #expect(Navigation.section(for: p, application: app) == .interviews)
+        p.decision = "skipped"
+        #expect(Navigation.section(for: p, application: app) == .skipped)
     }
 
     @Test func reviewStringsAreReadable() {

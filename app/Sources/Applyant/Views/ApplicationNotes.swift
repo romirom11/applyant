@@ -14,10 +14,10 @@ struct NotesCard: View {
     private var saved: String { app.hasNotes ? app.notes : "" }
 
     var body: some View {
-        GroupBox {
+        Card {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Text("Notes").font(.headline)
+                    CardTitle(title: "Notes", systemImage: "note.text")
                     Spacer()
                     if saving { ProgressView().controlSize(.small) }
                     Button("Save") {
@@ -27,20 +27,20 @@ struct NotesCard: View {
                             saving = false
                         }
                     }
+                    .buttonStyle(.secondary)
+                    .controlSize(.small)
                     .disabled(saving || text == saved)
                 }
                 TextEditor(text: $text)
                     .font(.body)
                     .frame(minHeight: 70, maxHeight: 160)
                     .scrollContentBackground(.hidden)
-                    .padding(4)
-                    .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 5))
-                    .overlay(RoundedRectangle(cornerRadius: 5).stroke(.separator))
+                    .padding(6)
+                    .insetSurface()
+                    .overlay(RoundedRectangle(cornerRadius: Theme.innerRadius, style: .continuous).strokeBorder(Theme.hairline, lineWidth: 0.5))
                 Text("Only for you: what was said on a call, what to ask next.")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(6)
         }
         .onAppear { text = saved }
         .onChange(of: saved) { _, new in text = new }
@@ -54,15 +54,17 @@ struct ContactsCard: View {
     @State private var form = ContactForm()
 
     var body: some View {
-        GroupBox {
+        Card {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Text("Contacts").font(.headline)
+                    CardTitle(title: "Contacts", systemImage: "person.2")
                     Spacer()
                     Button(adding ? "Cancel" : "Add contact…") {
                         adding.toggle()
                         form = ContactForm()
                     }
+                    .buttonStyle(.secondary)
+                    .controlSize(.small)
                 }
                 if app.contacts.isEmpty && !adding {
                     Text("No contacts yet: the recruiter, the hiring manager.").font(.callout).foregroundStyle(.secondary)
@@ -71,10 +73,9 @@ struct ContactsCard: View {
                     ContactRow(contact: c) { Task { await store.deleteApplicationContact(c.id) } }
                     if c.id != app.contacts.last?.id { Divider() }
                 }
-                if adding { addForm }
+                if adding { addForm.transition(.opacity.combined(with: .move(edge: .top))) }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(6)
+            .animation(Theme.Motion.snappy, value: adding)
         }
     }
 
@@ -103,6 +104,7 @@ struct ContactsCard: View {
                         }
                     }
                 }
+                .buttonStyle(.primary)
                 .keyboardShortcut(.defaultAction)
                 .disabled(form.problem != nil)
             }
@@ -146,10 +148,10 @@ struct InterviewPrepCard: View {
 
     var body: some View {
         let prep = store.interviewPrep(app)
-        GroupBox {
+        Card {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    Text("Interview prep" + (prep.company.map { " · \($0)" } ?? "")).font(.headline)
+                    CardTitle(title: "Interview prep" + (prep.company.map { " · \($0)" } ?? ""), systemImage: "person.wave.2")
                     Spacer()
                     if prep.note != nil {
                         Button("Company research") {
@@ -191,8 +193,6 @@ struct InterviewPrepCard: View {
                     }
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(6)
         }
         .task(id: app.postingID) { await store.openInterviewPrep(posting: app.postingID) }
     }

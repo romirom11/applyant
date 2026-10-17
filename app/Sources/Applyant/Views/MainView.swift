@@ -5,6 +5,8 @@ import SwiftUI
 
 struct MainView: View {
     @Bindable var store: AppStore
+    /// "Approved: on its way", "Skipped": a moment over the bottom of the window.
+    var toasts = Toasts()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -19,9 +21,13 @@ struct MainView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .overlay(alignment: .bottom) { ToastHost(toasts: toasts) }
 
             ActivityBar(store: store)
         }
+        .animation(Theme.Motion.smooth, value: store.activityLine == nil)
+        .environment(toasts)
+        .tint(Theme.accent)
         .sheet(isPresented: $store.showOnboarding) {
             OnboardingView(store: store)
                 .frame(minWidth: 900, idealWidth: 980, minHeight: 640, idealHeight: 720)
@@ -80,13 +86,14 @@ struct MainView: View {
 /// Before the first answer from the background service.
 struct ServiceStarting: View {
     var body: some View {
-        VStack(spacing: 12) {
-            ProgressView()
-            Text("Starting Applyant…").font(.title3)
+        VStack(spacing: 14) {
+            LiveSymbol(systemImage: "sparkles")
+            Text("Starting Applyant…").font(.title3.weight(.semibold))
             Text("Waiting for its background service. The first start also fetches a browser for reading job pages, which can take a minute.")
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 420)
+            ProgressView().controlSize(.small)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -98,15 +105,15 @@ struct ServiceDown: View {
 
     var body: some View {
         ContentUnavailableView {
-            Label("Applyant's background service isn't running", systemImage: "bolt.horizontal.circle")
+            Label { Text("Applyant's background service isn't running") } icon: { LiveSymbol(systemImage: "bolt.horizontal.circle") }
         } description: {
             VStack(spacing: 6) {
                 if case let .disconnected(reason) = store.connection { Text(reason).textSelection(.enabled) }
                 Text("It does all the work: searching, scoring, writing and sending. macOS starts it at login and again after a crash, and Applyant keeps trying to reach it. If it stays down, the log says why.")
             }
         } actions: {
-            Button("Retry") { store.retryConnection() }.buttonStyle(.borderedProminent)
-            Button("Show Logs") { NSWorkspace.shared.open(UserPaths().logsDir) }
+            Button("Retry") { store.retryConnection() }.buttonStyle(.primary)
+            Button("Show Logs") { NSWorkspace.shared.open(UserPaths().logsDir) }.buttonStyle(.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -128,24 +135,35 @@ struct PauseButton: View {
 }
 
 /// A slim line along the window's bottom: what Applyant is doing now, or what it waits for.
+/// While it works, the brand colours flow along its top edge.
 struct ActivityBar: View {
     let store: AppStore
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    private let motion = EndlessMotion()
 
     var body: some View {
         if store.connection == .connected, let line = store.activityLine {
+            let working = store.activity.paused == nil && store.backgroundPausedAt == nil
             HStack(spacing: 8) {
-                if store.activity.paused == nil && store.backgroundPausedAt == nil {
-                    ProgressView().controlSize(.small)
-                } else {
-                    Image(systemName: "pause.circle").foregroundStyle(.orange)
+                Image(systemName: working ? "sparkles" : "pause.circle.fill")
+                    .foregroundStyle(working ? AnyShapeStyle(Theme.brand) : AnyShapeStyle(Theme.warning))
+                    .symbolEffect(.pulse, options: .repeating, isActive: working && motion.allowed)
+                    .contentTransition(.symbolEffect(.replace))
+                ZStack(alignment: .leading) {
+                    Text(line)
+                        .font(.callout).foregroundStyle(.secondary).lineLimit(1).truncationMode(.tail)
+                        .id(line)
+                        .transition(reduceMotion ? .opacity : .push(from: .bottom))
                 }
-                Text(line).font(.callout).foregroundStyle(.secondary).lineLimit(1).truncationMode(.tail)
+                .clipped()
                 Spacer()
             }
+            .animation(Theme.Motion.smooth, value: line)
             .padding(.horizontal, 14)
-            .padding(.vertical, 5)
+            .padding(.vertical, 6)
             .background(.bar)
-            .overlay(alignment: .top) { Divider() }
+            .overlay(alignment: .top) { FlowLine(flowing: working).id(working) }
+            .transition(.move(edge: .bottom).combined(with: .opacity))
         }
     }
 }
@@ -164,7 +182,7 @@ struct ErrorBanner: View {
                 Button("Dismiss") { store.lastError = nil }.controlSize(.small)
             }
             .padding(10)
-            .background(.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+            .insetSurface(tint: Theme.warning)
         }
     }
 }
@@ -185,8 +203,20 @@ extension View {
 
 struct Detail: View {
     let store: AppStore
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
+        // A newly picked job comes in from a little below, out of a blur; the one before fades.
+        ZStack { content }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .pageBackground()
+            // The page runs up under the toolbar: no bar of the window's own colour over it.
+            .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
+            .animation(Theme.Motion.pick(Theme.Motion.smooth, reduceMotion: reduceMotion), value: store.navigation.postingId)
+    }
+
+    @ViewBuilder
+    private var content: some View {
         if store.navigation.section == .overview {
             OverviewMetrics(store: store)
         } else if store.navigation.section == .profile {
@@ -206,25 +236,23 @@ struct Detail: View {
                 InterviewThreadView(store: store, target: target)
                     .id(target)
             } else {
-                ContentUnavailableView(
-                    "Questions for you",
+                EmptyState(
+                    title: "Questions for you",
                     systemImage: ApplyantKit.Section.interview.symbol,
-                    description: Text("Applyant asks what your CV and repositories can't show: what you built yourself, the team, the results. Pick a question or a project on the left; your answers become facts that applications can use.")
+                    detail: "Applyant asks what your CV and repositories can't show: what you built yourself, the team, the results. Pick a question or a project on the left; your answers become facts that applications can use."
                 )
             }
-        } else if let app = store.navigation.reviewing {
-            ReviewApplication(store: store, applicationId: app)
-                .id(app)
         } else if let posting = store.navigation.postingId {
-            PostingDetail(store: store, postingId: posting)
+            JobDetail(store: store, postingId: posting, applicationId: store.navigation.reviewing)
                 .id(posting)
+                .transition(.page(reduceMotion: reduceMotion))
         } else {
             let section = store.navigation.section
             if store.items(section).isEmpty {
                 // The list says why it's empty; nothing to repeat here.
                 Color.clear
             } else {
-                ContentUnavailableView("Nothing selected", systemImage: section.symbol, description: Text("Pick one on the left."))
+                EmptyState(title: "Nothing selected", systemImage: section.symbol, detail: "Pick one on the left.")
             }
         }
     }
@@ -261,52 +289,97 @@ struct Sidebar: View {
 
     private func row(_ section: ApplyantKit.Section) -> some View {
         let count = store.count(section)
-        return Label(section.title, systemImage: section.symbol)
-            .badge(count > 0 && section != .skipped ? count : 0)
+        return SidebarRow(section: section, count: count > 0 && section != .skipped ? count : 0)
             .foregroundStyle(section.isBuilt ? .primary : .secondary)
             .tag(section)
     }
 }
 
+/// A section in the sidebar: its symbol hops when something new arrives, and its count rolls
+/// to the new number.
+private struct SidebarRow: View {
+    let section: ApplyantKit.Section
+    let count: Int
+    @State private var arrivals = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        Label {
+            HStack {
+                Text(section.title)
+                Spacer(minLength: 4)
+                if count > 0 {
+                    Text("\(count)")
+                        .font(.caption.weight(.semibold))
+                        .monospacedDigit()
+                        .contentTransition(.numericText(value: Double(count)))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 1)
+                        .background(Color.primary.opacity(0.07), in: Capsule())
+                        .transition(.scale.combined(with: .opacity))
+                }
+            }
+            .animation(Theme.Motion.pick(Theme.Motion.snappy, reduceMotion: reduceMotion), value: count)
+        } icon: {
+            // In the app's own accent, like everything else that's Applyant's.
+            Image(systemName: section.symbol)
+                .foregroundStyle(Theme.accent)
+                .symbolEffect(.bounce, value: reduceMotion ? 0 : arrivals)
+        }
+        .onChange(of: count) { old, new in
+            if new > old { arrivals += 1 }
+        }
+    }
+}
+
+/// A list of jobs: To review in its groups, New under its filter, the others as they are.
+/// Every row opens the same job detail.
 struct PostingList: View {
-    let store: AppStore
+    @Bindable var store: AppStore
     /// What Re-score said, under the title for a few seconds.
     @State private var note: String?
     @State private var addingPosting = false
 
     var body: some View {
         let section = store.navigation.section
-        let items = store.items(section)
+        let groups = store.groups(section)
+        let items = groups.flatMap(\.items)
         Group {
             if items.isEmpty {
-                let empty = store.emptyState(section)
-                ContentUnavailableView {
-                    Label(empty.title, systemImage: section.symbol)
-                } description: {
-                    Text(empty.detail)
-                } actions: {
-                    if section == .inbox {
-                        Button("Add posting…") { addingPosting = true }
-                        if store.search.strategies.isEmpty {
-                            Button("Open Search") { store.navigation.section = .search }
+                emptyState(section)
+            } else {
+                List(selection: Binding(
+                    get: { store.navigation.postingId.flatMap { id in items.first { $0.postingId == id }?.id } },
+                    set: { id in if let item = items.first(where: { $0.id == id }) { store.navigation.select(item) } }
+                )) {
+                    ForEach(groups) { group in
+                        if group.title.isEmpty {
+                            rows(group.items, section: section)
+                        } else {
+                            SwiftUI.Section {
+                                rows(group.items, section: section, live: group.id == JobLists.ReviewGroup.preparing.rawValue)
+                            } header: {
+                                Eyebrow(text: group.title, count: group.items.count, tint: groupTint(group.id))
+                                    .padding(.vertical, 2)
+                            }
                         }
                     }
                 }
-            } else {
-                List(items, selection: Binding(
-                    get: { store.navigation.postingId.flatMap { id in items.first { $0.postingId == id }?.id } },
-                    set: { select($0, in: items, section: section) }
-                )) { item in
-                    PostingRow(item: item)
-                        .tag(item.id)
-                        .contextMenu { rowMenu(item, section: section) }
-                }
+                // Approved, skipped or moved: rows slide out and in instead of jumping.
+                .animation(Theme.Motion.smooth, value: items.map(\.id))
+                // Another list, or New's other filter, is a list of its own: not hundreds of rows
+                // animating out and in.
+                .id(section == .new ? "\(section.rawValue).\(store.navigation.newFilter.rawValue)" : section.rawValue)
             }
+        }
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if section == .new { NewFilterBar(store: store) }
         }
         .navigationTitle(section.title)
         .navigationSubtitle(note ?? "")
         .toolbar {
-            if section == .inbox {
+            if section == .new {
                 ToolbarItem {
                     Button { addingPosting = true } label: {
                         Label("Add posting…", systemImage: "plus")
@@ -326,7 +399,39 @@ struct PostingList: View {
             guard note != nil, (try? await Task.sleep(for: .seconds(4))) != nil else { return }
             note = nil
         }
+        .task { await store.loadPreferences() }
         .sheet(isPresented: $addingPosting) { AddPostingSheet(store: store) { addingPosting = false } }
+    }
+
+    private func rows(_ items: [ListItem], section: ApplyantKit.Section, live: Bool = false) -> some View {
+        ForEach(items) { item in
+            PostingRow(item: item, live: live)
+                .tag(item.id)
+                .contextMenu { rowMenu(item, section: section) }
+        }
+    }
+
+    private func groupTint(_ id: String) -> Color {
+        switch JobLists.ReviewGroup(rawValue: id) {
+        case .needsYou: Theme.warning
+        case .ready: Theme.accent
+        default: .secondary
+        }
+    }
+
+    @ViewBuilder
+    private func emptyState(_ section: ApplyantKit.Section) -> some View {
+        let hidden = section == .new ? store.newHidden : 0
+        let empty = hidden > 0 ? ActivityText.noGoodMatches(hidden: hidden, below: store.goodMatchScore) : store.emptyState(section)
+        EmptyState(title: empty.title, systemImage: section.symbol, detail: empty.detail) {
+            if section == .new {
+                if hidden > 0 { Button("Show all") { store.navigation.newFilter = .all }.buttonStyle(.primary) }
+                Button("Add posting…") { addingPosting = true }.buttonStyle(.secondary)
+                if store.search.strategies.isEmpty {
+                    Button("Open Search") { store.navigation.section = .search }.buttonStyle(.secondary)
+                }
+            }
+        }
     }
 
     /// A row's menu: Set status for an application, Re-score in the posting sections.
@@ -335,26 +440,46 @@ struct PostingList: View {
         if let id = item.applicationId, let app = store.applications[id] {
             SetStatusMenu(store: store, app: app)
         }
-        if [.inbox, .interested, .skipped].contains(section), let p = store.postings[item.postingId], Score.canRescore(p) {
+        if [.new, .saved, .skipped].contains(section), let p = store.postings[item.postingId], Score.canRescore(p) {
             Button("Re-score") { Task { note = await store.rescore([p.id]) } }
         }
     }
+}
 
-    private func select(_ id: String?, in items: [ListItem], section: ApplyantKit.Section) {
-        guard let item = items.first(where: { $0.id == id }) else { return }
-        store.navigation.postingId = item.postingId
-        // Application sections open the review; posting sections open the posting.
-        let reviewSections: Set<ApplyantKit.Section> = [.readyToReview, .preparing, .applied, .interviews, .offers]
-        store.navigation.reviewing = reviewSections.contains(section) ? item.applicationId : nil
+/// New's filter: the good matches first, or everything scored, and what the filter hides.
+struct NewFilterBar: View {
+    @Bindable var store: AppStore
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            PillPicker(items: NewFilter.allCases, title: \.title, selection: $store.navigation.newFilter)
+                .help("Good matches score \(store.goodMatchScore) or more. The ones at or above your threshold are prepared on their own and wait in To review.")
+            if let hidden = JobLists.hiddenLine(store.newHidden, below: store.goodMatchScore) {
+                Text(hidden)
+                    .font(.caption).foregroundStyle(.secondary)
+                    .contentTransition(.numericText())
+                    .animation(Theme.Motion.snappy, value: hidden)
+                    .padding(.leading, 4)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(.bar)
+        .overlay(alignment: .bottom) { Divider().opacity(0.6) }
     }
 }
 
+/// A job in a list: its score ring, what and where it is, and its chips. Preparing ones shimmer.
 struct PostingRow: View {
     let item: ListItem
+    var live = false
+    @State private var hovering = false
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            ScoreBadge(score: item.score)
+        HStack(alignment: .top, spacing: 11) {
+            ScoreRing(score: item.score, size: 34)
+                .padding(.top, 1)
             VStack(alignment: .leading, spacing: 3) {
                 Text(item.title).font(.headline).lineLimit(2)
                 if !item.subtitle.isEmpty {
@@ -364,54 +489,26 @@ struct PostingRow: View {
                     HStack(spacing: 4) {
                         ForEach(item.chips, id: \.text) { ChipView(chip: $0) }
                     }
+                    .padding(.top, 2)
                 }
             }
+            .shimmer(live)
+            Spacer(minLength: 0)
         }
-        .padding(.vertical, 3)
+        .padding(.vertical, 5)
+        .padding(.horizontal, 4)
+        .background(
+            RoundedRectangle(cornerRadius: Theme.innerRadius, style: .continuous)
+                .fill(Color.primary.opacity(hovering ? 0.045 : 0))
+                .padding(.horizontal, -6)
+        )
+        .contentShape(Rectangle())
+        .onHover { hovering = $0 }
+        .animation(Theme.Motion.fade, value: hovering)
     }
 }
 
-struct ScoreBadge: View {
-    let score: Int32?
-
-    var body: some View {
-        Text(score.map { "\($0)" } ?? "–")
-            .font(.system(.title3, design: .rounded).weight(.semibold))
-            .monospacedDigit()
-            .frame(width: 38)
-            .foregroundStyle(color)
-    }
-
-    private var color: Color {
-        guard let score else { return .secondary }
-        return score >= 80 ? .green : score >= 60 ? .primary : .secondary
-    }
-}
-
-struct ChipView: View {
-    let chip: Chip
-
-    var body: some View {
-        Text(chip.text)
-            .font(.caption)
-            .lineLimit(1)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 1)
-            .background(tint.opacity(0.15), in: Capsule())
-            .foregroundStyle(tint == .secondary ? Color.secondary : tint)
-    }
-
-    private var tint: Color {
-        switch chip.tone {
-        case .accent: .accentColor
-        case .warning: .orange
-        case .good: .green
-        case .neutral: .secondary
-        }
-    }
-}
-
-/// Inbox → Add posting…: a URL → AddPosting (the same as `applyant jobs add` and the Share
+/// New → Add posting…: a URL → AddPosting (the same as `applyant jobs add` and the Share
 /// extension), and what happened: added, already known, or refused.
 struct AddPostingSheet: View {
     let store: AppStore
@@ -450,6 +547,7 @@ struct AddPostingSheet: View {
                 Spacer()
                 Button(outcome == nil ? "Cancel" : "Done", action: close)
                 Button("Add", action: add)
+                    .buttonStyle(.primary)
                     .keyboardShortcut(.defaultAction)
                     .disabled(adding || url.trimmingCharacters(in: .whitespaces).isEmpty)
             }

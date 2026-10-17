@@ -140,19 +140,19 @@ struct SearchDetail: View {
             if let s = store.strategy(id) {
                 StrategyDetail(store: store, strategy: s)
             } else {
-                ContentUnavailableView("This search was deleted", systemImage: "magnifyingglass")
+                EmptyState(title: "This search was deleted", systemImage: "magnifyingglass")
             }
         case let .source(key)?:
             if let s = store.source(key) {
                 SourceDetail(store: store, source: s)
             } else {
-                ContentUnavailableView("Source gone", systemImage: "magnifyingglass")
+                EmptyState(title: "Source gone", systemImage: "magnifyingglass")
             }
         case nil:
-            ContentUnavailableView(
-                "Search",
+            EmptyState(
+                title: "Search",
                 systemImage: ApplyantKit.Section.search.symbol,
-                description: Text("A search looks for job titles in the sources below, on its schedule, and puts what it finds in the Inbox. Pick a search to see what it looks for and how it's doing, or a source to switch it off.")
+                detail: "A search looks for job titles in the sources below, on its schedule, and puts what it finds in New. Pick a search to see what it looks for and how it's doing, or a source to switch it off."
             )
         }
     }
@@ -161,35 +161,41 @@ struct SearchDetail: View {
 struct StrategyDetail: View {
     let store: AppStore
     let strategy: SearchStrategy
+    private let motion = EndlessMotion()
     @State private var editing = false
     @State private var confirmingDelete = false
 
     var body: some View {
         let s = strategy
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 6) {
-                        Text(s.name).font(.title2.weight(.semibold))
-                        if s.origin == "agent" { ChipView(chip: Chip(text: "Agent-generated", tone: .accent)) }
-                    }
-                    Text(SearchText.stats(s.stats)).foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: Theme.blockSpacing) {
+                PageHeader(title: s.name, subtitle: SearchText.stats(s.stats)) {
+                    IconTile(systemImage: s.running ? "magnifyingglass" : "binoculars.fill")
+                        .symbolEffect(.pulse, options: .repeating, isActive: s.running && motion.allowed)
+                } trailing: {
+                    if s.origin == "agent" { ChipView(chip: Chip(text: "Agent-generated", tone: .accent)) }
                 }
-                HStack(spacing: 8) {
-                    Button(s.state == "paused" ? "Resume" : "Pause") {
+                FlowRow(spacing: 8) {
+                    Button {
                         Task { await store.setStrategy(s.id, paused: s.state != "paused") }
+                    } label: {
+                        Label(s.state == "paused" ? "Resume" : "Pause", systemImage: s.state == "paused" ? "play.fill" : "pause.fill")
                     }
-                    Button("Run now") { Task { await store.runStrategy(s.id) } }
+                    Button { Task { await store.runStrategy(s.id) } } label: { Label("Run now", systemImage: "bolt.fill") }
                         .disabled(s.running || s.sourceKeys.isEmpty)
                         .help(s.running ? "A run is waiting or running" : "Search now, outside the schedule")
-                    Button("Edit…") { editing = true }
-                    Button("Delete…", role: .destructive) { confirmingDelete = true }
+                    Button { editing = true } label: { Label("Edit…", systemImage: "pencil") }
+                    Button(role: .destructive) { confirmingDelete = true } label: { Label("Delete…", systemImage: "trash") }
                     if s.running {
-                        ProgressView().controlSize(.small)
-                        Text("Running…").foregroundStyle(.secondary)
+                        HStack(spacing: 6) {
+                            ProgressView().controlSize(.small)
+                            Text("Running…").foregroundStyle(.secondary)
+                        }
                     }
                 }
-                Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 14, verticalSpacing: 6) {
+                .buttonStyle(.secondary)
+                .entrance(1)
+                Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 14, verticalSpacing: 8) {
                     GridRow {
                         Text("Looks for").foregroundStyle(.secondary)
                         Text(s.queries.isEmpty ? "every listing" : s.queries.map { "“\($0)”" }.joined(separator: ", "))
@@ -221,16 +227,20 @@ struct StrategyDetail: View {
                             : s.sourceKeys.compactMap { store.source($0)?.label }.joined(separator: ", "))
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(Theme.cardPadding)
+                .cardSurface()
+                .entrance(2)
                 let runs = store.runs(of: s.id)
                 if !runs.isEmpty {
-                    Text("Recent runs").font(.headline)
-                    ForEach(runs.prefix(5), id: \.id) { run in
-                        RunSummary(store: store, run: run)
+                    CardTitle(title: "Recent runs", systemImage: "clock.arrow.circlepath").padding(.top, 4).entrance(3)
+                    ForEach(Array(runs.prefix(5).enumerated()), id: \.element.id) { index, run in
+                        RunSummary(store: store, run: run).entrance(4 + index)
                     }
                 }
             }
-            .padding(20)
-            .frame(maxWidth: 820, alignment: .leading)
+            .padding(Theme.pagePadding)
+            .frame(maxWidth: Theme.readableWidth, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .sheet(isPresented: $editing) {
@@ -266,7 +276,8 @@ struct RunSummary: View {
                     store.navigation.section = .agentRuns
                     store.navigation.run = run.id
                 }
-                .buttonStyle(.link)
+                .buttonStyle(.secondary)
+                .controlSize(.small)
             }
             if run.hasNote { Text(run.note).font(.caption).foregroundStyle(.secondary) }
             ForEach(run.sources, id: \.sourceKey) { src in
@@ -277,8 +288,8 @@ struct RunSummary: View {
                 }
             }
         }
-        .padding(10)
-        .background(Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+        .padding(12)
+        .cardSurface(radius: Theme.innerRadius + 3)
     }
 }
 
@@ -289,15 +300,13 @@ struct SourceDetail: View {
     var body: some View {
         let s = source
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 6) {
-                        Text(s.label).font(.title2.weight(.semibold))
-                        if s.origin == "agent" { ChipView(chip: Chip(text: "Found by the agent", tone: .accent)) }
-                    }
-                    Text(s.key).font(.callout).foregroundStyle(.secondary).textSelection(.enabled)
-                    if s.hasNote { Text(s.note).font(.callout) }
+            VStack(alignment: .leading, spacing: Theme.blockSpacing) {
+                PageHeader(title: s.label, subtitle: s.key) {
+                    IconTile(systemImage: "dot.radiowaves.left.and.right", colors: s.enabled && s.kindEnabled ? Theme.brandColors : [.gray, .secondary])
+                } trailing: {
+                    if s.origin == "agent" { ChipView(chip: Chip(text: "Found by the agent", tone: .accent)) }
                 }
+                if s.hasNote { Text(s.note).font(.callout) }
                 Toggle(isOn: Binding(
                     get: { s.enabled },
                     set: { on in Task { await store.setSource(s.key, enabled: on) } }
@@ -305,11 +314,12 @@ struct SourceDetail: View {
                     Text(s.enabled ? "On: searches that include it read it" : "Off: never read")
                 }
                 .toggleStyle(.switch)
+                .entrance(1)
                 if !s.kindEnabled {
                     Label("All \(SearchText.kindTitles[s.kind] ?? s.kind) sources are off, so this one isn't read either.", systemImage: "exclamationmark.triangle")
                         .foregroundStyle(.orange)
                 }
-                Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 14, verticalSpacing: 6) {
+                Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 14, verticalSpacing: 8) {
                     GridRow {
                         Text("Results").foregroundStyle(.secondary)
                         Text(SearchText.stats(s.stats))
@@ -333,12 +343,16 @@ struct SourceDetail: View {
                             : "not yet")
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(Theme.cardPadding)
+                .cardSurface()
+                .entrance(2)
                 if let detail = store.sourceDetails[s.key], detail.hasRecipe {
-                    RecipeView(store: store, source: detail)
+                    RecipeView(store: store, source: detail).entrance(3)
                 }
             }
-            .padding(20)
-            .frame(maxWidth: 820, alignment: .leading)
+            .padding(Theme.pagePadding)
+            .frame(maxWidth: Theme.readableWidth, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .task(id: source.key) { await store.openSource(source.key) }
@@ -359,6 +373,7 @@ struct RecipeView: View {
                 ChipView(chip: SearchText.recipeChip(r))
                 Spacer()
                 Button("Rebuild") { Task { await store.rebuildRecipe(source.key) } }
+                    .buttonStyle(.secondary)
                     .disabled(r.status == "building")
                     .help("This page has no feed, so Applyant worked out where its job list is. Rebuild makes it work that out again, for when the page changed")
             }
@@ -386,7 +401,7 @@ struct RecipeView: View {
                 }
             }
         }
-        .padding(10)
-        .background(Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+        .padding(Theme.cardPadding)
+        .cardSurface()
     }
 }

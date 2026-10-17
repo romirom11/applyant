@@ -10,14 +10,16 @@ struct HandOffCard: View {
     @State private var noWindow = false
     @State private var confirmSubmitted = false
     @State private var confirmRetry = false
+    private let motion = EndlessMotion()
 
     var body: some View {
         let h = app.handOff
-        GroupBox {
+        Card(tint: Theme.warning) {
             VStack(alignment: .leading, spacing: 6) {
                 Label(ApproveText.mayHaveBeenSent(app) ? "This one may already be sent" : "Finish this one in the browser", systemImage: "hand.raised.fill")
                     .font(.headline)
                     .foregroundStyle(.orange)
+                    .symbolEffect(.wiggle, options: .repeat(.periodic(2, delay: 3)), isActive: motion.allowed)
                 Text(h.reason)
                 if h.hasDetail { Text(h.detail).font(.callout).foregroundStyle(.secondary) }
                 if let place = place(h) { Text(place).font(.callout) }
@@ -28,13 +30,13 @@ struct HandOffCard: View {
                     Text("Check the site or your mailbox for a confirmation before anything else.")
                         .font(.callout.weight(.medium))
                 }
-                HStack {
+                FlowRow(spacing: 8) {
                     if sent {
-                        Button("I submitted it") { confirmSubmitted = true }.buttonStyle(.borderedProminent)
+                        Button("I submitted it") { confirmSubmitted = true }.buttonStyle(.primary)
                         Button("Show the browser window") { noWindow = !ChromeWindow.bringForward() }
                     } else {
                         Button("Show the browser window") { noWindow = !ChromeWindow.bringForward() }
-                            .buttonStyle(.borderedProminent)
+                            .buttonStyle(.primary)
                         Button("I submitted it") { confirmSubmitted = true }
                     }
                     Button("Try delivery again…") { confirmRetry = true }
@@ -46,13 +48,13 @@ struct HandOffCard: View {
                         Link("Page ↗", destination: url)
                     }
                 }
+                .buttonStyle(.secondary)
+                .padding(.top, 4)
                 if noWindow {
                     Text("Applyant's Chrome isn't running any more. “Try delivery again…” opens the form once more.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(6)
         }
         .confirmationDialog("Did the site accept your application?", isPresented: $confirmSubmitted) {
             Button("Yes, I submitted it") { Task { await store.markSubmitted(application: app.id) } }

@@ -1,3 +1,5 @@
+// Chat: questions about the candidate's own experience, answered from the profile, projects
+// and confirmed facts. Messages rise in as they arrive; the reply's dots bounce while it's written.
 import ApplyantKit
 import SwiftUI
 
@@ -5,6 +7,7 @@ struct ChatView: View {
     let store: AppStore
     @State private var draft = ""
     @State private var confirmingClear = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(spacing: 0) {
@@ -12,24 +15,29 @@ struct ChatView: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 16) {
                         if store.chatMessages.isEmpty {
-                            ContentUnavailableView(
-                                "Ask about your experience",
-                                systemImage: "message",
-                                description: Text("Chat uses your profile, projects and confirmed facts. You can ask what supports a claim, compare your experience with a role, or work through how to describe a project.")
+                            EmptyState(
+                                title: "Ask about your experience",
+                                systemImage: "bubble.left.and.text.bubble.right",
+                                detail: "Chat uses your profile, projects and confirmed facts. You can ask what supports a claim, compare your experience with a role, or work through how to describe a project."
                             )
                             .frame(maxWidth: .infinity, minHeight: 300)
                         }
                         ForEach(store.chatMessages, id: \.id) { message in
                             ChatBubble(message: message, facts: store.chatFacts)
                                 .id(message.id)
+                                .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity).combined(with: .scale(scale: 0.96, anchor: message.role == "user" ? .bottomTrailing : .bottomLeading)))
                         }
                         if store.chatSending {
-                            HStack(spacing: 8) {
-                                ProgressView().controlSize(.small)
+                            HStack(spacing: 10) {
+                                TypingDots()
                                 Text("Thinking…").foregroundStyle(.secondary)
                             }
+                            .bubble(mine: false)
+                            .transition(.opacity.combined(with: .move(edge: .bottom)))
                         }
                     }
+                    .animation(Theme.Motion.pick(Theme.Motion.bouncy, reduceMotion: reduceMotion), value: store.chatMessages.count)
+                    .animation(Theme.Motion.smooth, value: store.chatSending)
                     .padding(24)
                     .frame(maxWidth: 850)
                     .frame(maxWidth: .infinity)
@@ -39,21 +47,24 @@ struct ChatView: View {
                 }
             }
 
-            Divider()
+            Divider().opacity(0.6)
             HStack(alignment: .bottom, spacing: 12) {
                 TextEditor(text: $draft)
                     .font(.body)
                     .frame(minHeight: 65, maxHeight: 115)
-                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(.quaternary))
+                    .composerField()
                     .accessibilityLabel("Message")
-                Button("Send", action: send)
-                    .buttonStyle(.borderedProminent)
+                Button(action: send) { Label("Send", systemImage: "arrow.up") }
+                    .buttonStyle(.primary)
+                    .keyboardShortcut(.return, modifiers: .command)
+                    .help("Send (⌘↩)")
                     .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || store.chatSending)
             }
             .padding(16)
             .frame(maxWidth: 850)
             .frame(maxWidth: .infinity)
         }
+        .pageBackground()
         .navigationTitle("Chat")
         .toolbar {
             Button("New conversation") { confirmingClear = true }
@@ -83,7 +94,7 @@ private struct ChatBubble: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text(message.role == "user" ? "You" : "Applyant")
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                    .opacity(0.7)
                 Text(message.text).textSelection(.enabled)
                 if !message.factIds.isEmpty {
                     DisclosureGroup("Confirmed facts used (\(message.factIds.count))") {
@@ -101,9 +112,7 @@ private struct ChatBubble: View {
                     .font(.caption)
                 }
             }
-            .padding(14)
-            .frame(maxWidth: 620, alignment: .leading)
-            .background(message.role == "user" ? Color.accentColor.opacity(0.12) : Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
+            .bubble(mine: message.role == "user")
             if message.role != "user" { Spacer(minLength: 80) }
         }
     }

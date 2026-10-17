@@ -90,16 +90,18 @@ struct ProfileSourcesPane: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Profile sources").font(.title2.weight(.semibold))
-                    Text("Your CV, LinkedIn PDF and other documents about you as a whole: their facts are sorted into projects.")
-                        .foregroundStyle(.secondary)
-                }
+            VStack(alignment: .leading, spacing: Theme.blockSpacing) {
+                PageHeader(
+                    title: "Profile sources",
+                    subtitle: "Your CV, LinkedIn PDF and other documents about you as a whole: their facts are sorted into projects.",
+                    systemImage: "person.text.rectangle"
+                )
                 KnowledgeSourcesSection(store: store, project: nil, sources: store.candidateProfile?.profileSources ?? [])
+                    .padding(Theme.cardPadding).cardSurface().entrance(1)
                 FactsSection(store: store, project: nil)
+                    .padding(Theme.cardPadding).cardSurface().entrance(2)
             }
-            .padding(20)
+            .padding(Theme.pagePadding)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
@@ -215,10 +217,10 @@ struct ProjectDetail: View {
         } else if !store.unconfirmedFacts.isEmpty {
             FactsToConfirmPane(store: store)
         } else {
-            ContentUnavailableView(
-                "Projects",
+            EmptyState(
+                title: "Projects",
                 systemImage: ApplyantKit.Section.projects.symbol,
-                description: Text("Your experience is told in projects. Pick one to add a GitHub repository, a file or a page to it.")
+                detail: "Your experience is told in projects. Pick one to add a GitHub repository, a file or a page to it."
             )
         }
     }
@@ -234,9 +236,10 @@ private struct ProjectPane: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(alignment: .firstTextBaseline) {
+            VStack(alignment: .leading, spacing: Theme.blockSpacing) {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(alignment: .center, spacing: 14) {
+                        IconTile(systemImage: project.kind == "position" ? "briefcase.fill" : "hammer.fill")
                         if renaming {
                             TextField("Name", text: $name)
                                 .textFieldStyle(.roundedBorder)
@@ -248,7 +251,7 @@ private struct ProjectPane: View {
                                 .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
                             Button("Cancel") { renaming = false }
                         } else {
-                            Text(project.name).font(.title2.weight(.semibold))
+                            Text(project.name).font(Theme.pageTitle)
                                 .onTapGesture(count: 2) { startRenaming() }
                                 .help("Double-click to rename")
                             Spacer()
@@ -281,10 +284,13 @@ private struct ProjectPane: View {
                         }
                     }
                 }
+                .entrance(0)
                 KnowledgeSourcesSection(store: store, project: project.id, sources: store.projectSources[project.id] ?? [])
+                    .padding(Theme.cardPadding).cardSurface().entrance(1)
                 FactsSection(store: store, project: project.id)
+                    .padding(Theme.cardPadding).cardSurface().entrance(2)
             }
-            .padding(20)
+            .padding(Theme.pagePadding)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .task { await store.openProject(project.id) }
@@ -325,11 +331,10 @@ struct FactsToConfirmPane: View {
         let total = store.unconfirmedFacts.count
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text("Facts to confirm").font(.title2.weight(.semibold))
-                    Text("\(total) in \(groups.count) place\(groups.count == 1 ? "" : "s")").foregroundStyle(.secondary)
-                    Spacer()
-                    Button("Confirm All \(total)…") { confirmingAll = true }
+                PageHeader(title: "Facts to confirm", subtitle: "\(total) in \(groups.count) place\(groups.count == 1 ? "" : "s")") {
+                    IconTile(systemImage: "checkmark.seal.fill")
+                } trailing: {
+                    Button("Confirm All \(total)…") { confirmingAll = true }.buttonStyle(.primary)
                     FactsMenu(showQuotes: $showQuotes)
                 }
                 .help("Drafted from your CV and other sources. Confirm what's true as written, edit what isn't quite right, reject what's wrong. An application is only sent once every fact it relies on is confirmed.")
@@ -341,9 +346,10 @@ struct FactsToConfirmPane: View {
                         Button("Confirm These \(group.facts.count)") {
                             Task { await store.confirmFacts(group.facts.map(\.id), project: group.project) }
                         }
+                        .buttonStyle(.secondary)
                         .controlSize(.small)
                         if let id = group.project {
-                            Button("Open Project") { store.navigation.project = id }.controlSize(.small)
+                            Button("Open Project") { store.navigation.project = id }.buttonStyle(.secondary).controlSize(.small)
                         }
                     }
                     .padding(.top, 6)
@@ -353,7 +359,7 @@ struct FactsToConfirmPane: View {
                     }
                 }
             }
-            .padding(20)
+            .padding(Theme.pagePadding)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .task { await store.openUnconfirmedFacts() }
@@ -384,7 +390,7 @@ struct KnowledgeSourcesSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("Sources").font(.headline)
+                CardTitle(title: "Sources", systemImage: "tray.full")
                     .help("Each source is read in the background into facts for you to confirm; nothing unconfirmed is ever sent.")
                 Spacer()
                 Menu("Add Source…") {
@@ -447,7 +453,7 @@ struct KnowledgeSourcesSection: View {
                     .padding(.top, 6)
                 }
                 .padding(10)
-                .background(Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+                .insetSurface()
             }
             if project == nil, let note = store.baseCvNote {
                 Label(note, systemImage: "doc.badge.arrow.up").font(.callout).foregroundStyle(.secondary)
@@ -554,14 +560,14 @@ private struct RepoSuggestionsCard: View {
                             Spacer()
                             Button("Add") { Task { await store.addKnowledgeSource(to: project, r.url) } }
                                 .controlSize(.small)
-                                .buttonStyle(.borderedProminent)
+                                .buttonStyle(.primary)
                             Button("Not This One") { store.dismissedRepoSuggestions.insert(r.url) }
                                 .controlSize(.small)
                         }
                     }
                 }
                 .padding(10)
-                .background(Color.accentColor.opacity(0.07), in: RoundedRectangle(cornerRadius: 8))
+                .insetSurface(tint: Theme.accent)
             }
         }
     }
@@ -683,7 +689,7 @@ struct FactsSection: View {
         let shown = FactsText.shown(all, filter: filter)
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("Facts").font(.headline)
+                CardTitle(title: "Facts", systemImage: "checkmark.seal")
                     .help("Extracted facts start unconfirmed; drafts may use them, but nothing unconfirmed is sent. An edit is saved in your words, confirmed.")
                 Text(FactsText.counts(all)).font(.callout).foregroundStyle(.secondary)
                 Spacer()

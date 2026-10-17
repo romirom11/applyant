@@ -82,7 +82,7 @@ public enum ActivityText {
         backgroundPaused: Date? = nil
     ) -> Empty {
         switch section {
-        case .inbox:
+        case .new:
             if backgroundPaused != nil {
                 return Empty(title: "Paused", detail: "Background work is paused: nothing is searched or scored until you resume it (Resume above the sidebar, or in the menu bar).")
             }
@@ -107,15 +107,17 @@ public enum ActivityText {
                         : "Finish the setup's Preferences step to start searching, or add a posting by its link with Add posting…"
                 )
             }
-            return Empty(title: "No scored postings yet", detail: "Your searches run on their schedule; new postings appear here once they're checked and scored. Search shows when each ran last.")
-        case .readyToReview:
-            return Empty(title: "Nothing to review", detail: "Applications appear here when a posting scores at or above your threshold, or when you press Prepare application on a posting.")
-        case .preparing:
-            return Empty(title: "Nothing being prepared", detail: activity.paused ?? "Answers and the CV are drafted here before they're ready to review.")
-        case .interested:
-            return Empty(title: "Nothing marked interested", detail: "Press Interested on a posting to keep it here.")
+            return Empty(title: "Nothing new", detail: "Your searches run on their schedule; new postings appear here once they're checked and scored (the ones at or above your threshold are prepared and go to To review). Search shows when each ran last.")
+        case .toReview:
+            return Empty(
+                title: "Nothing to review",
+                detail: "Applyant prepares an application on its own when a posting scores at or above your threshold; press Prepare application on one in New for any other. Each waits here until you send it."
+                    + (activity.paused.map { "\n\n" + $0 } ?? "")
+            )
+        case .saved:
+            return Empty(title: "Nothing saved", detail: "Press Save on a job to keep it here. Saving also starts its application.")
         case .skipped:
-            return Empty(title: "Nothing skipped", detail: "Postings you skip land here; Back to Inbox undoes it.")
+            return Empty(title: "Nothing skipped", detail: "Jobs you skip land here; Back to New undoes it.")
         case .applied:
             return Empty(title: "No applications sent yet", detail: "An application is sent right after you approve it, and stays here with what was sent.")
         case .interviews:
@@ -125,6 +127,14 @@ public enum ActivityText {
         default:
             return Empty(title: "Nothing here yet", detail: "")
         }
+    }
+
+    /// New with its good-matches filter on and every posting under the bar.
+    public static func noGoodMatches(hidden: Int, below score: Int32) -> Empty {
+        Empty(
+            title: "No good matches right now",
+            detail: "\(hidden) posting\(hidden == 1 ? " scores" : "s score") under \(score). The ones at or above your threshold are prepared on their own and wait in To review."
+        )
     }
 }
 

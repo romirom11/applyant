@@ -11,17 +11,18 @@ struct InterviewList: View {
         let rows = store.interviewRows
         Group {
             if rows.waiting.isEmpty && rows.projects.isEmpty {
-                ContentUnavailableView {
-                    Label("No projects yet", systemImage: ApplyantKit.Section.interview.symbol)
-                } description: {
-                    Text("Questions are asked about your projects. Import your CV or add a project first.")
-                } actions: {
+                EmptyState(
+                    title: "No projects yet",
+                    systemImage: ApplyantKit.Section.interview.symbol,
+                    detail: "Questions are asked about your projects. Import your CV or add a project first."
+                ) {
                     Button("Open Projects") {
                         store.showOnboarding = false
                         store.navigation.section = .projects
                     }
+                    .buttonStyle(.primary)
                     if store.showOnboarding {
-                        Button("Back to Import") { store.onboarding.open(.importing) }
+                        Button("Back to Import") { store.onboarding.open(.importing) }.buttonStyle(.secondary)
                     }
                 }
             } else {
@@ -74,14 +75,15 @@ struct InterviewThreadView: View {
                 VStack(spacing: 0) {
                     ScrollViewReader { proxy in
                         ScrollView {
-                            VStack(alignment: .leading, spacing: 14) {
+                            VStack(alignment: .leading, spacing: 16) {
                                 header(thread)
-                                ForEach(thread.questions, id: \.id) { q in
-                                    exchange(q).id(q.id)
+                                ForEach(Array(thread.questions.enumerated()), id: \.element.id) { index, q in
+                                    exchange(q).id(q.id).entrance(index + 1)
                                 }
                                 footer(thread)
                             }
-                            .padding(20)
+                            .animation(Theme.Motion.smooth, value: thread.questions.map(\.status))
+                            .padding(Theme.pagePadding)
                             .frame(maxWidth: 760, alignment: .leading)
                             .frame(maxWidth: .infinity, alignment: .leading)
                         }
@@ -90,7 +92,7 @@ struct InterviewThreadView: View {
                         }
                     }
                     if let open = InterviewText.openQuestion(thread) {
-                        Divider()
+                        Divider().opacity(0.6)
                         composer(open)
                     }
                 }
@@ -105,26 +107,31 @@ struct InterviewThreadView: View {
 
     @ViewBuilder
     private func header(_ thread: InterviewThread) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            if thread.hasProject {
-                let p = thread.project
-                Text(p.project.name).font(.title2.weight(.semibold))
-                Text(p.gaps.isEmpty
+        if thread.hasProject {
+            let p = thread.project
+            PageHeader(
+                title: p.project.name,
+                subtitle: p.gaps.isEmpty
                     ? "Its facts cover your role, what you built, the team and the results."
-                    : "Its facts don't show yet: " + p.gapLabels.joined(separator: "; ") + ".")
-                    .foregroundStyle(.secondary)
-            } else if let first = thread.questions.first {
-                Text(first.hasApplication ? first.application : "An application").font(.title2.weight(.semibold))
-                Text("The application asks this, and nothing Applyant knows answers it yet. Your answer is saved as facts and used for this application and later ones.")
-                    .foregroundStyle(.secondary)
-            }
+                    : "Its facts don't show yet: " + p.gapLabels.joined(separator: "; ") + ".",
+                systemImage: "folder.fill"
+            )
+        } else if let first = thread.questions.first {
+            PageHeader(
+                title: first.hasApplication ? first.application : "An application",
+                subtitle: "The application asks this, and nothing Applyant knows answers it yet. Your answer is saved as facts and used for this application and later ones.",
+                systemImage: "doc.text.fill"
+            )
         }
     }
 
     private func exchange(_ q: InterviewQuestion) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .top, spacing: 8) {
-                Image(systemName: "bubble.left.fill").foregroundStyle(.secondary)
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "sparkles")
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(Theme.brand)
+                    .padding(.top, 2)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(q.text).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
                     if q.hasContext {
@@ -133,8 +140,8 @@ struct InterviewThreadView: View {
                     }
                 }
             }
-            .padding(10)
-            .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+            .bubble(mine: false)
+            .padding(.trailing, 60)
 
             if q.hasAnswer {
                 HStack {
@@ -142,8 +149,7 @@ struct InterviewThreadView: View {
                     Text(q.answer)
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
-                        .padding(10)
-                        .background(Color.accentColor.opacity(0.14), in: RoundedRectangle(cornerRadius: 10))
+                        .bubble(mine: true)
                 }
             }
             switch q.status {
@@ -178,11 +184,13 @@ struct InterviewThreadView: View {
     @ViewBuilder
     private func footer(_ thread: InterviewThread) -> some View {
         if thread.pending && InterviewText.openQuestion(thread) == nil {
-            HStack(spacing: 8) {
-                ProgressView().controlSize(.small)
+            HStack(spacing: 10) {
+                TypingDots()
                 Text(thread.questions.contains { $0.status == "processing" } ? "Reading your answer…" : "Writing a question…")
                     .foregroundStyle(.secondary)
             }
+            .bubble(mine: false)
+            .transition(.opacity.combined(with: .move(edge: .bottom)))
         } else if InterviewText.canAskMore(thread) {
             let p = thread.project
             HStack {
@@ -190,10 +198,12 @@ struct InterviewThreadView: View {
                     Text(p.gaps.isEmpty ? "That's all for now." : "Nothing more asked for now.").foregroundStyle(.secondary)
                 }
                 Spacer()
-                Button(p.asked == 0 ? "Start the interview" : "Ask me more") {
+                Button {
                     Task { await store.startInterview(project: p.project.id) }
+                } label: {
+                    Label(p.asked == 0 ? "Start the interview" : "Ask me more", systemImage: "sparkles")
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.primary)
             }
         } else if !thread.hasProject, let q = thread.questions.last, q.hasApplicationID, q.status != "open", q.status != "processing" {
             HStack {
@@ -204,8 +214,9 @@ struct InterviewThreadView: View {
                 Spacer()
                 if let app = store.applications[q.applicationID] {
                     Button("Open the application") {
-                        store.navigation.showReview(application: app.id, posting: app.postingID, stage: app.stage)
+                        store.navigation.showReview(app)
                     }
+                    .buttonStyle(.secondary)
                 }
             }
         }
@@ -223,9 +234,7 @@ struct InterviewThreadView: View {
                             .foregroundStyle(.tertiary).padding(.top, 1).padding(.leading, 5).allowsHitTesting(false)
                     }
                 }
-                .scrollContentBackground(.hidden)
-                .padding(6)
-                .background(Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+                .composerField()
             if case let .failed(why) = dictation.state {
                 Text(why).font(.caption).foregroundStyle(.orange)
             } else if dictation.listening {
@@ -237,11 +246,12 @@ struct InterviewThreadView: View {
                     dictation.stop()
                     Task { await store.dismissInterview(target, question: q.id) }
                 }
+                .buttonStyle(.secondary)
                 .help(q.hasApplicationID ? "You can write this answer yourself in review" : "Skip this question for now")
                 DictateButton(dictation: dictation, spoken: store.spokenLanguages, text: $answer)
                 Spacer()
-                Button("Send") { send(q) }
-                    .buttonStyle(.borderedProminent)
+                Button { send(q) } label: { Label("Send", systemImage: "arrow.up") }
+                    .buttonStyle(.primary)
                     .keyboardShortcut(.return, modifiers: .command)
                     .disabled(answer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }

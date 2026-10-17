@@ -49,10 +49,10 @@ struct WhichApplicationList: View {
             MailboxStatus(store: store)
             Divider()
             if store.mailQueue.isEmpty {
-                ContentUnavailableView(
-                    "Nothing to sort",
+                EmptyState(
+                    title: "Nothing to sort",
                     systemImage: ApplyantKit.Section.whichApplication.symbol,
-                    description: Text("Replies Applyant can't place on its own, or can't tell what they are, wait here.")
+                    detail: "Replies Applyant can't place on its own, or can't tell what they are, wait here."
                 )
             } else {
                 List(store.mailQueue, id: \.id, selection: Binding(
@@ -89,10 +89,10 @@ struct WhichApplicationDetail: View {
         if let id = store.navigation.email, let email = store.mailQueue.first(where: { $0.id == id }) {
             WhichApplication(store: store, email: email).id(id)
         } else {
-            ContentUnavailableView(
-                "Which application is this?",
+            EmptyState(
+                title: "Which application is this?",
                 systemImage: ApplyantKit.Section.whichApplication.symbol,
-                description: Text("Pick a reply on the left and say which application it's about, or that it's about none.")
+                detail: "Pick a reply on the left and say which application it's about, or that it's about none."
             )
         }
     }
@@ -111,22 +111,20 @@ struct WhichApplication: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: Theme.blockSpacing) {
                 // The reply, read like a message.
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(email.subject.isEmpty ? "(no subject)" : email.subject).font(.title2.weight(.semibold))
-                    HStack(spacing: 6) {
-                        Text(MailText.sender(email))
-                        Text("·")
-                        Text(email.receivedAt.date.formatted(date: .abbreviated, time: .shortened))
-                    }
-                    .font(.callout).foregroundStyle(.secondary)
-                }
+                PageHeader(
+                    title: email.subject.isEmpty ? "(no subject)" : email.subject,
+                    subtitle: MailText.sender(email) + " · " + email.receivedAt.date.formatted(date: .abbreviated, time: .shortened),
+                    systemImage: "envelope.open"
+                )
                 Text(email.snippet)
                     .textSelection(.enabled)
                     .lineSpacing(3)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                Divider()
+                    .padding(Theme.cardPadding)
+                    .cardSurface()
+                    .entrance(1)
                 // What Applyant made of it, and what's left for you.
                 VStack(alignment: .leading, spacing: 12) {
                     HStack(spacing: 8) {
@@ -153,8 +151,10 @@ struct WhichApplication: View {
                             Text(MailText.candidateTitle(c))
                             ChipView(chip: MailText.stageChip(c.stage) ?? Chip(text: "Applied", tone: .neutral))
                             Spacer()
-                            Button("This one") { assign(c.applicationID) }
+                            Button("This one") { assign(c.applicationID) }.buttonStyle(.primary).controlSize(.small)
                         }
+                        .padding(10)
+                        .insetSurface()
                     }
                     HStack(spacing: 10) {
                         let others = otherApplications
@@ -176,9 +176,13 @@ struct WhichApplication: View {
                             .font(.caption).foregroundStyle(.secondary)
                     }
                 }
+                .padding(Theme.cardPadding)
+                .cardSurface()
+                .entrance(2)
             }
-            .padding(24)
-            .frame(maxWidth: 720, alignment: .leading)
+            .padding(Theme.pagePadding)
+            .frame(maxWidth: 760, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
@@ -205,7 +209,7 @@ struct ApplicationReplies: View {
     let app: Application
 
     var body: some View {
-        GroupBox("Replies") {
+        Card(title: "Replies", systemImage: "envelope") {
             VStack(alignment: .leading, spacing: 10) {
                 ForEach(app.emails, id: \.id) { e in
                     VStack(alignment: .leading, spacing: 3) {
@@ -227,8 +231,6 @@ struct ApplicationReplies: View {
                     }
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(6)
         }
     }
 }

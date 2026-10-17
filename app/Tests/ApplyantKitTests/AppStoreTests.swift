@@ -778,7 +778,7 @@ func eventually(_ what: String, timeout: Duration = .seconds(3), _ condition: ()
         defer { run.cancel() }
 
         try await eventually("first connect") { store.connection == .connected && store.reloads == 1 }
-        #expect(store.items(.inbox).map(\.title) == ["Backend"])
+        #expect(store.items(.new).map(\.title) == ["Backend"])
         #expect(first.watchedAfter == [41])
 
         // The daemon goes away (the stream breaks), is down for one try, then comes back.
@@ -787,7 +787,7 @@ func eventually(_ what: String, timeout: Duration = .seconds(3), _ condition: ()
         #expect(connector.connects == 3)
         #expect(store.connection == .connected)
         // What was added while the stream was down is there: nothing missed during the gap.
-        #expect(store.items(.inbox).map(\.title) == ["AI Engineer", "Backend"])
+        #expect(store.items(.new).map(\.title) == ["AI Engineer", "Backend"])
         #expect(second.watchedAfter == [57])
     }
 
@@ -802,8 +802,10 @@ func eventually(_ what: String, timeout: Duration = .seconds(3), _ condition: ()
         let run = Task { await store.run() }
         defer { run.cancel() }
         try await eventually("connected") { store.connection == .connected }
-        #expect(store.items(.preparing).map(\.applicationId) == [9])
-        #expect(store.items(.inbox).first?.chips.first?.text == "Preparing…")
+        #expect(store.review(.preparing).map(\.applicationId) == [9])
+        #expect(store.items(.toReview).first?.chips.first?.text == "Preparing…")
+        // Its posting has an application now: it isn't in New as well.
+        #expect(store.items(.new).isEmpty)
 
         // Preparation finishes on the daemon; the event says so.
         daemon.applications[9]?.stage = .readyForReview
@@ -812,9 +814,11 @@ func eventually(_ what: String, timeout: Duration = .seconds(3), _ condition: ()
         stage.postingID = 5
         stage.stage = .readyForReview
         daemon.feed.yield(event(60, .application(stage)))
-        try await eventually("ready") { store.applications[9]?.stage == .readyForReview }
-        #expect(store.items(.readyToReview).map(\.applicationId) == [9])
-        #expect(store.items(.preparing).isEmpty)
+        // The notification follows the posting's refresh, after the application's.
+        try await eventually("ready") { store.applications[9]?.stage == .readyForReview && !notes.isEmpty }
+        #expect(store.review(.ready).map(\.applicationId) == [9])
+        #expect(store.review(.preparing).isEmpty)
+        #expect(store.count(.toReview) == 1)
         #expect(notes.map(\.kind) == [.readyForReview])
         #expect(notes.first?.title == "Acme · Senior AI Engineer · 91")
 
@@ -843,7 +847,10 @@ func eventually(_ what: String, timeout: Duration = .seconds(3), _ condition: ()
         try await eventually("hand-off") { notes.count == 2 }
         #expect(notes.last?.kind == .handOff)
         #expect(store.needsYou.map(\.id) == [9])
-        #expect(store.items(.applied).first?.chips.first?.text == "Finish in browser")
+        // Waiting on the candidate: in To review's Needs you, not in Applied.
+        #expect(store.review(.needsYou).first?.chips.first?.text == "Finish in browser")
+        #expect(store.items(.applied).isEmpty)
+        #expect(store.count(.toReview) == 1)
 
         // The candidate finishes it in the browser and says so.
         await store.markSubmitted(application: 9)
@@ -923,29 +930,109 @@ func eventually(_ what: String, timeout: Duration = .seconds(3), _ condition: ()
         try await eventually("disconnected") { store.connection == .disconnected("Applyant's background service isn't running") }
     }
 
-    @Test func skipMovesAPostingOutOfTheInbox() async throws {
+    @Test func everyJobIsInOneListAndSkipMovesItOut() async throws {
         let daemon = FakeDaemon(
-            postings: [posting(1, score: 70, title: "A", appId: 9), posting(2, score: 60, title: "B")],
+            postings: [posting(1, score: 70, title: "A", appId: 9), posting(2, score: 75, title: "B")],
             applications: [application(9, posting: 1, stage: .readyForReview)]
         )
         let store = AppStore(connector: FakeConnector([daemon]), backoff: { _ in })
         let run = Task { await store.run() }
         defer { run.cancel() }
         try await eventually("connected") { store.connection == .connected }
-        #expect(store.items(.readyToReview).map(\.applicationId) == [9])
+        // A has an application: To review only. B has none: New.
+        #expect(store.items(.toReview).map(\.applicationId) == [9])
+        #expect(store.items(.new).map(\.postingId) == [2])
         await store.skip(posting: 1, reason: "salary too low")
         #expect(daemon.calls.contains("skip 1 salary too low"))
-        #expect(store.items(.inbox).map(\.postingId) == [2])
         #expect(store.items(.skipped).map(\.postingId) == [1])
-        #expect(store.items(.readyToReview).isEmpty)
+        #expect(store.items(.toReview).isEmpty)
+        #expect(store.count(.skipped) == 0)
         await store.markInterested(posting: 2)
-        #expect(store.items(.interested).map(\.postingId) == [2])
-        // Back to Inbox takes the skip back without marking it interested.
-        await store.backToInbox(posting: 1)
+        #expect(store.items(.saved).map(\.postingId) == [2])
+        #expect(store.items(.new).isEmpty)
+        // Back to New takes the skip back without saving it: its application is in To review again.
+        await store.undoDecision(posting: 1)
         #expect(daemon.calls.contains("unskip 1"))
         #expect(store.items(.skipped).isEmpty)
-        #expect(store.items(.inbox).map(\.postingId) == [1, 2])
-        #expect(store.items(.readyToReview).map(\.applicationId) == [9])
+        #expect(store.items(.toReview).map(\.applicationId) == [9])
+        #expect(store.items(.new).isEmpty)
+    }
+
+    @Test func toReviewGroupsWhatNeedsYouWhatIsReadyAndWhatIsBeingPrepared() async throws {
+        var handOff = application(4, posting: 4, stage: .approved)
+        handOff.handOff = .with { $0.reason = "a captcha" }
+        let daemon = FakeDaemon(
+            postings: (1...5).map { posting($0, score: 90 - Int32($0), title: "Role \($0)", appId: $0) },
+            applications: [
+                application(1, posting: 1, stage: .readyForReview),
+                application(2, posting: 2, stage: .needsCandidate),
+                application(3, posting: 3, stage: .preparing),
+                handOff,
+                application(5, posting: 5, stage: .approved),
+            ]
+        )
+        let store = AppStore(connector: FakeConnector([daemon]), backoff: { _ in })
+        let run = Task { await store.run() }
+        defer { run.cancel() }
+        try await eventually("connected") { store.connection == .connected }
+        let groups = store.groups(.toReview)
+        #expect(groups.map(\.title) == ["Needs you", "Ready to send", "Preparing"])
+        #expect(groups.map { Set($0.items.compactMap(\.applicationId)) } == [[2, 4], [1], [3]])
+        // The badge counts what waits for the candidate, not what's still being prepared.
+        #expect(store.count(.toReview) == 3)
+        // On its way: Applied.
+        #expect(store.items(.applied).compactMap(\.applicationId) == [5])
+        #expect(Navigation.section(for: handOff) == .toReview)
+    }
+
+    @Test func newShowsGoodMatchesFirstAndSaysHowManyItHides() async throws {
+        let daemon = FakeDaemon(postings: [
+            posting(1, score: 72, title: "Good"), posting(2, score: 69, title: "Close"), posting(3, score: 40, title: "Far"),
+        ])
+        let store = AppStore(connector: FakeConnector([daemon]), backoff: { _ in })
+        let run = Task { await store.run() }
+        defer { run.cancel() }
+        try await eventually("connected") { store.connection == .connected }
+        // No preferences from this daemon: the default threshold (80) puts the bar at 70.
+        #expect(store.goodMatchScore == 70)
+        #expect(store.navigation.newFilter == .good)
+        #expect(store.items(.new).map(\.title) == ["Good"])
+        #expect(store.count(.new) == 1)
+        #expect(store.newHidden == 2)
+        store.navigation.newFilter = .all
+        #expect(store.items(.new).map(\.title) == ["Good", "Close", "Far"])
+        #expect(store.newHidden == 0)
+        // The badge counts good matches whichever filter is on.
+        #expect(store.count(.new) == 1)
+    }
+
+    @Test func approvingOpensTheNextJobOfTheList() async throws {
+        let daemon = FakeDaemon(
+            postings: [posting(1, score: 90, title: "A", appId: 1), posting(2, score: 85, title: "B", appId: 2), posting(3, score: 80, title: "C", appId: 3)],
+            // Highest score first, as the list shows them: A, B, C.
+            applications: [(Int64(1), Int32(90)), (2, 85), (3, 80)].map { (id: Int64, score: Int32) -> Application in
+                var app = application(id, posting: id, stage: .readyForReview)
+                app.score = score
+                return app
+            }
+        )
+        let store = AppStore(connector: FakeConnector([daemon]), backoff: { _ in })
+        let run = Task { await store.run() }
+        defer { run.cancel() }
+        try await eventually("connected") { store.connection == .connected }
+        store.navigation.section = .toReview
+        let middle = try #require(store.items(.toReview).first { $0.postingId == 2 })
+        store.navigation.select(middle)
+        await store.advancing { await store.approve(application: 2) }
+        #expect(daemon.calls.contains("approve 2"))
+        // B went to Applied; C took its place.
+        #expect(store.navigation.postingId == 3 && store.navigation.reviewing == 3)
+        // Skipping the last one opens the one before it.
+        await store.advancing { await store.skip(posting: 3, reason: "") }
+        #expect(store.navigation.postingId == 1)
+        // A refused action leaves the selection alone.
+        await store.advancing { false }
+        #expect(store.navigation.postingId == 1)
     }
 }
 

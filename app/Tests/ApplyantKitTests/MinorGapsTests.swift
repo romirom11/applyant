@@ -1,4 +1,4 @@
-// Minor gaps: Add posting from the Inbox, when the apply form was read, model runs, an
+// Minor gaps: Add posting from New, when the apply form was read, model runs, an
 // application's notes and contacts, interview prep, and the CV template in Settings.
 import ApplyantAPI
 import Foundation

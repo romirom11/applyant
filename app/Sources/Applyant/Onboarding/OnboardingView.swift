@@ -60,11 +60,13 @@ struct OnboardingView: View {
                     Button(skip == "later" ? "Later" : "Skip") {
                         Task { await store.settleStep(flow.current, as: skip) }
                     }
+                    .buttonStyle(.secondary)
                 }
                 if flow.current != .preferences {
                     Button(flow.current == .interview ? "Done" : "Continue") {
                         Task { await store.settleStep(flow.current) }
                     }
+                    .buttonStyle(.primary)
                     .keyboardShortcut(.defaultAction)
                 }
             }
@@ -276,7 +278,7 @@ struct AssistantNotesBox: View {
                 NSPasteboard.general.setString(AssistantNotes.prompt, forType: .string)
                 copied = true
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.primary)
         }
         if showingPrompt {
             ScrollView {
@@ -290,9 +292,7 @@ struct AssistantNotesBox: View {
             TextEditor(text: $answer)
                 .font(.callout)
                 .frame(minHeight: 90, maxHeight: 180)
-                .scrollContentBackground(.hidden)
-                .padding(6)
-                .background(Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+                .composerField()
             HStack {
                 if added {
                     Label("Added: it's being read into facts for you to confirm.", systemImage: "checkmark.circle.fill")
@@ -571,6 +571,7 @@ private struct PreferencesStep: View {
                         saving = false
                     }
                 }
+                .buttonStyle(.primary)
                 .keyboardShortcut(.defaultAction)
                 .disabled(saving)
             }
@@ -629,10 +630,10 @@ private struct InterviewStep: View {
                 if let target = store.navigation.interview {
                     InterviewThreadView(store: store, target: target).id(target)
                 } else {
-                    ContentUnavailableView(
-                        "Pick a project",
+                    EmptyState(
+                        title: "Pick a project",
                         systemImage: ApplyantKit.Section.interview.symbol,
-                        description: Text("Applyant asks what your CV and repositories can't show. Or choose Later: the questions wait in Questions for you.")
+                        detail: "Applyant asks what your CV and repositories can't show. Or choose Later: the questions wait in Questions for you."
                     )
                 }
             }

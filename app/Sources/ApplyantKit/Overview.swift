@@ -46,6 +46,18 @@ public enum OverviewText {
         }
     }
 
+    /// The list a funnel step's postings are in now, for the row's link.
+    public static func section(forStep key: String) -> Section? {
+        switch key {
+        case "found", "verified": .new
+        case "interested", "prepared": .toReview
+        case "approved", "applied": .applied
+        case "interview": .interviews
+        case "offer": .offers
+        default: nil
+        }
+    }
+
     public enum Standing: Equatable, Sendable {
         /// The target holds.
         case met

@@ -80,28 +80,26 @@ final class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
             Task { await store.skip(posting: posting, reason: "skipped from a notification") }
         case Action.open.rawValue where kind == StoreNotification.Kind.handOff.rawValue:
             ChromeWindow.bringForward()
-            navigate(application: application, posting: posting, kind: kind)
+            navigate(application: application, posting: posting)
         case Action.open.rawValue where kind == StoreNotification.Kind.statusChange.rawValue:
-            navigate(application: application, posting: posting, kind: kind)
+            navigate(application: application, posting: posting)
         case Action.open.rawValue:
             if let url = store.postings[posting]?.canonicalURL, let link = URL(string: url) {
                 NSWorkspace.shared.open(link)
             }
         default:
             // Review, or a click on the notification itself.
-            navigate(application: application, posting: posting, kind: kind)
+            navigate(application: application, posting: posting)
         }
     }
 
-    private func navigate(application: Int64, posting: Int64, kind: String?) {
-        store.navigation.showReview(application: application, posting: posting, stage: store.applications[application]?.stage)
-        if kind == StoreNotification.Kind.handOff.rawValue { store.navigation.section = .applied }
-        if kind == StoreNotification.Kind.statusChange.rawValue {
-            store.navigation.section = switch store.applications[application]?.stage {
-            case .interview?: .interviews
-            case .offer?: .offers
-            default: .applied
-            }
+    /// The application's tab, in the list it's in now: a hand-off waits in To review, a reply's
+    /// status in Applied, Interviews or Offers.
+    private func navigate(application: Int64, posting: Int64) {
+        if let app = store.applications[application] {
+            store.navigation.showReview(app)
+        } else {
+            store.navigation.showReview(application: application, posting: posting)
         }
         showMainWindow()
     }
