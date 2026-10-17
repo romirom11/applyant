@@ -1,8 +1,8 @@
 // Home, the screen the window opens on, built like CleanMyMac's Smart Care but dense: a
 // greeting and a line on where things stand, a compact grid of glass tiles (a number that says
 // what it counts, a caption and a 3D object peeking in from the corner; on a wide window the
-// funnel's tile too), how it's going opening right under the grid when its tile is clicked
-// (the funnel and the success metrics, for 7 days, 30 days or all time), the strip of what
+// funnel's tile too; like every tile it opens a page of its own: How it's going, the funnel and
+// the success metrics for 7 days, 30 days or all time, with a way back), the strip of what
 // Applyant is working on while it works, and the next few jobs ready to send beside the round
 // button.
 import ApplyantAPI
@@ -11,17 +11,36 @@ import SwiftUI
 
 struct HomeView: View {
     @Bindable var store: AppStore
-    /// How it's going, open for this visit only. `--show-how-its-going` opens it at launch (for
-    /// screenshots).
+    /// How it's going's page instead of Home, for this visit only. `--show-how-its-going` opens it
+    /// at launch (for screenshots).
     @State private var showsMetrics = CommandLine.arguments.contains("--show-how-its-going")
     /// The column's width, measured: the grid, the panel's notch and the round button follow it.
     @State private var measured: CGFloat = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
+        Group {
+            if showsMetrics {
+                HowItsGoingPage(store: store) { toggleMetrics() }
+                    .transition(.push(from: .trailing))
+            } else {
+                home
+                    .transition(.push(from: .leading))
+            }
+        }
+        .animation(Theme.Motion.pick(Theme.Motion.smooth, reduceMotion: reduceMotion), value: showsMetrics)
+        .focusedSceneValue(\.showsHowItsGoing, $showsMetrics)
+        .task {
+            await store.openProfile()
+            await store.openSearch()
+        }
+        .task(id: store.overviewWindow) { await store.openOverview() }
+    }
+
+    private var home: some View {
         let input = store.homeInput
         let live = HomeText.live(input)
-        GeometryReader { geo in
+        return GeometryReader { geo in
             // Until measured, the window less the page's margins.
             let total = measured > 0 ? measured : max(min(geo.size.width, 1500) - Theme.pagePadding * 2, 0)
             let columns = HomeGrid.columns(width: total)
@@ -33,20 +52,10 @@ struct HomeView: View {
                         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { measured = $0 }
                     HomeGridView(
                         store: store, input: input, live: live, columns: columns, total: total,
-                        tileHeight: HomeGrid.tileHeight(window: geo.size.height), showsMetrics: $showsMetrics
-                    )
+                        tileHeight: HomeGrid.tileHeight(window: geo.size.height)
+                    ) { toggleMetrics() }
                     if columns < 4 {
-                        MetricsLine(store: store, showsMetrics: $showsMetrics)
-                    }
-                    if showsMetrics {
-                        // Hangs from what opened it: the funnel's tile, or the line's chevron.
-                        let anchor = columns < 4
-                            ? 24
-                            : total - HomeGrid.width(.funnel, columns: columns, total: total, spacing: Theme.blockSpacing) / 2
-                        AnchoredPanel(anchorX: anchor) {
-                            HomeMetrics(store: store, width: total - Theme.cardPadding * 2) { toggleMetrics() }
-                        }
-                        .transition(.reveal(reduceMotion: reduceMotion))
+                        MetricsLine(store: store) { toggleMetrics() }
                     }
                     if let live {
                         ActivityStrip(tile: live.tile, live: live)
@@ -62,7 +71,6 @@ struct HomeView: View {
                     .entrance(3)
                 }
                 .animation(Theme.Motion.pick(Theme.Motion.smooth, reduceMotion: reduceMotion), value: live)
-                .animation(Theme.Motion.pick(Theme.Motion.disclose, reduceMotion: reduceMotion), value: showsMetrics)
                 .padding(.horizontal, Theme.pagePadding)
                 .padding(.top, 10)
                 .padding(.bottom, 28)
@@ -71,12 +79,6 @@ struct HomeView: View {
             }
             .scrollIndicators(.automatic)
         }
-        .focusedSceneValue(\.showsHowItsGoing, $showsMetrics)
-        .task {
-            await store.openProfile()
-            await store.openSearch()
-        }
-        .task(id: store.overviewWindow) { await store.openOverview() }
     }
 
     private func toggleMetrics() {
@@ -134,7 +136,8 @@ private struct HomeGridView: View {
     let columns: Int
     let total: CGFloat
     let tileHeight: CGFloat
-    @Binding var showsMetrics: Bool
+    /// The funnel's tile opens How it's going.
+    let openHowItsGoing: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.blockSpacing) {
@@ -147,7 +150,7 @@ private struct HomeGridView: View {
                             case let .tile(tile):
                                 HomeTileView(store: store, tile: tile, figure: HomeText.figure(tile, input), live: live?.tile == tile ? live : nil, size: size)
                             case .funnel:
-                                FunnelTile(store: store, showsMetrics: $showsMetrics, size: size)
+                                FunnelTile(store: store, size: size, open: openHowItsGoing)
                             }
                         }
                         .frame(width: size.width, height: size.height)
@@ -291,33 +294,22 @@ private struct HomeTileView: View {
     }
 }
 
-/// The wide grid's last tile, built like the others: how far the postings got (found ›
-/// applied › interviews › offers). A click opens the funnel and the metrics right under the
-/// grid, the panel's notch pointing back at it.
+/// The funnel at a glance (found › applied › interviews › offers) in a tile like the others:
+/// a click opens its page, How it's going.
 private struct FunnelTile: View {
     let store: AppStore
-    @Binding var showsMetrics: Bool
     let size: CGSize
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let open: () -> Void
 
     var body: some View {
         let art: CGFloat = min(88, size.height * 0.56)
-        Button {
-            withAnimation(Theme.Motion.pick(Theme.Motion.disclose, reduceMotion: reduceMotion)) { showsMetrics.toggle() }
-        } label: {
+        Button(action: open) {
             ZStack(alignment: .topLeading) {
                 ArtView(.overview, size: art)
                     .offset(x: size.width - art * 0.82, y: -art * 0.14)
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 0) {
-                    HStack(spacing: 6) {
-                        Text("How it's going · " + OverviewText.title(store.overviewWindow)).textRole(.label).lineLimit(1)
-                        // Beside the label: what the tile opens, and that it's open.
-                        Image(systemName: showsMetrics ? "chevron.up" : "chevron.down")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(Theme.glyph)
-                            .accessibilityHidden(true)
-                    }
+                    Text("How it's going · " + OverviewText.title(store.overviewWindow)).textRole(.label).lineLimit(1)
                     Spacer(minLength: 0)
                     if let report = store.overview {
                         FunnelStrip(HomeText.funnelSummary(OverviewText.funnel(report.funnel)).map {
@@ -333,31 +325,37 @@ private struct FunnelTile: View {
             .frame(width: size.width, height: size.height, alignment: .topLeading)
             .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadius, style: .continuous))
         }
-        .buttonStyle(.tile(selected: showsMetrics))
-        .accessibilityValue(showsMetrics ? "Expanded" : "Collapsed")
-        .help("Show the funnel and the goals")
+        .buttonStyle(.tile())
+        .help("Open How it's going: the whole funnel and the goals")
     }
 }
 
-/// The narrow grid has no funnel tile: the same disclosure as a line under the grid, the
-/// funnel's four numbers beside it.
+/// The narrow grid has no funnel tile: How it's going as a line under the grid, the funnel's
+/// four numbers beside it; a click opens its page.
 private struct MetricsLine: View {
     let store: AppStore
-    @Binding var showsMetrics: Bool
+    let open: () -> Void
 
     var body: some View {
-        HStack(alignment: .center, spacing: Theme.Space.xl) {
-            DisclosureLine("How it's going · " + OverviewText.title(store.overviewWindow), isExpanded: $showsMetrics)
-            if let report = store.overview {
-                FunnelStrip(HomeText.funnelSummary(OverviewText.funnel(report.funnel)).map {
-                    FunnelStrip.Step(id: $0.id, count: $0.count, label: OverviewText.stepLabel($0.id))
-                }, size: .small)
-                .frame(maxWidth: 420)
-                .accessibilityElement(children: .combine)
+        Button(action: open) {
+            HStack(alignment: .center, spacing: Theme.Space.xl) {
+                Label("How it's going · " + OverviewText.title(store.overviewWindow), systemImage: "chart.line.uptrend.xyaxis")
+                    .textRole(.itemTitle)
+                if let report = store.overview {
+                    FunnelStrip(HomeText.funnelSummary(OverviewText.funnel(report.funnel)).map {
+                        FunnelStrip.Step(id: $0.id, count: $0.count, label: OverviewText.stepLabel($0.id))
+                    }, size: .small)
+                    .frame(maxWidth: 420)
+                    .accessibilityElement(children: .combine)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right").foregroundStyle(Theme.glyph).accessibilityHidden(true)
             }
-            Spacer(minLength: 0)
+            .padding(Theme.cardPadding)
+            .contentShape(Rectangle())
         }
-        .padding(.horizontal, 4)
+        .buttonStyle(.tile())
+        .help("Open How it's going: the whole funnel and the goals")
     }
 }
 
@@ -520,21 +518,43 @@ private struct UpNextRow: View {
 
 // MARK: - How it's going
 
-/// The panel under the grid: one line on how it's going with the window and a close button,
-/// the whole funnel as one strip (a step opens the list its postings are in now), the success
-/// metrics as equal cards, and what they measure folded away under them.
-private struct HomeMetrics: View {
+/// How it's going, Home's page for the funnel's tile: a way back, one line on how it's going
+/// with the window, the whole funnel as one strip (a step opens the list its postings are in
+/// now), the success metrics as equal cards, and what they measure folded away under them.
+private struct HowItsGoingPage: View {
     @Bindable var store: AppStore
-    /// The panel's inner width: three cards a row from 900 points, else two.
-    let width: CGFloat
-    let close: () -> Void
+    let back: () -> Void
     @State private var showsDefinitions = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
+        GeometryReader { geo in
+            ScrollView {
+                VStack(alignment: .leading, spacing: Theme.blockSpacing) {
+                    Button(action: back) { Label("Home", systemImage: "chevron.left") }
+                        .buttonStyle(.secondary)
+                        .keyboardShortcut(.cancelAction)
+                        .help("Back to Home (Esc)")
+                    ModuleHeader(section: .overview, title: "How it's going", subtitle: store.overview.map(OverviewText.summary), artSize: 56) {
+                        PillPicker(items: OverviewText.windows, title: OverviewText.title, selection: $store.overviewWindow, accessibilityLabel: "Window")
+                            .help("Postings first seen in the window, and how far each got")
+                    }
+                    content(width: min(geo.size.width, 1500) - Theme.pagePadding * 2)
+                }
+                .padding(.horizontal, Theme.pagePadding)
+                .padding(.top, 10)
+                .padding(.bottom, 28)
+                .frame(maxWidth: 1500)
+                .frame(maxWidth: .infinity)
+            }
+        }
+    }
+
+    private func content(width: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: Theme.blockSpacing) {
-            header
             if let report = store.overview {
+                MetaLine(OverviewText.since(report))
+                    .help("Postings first seen in the window, and how far each got")
                 FunnelStrip(OverviewText.funnel(report.funnel).map {
                     FunnelStrip.Step(id: $0.id, count: $0.count, label: OverviewText.stepLabel($0.id), conversion: $0.shortConversion)
                 }, size: .small) { step in
@@ -542,6 +562,8 @@ private struct HomeMetrics: View {
                     store.navigation.section = list
                     store.navigation.select(nil)
                 }
+                .padding(Theme.cardPadding)
+                .glass(radius: Theme.cornerRadius)
                 EqualHeightGrid(report.metrics.map(MetricItem.init), columns: width >= 900 ? 3 : 2) { item in
                     MetricCard(metric: item.metric)
                 }
@@ -555,30 +577,6 @@ private struct HomeMetrics: View {
             }
         }
         .animation(Theme.Motion.pick(Theme.Motion.disclose, reduceMotion: reduceMotion), value: showsDefinitions)
-    }
-
-    private var header: some View {
-        HStack(alignment: .center, spacing: 12) {
-            if let report = store.overview {
-                Text(OverviewText.summary(report)).textRole(.heading).lineLimit(1)
-                MetaLine(OverviewText.since(report))
-                    .help("Postings first seen in the window, and how far each got")
-            }
-            Spacer(minLength: 8)
-            PillPicker(items: OverviewText.windows, title: OverviewText.title, selection: $store.overviewWindow, accessibilityLabel: "Window")
-                .help("Postings first seen in the window, and how far each got")
-            Button(action: close) {
-                Image(systemName: "chevron.up")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(Theme.glyph)
-                    .frame(width: 28, height: 28)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .keyboardShortcut(.cancelAction)
-            .help("Hide How it's going (Esc)")
-            .accessibilityLabel("Hide How it's going")
-        }
     }
 
     /// Each metric's name beside what it measures, at reading measure.

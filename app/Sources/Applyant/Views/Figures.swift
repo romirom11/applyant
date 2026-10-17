@@ -101,37 +101,40 @@ struct FunnelStrip: View {
         }
     }
 
+    /// Equal columns, read left to right like any row of figures: no arrows between them. With
+    /// conversions, each step says what share of the step before it got this far, and a
+    /// hairline separates the steps.
     private func strip(_ size: Theme.FigureSize) -> some View {
-        HStack(alignment: .figureMid, spacing: 0) {
+        let converts = steps.contains { $0.conversion != nil }
+        return HStack(alignment: .top, spacing: converts ? 0 : Theme.Space.l) {
             ForEach(Array(steps.enumerated()), id: \.element.id) { index, step in
-                HStack(alignment: .figureMid, spacing: 8) {
-                    if index > 0 { connector(step.conversion) }
-                    figure(step, size)
+                HStack(alignment: .top, spacing: 0) {
+                    if converts && index > 0 {
+                        Rectangle().fill(Theme.hairline).frame(width: 1).padding(.trailing, Theme.Space.l)
+                    }
+                    VStack(alignment: .leading, spacing: 4) {
+                        figure(step, size)
+                        if converts {
+                            Text(conversionLine(index))
+                                .font(.system(size: 12, weight: .medium))
+                                .monospacedDigit()
+                                .foregroundStyle(Theme.tertiaryText)
+                                .lineLimit(1)
+                                .fixedSize()
+                        }
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
+        .fixedSize(horizontal: false, vertical: true)
         .accessibilityElement(children: .contain)
     }
 
-    /// 28 points for a bare chevron, 44 with the conversion over it.
-    private func connector(_ conversion: String?) -> some View {
-        VStack(spacing: 1) {
-            if let conversion {
-                Text(conversion)
-                    .font(.system(size: 11, weight: .semibold))
-                    .monospacedDigit()
-                    .foregroundStyle(Theme.secondaryText)
-                    .lineLimit(1)
-                    .fixedSize()
-            }
-            Image(systemName: "chevron.right")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(Theme.glyph)
-                .alignmentGuide(.figureMid) { $0[VerticalAlignment.center] }
-        }
-        .frame(width: conversion == nil ? 28 : 44)
-        .accessibilityHidden(true)
+    /// "88% of found"; the first step is where it starts.
+    private func conversionLine(_ index: Int) -> String {
+        guard index > 0, let conversion = steps[index].conversion else { return index == 0 ? "the start" : " " }
+        return "\(conversion) of \(steps[index - 1].label)"
     }
 
     @ViewBuilder private func figure(_ step: Step, _ size: Theme.FigureSize) -> some View {
