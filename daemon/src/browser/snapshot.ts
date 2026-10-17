@@ -228,9 +228,15 @@ function scanFrame(args: ScanArgs): ScanResult {
     !!v &&
     !/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}/i.test(v) &&
     !/^:r[0-9a-z]*:$|^react-select-\d/.test(v) &&
-    // A long mixed-case alphanumeric run ("input_files_input_Pet31Ww9bdOsudi4") is a nonce.
+    // A long mixed-case alphanumeric run ("input_files_input_Pet31Ww9bdOsudi4") is a nonce,
+    // digits or not ("…_ywHeBVbPsTrmMLym"), unless it reads as camelCase words ("coverLetterText").
     !(v.match(/[A-Za-z0-9]{12,}/g) ?? []).some(
-      (run) => /\d/.test(run) && /[a-z]/.test(run) && /[A-Z]/.test(run),
+      (run) =>
+        /[a-z]/.test(run) &&
+        /[A-Z]/.test(run) &&
+        (/\d/.test(run) ||
+          !/^[A-Za-z][a-z]+(?:[A-Z][a-z]{2,})*$/.test(run) ||
+          !run.split(/(?=[A-Z])/).every((w) => /[aeiouy]/i.test(w))),
     );
   const cssFor = (el: Element): string => {
     const tag = el.tagName.toLowerCase();
