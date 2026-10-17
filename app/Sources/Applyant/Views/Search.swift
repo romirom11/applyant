@@ -135,8 +135,7 @@ struct FollowChannel: View {
     var body: some View {
         HStack {
             TextField("Follow a channel: @name or t.me/name", text: $channel)
-                .textFieldStyle(.roundedBorder)
-                .controlSize(.small)
+                .textFieldStyle(.glass)
                 .onSubmit(follow)
             Button("Follow", action: follow)
                 .controlSize(.small)

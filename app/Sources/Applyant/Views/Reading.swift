@@ -150,11 +150,14 @@ struct MetaLine: View {
     private let text: String
     private let systemImage: String?
     private let tone: Chip.Tone?
+    private let details: String?
 
-    init(_ text: String, systemImage: String? = nil, tone: Chip.Tone? = nil) {
+    /// `details`: the longer story, on hover (else the line itself).
+    init(_ text: String, systemImage: String? = nil, tone: Chip.Tone? = nil, details: String? = nil) {
         self.text = text
         self.systemImage = systemImage
         self.tone = tone
+        self.details = details
     }
 
     var body: some View {
@@ -168,7 +171,7 @@ struct MetaLine: View {
             Text(text).lineLimit(1).truncationMode(.tail)
         }
         .textRole(.meta)
-        .help(text)
+        .help(details ?? text)
     }
 }
 
@@ -495,9 +498,9 @@ private struct MarginLayout: Layout {
 
 // MARK: - Form rows
 
-/// A form's row: its label (a note under it, a status dot before it) in a 200 pt column, the
-/// control after it at its own size. Under 460 points the label stacks over the control.
-/// Controls size to their content: a picker `.fixedSize()`, a text field `maxWidth: 320`.
+/// A form's row: its label (a note under it, a status dot before it) in a 240 pt column, the
+/// control after it. Under 460 points the label stacks over the control. A picker sizes to its
+/// content (`.fixedSize()`); a text field fills the rest of the row.
 struct LabeledRow<Control: View>: View {
     private let label: String
     private let note: String?
@@ -614,19 +617,21 @@ struct Composer<Accessory: View>: View {
             TextEditor(text: $text)
                 .font(.system(size: 14))
                 .lineSpacing(3)
-                .frame(minHeight: 44, maxHeight: 160)
+                // One line's height, like a message field: a longer answer scrolls inside it.
+                .frame(minHeight: 44, idealHeight: 44, maxHeight: 96)
+                .fixedSize(horizontal: false, vertical: true)
                 .overlay(alignment: .topLeading) {
                     if text.isEmpty {
                         Text(placeholder)
                             .font(.system(size: 14))
-                            .foregroundStyle(Theme.secondaryText)
+                            .foregroundStyle(Theme.tertiaryText)
                             .padding(.leading, 5)
                             .padding(.top, 1)
                             .allowsHitTesting(false)
                             .accessibilityHidden(true)
                     }
                 }
-                .composerField()
+                .glassEditor(minHeight: 44)
                 .accessibilityLabel(placeholder)
             HStack(spacing: Theme.Space.s) {
                 accessory
@@ -713,7 +718,7 @@ struct SystemGallery: View {
                 section("Labeled rows") {
                     VStack(alignment: .leading, spacing: Theme.rowSpacing) {
                         LabeledRow("Notice period", note: "Asked by 3 forms", status: .warning) {
-                            TextField("e.g. 1 month", text: $draft).textFieldStyle(.roundedBorder).frame(maxWidth: 320)
+                            TextField("e.g. 1 month", text: $draft).textFieldStyle(.glass)
                         }
                         LabeledRow("Work authorisation") {
                             Picker("", selection: .constant(0)) { Text("EU citizen").tag(0) }.labelsHidden().fixedSize()

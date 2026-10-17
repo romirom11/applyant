@@ -293,7 +293,7 @@ struct AssistantNotesBox: View {
             TextEditor(text: $answer)
                 .font(.callout)
                 .frame(minHeight: 90, maxHeight: 180)
-                .composerField()
+                .glassEditor(minHeight: 90)
             HStack {
                 if added {
                     Label("Added: it's being read into facts for you to confirm.", systemImage: "checkmark.circle.fill")

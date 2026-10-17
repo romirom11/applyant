@@ -42,7 +42,7 @@ struct HomeView: View {
         let live = HomeText.live(input)
         return GeometryReader { geo in
             // Until measured, the window less the page's margins.
-            let total = measured > 0 ? measured : max(min(geo.size.width, 1500) - Theme.pagePadding * 2, 0)
+            let total = measured > 0 ? measured : max(geo.size.width - Theme.pagePadding * 2, 0)
             let columns = HomeGrid.columns(width: total)
             ScrollView {
                 VStack(alignment: .leading, spacing: Theme.blockSpacing) {
@@ -74,8 +74,7 @@ struct HomeView: View {
                 .padding(.horizontal, Theme.pagePadding)
                 .padding(.top, 10)
                 .padding(.bottom, 28)
-                .frame(maxWidth: 1500)
-                .frame(maxWidth: .infinity)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .scrollIndicators(.automatic)
         }
@@ -539,13 +538,12 @@ private struct HowItsGoingPage: View {
                         PillPicker(items: OverviewText.windows, title: OverviewText.title, selection: $store.overviewWindow, accessibilityLabel: "Window")
                             .help("Postings first seen in the window, and how far each got")
                     }
-                    content(width: min(geo.size.width, 1500) - Theme.pagePadding * 2)
+                    content(width: geo.size.width - Theme.pagePadding * 2)
                 }
                 .padding(.horizontal, Theme.pagePadding)
                 .padding(.top, 10)
                 .padding(.bottom, 28)
-                .frame(maxWidth: 1500)
-                .frame(maxWidth: .infinity)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
     }

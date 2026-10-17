@@ -107,8 +107,7 @@ struct StrategyEditorSheet: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Looks for (one title phrase per line)")
                     TextEditor(text: $form.queries)
-                        .font(Theme.TextRole.body.font)
-                        .frame(minHeight: 70)
+                        .glassEditor(minHeight: 70)
                     Text("A listing matches when every word of one phrase is in its title; \"-word\" excludes. Empty: every listing.")
                         .textRole(.meta)
                 }
@@ -152,8 +151,7 @@ struct AddBoardOrPage: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
                 TextField("Add a board or career page URL", text: $input)
-                    .textFieldStyle(.roundedBorder)
-                    .controlSize(.small)
+                    .textFieldStyle(.glass)
                     .onSubmit(add)
                 Button("Add", action: add)
                     .controlSize(.small)

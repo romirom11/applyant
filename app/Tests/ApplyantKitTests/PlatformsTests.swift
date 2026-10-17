@@ -25,6 +25,35 @@ import Testing
         #expect(Section.settings.isBuilt)
     }
 
+    @Test func settingsListSaysWhereEachPaneStands() {
+        #expect(SettingsText.general(name: "Roman Kudin", projects: 21) == "Roman Kudin · 21 projects")
+        #expect(SettingsText.general(name: nil, projects: 0) == "Setup, profile and preferences")
+
+        var gmail = Mailbox.with { $0.kind = "gmail"; $0.status = "connected"; $0.address = "me@gmail.com" }
+        #expect(SettingsText.connections(gmail, telegram: nil) == "Gmail connected")
+        #expect(SettingsText.connections(gmail, telegram: .with { $0.state = .connected }) == "Gmail connected · Telegram")
+        #expect(!SettingsText.connectionsNeedYou(gmail))
+        gmail.note = "invalid_grant (Token has been expired or revoked.)"
+        #expect(SettingsText.connections(gmail, telegram: nil) == "Gmail signed out")
+        #expect(SettingsText.connectionsNeedYou(gmail))
+        #expect(SettingsText.connections(nil, telegram: nil) == "No mailbox")
+
+        let list = PlatformList.with {
+            $0.platforms = [
+                .with { $0.platform = "xing"; $0.name = "Xing"; $0.signedInAt = .init(date: Date()) },
+                .with { $0.platform = "linkedin"; $0.name = "LinkedIn"; $0.signedInAt = .init(date: Date()) },
+            ]
+        }
+        #expect(SettingsText.sites(list, secrets: ["capmonster", "login.djinni.co", "login.linkedin.com"]) == "Djinni · LinkedIn · Xing")
+        #expect(SettingsText.sites(nil, secrets: []) == "No sign-ins yet")
+        // A login kept under its flattened sign-in address still reads as the site.
+        #expect(SettingsText.sites(nil, secrets: ["login.djinni.co-login", "login.acme.wd5.myworkdayjobs.com"]) == "Djinni · Workday")
+
+        let roles = ["claude:sonnet", "claude:haiku", "codex", "claude:opus"].map { route in RoleRoute.with { $0.route = route } }
+        #expect(SettingsText.models(roles) == "Claude · Codex · 4 roles")
+        #expect(SettingsText.models([]) == "Models and stored keys")
+    }
+
     @Test func settingsSignsInResumesSetsCapsAndStoresTheKeyWithoutReadingItBack() async throws {
         let daemon = FakeDaemon(postings: [], applications: [], lastId: 5)
         daemon.platformList.platforms[0].pausedAt = .init(date: Date())

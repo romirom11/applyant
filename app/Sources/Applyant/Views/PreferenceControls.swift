@@ -124,9 +124,9 @@ private struct RolesEditor: View {
                 }
             }
             HStack {
-                TextField("Add a role", text: $typed, prompt: Text("Add a role… (Backend Engineer, CFO, Chef)"))
+                TextField("Add a role", text: $typed, prompt: .fieldPrompt("Add a role… (Backend Engineer, CFO, Chef)"))
                     .labelsHidden()
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(.glass)
                     .onSubmit(add)
                     .onChange(of: typed) { _, now in if RoleTokens.endsTitle(now) { add() } }
                     .disabled(roles.count >= RoleTokens.limit)
@@ -205,9 +205,9 @@ private struct BasedInRow: View {
                     Button { country = "" } label: { Image(systemName: "xmark.circle.fill") }
                         .buttonStyle(.plain).foregroundStyle(Theme.secondaryText).help("Clear the country")
                 }
-                TextField("City", text: $city, prompt: Text("City"))
+                TextField("City", text: $city, prompt: .fieldPrompt("City"))
                     .labelsHidden()
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(.glass)
                     .frame(width: 170)
             }
             Text("Where you work from. The city matters for on-site and hybrid jobs.")
@@ -365,9 +365,9 @@ struct SearchableList: View {
     var body: some View {
         let found = Places.search(query, in: items)
         return VStack(spacing: 0) {
-            TextField(prompt, text: $query, prompt: Text(prompt))
+            TextField(prompt, text: $query, prompt: .fieldPrompt(prompt))
                 .labelsHidden()
-                .textFieldStyle(.roundedBorder)
+                .textFieldStyle(.glass)
                 .focused($searching)
                 .onSubmit { if let first = found.first { pick(first) } }
                 .padding(8)

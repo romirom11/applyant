@@ -391,7 +391,8 @@ private func list(after heading: String, in blocks: [Block]) -> [String]? {
             .with { $0.key = "language"; $0.note = "English (fluent) · you have B1"; $0.weight = 10; $0.value = 0.5 },
         ]
         let d = PostingDescription.parse(PostingSamples.djinni, title: p.title, company: p.company)
-        #expect(KeyFacts.stripRows(p, description: d).map(\.label) == ["Employment", "Seniority", "Language"])
+        // When it was posted is the strip's: the hero says when it was found.
+        #expect(KeyFacts.stripRows(p, description: d).map(\.label) == ["Employment", "Seniority", "Language", "Posted"])
     }
 
     @Test func gapsComeFirstAndWhatsMetFoldsIntoOneLine() {
@@ -441,6 +442,42 @@ private func list(after heading: String, in blocks: [Block]) -> [String]? {
         var rejected = sent
         rejected.stage = .rejected
         #expect(ListItem(application: rejected).chips(in: .applied).map(\.text) == ["Rejected"])
+    }
+
+    @Test func theHeroSaysWhatAndWhereInOneLineAndWhatsLeftAsOneLink() {
+        let now = Date(timeIntervalSince1970: 1_791_000_000)
+        var p = posting(1, score: 89, title: "Staff Backend Engineer", company: "Kalepa")
+        p.canonicalURL = "https://job-boards.greenhouse.io/kalepa/jobs/1"
+        p.firstSeenAt = .init(date: now.addingTimeInterval(-4 * 86_400))
+        let facts = [KeyFact("Workplace", "Remote (europe)"), KeyFact("Salary", "$100k – $185k USD"), KeyFact("Employment", "Full-time")]
+        #expect(HeaderText.meta(posting: p, app: nil, facts: facts, now: now) == "Kalepa · Remote (europe) · $100k – $185k USD · Greenhouse · Found 4 days ago")
+
+        // Waiting for review: the buttons say where it stands, the line doesn't.
+        var app = application(9, posting: 1, stage: .needsCandidate)
+        #expect(HeaderText.state(posting: p, app: app) == nil)
+        app.stage = .preparing
+        #expect(HeaderText.state(posting: p, app: app) == "Preparing…")
+        // Sent: when, and how it's going since.
+        app.stage = .interview
+        app.appliedAt = .init(date: now.addingTimeInterval(-14 * 86_400))
+        let sent = app.appliedAt.date.formatted(.dateTime.month(.abbreviated).day())
+        #expect(HeaderText.meta(posting: p, app: app, facts: [], now: now) == "Kalepa · Greenhouse · Interview · Sent \(sent) · 14 days ago · no reply yet")
+        app.stage = .applied
+        #expect(HeaderText.state(posting: p, app: app) == nil)
+        // A delivery under way has its own strip; a closed posting says so.
+        app.stage = .approved
+        #expect(HeaderText.state(posting: p, app: app, delivering: true) == nil)
+        #expect(HeaderText.state(posting: p, app: app) == "Approved · delivering")
+        p.stage = .closed
+        #expect(HeaderText.state(posting: p, app: nil) == "Closed")
+
+        let todo = [ReviewTodo(kind: .values, count: 3), ReviewTodo(kind: .answers, count: 1), ReviewTodo(kind: .sentences, count: 1)]
+        #expect(HeaderText.todo(todo)?.title == "5 things left")
+        #expect(HeaderText.todo(todo)?.help == "3 values only you can give, 1 question only you can answer, 1 sentence to check")
+        #expect(HeaderText.todo([ReviewTodo(kind: .cv, count: 1)])?.title == "1 thing left")
+        #expect(HeaderText.todo([]) == nil)
+        #expect(HeaderText.redFlags(1) == "1 red flag")
+        #expect(HeaderText.redFlags(2) == "2 red flags")
     }
 
     @Test func aSentApplicationSaysWhenAndWhetherAnyoneReplied() {

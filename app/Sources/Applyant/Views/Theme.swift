@@ -34,19 +34,15 @@ enum Theme {
     static let innerRadius: CGFloat = 10
     /// The list column's panel, the job's hero and Home's metrics panel.
     static let panelRadius: CGFloat = 24
-    /// The widest a page's or a tab's column gets.
-    static let pageWidth: CGFloat = 820
-    /// Running text at 14 pt: about 75 Latin (65 Cyrillic) characters a line.
-    static let measure: CGFloat = 540
-    /// A lead sentence at 17 pt: about 75 characters.
-    static let leadMeasure: CGFloat = 600
+    /// Pages, cards, grids and forms fill their pane. Only running text keeps a line length,
+    /// inside its card: at 14 pt about 105 Latin (90 Cyrillic) characters a line.
+    static let measure: CGFloat = 760
+    /// A lead sentence at 17 pt: about 85 characters.
+    static let leadMeasure: CGFloat = 760
     /// EvidenceRow's right column ("4 facts ›", "Sep 2021").
     static let marginColumn: CGFloat = 132
     /// LabeledRow's label column.
-    static let labelColumn: CGFloat = 200
-    /// Kept for the views that name them: a page's width and running text's.
-    static let readableWidth: CGFloat = pageWidth
-    static let proseWidth: CGFloat = measure
+    static let labelColumn: CGFloat = 240
     /// The rail of sections on the left.
     static let railWidth: CGFloat = 74
 
@@ -285,6 +281,8 @@ enum Theme {
     /// A glass edge: a 1 px hairline, a little brighter along the top (20% with Increase Contrast).
     static let glassEdge = LinearGradient(colors: [topEdge, hairline, hairline], startPoint: .top, endPoint: .bottom)
     private static let topEdge = adaptive(NSColor.white.withAlphaComponent(0.15), contrast: NSColor.white.withAlphaComponent(0.26))
+    /// A text field's glass: a little brighter than a card's, so it reads as a place to type.
+    static let fieldFill = adaptive(NSColor.white.withAlphaComponent(0.08), opaque: NSColor(hex: 0x141C36))
     /// A block inside a tile.
     static let insetFill = adaptive(NSColor.white.withAlphaComponent(0.05), opaque: NSColor(hex: 0x182140))
     static let hairline = adaptive(NSColor.white.withAlphaComponent(0.10), contrast: NSColor.white.withAlphaComponent(0.20))

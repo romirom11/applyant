@@ -46,15 +46,15 @@ extension View {
         foregroundStyle(Theme.text, Theme.secondaryText, Theme.tertiaryText)
     }
 
-    /// A page's or a tab's column: the same insets and the same maximum width everywhere, so
-    /// switching tabs never moves the first card. Leading in a detail pane, centred on a page of
-    /// its own (Chat, Settings).
+    /// A page's or a tab's column: the same insets everywhere, so switching tabs never moves the
+    /// first card, and the whole width of its pane (cards and grids stretch with the window;
+    /// only running text keeps its measure). `centered` is kept for the callers that name it:
+    /// a column as wide as its pane has nothing to centre.
     func pageColumn(centered: Bool = false) -> some View {
         padding(.horizontal, Theme.pagePadding)
             .padding(.top, Theme.Space.m)
             .padding(.bottom, Theme.Space.xl)
-            .frame(maxWidth: Theme.pageWidth + 2 * Theme.pagePadding, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: centered ? .center : .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -1091,13 +1091,66 @@ private struct Bubble: ViewModifier {
     }
 }
 
-/// Where a message or an answer is written: dark glass with a lit edge.
+// MARK: - Fields
+
+/// Every text field: glass a little brighter than a card, a hairline that turns into the accent
+/// while you type, 14 pt words, the whole width it's given.
+@MainActor
+struct GlassFieldStyle: @preconcurrency TextFieldStyle {
+    func _body(configuration: TextField<Self._Label>) -> some View {
+        GlassFieldChrome(padding: EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12), content: configuration.textFieldStyle(.plain))
+    }
+}
+
+extension TextFieldStyle where Self == GlassFieldStyle {
+    static var glass: GlassFieldStyle { GlassFieldStyle() }
+}
+
 extension View {
-    func composerField() -> some View {
-        scrollContentBackground(.hidden)
-            .padding(10)
-            .background(Theme.readingFill, in: RoundedRectangle(cornerRadius: Theme.innerRadius + 4, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: Theme.innerRadius + 4, style: .continuous).strokeBorder(Theme.glassEdge, lineWidth: 1))
+    /// A TextEditor in the same glass as the fields, at least `minHeight` tall.
+    func glassEditor(minHeight: CGFloat = 80) -> some View {
+        modifier(GlassEditor(minHeight: minHeight))
+    }
+}
+
+private struct GlassEditor: ViewModifier {
+    let minHeight: CGFloat
+
+    func body(content: Content) -> some View {
+        GlassFieldChrome(padding: EdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 8),
+                         content: content.scrollContentBackground(.hidden).frame(minHeight: minHeight))
+    }
+}
+
+/// A field's glass: its fill, its edge and its focus.
+private struct GlassFieldChrome<Content: View>: View {
+    let padding: EdgeInsets
+    let content: Content
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: Theme.innerRadius, style: .continuous)
+        content
+            .font(Theme.prose)
+            .foregroundStyle(Theme.text)
+            .tint(Theme.accent)
+            .focused($focused)
+            .focusEffectDisabled()
+            .padding(padding)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Theme.fieldFill, in: shape)
+            .overlay {
+                shape.strokeBorder(focused ? Theme.accentFill : Theme.hairline, lineWidth: focused ? 1.5 : 1)
+            }
+            .contentShape(shape)
+            .animation(Theme.Motion.fade, value: focused)
+    }
+}
+
+extension Text {
+    /// A field's placeholder: tertiary, so it never reads as a value.
+    static func fieldPrompt(_ words: String) -> Text {
+        Text(words).foregroundStyle(Theme.tertiaryText)
     }
 }
 

@@ -104,9 +104,9 @@ public enum KeyFacts {
     }
 
     /// The facts the Job tab's strip shows: the ones the hero doesn't already say (it has the
-    /// workplace, the place, the salary and when it was posted).
+    /// workplace, the place and the salary).
     public static func stripRows(_ p: Posting, description: PostingDescription) -> [KeyFact] {
-        let inHero: Set<String> = ["Workplace", "Location", "Salary", "Posted"]
+        let inHero: Set<String> = ["Workplace", "Location", "Salary"]
         return rows(p, description: description).filter { !inHero.contains($0.label) }
     }
 
@@ -325,6 +325,57 @@ public enum MatchText {
     public static func issues(_ p: Posting) -> [String] {
         p.dealbreakers.map { "Dealbreaker: \($0)" }
             + p.breakdown.filter { $0.uncertain && $0.hasNote }.map { "\(Score.componentTitles[$0.key] ?? $0.key): \($0.note)" }
+    }
+}
+
+/// The hero's words around its buttons: one line of what and where the job is, and what's left
+/// before it can go as one link.
+public enum HeaderText {
+    /// "Kalepa · Remote (europe) · $100k–$185k USD · Greenhouse · Found 4 days ago"; once it's
+    /// sent, "… · Interview · Sent Oct 3 · 14 days ago · 1 reply".
+    public static func meta(posting: Posting?, app: Application?, facts: [KeyFact], delivering: Bool = false, now: Date = Date()) -> String {
+        let company = posting.flatMap { $0.hasCompany ? $0.company : nil } ?? app.flatMap { $0.hasCompany ? $0.company : nil }
+        let place = ["Workplace", "Location", "Salary"].map { label in facts.first { $0.label == label }?.value }
+        let site = Source.site(posting?.canonicalURL ?? app?.postingURL ?? "")
+        let parts = [company] + place + [site, state(posting: posting, app: app, delivering: delivering), when(posting: posting, app: app, now: now)]
+        return parts.compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
+    }
+
+    /// Where the job stands, in words only where its buttons and its list don't say it already:
+    /// "Preparing…", "Interview", "Closed"; nil while it waits for review.
+    public static func state(posting: Posting?, app: Application?, delivering: Bool = false) -> String? {
+        if let app {
+            switch app.stage {
+            case .preparing: return "Preparing…"
+            case .approved: return app.hasHandOff ? "Finish in browser" : delivering ? nil : "Approved · delivering"
+            case .applied: return SentText.line(app) == nil ? "Applied" : nil
+            case .interview, .offer, .rejected, .withdrawn: return StageText.name(app.stage)
+            default: return nil
+            }
+        }
+        return posting?.stage == .closed ? "Closed" : nil
+    }
+
+    /// "Sent Oct 3 · 14 days ago · no reply yet" once it's sent, else "Found 4 days ago".
+    static func when(posting: Posting?, app: Application?, now: Date) -> String? {
+        if let app, let line = SentText.line(app, now: now) { return line }
+        guard let posting, posting.hasFirstSeenAt else { return nil }
+        let formatter = RelativeDateTimeFormatter()
+        formatter.dateTimeStyle = .named
+        return "Found " + formatter.localizedString(for: posting.firstSeenAt.date, relativeTo: now)
+    }
+
+    /// "5 things left", and each kind for its tooltip: "3 values only you can give, 1 question
+    /// only you can answer, 1 sentence to check". Nil when nothing's left.
+    public static func todo(_ items: [ReviewTodo]) -> (title: String, help: String)? {
+        let total = items.map(\.count).reduce(0, +)
+        guard total > 0 else { return nil }
+        return (total == 1 ? "1 thing left" : "\(total) things left", items.map(\.title).joined(separator: ", "))
+    }
+
+    /// "1 red flag", "2 red flags".
+    public static func redFlags(_ count: Int) -> String {
+        count == 1 ? "1 red flag" : "\(count) red flags"
     }
 }
 

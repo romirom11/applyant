@@ -121,7 +121,7 @@ struct SitesCard: View {
     @State private var signingIn = false
 
     var body: some View {
-        Card(title: "Sites") {
+        Card(title: "Other sites") {
             LabeledRow("Sign-ins", note: "Workday, Djinni or any site that needs an account: sign in once in Applyant's browser and the session is reused.") {
                 Button("Sign In to a Site…") { signingIn = true }.fixedSize()
             }
@@ -150,11 +150,11 @@ struct SiteSignInSheet: View {
                 }
             } else {
                 TextField("Site", text: $site, prompt: Text("https://acme.wd3.myworkdayjobs.com · djinni.co · linkedin"))
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(.glass)
                 Toggle("Also keep this site's login in Applyant's secrets (the Keychain)", isOn: $saveLogin)
                 if saveLogin {
-                    TextField("Username or email", text: $username).textFieldStyle(.roundedBorder)
-                    SecureField("Password", text: $password).textFieldStyle(.roundedBorder)
+                    TextField("Username or email", text: $username).textFieldStyle(.glass)
+                    SecureField("Password", text: $password).textFieldStyle(.glass)
                     if let target = SiteLogin.target(site) {
                         Text("Stored as \"\(SiteLogin.secretName(target))\"; it's never shown again.")
                             .textRole(.meta)

@@ -337,9 +337,8 @@ struct EditSheet: View {
             Text(request.title).textRole(.heading)
             if !request.hint.isEmpty { Text(request.hint).textRole(.body, color: Theme.secondaryText).fixedSize(horizontal: false, vertical: true) }
             TextEditor(text: $text)
-                .font(.body)
                 .frame(width: 520, height: 180)
-                .composerField()
+                .glassEditor()
             MetaLine("Saved as a confirmed fact, so later applications can use it too.")
             HStack {
                 Spacer()
@@ -393,10 +392,9 @@ struct MissingFieldRow: View {
                 }
             } else {
                 HStack(spacing: 8) {
-                    TextField(field.label, text: $value, prompt: Text(FieldText.placeholder(field)))
+                    TextField(field.label, text: $value, prompt: .fieldPrompt(FieldText.placeholder(field)))
                         .labelsHidden()
-                        .textFieldStyle(.roundedBorder)
-                        .frame(maxWidth: 320)
+                        .textFieldStyle(.glass)
                         .onSubmit(commit)
                     Button("Set", action: commit)
                         .buttonStyle(.secondary)
@@ -439,8 +437,7 @@ struct FieldRow: View {
                 HStack(spacing: 8) {
                     TextField(field.label, text: $value)
                         .labelsHidden()
-                        .textFieldStyle(.roundedBorder)
-                        .frame(maxWidth: 320)
+                        .textFieldStyle(.glass)
                         .onSubmit(save)
                     Button("Set", action: save).buttonStyle(.secondary).controlSize(.small).fixedSize()
                     Button("Cancel") { editing = false }.buttonStyle(.secondary).controlSize(.small).fixedSize()
@@ -825,7 +822,7 @@ struct CvEditSheet: View {
                         }
                         if editingLine == line.handle {
                             TextField("The line, in your words", text: $text, axis: .vertical)
-                                .textFieldStyle(.roundedBorder)
+                                .textFieldStyle(.glass)
                                 .lineLimit(1 ... 5)
                             HStack {
                                 Spacer()

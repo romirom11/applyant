@@ -1059,10 +1059,11 @@ func eventually(_ what: String, timeout: Duration = .seconds(3), _ condition: ()
         #expect(ListItem(posting: p, application: nil).chips.map(\.text) == ["Dealbreaker: outstaffing", "Ashby"])
     }
 
-    @Test func everySectionHasContentAndHomeChatAndSettingsAreOnePage() {
+    @Test func everySectionHasContentAndHomeAndChatAreOnePage() {
         for section in Section.allCases {
             #expect(section.isBuilt, "\(section)")
-            #expect(section.isSinglePane == (section == .overview || section == .settings || section == .chat), "\(section)")
+            // Settings has its panes as a list, like every other section.
+            #expect(section.isSinglePane == (section == .overview || section == .chat), "\(section)")
         }
         #expect(Section.interview.title == "Questions for you")
         #expect(Section.interviews.title == "Interviews")

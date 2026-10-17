@@ -7,6 +7,8 @@ struct ChatView: View {
     let store: AppStore
     @State private var draft = ""
     @State private var confirmingClear = false
+    /// The conversation's width: a bubble gets 70% of it.
+    @State private var columnWidth: CGFloat = 800
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -19,8 +21,6 @@ struct ChatView: View {
             }
             .padding(.horizontal, Theme.pagePadding)
             .padding(.top, Theme.Space.m)
-            .frame(maxWidth: Theme.pageWidth + 2 * Theme.pagePadding)
-            .frame(maxWidth: .infinity)
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: Theme.blockSpacing) {
@@ -37,6 +37,7 @@ struct ChatView: View {
                             ChatBubble(
                                 message: message,
                                 facts: store.chatFacts,
+                                maxWidth: (columnWidth - 2 * Theme.pagePadding) * 0.7,
                                 retry: retry(before: index)
                             )
                             .id(message.id)
@@ -53,8 +54,9 @@ struct ChatView: View {
                     }
                     .animation(Theme.Motion.pick(Theme.Motion.bouncy, reduceMotion: reduceMotion), value: store.chatMessages.count)
                     .animation(Theme.Motion.smooth, value: store.chatSending)
-                    .pageColumn(centered: true)
+                    .pageColumn()
                 }
+                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { columnWidth = $0 }
                 // The top message slides under a soft edge, not a hard cut.
                 .overlay(alignment: .top) { EdgeScrim(edge: .top, height: 24) }
                 .onChange(of: store.chatMessages.count) { _, _ in
@@ -71,7 +73,7 @@ struct ChatView: View {
             )
             .padding(Theme.cardPadding)
             .glass(radius: Theme.panelRadius)
-            .pageColumn(centered: true)
+            .pageColumn()
         }
         .navigationTitle("Chat")
         .confirmationDialog("Clear this conversation?", isPresented: $confirmingClear) {
@@ -100,6 +102,8 @@ struct ChatView: View {
 private struct ChatBubble: View {
     let message: ChatMessage
     let facts: [Int64: Fact]
+    /// The widest the bubble gets: 70% of the conversation's width.
+    let maxWidth: CGFloat
     /// Asks the question again; nil for the candidate's own messages.
     var retry: (() -> Void)?
     @State private var showsFacts = false
@@ -108,7 +112,7 @@ private struct ChatBubble: View {
     var body: some View {
         let mine = message.role == "user"
         HStack {
-            if mine { Spacer(minLength: 80) }
+            if mine { Spacer(minLength: 0) }
             VStack(alignment: .leading, spacing: Theme.Space.xs) {
                 VStack(alignment: .leading, spacing: Theme.Space.s) {
                     Text(mine ? "You" : "Applyant").textRole(.label, color: mine ? .white : nil)
@@ -133,7 +137,6 @@ private struct ChatBubble: View {
                         }
                     }
                 }
-                .frame(maxWidth: Theme.measure, alignment: .leading)
                 .bubble(mine: mine)
                 .animation(Theme.Motion.pick(Theme.Motion.disclose, reduceMotion: reduceMotion), value: showsFacts)
                 if !mine {
@@ -148,7 +151,8 @@ private struct ChatBubble: View {
                     .padding(.leading, Theme.Space.xs)
                 }
             }
-            if !mine { Spacer(minLength: 80) }
+            .frame(maxWidth: max(maxWidth, 280), alignment: mine ? .trailing : .leading)
+            if !mine { Spacer(minLength: 0) }
         }
     }
 

@@ -1,21 +1,100 @@
-// Settings (phase 14): the captcha solver's key (set or not, never shown), and LinkedIn/Xing:
-// sign-in, a pause and Resume, the daily caps against today's use. Phase 15: Telegram connect
-// (phone → code → the 2FA password), for private channels and Telegram applications. Mailbox:
-// connect Gmail or IMAP/SMTP (MailboxConnect.swift), reconnect, disconnect. Models, Sites and
-// Stored keys are in SettingsModels.swift.
+// Settings (phase 14): a list of panes like every other section, the picked one beside it.
+// General: the setup, the profile, projects, preferences and the CV template. Connections: the
+// mailbox (MailboxConnect.swift), the captcha solver's key (set or not, never shown) and Telegram
+// (phone → code → the 2FA password), for private channels and Telegram applications. Sites:
+// LinkedIn and Xing (sign-in, a pause and Resume, the daily caps against today's use) and any
+// other site's sign-in. Models & Keys, Sites' sign-in sheet and Stored keys are in
+// SettingsModels.swift.
 import ApplyantAPI
 import ApplyantKit
 import SwiftUI
 
-/// Settings' panes, picked along the top; the last one picked stays.
-enum SettingsPane: String, CaseIterable {
+/// Settings' panes, the rows of its list; the last one picked stays.
+enum SettingsPane: String, CaseIterable, Identifiable {
     case general = "General"
     case connections = "Connections"
     case sites = "Sites"
     case models = "Models & Keys"
+
+    var id: String { rawValue }
+
+    var symbol: String {
+        switch self {
+        case .general: "gearshape"
+        case .connections: "envelope"
+        case .sites: "globe"
+        case .models: "cpu"
+        }
+    }
+
+    /// What the pane has, under its title.
+    var subtitle: String {
+        switch self {
+        case .general: "The setup, your profile, projects, preferences and CV template"
+        case .connections: "The mailbox, the captcha solver and Telegram"
+        case .sites: "LinkedIn, Xing and any other site Applyant signs in to"
+        case .models: "Which model does each job, and the keys stored for them"
+        }
+    }
 }
 
-struct SettingsView: View {
+/// Settings' list column: its panes, each with one line of where it stands.
+struct SettingsList: View {
+    @Bindable var store: AppStore
+    @AppStorage("settings.pane") private var pane: SettingsPane = .general
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ModuleHeader(section: .settings, subtitle: "Setup, connections, sites and models").columnHeader()
+            CardList(
+                selection: Binding(get: { pane }, set: { if let picked = $0 { pane = picked } }),
+                order: SettingsPane.allCases,
+                tint: Theme.world(.settings).main
+            ) {
+                ForEach(SettingsPane.allCases) { pane in
+                    SelectableCard(id: pane, padding: 11) { row(pane) }
+                }
+            }
+        }
+        .navigationTitle("Settings")
+        .task {
+            await store.openSettings()
+            await store.openProfile()
+            await store.openPreferences()
+            await store.openModels()
+            await store.openSecrets()
+        }
+    }
+
+    private func row(_ pane: SettingsPane) -> some View {
+        let warns = pane == .connections && SettingsText.connectionsNeedYou(store.mailbox)
+        return HStack(spacing: 12) {
+            IconTile(systemImage: pane.symbol, size: 34)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(pane.rawValue).textRole(.rowTitle).lineLimit(1)
+                Text(status(pane))
+                    .textRole(.meta, color: warns ? Theme.warning : nil)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    /// "Roman Kudin · 21 projects", "Gmail connected", "Djinni · LinkedIn · Xing", "Claude · 14 roles".
+    private func status(_ pane: SettingsPane) -> String {
+        switch pane {
+        case .general:
+            let name = store.candidateProfile?.profile.first { $0.key == "full_name" }?.values.first
+            return SettingsText.general(name: name, projects: store.knowledgeProjects.count)
+        case .connections: return SettingsText.connections(store.mailbox, telegram: store.telegram)
+        case .sites: return SettingsText.sites(store.platforms, secrets: store.secretNames)
+        case .models: return SettingsText.models(store.roles)
+        }
+    }
+}
+
+/// The picked Settings pane, across the detail's whole width.
+struct SettingsDetail: View {
     @Bindable var store: AppStore
     @AppStorage("settings.pane") private var pane: SettingsPane = .general
     @State private var editingProfile = false
@@ -25,26 +104,20 @@ struct SettingsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Theme.blockSpacing) {
-                ModuleHeader(section: .settings, subtitle: "The setup, your profile, connections, sites and models")
-                PillPicker(items: SettingsPane.allCases, title: \.rawValue, selection: $pane, accessibilityLabel: "Settings panes")
+                PageHeader(title: pane.rawValue, subtitle: pane.subtitle, systemImage: pane.symbol)
                 switch pane {
                 case .general: general
                 case .connections: connections
-                case .sites: SitesCard(store: store)
+                case .sites: sites
                 case .models:
                     ModelsCard(store: store)
                     StoredKeysCard(store: store)
                 }
             }
             .buttonStyle(.secondary)
-            .pageColumn(centered: true)
+            .pageColumn()
         }
-        .navigationTitle("Settings")
-        .task {
-            await store.openSettings()
-            await store.openProfile()
-            await store.openPreferences()
-        }
+        .id(pane)
         .sheet(isPresented: $editingProfile) { ProfileSheet(store: store) { editingProfile = false }.worldSheet() }
         .sheet(isPresented: $editingProjects) { ProjectsSheet(store: store) { editingProjects = false }.worldSheet() }
         .sheet(isPresented: $editingPreferences) {
@@ -87,15 +160,20 @@ struct SettingsView: View {
         Card(title: "Captcha solver", accessory: { ConnectionTag(note: ConnectionText.captcha) }) {
             CaptchaRows(store: store)
         }
+        Card(title: "Telegram", accessory: { ConnectionTag(note: ConnectionText.telegram) }) {
+            TelegramRows(store: store)
+        }
+    }
+
+    @ViewBuilder
+    private var sites: some View {
         if let open = PlatformText.signInOpen(store.platforms) {
             Callout(.warning, title: open)
         }
         ForEach(store.platforms?.platforms ?? [], id: \.platform) { platform in
             PlatformCard(store: store, platform: platform)
         }
-        Card(title: "Telegram", accessory: { ConnectionTag(note: ConnectionText.telegram) }) {
-            TelegramRows(store: store)
-        }
+        SitesCard(store: store)
     }
 
     private var profileLine: String {
@@ -262,6 +340,7 @@ struct TelegramRows: View {
             case .waitingCode?:
                 HStack {
                     TextField("The code Telegram sent you", text: $code)
+                        .textFieldStyle(.glass)
                     Button("Verify") {
                         let value = code
                         code = ""
@@ -273,6 +352,7 @@ struct TelegramRows: View {
             case .waitingPassword?:
                 HStack {
                     SecureField("Two-step verification password", text: $password)
+                        .textFieldStyle(.glass)
                     Button("Sign In") {
                         let value = password
                         password = ""
@@ -286,10 +366,13 @@ struct TelegramRows: View {
                     Text("Telegram asks every app for its own key: sign in at my.telegram.org, open API development tools, create an app and copy the two values here.")
                         .textRole(.meta).fixedSize(horizontal: false, vertical: true)
                     TextField("App api_id", text: $apiId)
+                        .textFieldStyle(.glass)
                     SecureField("App api_hash", text: $apiHash)
+                        .textFieldStyle(.glass)
                 }
                 HStack {
                     TextField("Phone (+30…)", text: $phone)
+                        .textFieldStyle(.glass)
                     Button("Connect") {
                         let start = Applyant_V1_ConnectTelegramStart.with {
                             $0.phone = phone

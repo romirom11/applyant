@@ -1,6 +1,7 @@
 // The main window, CleanMyMac-style: one deep colour world behind everything (the open
 // section's), a slim rail of section icons on the left, the section's list in a glass panel
-// and the picked item beside it. Home, Chat and Settings use the whole window beside the rail.
+// and the picked item beside it (Settings too: its panes are the list). Home and Chat use the
+// whole window beside the rail.
 // No system chrome: the traffic lights sit over the world, and what Applyant is doing (with
 // Pause and Resume) at the title bar's right.
 import AppKit
@@ -106,17 +107,17 @@ struct MainView: View {
         case .whichApplication: WhichApplicationList(store: store)
         case .profile: ProfileColumn(store: store)
         case .projects: ProjectsList(store: store)
+        case .settings: SettingsList(store: store)
         default: PostingList(store: store)
         }
     }
 
-    /// Home, Settings and Chat use the whole window beside the rail.
+    /// Home and Chat use the whole window beside the rail.
     @ViewBuilder
     private var onePane: some View {
         switch store.navigation.section {
-        case .overview: HomeView(store: store)
         case .chat: ChatView(store: store)
-        default: SettingsView(store: store)
+        default: HomeView(store: store)
         }
     }
 }
@@ -579,7 +580,9 @@ struct Detail: View {
 
     @ViewBuilder
     private var content: some View {
-        if store.navigation.section == .profile {
+        if store.navigation.section == .settings {
+            SettingsDetail(store: store)
+        } else if store.navigation.section == .profile {
             ProfileSourcesPane(store: store)
         } else if store.navigation.section == .projects {
             ProjectDetail(store: store)
@@ -867,7 +870,7 @@ struct AddPostingSheet: View {
             Text("Paste a job posting's link. It's verified, read and scored like the ones search finds.")
                 .textRole(.body, color: Theme.secondaryText)
             TextField("URL", text: $url, prompt: Text("https://jobs.example.com/backend-engineer"))
-                .textFieldStyle(.roundedBorder)
+                .textFieldStyle(.glass)
                 .onSubmit(add)
             if let outcome {
                 VStack(alignment: .leading, spacing: 2) {

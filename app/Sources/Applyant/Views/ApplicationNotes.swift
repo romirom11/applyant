@@ -69,19 +69,15 @@ struct NotesCard: View {
                     .textRole(.body)
                     .focused($editorFocused)
                     .frame(minHeight: 70, maxHeight: 160)
-                    .scrollContentBackground(.hidden)
-                    .padding(6)
                     .overlay(alignment: .topLeading) {
                         if text.isEmpty {
                             Text("Only for you: what was said on a call, what to ask next")
-                                .textRole(.body, color: Theme.secondaryText)
-                                .padding(.horizontal, 11)
-                                .padding(.vertical, 6)
+                                .textRole(.body, color: Theme.tertiaryText)
+                                .padding(.leading, 5)
                                 .allowsHitTesting(false)
                         }
                     }
-                    .insetSurface()
-                    .overlay(RoundedRectangle(cornerRadius: Theme.innerRadius, style: .continuous).strokeBorder(Theme.hairline, lineWidth: 0.5))
+                    .glassEditor(minHeight: 70)
             }
         }
         .onAppear {
@@ -160,7 +156,7 @@ struct ContactsCard: View {
                 .disabled(form.problem != nil)
             }
         }
-        .textFieldStyle(.roundedBorder)
+        .textFieldStyle(.glass)
         .padding(.top, 4)
     }
 }

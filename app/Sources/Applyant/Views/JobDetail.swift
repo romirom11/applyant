@@ -219,8 +219,10 @@ struct JobDetail: View {
 
 // MARK: - The header
 
-/// What the job is, where it stands, and its next step: one prominent action, Save and Skip…
-/// beside it, the rest in More; what's left before it can be sent under them; the tabs at its foot.
+/// What the job is and its next step, in three lines: the title; what and where it is, where it
+/// was found and (once sent) how it's going; one prominent action, Save and Skip… beside it, the
+/// rest in More, then what's left before it can go and the company's red flags as plain links
+/// to their tabs. The tabs at its foot.
 struct DetailHeader: View {
     let store: AppStore
     let posting: Posting?
@@ -238,7 +240,6 @@ struct DetailHeader: View {
 
     var body: some View {
         let world = Theme.world(store.navigation.section)
-        let todo = app.map(ReviewRules.todo) ?? []
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 16) {
                 HStack(alignment: .top, spacing: 18) {
@@ -248,53 +249,21 @@ struct DetailHeader: View {
                             .textRole(.display)
                             .lineLimit(3)
                             .textSelection(.enabled)
-                        if !subtitle.isEmpty {
-                            Text(subtitle)
+                        if !meta.isEmpty {
+                            Text(meta)
                                 .font(.system(size: 15, weight: .medium))
                                 .foregroundStyle(Theme.secondaryText)
                                 .lineLimit(2)
                                 .textSelection(.enabled)
                         }
-                        FlowRow(spacing: 6) {
-                            ForEach(chips, id: \.text) { ChipView(chip: $0, help: $0.help) }
-                            if let flags = redFlagsChip {
-                                Button { showTab(.company) } label: { ChipView(chip: flags) }
-                                    .buttonStyle(.plain)
-                                    .help((flags.help ?? "") + "\n\nThe Company tab has them with their sources.")
-                            }
-                            if let dates {
-                                Text(dates)
-                                    .font(.system(size: 12, weight: .medium))
-                                    .foregroundStyle(Theme.secondaryText)
-                                    .lineLimit(1)
-                                    .padding(.leading, 2)
-                            }
-                        }
-                        .padding(.top, 2)
                     }
                     Spacer(minLength: 0)
                     ScoreRing(score: score, size: 84)
                 }
                 if let hint = app.flatMap(SignInHint.of) { SignInBanner(store: store, hint: hint) }
                 if let app, let delivery = store.deliveries[app.id] { DeliveryStrip(progress: delivery) }
-                VStack(alignment: .leading, spacing: 10) {
-                    actions
-                    // What's left before it can be sent, each a way into the Application tab.
-                    if !todo.isEmpty {
-                        FlowRow(spacing: 6) {
-                            ForEach(todo) { item in
-                                Button { showTab(.application) } label: {
-                                    ChipView(chip: Chip(text: item.title + " ›", tone: .warning))
-                                }
-                                .buttonStyle(.plain)
-                                .help("Open the Application tab: it's under Before You Can Send")
-                            }
-                        }
-                        .accessibilityElement(children: .contain)
-                        .accessibilityLabel("Before you can send")
-                    }
-                }
-                .padding(.leading, Self.titleColumn)
+                actions
+                    .padding(.leading, Self.titleColumn)
             }
             .padding(22)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -328,54 +297,21 @@ struct DetailHeader: View {
         return app.flatMap { $0.hasScore ? $0.score : nil }
     }
 
-    private var facts: [KeyFact] {
-        guard let posting else { return [] }
-        return KeyFacts.rows(posting, description: DescriptionCache.description(posting))
-    }
-
     /// Sent or on its way: Set Status and Open Posting are out on the row, not in More.
     private var sent: Bool { app.map { $0.stage == .approved || StageRules.isSent($0.stage) } ?? false }
 
-    /// "Acme · Remote (europe) · $5000–7000".
-    private var subtitle: String {
-        let wanted = ["Workplace", "Location", "Salary"]
-        let parts = [company] + wanted.map { label in facts.first { $0.label == label }?.value }
-        return parts.compactMap { $0 }.joined(separator: " · ")
+    /// "Kalepa · Remote (europe) · $100k–$185k USD · Greenhouse · Found 4 days ago".
+    private var meta: String {
+        let facts = posting.map { KeyFacts.rows($0, description: DescriptionCache.description($0)) } ?? []
+        return HeaderText.meta(posting: posting, app: app, facts: facts, delivering: app.flatMap { store.deliveries[$0.id] } != nil)
     }
 
-    private var chips: [Chip] {
-        var chips: [Chip] = []
-        if let app {
-            chips.append(StageText.chip(app, delivery: store.deliveries[app.id]))
-        } else if let posting {
-            if posting.stage == .skipped || posting.decision == "skipped" { chips.append(Chip(text: "Skipped", tone: .neutral)) }
-            else if posting.decision == "interested" { chips.append(Chip(text: "Saved", tone: .accent)) }
-            else if posting.stage == .closed { chips.append(Chip(text: "Closed", tone: .warning)) }
-        }
-        if let site = Source.site(posting?.canonicalURL ?? app?.postingURL ?? "") { chips.append(Chip(text: site, tone: .neutral)) }
-        return chips
-    }
-
-    /// "2 red flags" when the company research found any: it opens the Company tab.
-    private var redFlagsChip: Chip? {
+    /// The company research's red flags, when it found any and the Company tab is there to show them.
+    private var redFlags: [CompanyRedFlag] {
         let research = posting.flatMap { $0.hasCompanyResearch ? $0.companyResearch : nil }
             ?? app.flatMap { $0.hasCompanyResearch ? $0.companyResearch : nil }
-        guard let flags = research?.redFlags, !flags.isEmpty, tabs.contains(.company) else { return nil }
-        return Chip(
-            text: flags.count == 1 ? "1 red flag" : "\(flags.count) red flags",
-            tone: .warning,
-            help: flags.map(CompanyText.flagTitle).joined(separator: "\n")
-        )
-    }
-
-    /// "Sent Oct 3 · 14 days ago · no reply yet" once it's sent; before that "Found 3 days ago
-    /// · posted 17 Sep 2026".
-    private var dates: String? {
-        if let app, let line = SentText.line(app) { return line }
-        guard let posting else { return nil }
-        var parts = ["Found " + posting.firstSeenAt.date.formatted(.relative(presentation: .named))]
-        if let posted = facts.first(where: { $0.label == "Posted" }) { parts.append("posted " + posted.value) }
-        return parts.joined(separator: " · ")
+        guard let flags = research?.redFlags, tabs.contains(.company) else { return [] }
+        return flags
     }
 
     // MARK: What to do
@@ -410,6 +346,7 @@ struct DetailHeader: View {
                     .help("The posting on its site")
             }
             more
+            links
             if let note {
                 Text(note).textRole(.meta)
                     .transition(.opacity.combined(with: .move(edge: .leading)))
@@ -417,6 +354,30 @@ struct DetailHeader: View {
         }
         .buttonStyle(.secondary)
         .animation(Theme.Motion.snappy, value: note)
+    }
+
+    /// What's left before it can go, and the company's red flags: one plain link each, to the
+    /// tab that has them ("5 things left › · 2 red flags ›").
+    @ViewBuilder
+    private var links: some View {
+        let todo = app.map(ReviewRules.todo).flatMap(HeaderText.todo)
+        let flags = redFlags
+        if todo != nil || !flags.isEmpty {
+            HStack(spacing: 6) {
+                if let todo {
+                    HeaderLink(title: todo.title) { showTab(.application) }
+                        .help(todo.help + "\n\nThe Application tab has them, under Before You Can Send.")
+                }
+                if todo != nil && !flags.isEmpty {
+                    Text("·").foregroundStyle(Theme.tertiaryText).accessibilityHidden(true)
+                }
+                if !flags.isEmpty {
+                    HeaderLink(title: HeaderText.redFlags(flags.count), color: Theme.warning) { showTab(.company) }
+                        .help(flags.map(CompanyText.flagTitle).joined(separator: "\n") + "\n\nThe Company tab has them with their sources.")
+                }
+            }
+            .padding(.leading, 10)
+        }
     }
 
     /// The one prominent action by where the job stands. Approve and Send… is the round Send
@@ -488,6 +449,30 @@ struct DetailHeader: View {
             .accessibilityLabel("More")
             .help("More")
         }
+    }
+}
+
+/// A plain link on the hero: its words and a chevron, brighter and underlined under the pointer.
+private struct HeaderLink: View {
+    let title: String
+    var color: Color = Theme.text
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 3) {
+                Text(title).underline(hovering)
+                Image(systemName: "chevron.right").font(.system(size: 9, weight: .bold))
+            }
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(color.opacity(hovering ? 1 : 0.85))
+            .frame(minHeight: 22)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .animation(Theme.Motion.snappy, value: hovering)
     }
 }
 
@@ -642,8 +627,7 @@ struct SkipPostingSheet: View {
                 .textRole(.body, color: Theme.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
             TextField("e.g. application link opens the homepage", text: $reason)
-                .textFieldStyle(.roundedBorder)
-                .frame(width: 380)
+                .textFieldStyle(.glass)
             HStack {
                 Spacer()
                 Button("Cancel") { dismiss() }.buttonStyle(.secondary)

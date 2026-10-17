@@ -36,22 +36,32 @@ struct ProfileEditor: View {
             }
             ScrollView {
                 VStack(alignment: .leading, spacing: Theme.blockSpacing) {
-                    if !showsHeader { HStack { Spacer(); actions } }
+                    HStack {
+                        MetaLine("Defaults for every application", systemImage: "info.circle", details: Self.about)
+                        Spacer()
+                        if !showsHeader { actions }
+                    }
+                    .padding(.horizontal, Theme.Space.xs)
                     Card {
                         ForEach(ProfileForm.fields, id: \.key) { field in
                             let unset = form.isUnset(field.key)
-                            LabeledRow(field.label, status: unset ? .warning : nil) {
+                            VStack(alignment: .leading, spacing: 6) {
+                                // The dot after the words, so every label starts at one x.
+                                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                    Text(field.label).textRole(.itemTitle)
+                                    if unset {
+                                        Circle().fill(Theme.warning).frame(width: 6, height: 6).accessibilityHidden(true)
+                                    }
+                                }
                                 TextField(field.label, text: Binding(get: { form[field.key] }, set: { form[field.key] = $0; saved = false }),
-                                          prompt: Text("Not set"))
+                                          prompt: .fieldPrompt("Not set"))
                                     .labelsHidden()
-                                    .textFieldStyle(.roundedBorder)
-                                    .frame(maxWidth: 320)
+                                    .textFieldStyle(.glass)
                                     .help("e.g. \(field.hint)")
                             }
+                            .accessibilityElement(children: .contain)
+                            .accessibilityLabel(unset ? "\(field.label), not set" : field.label)
                         }
-                        Text("Defaults for every application; each one can still be changed in its review. GitHub logins and commit emails decide which commits are yours (comma-separated).")
-                            .textRole(.meta)
-                            .fixedSize(horizontal: false, vertical: true)
                     }
                     Card(title: "Base CV") {
                         HStack {
@@ -85,6 +95,8 @@ struct ProfileEditor: View {
         .task { await store.openProfile(); load(force: false) }
         .onChange(of: store.candidateProfile?.profile) { load(force: false) }
     }
+
+    private static let about = "Defaults for every application; each one can still be changed in its review. GitHub logins and commit emails decide which commits are yours (comma-separated)."
 
     /// Saved (a check), Revert and Save (⌘S).
     private var actions: some View {
@@ -190,8 +202,8 @@ struct ProjectsList: View {
     private var newProject: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("New project").textRole(.heading)
-            TextField("Name", text: $newName, prompt: Text("Solovei, Ordi, a position…"))
-                .textFieldStyle(.roundedBorder)
+            TextField("Name", text: $newName, prompt: .fieldPrompt("Solovei, Ordi, a position…"))
+                .textFieldStyle(.glass)
                 .frame(width: 240)
                 .onSubmit(add)
             HStack {
@@ -313,7 +325,7 @@ private struct ProjectPane: View {
                             .help(project.kind == "position" ? "A job (Experience)" : "Something you built (Projects)")
                         if renaming {
                             TextField("Name", text: $name)
-                                .textFieldStyle(.roundedBorder)
+                                .textFieldStyle(.glass)
                                 .font(Theme.TextRole.title.font)
                                 .focused($nameFocused)
                                 .onSubmit(rename)
@@ -480,8 +492,8 @@ struct KnowledgeSourcesSection: View {
                 .popover(isPresented: $linking, arrowEdge: .bottom) {
                     VStack(alignment: .leading, spacing: 8) {
                         Text(project == nil ? "A page about you" : "A page about this project").textRole(.heading)
-                        TextField("Link", text: $link, prompt: Text("https://…"))
-                            .textFieldStyle(.roundedBorder)
+                        TextField("Link", text: $link, prompt: .fieldPrompt("https://…"))
+                            .textFieldStyle(.glass)
                             .frame(width: 320)
                             .onSubmit(addLink)
                         Text(project == nil
@@ -664,9 +676,9 @@ struct RepoPickerSheet: View {
                 Button("Cancel", action: close).keyboardShortcut(.cancelAction)
             }
             .padding(14)
-            TextField("Search", text: $query, prompt: Text("Search your repositories"))
+            TextField("Search", text: $query, prompt: .fieldPrompt("Search your repositories"))
                 .labelsHidden()
-                .textFieldStyle(.roundedBorder)
+                .textFieldStyle(.glass)
                 .focused($searching)
                 .padding(.horizontal, 14)
                 .padding(.bottom, 10)
@@ -837,7 +849,7 @@ struct FactRow: View {
             VStack(alignment: .leading, spacing: 3) {
                 if editing {
                     TextField("The fact, in your words", text: $text, axis: .vertical)
-                        .textFieldStyle(.roundedBorder)
+                        .textFieldStyle(.glass)
                         .lineLimit(2 ... 6)
                     HStack {
                         Spacer()

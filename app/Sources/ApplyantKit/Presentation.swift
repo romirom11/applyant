@@ -74,8 +74,8 @@ public enum Section: String, CaseIterable, Identifiable, Sendable {
     public var isBuilt: Bool { true }
 
     /// Sections that are one page: no list to pick from, so they take the whole window (Home
-    /// is its grid of tiles).
-    public var isSinglePane: Bool { self == .overview || self == .settings || self == .chat }
+    /// is its grid of tiles). Settings has its panes as a list, like every other section.
+    public var isSinglePane: Bool { self == .overview || self == .chat }
 
     /// Home's name in the rail: the Overview is where the window opens.
     /// The rail's label: short enough to fit beside a badge (the list header keeps the full title).
@@ -572,7 +572,7 @@ public enum ReviewRules {
         }
     }
 
-    /// What's left before it can be sent, from the application's own data, so the hero's chips,
+    /// What's left before it can be sent, from the application's own data, so the hero's link,
     /// the Application tab and any count agree. Nothing once it's approved or sent.
     public static func todo(_ app: Application) -> [ReviewTodo] {
         guard [.readyForReview, .needsCandidate].contains(app.stage) else { return [] }
@@ -585,6 +585,68 @@ public enum ReviewRules {
         ]
         return counts.filter { $0.1 > 0 }.map { ReviewTodo(kind: $0.0, count: $0.1) }
     }
+}
+
+/// Settings' list: each pane's one line of where it stands.
+public enum SettingsText {
+    /// "Roman Kudin · 21 projects".
+    public static func general(name: String?, projects: Int) -> String {
+        let count = projects == 0 ? nil : projects == 1 ? "1 project" : "\(projects) projects"
+        return [name?.nonBlank, count].compactMap { $0 }.joined(separator: " · ").nonBlank ?? "Setup, profile and preferences"
+    }
+
+    /// "Gmail connected" · "Gmail signed out" · "No mailbox", and " · Telegram" once it's connected.
+    public static func connections(_ box: Mailbox?, telegram: TelegramAccount?) -> String {
+        let gmail = box?.kind == "gmail"
+        let mailbox = if MailText.problem(box) != nil {
+            gmail ? "Gmail signed out" : "Mailbox not syncing"
+        } else {
+            switch box?.status {
+            case "connected"?: gmail ? "Gmail connected" : "Mailbox connected"
+            case "connecting"?: "Waiting for Google"
+            case "failed"?: "Mailbox failed"
+            default: "No mailbox"
+            }
+        }
+        return mailbox + (telegram?.state == .connected ? " · Telegram" : "")
+    }
+
+    /// The mailbox needs the candidate: signed out, not syncing, or failed.
+    public static func connectionsNeedYou(_ box: Mailbox?) -> Bool {
+        MailText.problem(box) != nil || box?.status == "failed"
+    }
+
+    /// The sites Applyant is signed in to, by name: "Djinni · LinkedIn · Xing" (LinkedIn and Xing
+    /// by their sign-in, any other by its kept login).
+    public static func sites(_ list: PlatformList?, secrets: [String]) -> String {
+        let platforms = (list?.platforms ?? []).filter(\.hasSignedInAt).map(\.name)
+        let logins = secrets.filter { $0.hasPrefix("login.") }.compactMap { name -> String? in
+            // The name is the sign-in address flattened ("djinni.co-login"): its host comes first.
+            let key = String(name.dropFirst("login.".count))
+            let host = key.range(of: #"^[a-z0-9.-]*?\.[a-z]{2,}(?=-|$)"#, options: .regularExpression).map { String(key[$0]) } ?? key
+            return Source.site("https://" + host)
+        }
+        let names = Set(platforms + logins).sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+        return names.isEmpty ? "No sign-ins yet" : names.joined(separator: " · ")
+    }
+
+    /// "Claude · 14 roles": the providers the roles run on, the most used first.
+    public static func models(_ roles: [RoleRoute]) -> String {
+        guard !roles.isEmpty else { return "Models and stored keys" }
+        let counts = Dictionary(grouping: roles) { RolesText.provider($0.route) }.mapValues(\.count)
+        let providers = counts.sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }.map { provider in
+            switch provider.key {
+            case "apple": "On-device"
+            case "": "Default"
+            default: provider.key.prefix(1).uppercased() + provider.key.dropFirst()
+            }
+        }
+        return (providers.prefix(2) + [roles.count == 1 ? "1 role" : "\(roles.count) roles"]).joined(separator: " · ")
+    }
+}
+
+private extension String {
+    var nonBlank: String? { trimmingCharacters(in: .whitespaces).isEmpty ? nil : self }
 }
 
 /// One kind of thing left to do before an application can go: "3 values only you can give".

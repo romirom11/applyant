@@ -243,13 +243,14 @@ private struct QuestionExchange: View {
                                 .textRole(.body, color: Theme.secondaryText)
                                 .textSelection(.enabled)
                                 .fixedSize(horizontal: false, vertical: true)
-                                .frame(maxWidth: Theme.measure, alignment: .leading)
                                 .transition(.reveal(reduceMotion: reduceMotion))
                         }
                     }
                 }
             }
             .bubble(mine: false)
+            // The page is as wide as the window; a message keeps a reading measure.
+            .frame(maxWidth: Theme.measure, alignment: .leading)
             .padding(.trailing, 60)
             .animation(Theme.Motion.pick(Theme.Motion.disclose, reduceMotion: reduceMotion), value: showsWhy)
 
@@ -261,6 +262,7 @@ private struct QuestionExchange: View {
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
                         .bubble(mine: true)
+                        .frame(maxWidth: Theme.measure, alignment: .trailing)
                 }
             }
             switch q.status {
