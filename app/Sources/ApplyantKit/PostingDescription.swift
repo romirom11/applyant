@@ -40,9 +40,16 @@ public struct PostingDescription: Equatable, Sendable {
     }
 
     /// A block's text with its inline markdown (bold, links), or as it is when it isn't markdown.
+    /// The text comes from any web page, so only http(s) links stay clickable: a `file:` or another
+    /// app's scheme is left as plain text.
     public static func inline(_ text: String) -> AttributedString {
         let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
-        return (try? AttributedString(markdown: text, options: options)) ?? AttributedString(text)
+        guard var parsed = try? AttributedString(markdown: text, options: options) else { return AttributedString(text) }
+        for run in parsed.runs {
+            guard let url = run.link else { continue }
+            if !["http", "https"].contains(url.scheme?.lowercased() ?? "") { parsed[run.range].link = nil }
+        }
+        return parsed
     }
 
     /// The JobPosting date fields ("2026-09-17T14:43:13.857463", "2025-07-01") as dates.

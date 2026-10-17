@@ -111,6 +111,10 @@ private func list(after heading: String, in blocks: [Block]) -> [String]? {
         // Inline markdown renders; text that isn't markdown stays as it is.
         #expect(String(PostingDescription.inline("About **us**").characters) == "About us")
         #expect(String(PostingDescription.inline("$100k – $185k USD*").characters) == "$100k – $185k USD*")
+        // Links from the page: http(s) stays clickable, anything else is plain text.
+        let links = PostingDescription.inline("[apply](https://jobs.example.com/1) [cv](file:///etc/hosts) [app](x-apple.systempreferences:)")
+        #expect(links.runs.compactMap(\.link).map(\.absoluteString) == ["https://jobs.example.com/1"])
+        #expect(String(links.characters) == "apply cv app")
         #expect(PostingDescription.blocks(text: "").isEmpty)
     }
 
