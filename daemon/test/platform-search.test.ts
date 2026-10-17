@@ -188,6 +188,28 @@ describe('LinkedIn and Xing search pages', () => {
     expect(g.status('linkedin').searchesToday).toBe(0);
   });
 
+  it('a strategy with more queries than a run reads takes the next ones each run', async () => {
+    t = tempDb();
+    const g = new Guardrails({ db: t.db, bus: new EventBus(), pacing: NO_PACING });
+    const { context, requested } = await platformContext(browser, { xing: 'xing-search.html' });
+    closers.push(() => context.close());
+    const queries = ['a1', 'a2', 'a3', 'a4', 'a5', 'a6'];
+    const searched = async (turn: number) => {
+      requested.length = 0;
+      const run = await readPlatform(XING, {
+        ...ctxFor(access(g, context, []), queries),
+        turn,
+      });
+      expect(run.note).toContain('(3 more in later runs)');
+      return requested
+        .filter((u) => u.includes('/jobs/search'))
+        .map((u) => new URL(u).searchParams.get('keywords'));
+    };
+    expect(await searched(0)).toEqual(['a1', 'a2', 'a3']);
+    expect(await searched(1)).toEqual(['a4', 'a5', 'a6']);
+    expect(await searched(2)).toEqual(['a1', 'a2', 'a3']);
+  });
+
   it('a checkpoint instead of results pauses LinkedIn and leaves the page for the candidate', async () => {
     t = tempDb();
     const g = new Guardrails({ db: t.db, bus: new EventBus(), pacing: NO_PACING });

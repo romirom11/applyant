@@ -2,8 +2,11 @@
 // listings a strategy wants, and which postings they are, is decided after (handlers.ts,
 // dedupe.ts). Posting text is read at verification, not here.
 import type { ReaderPool } from '../../../browser/reader-pool.ts';
+import type { AtsBoard } from './ats-embed.ts';
 import type { PlatformAccess } from './platform.ts';
+import type { SharedReads } from './shared.ts';
 import type { TelegramReading } from './telegram.ts';
+import type { WebSearchGate } from './web-search.ts';
 
 /** One job as a source lists it. */
 export interface Listing {
@@ -26,6 +29,11 @@ export interface Listing {
   postedAt: string | null;
   /** Text a strategy's queries are matched against instead of the title (HN: the first line). */
   matchText?: string | null;
+  /**
+   * The company board it's on, when the reader knows it and the URL doesn't say (a Workable
+   * job's apply.workable.com/j/… page): a matched listing's board joins the watch list.
+   */
+  board?: AtsBoard | null;
 }
 
 /**
@@ -55,6 +63,20 @@ export interface ReaderContext {
   platform?: PlatformAccess | null;
   /** Telegram channels (phase 15): the extractor over posts, and the candidate's account. */
   telegram?: TelegramReading | null;
+  /**
+   * Whether the strategy wants a listing (its queries and locations). Job searches across every
+   * company only look up the boards behind the jobs it wants; unset, it wants everything.
+   */
+  wants?: ((l: Listing) => boolean) | null;
+  /** Reads shared with other runs for a while (company boards, Workable accounts, web results). */
+  shared?: SharedReads | null;
+  /** The web search engines' pace and daily budget, shared by every run. */
+  web?: WebSearchGate | null;
+  /**
+   * Runs the strategy had before this one: readers that take a slice of its queries per run
+   * take the next slice each time.
+   */
+  turn?: number;
 }
 
 /** The longest description kept per listing (dedupe needs a sample, not the whole page). */

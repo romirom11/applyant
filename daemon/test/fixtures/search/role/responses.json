@@ -1,0 +1,50 @@
+[
+  {
+    "url": "https://jobs.workable.com/api/v1/jobs?query=laravel&workplace=remote",
+    "status": 200,
+    "contentType": "application/json",
+    "file": "workable-laravel-remote.json"
+  },
+  {
+    "url": "https://jobs.workable.com/api/v1/jobs?query=laravel&location=greece",
+    "status": 200,
+    "contentType": "application/json",
+    "file": "workable-laravel-greece.json"
+  },
+  {
+    "url": "https://jobs.workable.com/api/v1/jobs/fc81b9b1-52ae-460e-8b4c-30d8a596345b/form?includeAccountMetadata=true",
+    "status": 200,
+    "contentType": "application/json",
+    "file": "workable-form-intetics.json"
+  },
+  {
+    "url": "https://apply.workable.com/api/v1/widget/accounts/intetics-2?details=true",
+    "status": 200,
+    "contentType": "application/json",
+    "file": "workable-intetics-2.json"
+  },
+  {
+    "url": "https://jobs.smartrecruiters.com/sr-jobs/search?keyword=laravel&limit=100&offset=0",
+    "status": 200,
+    "contentType": "application/json",
+    "file": "smartrecruiters-laravel.json"
+  },
+  {
+    "url": "https://apply.workable.com/api/v1/widget/accounts/victus-networks?details=true",
+    "status": 200,
+    "contentType": "application/json",
+    "file": "workable-victus-networks.json"
+  },
+  {
+    "url": "https://boards-api.greenhouse.io/v1/boards/yipitdata/jobs?content=true",
+    "status": 200,
+    "contentType": "application/json",
+    "file": "greenhouse-yipitdata.json"
+  },
+  {
+    "url": "https://search.brave.com/search?q=site%3Agreenhouse.io%20%22tech%20lead%22&source=web",
+    "status": 200,
+    "contentType": "text/html",
+    "file": "brave-greenhouse-tech-lead.html"
+  }
+]

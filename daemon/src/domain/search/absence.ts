@@ -6,12 +6,15 @@
 //     listed    → a closed link (and a posting closed by absence) opens again
 //   partial or failed run (boards, searches, a page of several, a network error):
 //     missing   → verify_posting, so posting_liveness decides; never closed. Only postings this
-//                 strategy found through this source, at most once per REVERIFY_AFTER_MS.
-import { and, eq, inArray, isNotNull, isNull, ne } from 'drizzle-orm';
+//                 strategy found through this source, at most once per REVERIFY_AFTER_MS, and
+//                 not while a complete list read in that time (the company's board) still
+//                 lists them: that list says when they close.
+import { and, eq, gt, inArray, isNotNull, isNull, ne } from 'drizzle-orm';
 import {
   type PostingStage,
   postingSources,
   postings,
+  searchSources,
   strategyPostings,
   tasks,
 } from '../../db/schema.ts';
@@ -40,6 +43,29 @@ export interface AbsenceResult {
   closed: number;
   reopened: number;
   reverify: number;
+}
+
+/**
+ * A source whose last read was its complete list still lists the posting, and read it since
+ * `since`: a board nobody reads any more (its kind switched off, no strategy selects it) says
+ * nothing about today.
+ */
+function onCompleteList(tx: Tx, postingId: number, exceptSourceId: number, since: Date): boolean {
+  return !!tx.db
+    .select({ id: postingSources.id })
+    .from(postingSources)
+    .innerJoin(searchSources, eq(searchSources.id, postingSources.searchSourceId))
+    .where(
+      and(
+        eq(postingSources.postingId, postingId),
+        ne(postingSources.searchSourceId, exceptSourceId),
+        isNull(postingSources.closedAt),
+        gt(postingSources.lastSeenAt, since),
+        eq(searchSources.enabled, true),
+        eq(searchSources.lastComplete, true),
+      ),
+    )
+    .get();
 }
 
 function verifyBusy(tx: Tx, postingId: number): boolean {
@@ -165,7 +191,8 @@ export function applyAbsence(tx: Tx, input: AbsenceInput): AbsenceResult {
     }
     if (asked.has(posting.id) || !CHECKED_STAGES.includes(posting.stage)) continue;
     if (posting.verifiedAt && posting.verifiedAt.getTime() > due) continue;
-    if (verifyBusy(tx, posting.id)) continue;
+    if (verifyBusy(tx, posting.id) || onCompleteList(tx, posting.id, input.sourceId, new Date(due)))
+      continue;
     tx.enqueue('verify_posting', posting.id);
     asked.add(posting.id);
     result.reverify++;

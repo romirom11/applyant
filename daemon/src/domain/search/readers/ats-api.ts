@@ -10,6 +10,7 @@
 //               totalFound; no descriptions: verification reads the job page)
 import type { Ats } from './ats-embed.ts';
 import { get, getJson, HttpError } from './http.ts';
+import { BOARD_READ_MS } from './shared.ts';
 import { type Listing, plainText, type ReaderContext, type ReaderRun, str } from './types.ts';
 
 type Node = Record<string, unknown>;
@@ -229,6 +230,33 @@ async function workable(account: string, ctx: ReaderContext): Promise<AtsRun> {
   };
 }
 
+/**
+ * One SmartRecruiters posting as a listing: the company API and the job search across every
+ * company (ats-search.ts) list postings alike. `company` is the board's identifier when the
+ * posting doesn't name it.
+ */
+export function smartRecruitersListing(j: Node, company: string): Listing | null {
+  const id = str(j.id);
+  const title = str(j.name);
+  if (!id || !title) return null;
+  const co = (j.company ?? {}) as Node;
+  const loc = (j.location ?? {}) as Node;
+  const where =
+    str(loc.fullLocation) ??
+    ([str(loc.city), str(loc.region), str(loc.country)].filter(Boolean).join(', ') || null);
+  const remote = loc.remote === true;
+  return base({
+    url: `https://jobs.smartrecruiters.com/${encodeURIComponent(str(co.identifier) ?? company)}/${id}`,
+    title,
+    externalId: id,
+    company: str(co.name),
+    location: remote ? `Remote${where ? ` (${where})` : ''}` : where,
+    remote: remote ? true : loc.hybrid === true ? false : null,
+    team: str((j.department as Node | undefined)?.label),
+    postedAt: str(j.releasedDate),
+  });
+}
+
 const SR_PAGE = 100;
 /** Big employers list thousands of jobs: past this many the list is read as partial. */
 const SR_MAX = 1000;
@@ -259,31 +287,11 @@ async function smartrecruiters(company: string, ctx: ReaderContext): Promise<Ats
     const known = page.status < 400 && new URL(page.url).pathname.replace(/\/$/, '') !== '';
     if (!known) throw new HttpError(404, `https://careers.smartrecruiters.com/${company}`);
   }
-  let boardCompany: string | null = null;
   const listings = jobs.flatMap((j) => {
-    const id = str(j.id);
-    const title = str(j.name);
-    if (!id || !title) return [];
-    const co = (j.company ?? {}) as Node;
-    boardCompany ??= str(co.name);
-    const loc = (j.location ?? {}) as Node;
-    const where =
-      str(loc.fullLocation) ??
-      ([str(loc.city), str(loc.region), str(loc.country)].filter(Boolean).join(', ') || null);
-    const remote = loc.remote === true;
-    return [
-      base({
-        url: `https://jobs.smartrecruiters.com/${encodeURIComponent(str(co.identifier) ?? company)}/${id}`,
-        title,
-        externalId: id,
-        company: str(co.name),
-        location: remote ? `Remote${where ? ` (${where})` : ''}` : where,
-        remote: remote ? true : loc.hybrid === true ? false : null,
-        team: str((j.department as Node | undefined)?.label),
-        postedAt: str(j.releasedDate),
-      }),
-    ];
+    const l = smartRecruitersListing(j, company);
+    return l ? [l] : [];
   });
+  const boardCompany = listings.find((l) => l.company)?.company ?? null;
   const complete = listings.length === total;
   return {
     listings,
@@ -291,6 +299,26 @@ async function smartrecruiters(company: string, ctx: ReaderContext): Promise<Ats
     company: boardCompany,
     note: `${boardCompany ?? company} on SmartRecruiters: ${listings.length} jobs${complete ? '' : ` of ${total} (partial)`}`,
   };
+}
+
+/**
+ * A board's list, shared with the other runs that read it within BOARD_READ_MS (`ctx.shared`):
+ * several strategies read the same watched boards, and job searches look up boards too.
+ * Workable's are read in its lane, paced (see shared.ts).
+ */
+export function readAtsBoardShared(
+  ats: Ats,
+  token: string,
+  ctx: ReaderContext,
+  o: { apiHost?: string | undefined } = {},
+): Promise<AtsRun> {
+  const read = async () => {
+    if (ats === 'workable') await ctx.shared?.turn('workable', ctx.signal);
+    return readAtsBoard(ats, token, ctx, o);
+  };
+  return ctx.shared
+    ? ctx.shared.memo(`ats:${ats}:${token.toLowerCase()}`, BOARD_READ_MS, ctx.now, read)
+    : read();
 }
 
 /** Reads one ATS board's public list. `apiHost` is Lever's host that answered last time. */

@@ -19,6 +19,7 @@ import {
 import { openListing } from '../recipes/page.ts';
 import { checkInvariants, runRecipe } from '../recipes/run.ts';
 import type { ListingRecipe, RecipeListing } from '../recipes/types.ts';
+import { sliceFor } from './ats-search.ts';
 import type { Listing, ReaderContext, ReaderRun } from './types.ts';
 
 /** How one platform's job search is read. */
@@ -148,12 +149,10 @@ export async function readPlatform(
   if (queries.length === 0) {
     return { listings: [], complete: false, note: `${name}: the strategy has no queries` };
   }
-  // More queries than a run reads: each run starts further along, so all of them get their turn.
-  const start = Math.floor(ctx.now.getTime() / 3_600_000) % queries.length;
-  const reading = [...queries.slice(start), ...queries.slice(0, start)].slice(
-    0,
-    MAX_QUERIES_PER_RUN,
-  );
+  // More queries than a run reads: each run takes the next ones, so all of them get their turn
+  // (by the run's turn: an hourly start repeats itself on a 6-hour schedule).
+  const turn = ctx.turn ?? Math.floor(ctx.now.getTime() / 3_600_000);
+  const reading = sliceFor(queries, turn, MAX_QUERIES_PER_RUN);
   const use = recipe ?? s.recipe;
   const listings = await access.guardrails.run(
     s.platform,

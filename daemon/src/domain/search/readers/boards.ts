@@ -8,7 +8,12 @@
 // Terms: RemoteOK and Himalayas ask for a link back, which the posting's source URL keeps;
 // Jobicy asks for at most hourly polls, Himalayas for daily refreshes (strategies run every
 // few hours at most).
+//
+// Three more search every company on the ATSs for the strategy's titles (ats-search.ts):
+// Workable's and SmartRecruiters' own job searches, and web search for Greenhouse, Ashby and
+// Lever job pages.
 import { atsJobPage } from './ats-embed.ts';
+import { readAtsWebSearch, readSmartRecruitersSearch, readWorkableSearch } from './ats-search.ts';
 import { parseFeed } from './feed.ts';
 import { get, getJson } from './http.ts';
 import {
@@ -19,18 +24,21 @@ import {
   type ReaderRun,
   str,
 } from './types.ts';
+import { PER_DAY } from './web-search.ts';
 
 /**
  * Boards that start switched off, and why (the candidate can switch them on). Himalayas' job
  * pages answer the headless reader with HTTP 403, so none of its postings can be verified.
  * Jobicy's "Apply Now" asks to sign in before it shows the employer's link, and its API
- * doesn't give that link either, so its postings fail verification too.
+ * doesn't give that link either, so its postings fail verification too. Web search reads search
+ * engines' result pages, which ask automated clients not to: the candidate decides.
  */
 export const BOARDS_OFF: Partial<Record<BoardId, string>> = {
   himalayas:
     'off by default: its job pages refuse the headless reader (HTTP 403), so its postings fail verification',
   jobicy:
     "off by default: its Apply asks to sign in before showing the employer's link, so its postings fail verification",
+  'ats-web-search': `off by default: it reads Brave's and DuckDuckGo's result pages, whose robots.txt asks automated clients not to; switched on, it makes at most ${PER_DAY} queries a day`,
 };
 
 export const BOARDS = {
@@ -42,6 +50,9 @@ export const BOARDS = {
   arbeitnow: 'Arbeitnow',
   jobicy: 'Jobicy',
   djinni: 'Djinni',
+  'workable-search': 'Workable job search · every company',
+  'smartrecruiters-search': 'SmartRecruiters job search · every company',
+  'ats-web-search': 'Web search · Greenhouse, Ashby and Lever jobs',
 } as const;
 export type BoardId = keyof typeof BOARDS;
 
@@ -530,6 +541,9 @@ const READERS: Record<BoardId, (ctx: ReaderContext) => Promise<ReaderRun>> = {
   arbeitnow,
   jobicy,
   djinni,
+  'workable-search': readWorkableSearch,
+  'smartrecruiters-search': readSmartRecruitersSearch,
+  'ats-web-search': readAtsWebSearch,
 };
 
 export function readBoard(board: BoardId, ctx: ReaderContext): Promise<ReaderRun> {

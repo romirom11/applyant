@@ -1,0 +1,204 @@
+{
+ "jobs": [
+  {
+   "absolute_url": "https://job-boards.greenhouse.io/yipitdata/jobs/7737220",
+   "data_compliance": [
+    {
+     "type": "gdpr",
+     "requires_consent": false,
+     "requires_processing_consent": false,
+     "requires_retention_consent": false,
+     "retention_period": null,
+     "demographic_data_consent_applies": false
+    }
+   ],
+   "internal_job_id": 3394585,
+   "location": {
+    "name": "New York"
+   },
+   "metadata": null,
+   "id": 7737220,
+   "updated_at": "2026-07-16T13:46:12-04:00",
+   "requisition_id": null,
+   "title": "Tech Lead - Senior Software Engineer",
+   "company_name": "YipitData",
+   "first_published": "2026-03-19T22:50:26-04:00",
+   "language": "en",
+   "application_deadline": null,
+   "content": "&lt;p&gt;&lt;img style=&quot;max-width: 100%;&quot; src=&quot;https://images.squarespace-cdn.com/content/v1/61a5868fbaa6ba287e749ca1/63edab4c-dc5d-43c9-9ee2-245982823f2e/SHOT_05_MIXED_01_MM_220322_057.jpg&quot; alt=&quot;&quot; width=&quot;800&quot;&gt;&lt;/p&gt;\n&lt;p&gt;&lt;strong&gt;About Us&lt;/strong&gt;&lt;/p&gt;\n&lt;p&gt;YipitData is the leading market research and analytics firm for the disruptive economy and most recently raised $475M from The Carlyle Group at a valuation of over $1B. Every day, our proprietary technology analyzes billions of alternative data points to uncover actiona",
+   "departments": [
+    {
+     "id": 26463,
+     "name": "Engineering",
+     "child_ids": [
+      303146,
+      303147,
+      303148,
+      303149,
+      303150,
+      303151,
+      303152,
+      303153
+     ],
+     "parent_id": null
+    }
+   ],
+   "offices": [
+    {
+     "id": 17936,
+     "name": "New York City HQ",
+     "location": "New York, NY, United States",
+     "child_ids": [],
+     "parent_id": null
+    }
+   ],
+   "ai_disclaimer": null,
+   "include_ai_disclaimer": false,
+   "ai_opt_out_request_url": "http://app.greenhouse.io/ai_opt_out_request/job_post/7737220/ai_opt_out"
+  },
+  {
+   "absolute_url": "https://job-boards.greenhouse.io/yipitdata/jobs/8237621",
+   "data_compliance": [
+    {
+     "type": "gdpr",
+     "requires_consent": false,
+     "requires_processing_consent": false,
+     "requires_retention_consent": false,
+     "retention_period": null,
+     "demographic_data_consent_applies": false
+    }
+   ],
+   "internal_job_id": 3564625,
+   "location": {
+    "name": "US Remote"
+   },
+   "metadata": null,
+   "id": 8237621,
+   "updated_at": "2026-10-06T14:09:03-04:00",
+   "requisition_id": null,
+   "title": "Account Development Manager II",
+   "company_name": "YipitData",
+   "first_published": "2026-10-02T09:19:43-04:00",
+   "language": "en",
+   "application_deadline": null,
+   "content": "&lt;p&gt;&lt;img style=&quot;max-width: 100%;&quot; src=&quot;https://images.squarespace-cdn.com/content/v1/61a5868fbaa6ba287e749ca1/2c2722b4-1d79-4c06-a4de-896076e98fcc/SHOT_06_INVESTOR_DATA_MM_220322_122.jpg&quot; alt=&quot;&quot; width=&quot;800&quot;&gt;&lt;/p&gt;\n&lt;p&gt;&lt;strong&gt;About Us:&lt;/strong&gt;&lt;/p&gt;\n&lt;p&gt;YipitData is the leading market research and analytics firm for the disruptive economy and most recently raised $475M from The Carlyle Group at a valuation of over $1B. Every day, our proprietary technology analyzes billions of alternative data points to uncover a",
+   "departments": [
+    {
+     "id": 79775,
+     "name": "Investor - Client Strategy",
+     "child_ids": [],
+     "parent_id": 79669
+    }
+   ],
+   "offices": [
+    {
+     "id": 17936,
+     "name": "New York City HQ",
+     "location": "New York, NY, United States",
+     "child_ids": [],
+     "parent_id": null
+    }
+   ],
+   "ai_disclaimer": null,
+   "include_ai_disclaimer": false,
+   "ai_opt_out_request_url": "http://app.greenhouse.io/ai_opt_out_request/job_post/8237621/ai_opt_out"
+  },
+  {
+   "absolute_url": "https://job-boards.greenhouse.io/yipitdata/jobs/8031925",
+   "data_compliance": [
+    {
+     "type": "gdpr",
+     "requires_consent": false,
+     "requires_processing_consent": false,
+     "requires_retention_consent": false,
+     "retention_period": null,
+     "demographic_data_consent_applies": false
+    }
+   ],
+   "internal_job_id": 3481737,
+   "location": {
+    "name": "US Remote"
+   },
+   "metadata": null,
+   "id": 8031925,
+   "updated_at": "2026-09-23T19:32:38-04:00",
+   "requisition_id": null,
+   "title": "AI Product Manager",
+   "company_name": "YipitData",
+   "first_published": "2026-06-26T21:25:56-04:00",
+   "language": "en",
+   "application_deadline": null,
+   "content": "&lt;p&gt;&lt;strong&gt;&lt;a class=&quot;_mizu1p6i _1ah3dkaa _ra3xnqa1 _128mdkaa _1cvmnqa1 _4davt94y _4bfu18uv _1hms8stv _ajmmnqa1 _vchhusvi _kqswh2mm _syaz14q2 _ect41gqc _1a3b18uv _4fpr8stv _5goinqa1 _f8pj14q2 _9oik18uv _1bnxglyw _jf4cnqa1 _30l314q2 _1nrm18uv _c2waglyw _1iohnqa1 _9h8h16c2 _1053w7te _1ienw7te _n0fxw7te _1vhvg3x0&quot; href=&quot;https://images.squarespace-cdn.com/content/v1/61a5868fbaa6ba287e749ca1/d8a20177-9960-4ab7-8d5d-a931e9989fd0/SHOT_04_FINANCE_MM_220321_104.jpg&quot; data-renderer-mark=&quot;true&quot; data-is-router-link=&quot;false&quot; data-testid=&quot;link-with-sa",
+   "departments": [
+    {
+     "id": 26462,
+     "name": "Investor - Product",
+     "child_ids": [],
+     "parent_id": 79669
+    }
+   ],
+   "offices": [
+    {
+     "id": 17936,
+     "name": "New York City HQ",
+     "location": "New York, NY, United States",
+     "child_ids": [],
+     "parent_id": null
+    }
+   ],
+   "ai_disclaimer": null,
+   "include_ai_disclaimer": false,
+   "ai_opt_out_request_url": "http://app.greenhouse.io/ai_opt_out_request/job_post/8031925/ai_opt_out"
+  },
+  {
+   "absolute_url": "https://job-boards.greenhouse.io/yipitdata/jobs/7428754",
+   "data_compliance": [
+    {
+     "type": "gdpr",
+     "requires_consent": false,
+     "requires_processing_consent": false,
+     "requires_retention_consent": false,
+     "retention_period": null,
+     "demographic_data_consent_applies": false
+    }
+   ],
+   "internal_job_id": 3305895,
+   "location": {
+    "name": "US Remote"
+   },
+   "metadata": null,
+   "id": 7428754,
+   "updated_at": "2026-09-22T17:31:14-04:00",
+   "requisition_id": null,
+   "title": "Associate Director of Product Development",
+   "company_name": "YipitData",
+   "first_published": "2025-12-05T08:56:42-05:00",
+   "language": "en",
+   "application_deadline": null,
+   "content": "&lt;p&gt;&lt;img style=&quot;max-width: 100%;&quot; src=&quot;https://images.squarespace-cdn.com/content/v1/61a5868fbaa6ba287e749ca1/2c2722b4-1d79-4c06-a4de-896076e98fcc/SHOT_06_INVESTOR_DATA_MM_220322_122.jpg&quot; alt=&quot;&quot; width=&quot;800&quot;&gt;&lt;/p&gt;\n&lt;p&gt;&lt;strong&gt;About Us:&lt;/strong&gt;&lt;/p&gt;\n&lt;p&gt;YipitData is the leading market research and analytics firm for the disruptive economy and most recently raised $475M from The Carlyle Group at a valuation of over $1B. Every day, our proprietary technology analyzes billions of alternative data points to uncover a",
+   "departments": [
+    {
+     "id": 303145,
+     "name": "Investor - Feeds",
+     "child_ids": [],
+     "parent_id": 79669
+    }
+   ],
+   "offices": [
+    {
+     "id": 17936,
+     "name": "New York City HQ",
+     "location": "New York, NY, United States",
+     "child_ids": [],
+     "parent_id": null
+    }
+   ],
+   "ai_disclaimer": null,
+   "include_ai_disclaimer": false,
+   "ai_opt_out_request_url": "http://app.greenhouse.io/ai_opt_out_request/job_post/7428754/ai_opt_out"
+  }
+ ],
+ "meta": {
+  "total": 4
+ }
+}

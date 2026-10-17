@@ -6,13 +6,15 @@
 //               career pages read by their listing recipe (phase 11) get a sample of their
 //               listings checked every few days (listing_check: "a job title with its link?")
 //   commit      new postings at `found` (+ verify_posting), every listing as a posting source,
-//               the strategy's claim on them · the absence rule per source (absence.ts) · the
+//               the strategy's claim on them · the ATS boards behind matched listings onto the
+//               watch list (watchlist.ts) · the absence rule per source (absence.ts) · the
 //               run's per-source results · a build_recipe for pages that need one (recipes/) ·
 //               a `search.run` event
 //
 // Tasks created here (verify, and from it score and read_form) carry the run's id.
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, count, eq, isNull } from 'drizzle-orm';
 import type { ReaderPool } from '../../browser/reader-pool.ts';
+import type { Conn } from '../../db/client.ts';
 import {
   type PostingRow,
   postingSources,
@@ -31,11 +33,12 @@ import { telegramPostsSchema } from '../../models/schemas/telegram.ts';
 import type { Handler, Tx } from '../../queue/types.ts';
 import { applyAbsence, reopenPosting } from './absence.ts';
 import { type Cluster, DedupeIndex } from './dedupe.ts';
-import { readAtsBoard } from './readers/ats-api.ts';
+import { readAtsBoardShared } from './readers/ats-api.ts';
 import { isBoardId, readBoard } from './readers/boards.ts';
 import { LINKEDIN } from './readers/linkedin.ts';
 import { NeedsRecipeError, readPage } from './readers/page.ts';
 import { type PlatformAccess, readPlatform } from './readers/platform.ts';
+import { SharedReads } from './readers/shared.ts';
 import {
   applyUrlOf,
   type JudgePosts,
@@ -45,6 +48,7 @@ import {
   telegramPostsPrompt,
 } from './readers/telegram.ts';
 import type { Listing, ReaderContext, ReaderRun } from './readers/types.ts';
+import { WebSearchGate } from './readers/web-search.ts';
 import { XING } from './readers/xing.ts';
 import {
   type RecipeForRun,
@@ -57,10 +61,17 @@ import {
 import type { RecipeListing } from './recipes/types.ts';
 import { isAts, isPlatformKind, sourcesFor } from './sources.ts';
 import { matchesStrategy } from './strategies.ts';
+import { watchSeen } from './watchlist.ts';
 
 /** New postings one run may add; the rest wait for the next run (they're still new then). */
 export const MAX_NEW_PER_RUN = 50;
 const PARALLEL_SOURCES = 4;
+
+// The daemon's own, over the real network: strategies read the same watched boards within
+// minutes of each other and share those reads, and every run's web searches go through one
+// pace and daily budget. An injected fetch (tests) gets fresh ones per run.
+const SHARED_READS = new SharedReads({ gapMs: { workable: 1_000 } });
+const WEB_SEARCH = new WebSearchGate();
 
 export interface SourceRead {
   source: SearchSourceRow;
@@ -100,7 +111,7 @@ export async function readSource(
   try {
     if (isAts(source.kind)) {
       const apiHost = source.resolved?.via === 'lever' ? source.resolved.apiHost : undefined;
-      const run = await readAtsBoard(source.kind, source.locator, ctx, { apiHost });
+      const run = await readAtsBoardShared(source.kind, source.locator, ctx, { apiHost });
       read.run = run;
       read.company = run.company;
       if (run.apiHost) read.resolved = { via: 'lever', apiHost: run.apiHost };
@@ -296,6 +307,7 @@ export const searchHandler: Handler<'search'> = async (task, ctx) => {
   );
   ctx.progress({ message: `${strategy.name}: reading ${sources.length} source(s)` });
   const reader = ctx.deps.reader as ReaderPool | undefined;
+  const live = !ctx.deps.fetch;
   const rctx: ReaderContext = {
     fetch: ctx.deps.fetch ?? globalThis.fetch,
     signal: ctx.signal,
@@ -305,6 +317,10 @@ export const searchHandler: Handler<'search'> = async (task, ctx) => {
     locations: strategy.locations,
     platform: platformAccess(ctx, task.id),
     telegram: telegramReading(ctx, task.id),
+    wants: (l) => matchesStrategy(l, strategy),
+    shared: live ? SHARED_READS : new SharedReads(),
+    web: live ? WEB_SEARCH : new WebSearchGate({ paceMs: 0 }),
+    turn: runsBefore(ctx.read, strategy.id, task.runId),
   };
   const reads = await mapLimit(sources, PARALLEL_SOURCES, async (s) => {
     const recipe = recipes.get(s.id) ?? null;
@@ -330,7 +346,8 @@ export const searchHandler: Handler<'search'> = async (task, ctx) => {
             ? listing
             : { ...listing, company: r.source.label },
         sourceId: r.source.id,
-        companyBoard: isAts(r.source.kind) || r.source.kind === 'page',
+        // A job search's listings that came from a company's board are that board's listings.
+        companyBoard: isAts(r.source.kind) || r.source.kind === 'page' || !!listing.board,
       })),
   );
   const index = DedupeIndex.load(ctx.read);
@@ -352,6 +369,16 @@ export const searchHandler: Handler<'search'> = async (task, ctx) => {
     commit: (tx) => commitSearch(tx, { strategy, runId: task.runId, reads, clusters }),
   };
 };
+
+/** The strategy's runs before this one: readers that take a slice of its queries per run. */
+function runsBefore(conn: Conn, strategyId: number, runId: number | null): number {
+  const row = conn
+    .select({ n: count() })
+    .from(searchRuns)
+    .where(eq(searchRuns.strategyId, strategyId))
+    .get();
+  return Math.max(0, (row?.n ?? 0) - (runId !== null ? 1 : 0));
+}
 
 interface CommitInput {
   strategy: SearchStrategyRow;
@@ -528,6 +555,23 @@ export function commitSearch(tx: Tx, input: CommitInput): void {
       .run();
   }
 
+  // The boards behind what this run matched join the watch list: a company hiring for the
+  // strategy's titles is then read in full on every run.
+  const watched = watchSeen(
+    tx,
+    input.clusters.flatMap((cluster) =>
+      cluster.candidates.map((c) => {
+        const read = bySource.get(c.sourceId);
+        // A career page that embeds a board reads that board: it isn't seen again.
+        const resolved = read?.resolved ?? read?.source.resolved ?? null;
+        const from =
+          resolved?.via === 'ats' ? { kind: resolved.ats, locator: resolved.token } : read?.source;
+        const where = `"${strategy.name}" matched it on ${read?.source.label ?? 'a search'}`;
+        return { listing: c.listing, where, from };
+      }),
+    ),
+  );
+
   // Absence, per source, over everything it listed (not only what this strategy matched).
   for (const r of input.reads) {
     const a = applyAbsence(tx, {
@@ -591,6 +635,9 @@ export function commitSearch(tx: Tx, input: CommitInput): void {
     `${listed} listed`,
     `${all.reduce((n, r) => n + r.matched, 0)} matched`,
     `${added} new`,
+    ...(watched.added.length
+      ? [`${watched.added.length} board${watched.added.length === 1 ? '' : 's'} now watched`]
+      : []),
     ...(closed ? [`${closed} closed`] : []),
     ...(failed ? [`${failed} source(s) failed`] : []),
     ...(left ? [`${left} more new left for the next run`] : []),

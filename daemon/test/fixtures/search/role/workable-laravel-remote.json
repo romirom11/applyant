@@ -1,0 +1,217 @@
+{
+ "title": "Workable",
+ "totalSize": 127,
+ "nextPageToken": null,
+ "jobs": [
+  {
+   "department": "PHP",
+   "id": "fc81b9b1-52ae-460e-8b4c-30d8a596345b",
+   "title": "Senior PHP Fullstack Engineer",
+   "state": "published",
+   "description": "<p><strong>Intetics Inc.</strong>, a global technology company providing custom software application development, distributed professional teams, software product quality assessment, and “all-things-digital” solutions, is seeking a highly skilled and experienced <strong>Senior Fullstack PHP Engineer </strong>to join our dynamic team on a full-time basis.<br /></p><p><strong>About the Client</strong></p><p>The client is an established international software company developing a B2B platform that helps organizations manage customer relationships, sales processes, and commercial data more effecti",
+   "socialSharingDescription": "",
+   "employmentType": "",
+   "benefitsSection": "",
+   "requirementsSection": "<p></p><ul><li>5+ years of professional software development experience, including strong expertise in PHP and JavaScript.</li><li>Solid experience with modern PHP frameworks (Laravel, Symfony, or similar).</li><li>Strong proficiency in JavaScript/TypeScript and modern frontend frameworks (React, Vue.js, or Angular).</li><li>Experience designing and developing RESTful APIs and integrating third-party services.</li><li>Strong knowledge of relational databases (MySQL, PostgreSQL), including query optimization and database design.</li><li>Good understanding of software architecture, design patter",
+   "url": "https://jobs.workable.com/view/xbtyVLd75c343cbXLLJbkn/remote-senior-php-fullstack-engineer-in-bulgaria-at-intetics",
+   "language": "en",
+   "locations": [
+    "TELECOMMUTE",
+    "Bulgaria"
+   ],
+   "location": {
+    "city": "",
+    "subregion": null,
+    "countryName": "Bulgaria"
+   },
+   "created": "2026-10-16T13:22:04.427Z",
+   "updated": "2026-10-16T13:22:04.427Z",
+   "company": {
+    "id": "7eb61613-c08d-41d3-9664-0f875e833fb5",
+    "title": "Intetics",
+    "website": "http://intetics.com",
+    "image": "https://workablehr.s3.amazonaws.com/uploads/account/logo/554738/logo",
+    "description": "",
+    "url": "https://jobs.workable.com/company/gDvZSRWtedxcHZawvZWQAz/jobs-at-intetics",
+    "socialSharingDescription": "Intetics Inc. is a leading American technology company providing custom software application development, distributed professional teams creation, software product quality assessment, and “all-things-digital” solutions built with SMAC, RPA, AI/ML, IoT,..."
+   },
+   "isFeatured": false,
+   "workplace": "remote"
+  },
+  {
+   "department": "PHP",
+   "id": "69bbfab4-c1fa-43c7-9a00-05d333dd4c9e",
+   "title": "Senior PHP Fullstack Engineer",
+   "state": "published",
+   "description": "<p><strong>Intetics Inc.</strong>, a global technology company providing custom software application development, distributed professional teams, software product quality assessment, and “all-things-digital” solutions, is seeking a highly skilled and experienced <strong>Senior Fullstack PHP Engineer </strong>to join our dynamic team on a full-time basis.<br /></p><p><strong>About the Client</strong></p><p>The client is an established international software company developing a B2B platform that helps organizations manage customer relationships, sales processes, and commercial data more effecti",
+   "socialSharingDescription": "",
+   "employmentType": "",
+   "benefitsSection": "",
+   "requirementsSection": "<p></p><ul><li>5+ years of professional software development experience, including strong expertise in PHP and JavaScript.</li><li>Solid experience with modern PHP frameworks (Laravel, Symfony, or similar).</li><li>Strong proficiency in JavaScript/TypeScript and modern frontend frameworks (React, Vue.js, or Angular).</li><li>Experience designing and developing RESTful APIs and integrating third-party services.</li><li>Strong knowledge of relational databases (MySQL, PostgreSQL), including query optimization and database design.</li><li>Good understanding of software architecture, design patter",
+   "url": "https://jobs.workable.com/view/e4h91qvDs5cmQJcYe6UT2G/remote-senior-php-fullstack-engineer-in-moldova-at-intetics",
+   "language": "en",
+   "locations": [
+    "TELECOMMUTE",
+    "Moldova"
+   ],
+   "location": {
+    "city": "",
+    "subregion": null,
+    "countryName": "Moldova"
+   },
+   "created": "2026-10-16T13:22:04.378Z",
+   "updated": "2026-10-16T13:22:04.378Z",
+   "company": {
+    "id": "7eb61613-c08d-41d3-9664-0f875e833fb5",
+    "title": "Intetics",
+    "website": "http://intetics.com",
+    "image": "https://workablehr.s3.amazonaws.com/uploads/account/logo/554738/logo",
+    "description": "",
+    "url": "https://jobs.workable.com/company/gDvZSRWtedxcHZawvZWQAz/jobs-at-intetics",
+    "socialSharingDescription": "Intetics Inc. is a leading American technology company providing custom software application development, distributed professional teams creation, software product quality assessment, and “all-things-digital” solutions built with SMAC, RPA, AI/ML, IoT,..."
+   },
+   "isFeatured": false,
+   "workplace": "remote"
+  },
+  {
+   "department": "PHP",
+   "id": "7de3de56-4b68-470b-bfc6-5ac0eca595c4",
+   "title": "Senior PHP Fullstack Engineer",
+   "state": "published",
+   "description": "<p><strong>Intetics Inc.</strong>, a global technology company providing custom software application development, distributed professional teams, software product quality assessment, and “all-things-digital” solutions, is seeking a highly skilled and experienced <strong>Senior Fullstack PHP Engineer </strong>to join our dynamic team on a full-time basis.<br /></p><p><strong>About the Client</strong></p><p>The client is an established international software company developing a B2B platform that helps organizations manage customer relationships, sales processes, and commercial data more effecti",
+   "socialSharingDescription": "",
+   "employmentType": "",
+   "benefitsSection": "",
+   "requirementsSection": "<p></p><ul><li>5+ years of professional software development experience, including strong expertise in PHP and JavaScript.</li><li>Solid experience with modern PHP frameworks (Laravel, Symfony, or similar).</li><li>Strong proficiency in JavaScript/TypeScript and modern frontend frameworks (React, Vue.js, or Angular).</li><li>Experience designing and developing RESTful APIs and integrating third-party services.</li><li>Strong knowledge of relational databases (MySQL, PostgreSQL), including query optimization and database design.</li><li>Good understanding of software architecture, design patter",
+   "url": "https://jobs.workable.com/view/gxCTo7Q8XNvsnBLnDrYbXW/remote-senior-php-fullstack-engineer-in-serbia-at-intetics",
+   "language": "en",
+   "locations": [
+    "TELECOMMUTE",
+    "Serbia"
+   ],
+   "location": {
+    "city": "",
+    "subregion": null,
+    "countryName": "Serbia"
+   },
+   "created": "2026-10-16T13:22:04.017Z",
+   "updated": "2026-10-16T13:22:04.017Z",
+   "company": {
+    "id": "7eb61613-c08d-41d3-9664-0f875e833fb5",
+    "title": "Intetics",
+    "website": "http://intetics.com",
+    "image": "https://workablehr.s3.amazonaws.com/uploads/account/logo/554738/logo",
+    "description": "",
+    "url": "https://jobs.workable.com/company/gDvZSRWtedxcHZawvZWQAz/jobs-at-intetics",
+    "socialSharingDescription": "Intetics Inc. is a leading American technology company providing custom software application development, distributed professional teams creation, software product quality assessment, and “all-things-digital” solutions built with SMAC, RPA, AI/ML, IoT,..."
+   },
+   "isFeatured": false,
+   "workplace": "remote"
+  },
+  {
+   "department": "PHP",
+   "id": "bd53e944-4908-45be-a7ef-3df163b0d0fb",
+   "title": "Senior PHP Fullstack Engineer",
+   "state": "published",
+   "description": "<p><strong>Intetics Inc.</strong>, a global technology company providing custom software application development, distributed professional teams, software product quality assessment, and “all-things-digital” solutions, is seeking a highly skilled and experienced <strong>Senior Fullstack PHP Engineer </strong>to join our dynamic team on a full-time basis.<br /></p><p><strong>About the Client</strong></p><p>The client is an established international software company developing a B2B platform that helps organizations manage customer relationships, sales processes, and commercial data more effecti",
+   "socialSharingDescription": "",
+   "employmentType": "",
+   "benefitsSection": "",
+   "requirementsSection": "<p></p><ul><li>5+ years of professional software development experience, including strong expertise in PHP and JavaScript.</li><li>Solid experience with modern PHP frameworks (Laravel, Symfony, or similar).</li><li>Strong proficiency in JavaScript/TypeScript and modern frontend frameworks (React, Vue.js, or Angular).</li><li>Experience designing and developing RESTful APIs and integrating third-party services.</li><li>Strong knowledge of relational databases (MySQL, PostgreSQL), including query optimization and database design.</li><li>Good understanding of software architecture, design patter",
+   "url": "https://jobs.workable.com/view/pnYXFrUEdt48xdUPe5fnhp/remote-senior-php-fullstack-engineer-in-poland-at-intetics",
+   "language": "en",
+   "locations": [
+    "TELECOMMUTE",
+    "Poland"
+   ],
+   "location": {
+    "city": "",
+    "subregion": null,
+    "countryName": "Poland"
+   },
+   "created": "2026-10-16T13:22:03.781Z",
+   "updated": "2026-10-16T13:22:03.781Z",
+   "company": {
+    "id": "7eb61613-c08d-41d3-9664-0f875e833fb5",
+    "title": "Intetics",
+    "website": "http://intetics.com",
+    "image": "https://workablehr.s3.amazonaws.com/uploads/account/logo/554738/logo",
+    "description": "",
+    "url": "https://jobs.workable.com/company/gDvZSRWtedxcHZawvZWQAz/jobs-at-intetics",
+    "socialSharingDescription": "Intetics Inc. is a leading American technology company providing custom software application development, distributed professional teams creation, software product quality assessment, and “all-things-digital” solutions built with SMAC, RPA, AI/ML, IoT,..."
+   },
+   "isFeatured": false,
+   "workplace": "remote"
+  },
+  {
+   "department": "PHP",
+   "id": "07f68888-1e6e-4476-9029-c8b16252d019",
+   "title": "Senior PHP Fullstack Engineer",
+   "state": "published",
+   "description": "<p><strong>Intetics Inc.</strong>, a global technology company providing custom software application development, distributed professional teams, software product quality assessment, and “all-things-digital” solutions, is seeking a highly skilled and experienced <strong>Senior Fullstack PHP Engineer </strong>to join our dynamic team on a full-time basis.<br /></p><p><strong>About the Client</strong></p><p>The client is an established international software company developing a B2B platform that helps organizations manage customer relationships, sales processes, and commercial data more effecti",
+   "socialSharingDescription": "",
+   "employmentType": "",
+   "benefitsSection": "",
+   "requirementsSection": "<p></p><ul><li>5+ years of professional software development experience, including strong expertise in PHP and JavaScript.</li><li>Solid experience with modern PHP frameworks (Laravel, Symfony, or similar).</li><li>Strong proficiency in JavaScript/TypeScript and modern frontend frameworks (React, Vue.js, or Angular).</li><li>Experience designing and developing RESTful APIs and integrating third-party services.</li><li>Strong knowledge of relational databases (MySQL, PostgreSQL), including query optimization and database design.</li><li>Good understanding of software architecture, design patter",
+   "url": "https://jobs.workable.com/view/1Z2R9iKk74rNmCKDWmRpkF/remote-senior-php-fullstack-engineer-in-georgia-at-intetics",
+   "language": "en",
+   "locations": [
+    "TELECOMMUTE",
+    "Georgia"
+   ],
+   "location": {
+    "city": "",
+    "subregion": null,
+    "countryName": "Georgia"
+   },
+   "created": "2026-10-16T13:22:04.341Z",
+   "updated": "2026-10-16T13:22:04.341Z",
+   "company": {
+    "id": "7eb61613-c08d-41d3-9664-0f875e833fb5",
+    "title": "Intetics",
+    "website": "http://intetics.com",
+    "image": "https://workablehr.s3.amazonaws.com/uploads/account/logo/554738/logo",
+    "description": "",
+    "url": "https://jobs.workable.com/company/gDvZSRWtedxcHZawvZWQAz/jobs-at-intetics",
+    "socialSharingDescription": "Intetics Inc. is a leading American technology company providing custom software application development, distributed professional teams creation, software product quality assessment, and “all-things-digital” solutions built with SMAC, RPA, AI/ML, IoT,..."
+   },
+   "isFeatured": false,
+   "workplace": "remote"
+  },
+  {
+   "department": "PHP",
+   "id": "d63a3477-082a-480d-98c9-8b0854398796",
+   "title": "Senior PHP Fullstack Engineer",
+   "state": "published",
+   "description": "<p><strong>Intetics Inc.</strong>, a global technology company providing custom software application development, distributed professional teams, software product quality assessment, and “all-things-digital” solutions, is seeking a highly skilled and experienced <strong>Senior Fullstack PHP Engineer </strong>to join our dynamic team on a full-time basis.<br /></p><p><strong>About the Client</strong></p><p>The client is an established international software company developing a B2B platform that helps organizations manage customer relationships, sales processes, and commercial data more effecti",
+   "socialSharingDescription": "",
+   "employmentType": "",
+   "benefitsSection": "",
+   "requirementsSection": "<p></p><ul><li>5+ years of professional software development experience, including strong expertise in PHP and JavaScript.</li><li>Solid experience with modern PHP frameworks (Laravel, Symfony, or similar).</li><li>Strong proficiency in JavaScript/TypeScript and modern frontend frameworks (React, Vue.js, or Angular).</li><li>Experience designing and developing RESTful APIs and integrating third-party services.</li><li>Strong knowledge of relational databases (MySQL, PostgreSQL), including query optimization and database design.</li><li>Good understanding of software architecture, design patter",
+   "url": "https://jobs.workable.com/view/ssjgTMvTxKdhRKLc6LSnoW/remote-senior-php-fullstack-engineer-in-armenia-at-intetics",
+   "language": "en",
+   "locations": [
+    "TELECOMMUTE",
+    "Armenia"
+   ],
+   "location": {
+    "city": "",
+    "subregion": null,
+    "countryName": "Armenia"
+   },
+   "created": "2026-10-16T13:22:04.317Z",
+   "updated": "2026-10-16T13:22:04.317Z",
+   "company": {
+    "id": "7eb61613-c08d-41d3-9664-0f875e833fb5",
+    "title": "Intetics",
+    "website": "http://intetics.com",
+    "image": "https://workablehr.s3.amazonaws.com/uploads/account/logo/554738/logo",
+    "description": "",
+    "url": "https://jobs.workable.com/company/gDvZSRWtedxcHZawvZWQAz/jobs-at-intetics",
+    "socialSharingDescription": "Intetics Inc. is a leading American technology company providing custom software application development, distributed professional teams creation, software product quality assessment, and “all-things-digital” solutions built with SMAC, RPA, AI/ML, IoT,..."
+   },
+   "isFeatured": false,
+   "workplace": "remote"
+  }
+ ]
+}

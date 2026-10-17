@@ -74,6 +74,35 @@ export function fixture(file: string): string {
   return readFileSync(join(FIXTURES, file), 'utf8');
 }
 
+/**
+ * test/fixtures/search/role: the job searches across every company (Workable, SmartRecruiters,
+ * web search) and the boards they lead to, recorded on 2026-10-17 and trimmed. Pass them to
+ * recordedFetch as extras.
+ */
+export function roleReplies(): Record<string, Reply> {
+  const dir = join(FIXTURES, 'role');
+  const recorded = JSON.parse(readFileSync(join(dir, 'responses.json'), 'utf8')) as Array<{
+    url: string;
+    status: number;
+    contentType: string;
+    file: string;
+  }>;
+  return Object.fromEntries(
+    recorded.map((r) => [
+      r.url,
+      {
+        status: r.status,
+        contentType: r.contentType,
+        body: readFileSync(join(dir, r.file), 'utf8'),
+      },
+    ]),
+  );
+}
+
+export function roleFixture(file: string): string {
+  return readFileSync(join(FIXTURES, 'role', file), 'utf8');
+}
+
 export function fixtureJson<T = Record<string, unknown>>(file: string): T {
   return JSON.parse(fixture(file)) as T;
 }

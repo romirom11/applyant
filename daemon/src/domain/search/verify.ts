@@ -18,7 +18,9 @@
 // A live posting keeps its readable text and where to apply, and moves on to score_posting and
 // read_form (the application form itself, read in phase 4's form engine). Verifying a posting
 // that was live before (a search source stopped listing it) only checks it still is: live keeps
-// its stage and everything built on it, dead closes it.
+// its stage and everything built on it, dead closes it. When the page or its apply link is on an
+// ATS board that isn't watched yet (a LinkedIn or Telegram job applying through Greenhouse), the
+// board joins the watch list.
 import { eq } from 'drizzle-orm';
 import type { Frame, Page } from 'playwright';
 import { guardReadOnly, readScope } from '../../browser/form-read.ts';
@@ -30,6 +32,7 @@ import type { Handler, Outcome } from '../../queue/types.ts';
 import { jobPostingNode, readPostingText } from './posting-text.ts';
 import { atsJobKey } from './readers/ats-embed.ts';
 import { checkTelegramPost, telegramPostOf } from './telegram-post.ts';
+import { watchSeen } from './watchlist.ts';
 
 export type Verdict =
   | {
@@ -181,6 +184,22 @@ export const verifyPosting: Handler<'verify_posting'> = async (task, ctx) => {
       if (stage === 'verified') {
         tx.enqueue('score_posting', posting.id);
         if (!byEmail) tx.enqueue('read_form', posting.id);
+        const title = posting.title ?? result.title;
+        watchSeen(
+          tx,
+          [
+            {
+              listing: {
+                url: posting.canonicalUrl,
+                applyUrl,
+                title: title ?? posting.canonicalUrl,
+                company: posting.company ?? result.company,
+              },
+              where: `posting ${posting.id} applies there`,
+            },
+          ],
+          1,
+        );
       }
     },
   };
