@@ -13,6 +13,7 @@
 import type { Locator, Page } from 'playwright';
 import type { ElementRef, FieldSpec, RevealedBy } from './form-types.ts';
 import { refKey } from './form-types.ts';
+import { isAccountControl } from './sign-in.ts';
 import {
   asksSignIn,
   type FormSnapshot,
@@ -279,10 +280,11 @@ export interface Advance {
 /**
  * The step's advance control. A button is "next" only when its words clearly say so and
  * nothing in them says submit; anything else that could send the form counts as final, so
- * Read never presses it.
+ * Read never presses it. Sign-in and sign-up controls ("Login with GitHub" is a submit button
+ * on Djinni) are never either.
  */
 export function pickAdvance(buttons: SnapButton[]): Advance {
-  const candidates = buttons.filter((b) => !NOT_ADVANCE.test(b.text));
+  const candidates = buttons.filter((b) => !NOT_ADVANCE.test(b.text) && !isAccountControl(b.text));
   const inRootFirst = (list: SnapButton[]) => [
     ...list.filter((b) => b.inRoot),
     ...list.filter((b) => !b.inRoot),

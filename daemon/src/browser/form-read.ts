@@ -19,6 +19,7 @@ import {
   waitForForm,
 } from './form-engine.ts';
 import type { FieldSpec, FormRead, FormStep } from './form-types.ts';
+import { isAccountControl, isSignInPage, readSignInNote, signInWall } from './sign-in.ts';
 import { type SnapField, snapshotForm } from './snapshot.ts';
 
 export interface ReadJudge {
@@ -38,6 +39,11 @@ export interface ReadFormOptions {
   exploreMaxOptions?: number;
   /** Total option tries per step. */
   exploreBudget?: number;
+  /**
+   * Read in Applyant's signed-in profile (a site that shows its form only to signed-in
+   * candidates): a signed-out page is reported, since its anonymous form isn't the one sent.
+   */
+  signedIn?: boolean;
 }
 
 export type ReadFormResult =
@@ -169,6 +175,8 @@ export async function followApply(page: Page, signal?: AbortSignal): Promise<boo
         }))
         .catch(() => null);
       if (!info || info.inForm || info.submit || NOT_APPLY.test(info.text)) continue;
+      // "Log in to apply" leads to a sign-in, not to the form.
+      if (isAccountControl(info.text)) continue;
       if (info.href && /^https?:/.test(info.href) && !info.href.startsWith('mailto:')) {
         await page.goto(info.href, { waitUntil: 'domcontentloaded' });
       } else {
@@ -214,13 +222,21 @@ export async function readForm(page: Page, o: ReadFormOptions): Promise<ReadForm
   if (status >= 400) return { kind: 'no_form', note: `HTTP ${status}`, url: page.url() };
   await settle(page);
   await dismissConsent(page);
+  const signedOut = async () =>
+    o.signedIn && (await signInWall(page)) !== null
+      ? ({ kind: 'no_form', note: readSignInNote(o.url), url: page.url() } as const)
+      : null;
+  const before = await signedOut();
+  if (before) return before;
   let found = await waitForForm(page, 10_000);
   if (!found) found = await followApply(page, o.signal);
   if (!found) return { kind: 'no_form', note: 'no application form found', url: page.url() };
   await dismissConsent(page);
   const url = page.url();
+  const after = await signedOut();
+  if (after) return after;
   const first = await snapshotForm(page);
-  if (first?.signIn && first.fields.length <= 3) {
+  if (isSignInPage(url) || (first?.signIn && first.fields.length <= 3)) {
     return { kind: 'no_form', note: 'the apply page asks you to sign in first', url };
   }
 
@@ -267,7 +283,10 @@ export async function readForm(page: Page, o: ReadFormOptions): Promise<ReadForm
       notes.push(`refers back to the job description: "${f.label.slice(0, 160)}"`);
     }
   }
-  return { kind: 'form', read: { url, requirements: { steps }, notes } };
+  return {
+    kind: 'form',
+    read: { url, requirements: { steps }, notes, ...(o.signedIn ? { signedIn: true } : {}) },
+  };
 }
 
 /**

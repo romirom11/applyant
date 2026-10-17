@@ -44,7 +44,12 @@ export type DeliverOutcome =
   | { kind: 'applied'; receipt: DeliveryReceipt }
   /** `challenge`: a guarded platform's own check was on the page (the platform pauses). */
   | { kind: 'needs_candidate'; handOff: HandOff; challenge?: string }
-  | { kind: 'new_field'; field: NewFieldFound };
+  | { kind: 'new_field'; field: NewFieldFound }
+  /**
+   * The site asked the candidate to sign in before submit was pressed: nothing was sent, and no
+   * window is left open (the sign-in window needs the profile). `url`: where it asked.
+   */
+  | { kind: 'sign_in'; url: string; reason: string };
 
 /** The application stopped waiting for delivery while this one was queued: nothing to send. */
 export class DeliveryStale extends Error {

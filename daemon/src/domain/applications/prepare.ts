@@ -23,6 +23,7 @@
 import { join } from 'node:path';
 import { and, eq, inArray, notInArray } from 'drizzle-orm';
 import { type FormRead, refKey } from '../../browser/form-types.ts';
+import { signInSiteOf } from '../../browser/sign-in.ts';
 import {
   type AnswerRow,
   type ApplicationRow,
@@ -80,7 +81,14 @@ import {
   prepareStandardFields,
   profileText,
 } from './standard-fields.ts';
-import { applicationView, emitStage, loadAnswers, loadFieldRows, PREPARABLE } from './store.ts';
+import {
+  applicationView,
+  applyTarget,
+  emitStage,
+  loadAnswers,
+  loadFieldRows,
+  PREPARABLE,
+} from './store.ts';
 import { runWriter } from './writer.ts';
 import { buildWriterContext, type WriterQuestion } from './writer-context.ts';
 
@@ -115,6 +123,9 @@ export const prepareApplication: Handler<'prepare_application'> = async (task, c
   if (!posting) return noop;
 
   if (posting.formStatus === null) return waitForForm(app, posting);
+  // A sign-in site's form read anonymously (when the posting was verified) isn't the one that is
+  // sent: it's read once more, in the signed-in profile, before anything is prepared from it.
+  if (readAnonymously(ctx.read, posting)) return waitForForm(app, posting);
   // An email or Telegram target (phases 13, 15) has a form too: the message and the CV.
   const readable =
     posting.formStatus === 'verified' ||
@@ -927,6 +938,15 @@ function waitForResearch(app: ApplicationRow, company: CompanyRow): Outcome {
         .run();
     },
   };
+}
+
+function readAnonymously(read: HandlerContext['read'], posting: PostingRow): boolean {
+  return (
+    posting.formStatus === 'verified' &&
+    posting.form?.signedIn !== true &&
+    READABLE_STAGES.includes(posting.stage) &&
+    signInSiteOf(applyTarget(read, posting)) !== null
+  );
 }
 
 function waitForForm(app: ApplicationRow, posting: PostingRow): Outcome {

@@ -2,15 +2,20 @@
 // application form asks for (postings.form). Read-only: nothing is submitted or uploaded to
 // the employer (see browser/form-read.ts). The candidate's standard profile values steer the
 // dry-fill, so conditional fields are recorded under the branch their answer takes.
+//
+// A sign-in site (Djinni) shows its real form only to signed-in candidates: once the posting has
+// an application to prepare, its form is read in Applyant's signed-in profile instead.
 
 import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { guardReadOnly, readForm, readScope } from '../../browser/form-read.ts';
 import { type FormRead, fieldCount } from '../../browser/form-types.ts';
-import { isPlatformHold, readerFor } from '../../browser/platform-reader.ts';
+import { isPlatformHold, profileReader, readerFor } from '../../browser/platform-reader.ts';
+import { signInSiteOf } from '../../browser/sign-in.ts';
 import { emailForm } from '../../channels/email.ts';
 import { parseTelegramContact, telegramForm } from '../../channels/telegram.ts';
 import type { Db } from '../../db/client.ts';
 import {
+  applications,
   type FormStatus,
   type PostingRow,
   type PostingStage,
@@ -19,11 +24,10 @@ import {
 } from '../../db/schema.ts';
 import type { EventBus } from '../../queue/events.ts';
 import { runInTx } from '../../queue/tx.ts';
-import type { Handler, Tx } from '../../queue/types.ts';
+import type { Handler, HandlerContext, Tx } from '../../queue/types.ts';
 import { getStandardProfile } from '../knowledge/profile.ts';
-import { applyTarget } from './deliver.ts';
 import { FormJudge } from './form-judge.ts';
-import { formReadFor } from './store.ts';
+import { applyTarget, formReadFor, PREPARABLE } from './store.ts';
 
 /** Navigation failures are retried this many times before the read is marked failed. */
 export const READ_FORM_ATTEMPTS = 3;
@@ -63,19 +67,25 @@ export const readFormHandler: Handler<'read_form'> = async (task, ctx) => {
     decide: (role, req) => ctx.deps.models.decide(role, req),
     profile: getStandardProfile(ctx.read),
     job: { title: posting.title, company: posting.company },
+    url,
     taskId: task.id,
     signal: ctx.signal,
     progress: (message) => ctx.progress({ message }),
   });
 
+  // Verifying a posting reads it anonymously, like any other: hundreds of Djinni postings don't
+  // each open the candidate's browser, only the ones with an application.
+  const signedIn = signInSiteOf(url) !== null && preparing(ctx.read, posting.id);
   let outcome: Awaited<ReturnType<typeof readForm>>;
   let blocked = 0;
   try {
-    // An Easy Apply / Xing form is read in the signed-in profile, under the guardrails.
-    const reader = readerFor(ctx.deps, url, {
-      taskId: task.id,
-      progress: (message) => ctx.progress({ message }),
-    });
+    // An Easy Apply / Xing form is read in the signed-in profile too, under the guardrails.
+    const reader = signedIn
+      ? profileReader(ctx.deps.submit)
+      : readerFor(ctx.deps, url, {
+          taskId: task.id,
+          progress: (message) => ctx.progress({ message }),
+        });
     outcome = await reader.withPage(
       async (page) => {
         const guard = await guardReadOnly(readScope(page));
@@ -85,6 +95,7 @@ export const readFormHandler: Handler<'read_form'> = async (task, ctx) => {
             judge,
             signal: ctx.signal,
             progress: (message) => ctx.progress({ message }),
+            ...(signedIn ? { signedIn: true } : {}),
           });
         } finally {
           blocked = guard.blocked.length;
@@ -127,6 +138,16 @@ export const readFormHandler: Handler<'read_form'> = async (task, ctx) => {
     commit: (tx) => save(tx, posting, 'verified', summariseForm(read), read),
   };
 };
+
+/** The posting has an application that may still be prepared. */
+function preparing(read: HandlerContext['read'], postingId: number): boolean {
+  const app = read
+    .select({ stage: applications.stage })
+    .from(applications)
+    .where(eq(applications.postingId, postingId))
+    .get();
+  return !!app && PREPARABLE.includes(app.stage);
+}
 
 function save(
   tx: Tx,

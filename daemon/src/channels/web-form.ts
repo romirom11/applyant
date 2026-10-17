@@ -147,6 +147,7 @@ export class WebFormChannel implements Channel {
     const result = await this.d.submit.deliver<
       | { kind: 'submitted'; url: string; confirmationText: string | null }
       | { kind: 'new_field'; ref: string; spec: ReturnType<typeof toSpec>; value: string }
+      | { kind: 'sign_in'; url: string; reason: string }
       | {
           kind: 'handoff';
           reason: string;
@@ -179,6 +180,7 @@ export class WebFormChannel implements Channel {
               decide: (role, req) => this.d.models.decide(role, req),
               profile,
               job: { title: posting.title, company: posting.company },
+              url,
               taskId: ctx.taskId,
               signal: ctx.signal,
               progress: ctx.progress,
@@ -227,10 +229,24 @@ export class WebFormChannel implements Channel {
           keepOpen: false,
         };
       }
-      // Hand-off: save a snapshot, restore the window, and leave it open. On LinkedIn/Xing,
-      // first: is this where the platform challenged the session?
+      // On LinkedIn/Xing, first: is this where the platform challenged the session? Its sign-in
+      // wall is one too: the platform pauses, and the page stays open, as for any challenge.
       const challenge =
-        outcome.challenge ?? (ctx.challenge ? await ctx.challenge(page).catch(() => null) : null);
+        (outcome.kind === 'handoff' ? outcome.challenge : undefined) ??
+        (ctx.challenge ? await ctx.challenge(page).catch(() => null) : null);
+      if (outcome.kind === 'sign_in' && !challenge) {
+        // Nothing to finish here: the candidate signs in through the sign-in window, which
+        // needs the profile to itself, so the page closes.
+        return {
+          result: { kind: 'sign_in', url: outcome.url, reason: outcome.reason },
+          keepOpen: false,
+        };
+      }
+      const stop =
+        outcome.kind === 'sign_in'
+          ? { reason: outcome.reason, scope: 'step' as const, step: outcome.step, fieldLabel: null }
+          : outcome;
+      // Hand-off: save a snapshot, restore the window, and leave it open.
       const snapshotPath = await saveSnapshot(page, this.d.snapshotsDir, ctx.taskId).catch(
         () => null,
       );
@@ -238,10 +254,10 @@ export class WebFormChannel implements Channel {
       return {
         result: {
           kind: 'handoff',
-          reason: outcome.reason,
-          scope: outcome.scope,
-          step: outcome.step,
-          fieldLabel: outcome.fieldLabel,
+          reason: stop.reason,
+          scope: stop.scope,
+          step: stop.step,
+          fieldLabel: stop.fieldLabel,
           snapshotPath,
           challenge,
         },
@@ -274,6 +290,7 @@ export class WebFormChannel implements Channel {
         field: { ref: result.ref, spec: result.spec, value: result.value },
       };
     }
+    if (result.kind === 'sign_in') return result;
     return {
       kind: 'needs_candidate',
       ...(result.challenge ? { challenge: result.challenge } : {}),

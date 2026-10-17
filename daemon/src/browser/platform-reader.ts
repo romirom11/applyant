@@ -4,6 +4,9 @@
 // inside the platform guardrails (its lane, pacing, the candidate-active wait and the pause) but
 // not counted against the daily caps. A challenge on the page pauses the platform and leaves the
 // page open for the candidate; the read then fails like any read that couldn't finish.
+//
+// A sign-in site's form (Djinni shows its real one only to signed-in candidates) is read in the
+// signed-in profile too, without guardrails: `profileReader`.
 import type { Page } from 'playwright';
 import { markSharedPage } from './form-read.ts';
 import {
@@ -78,6 +81,26 @@ export function readerFor(
           ...(o.taskId !== undefined ? { taskId: o.taskId } : {}),
         },
       );
+    },
+  };
+}
+
+/**
+ * Applyant's signed-in profile as a reader (one page at a time, between deliveries), for a form
+ * only signed-in candidates see. The read-only guard goes on the lent page, never the profile.
+ */
+export function profileReader(
+  submit: Pick<SubmitProfile, 'deliver'> | null | undefined,
+): PageReader {
+  return {
+    withPage<T>(fn: (page: Page) => Promise<T>): Promise<T> {
+      if (typeof submit?.deliver !== 'function') {
+        return Promise.reject(new Error("this form is read only in Applyant's signed-in browser"));
+      }
+      return submit.deliver(async (page) => {
+        markSharedPage(page);
+        return { result: await fn(page), keepOpen: false };
+      });
     },
   };
 }

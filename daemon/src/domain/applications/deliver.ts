@@ -1,8 +1,9 @@
 // deliver_application: fills and submits the real, live application form through its channel,
 // once the candidate has approved it. Result: `applied` (stage + applied_at + a receipt of
 // exactly what was sent) or `needs_candidate` with a hand-off — the browser window is left open
-// and filled when delivery got stuck mid-form. Like every handler, this never writes: it
-// returns a commit the queue applies under the lease.
+// and filled when delivery got stuck mid-form. A site that asks the candidate to sign in first
+// sends the application back to them unsent (stage needs_candidate). Like every handler, this
+// never writes: it returns a commit the queue applies under the lease.
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { and, desc, eq, inArray } from 'drizzle-orm';
@@ -18,6 +19,7 @@ import {
   platformName,
   platformOf,
 } from '../../browser/guardrails.ts';
+import { deliverySignInNote, isSignInNote, signInSiteOf, siteHost } from '../../browser/sign-in.ts';
 import { type DeliverContext, type DeliverOutcome, DeliveryStale } from '../../channels/channel.ts';
 import {
   type ApplicationRow,
@@ -33,6 +35,7 @@ import {
 import type { MailAccess } from '../../integrations/mail-service.ts';
 import type { Handler, HandlerContext, HandOff, Outcome, Tx } from '../../queue/types.ts';
 import { getStandardProfile } from '../knowledge/profile.ts';
+import { READABLE_STAGES } from './read-form.ts';
 import { waitForSecurityCode } from './security-code.ts';
 import {
   ApplicationError,
@@ -246,6 +249,39 @@ export const deliverApplication: Handler<'deliver_application'> = async (task, c
     };
   }
 
+  if (outcome.kind === 'sign_in') {
+    // Nothing was sent, and nothing can be until the candidate signs in: the application goes
+    // back to them. Once the sign-in window closes its form is read again (refreshAfterSignIn),
+    // and they approve it again.
+    const note = deliverySignInNote(sending.applyUrl ?? posting.canonicalUrl);
+    return {
+      kind: 'done',
+      commit: (tx) => {
+        const current = tx.db.select().from(applications).where(eq(applications.id, app.id)).get();
+        if (current?.stage !== 'approved') return;
+        // An earlier hand-off (this was a retry) closes too: no window waits for the candidate.
+        tx.db
+          .update(tasks)
+          .set({ status: 'done', updatedAt: tx.now })
+          .where(
+            and(
+              eq(tasks.kind, 'deliver_application'),
+              eq(tasks.entityId, app.id),
+              eq(tasks.status, 'needs_candidate'),
+            ),
+          )
+          .run();
+        const row = tx.db
+          .update(applications)
+          .set({ stage: 'needs_candidate', approvedAt: null, note, updatedAt: tx.now })
+          .where(eq(applications.id, app.id))
+          .returning()
+          .get();
+        emitStage(tx, row, 'needs_candidate', `application ${app.id}: ${note} (${outcome.reason})`);
+      },
+    };
+  }
+
   return needsCandidate(app, outcome.handOff.reason, outcome.handOff);
 };
 
@@ -343,6 +379,58 @@ export function setApplyForm(tx: Tx, app: ApplicationRow, form: ApplyForm): Appl
         ? `switched to the ${platformName(platformOf(targets.platform ?? '') ?? 'linkedin')} form`
         : "switched to the company's own form",
   });
+}
+
+/**
+ * The candidate signed in at `url` (the sign-in window closed). Unsent applications whose form
+ * is read in the signed-in profile on that site (Djinni, LinkedIn/Xing's own forms) may see
+ * another form now: Djinni shows its anonymous one until then. Each is read again and prepared
+ * again, as after a form switch. Left alone: forms the anonymous reader reads (they wouldn't
+ * change), forms already read signed in (LinkedIn/Xing's always are) unless a sign-in stopped
+ * the application, and hand-offs (the candidate's to finish; after a submit press, preparing
+ * one again would invite a second send). Returns the applications refreshed.
+ */
+export function refreshAfterSignIn(tx: Tx, url: string): number[] {
+  const site = signInSiteOf(url)?.key ?? platformOf(url);
+  if (!site) return [];
+  const rows = tx.db
+    .select({ app: applications, posting: postings })
+    .from(applications)
+    .innerJoin(postings, eq(applications.postingId, postings.id))
+    .where(inArray(applications.stage, SWITCHABLE))
+    .all();
+  const handedOff = new Set(
+    tx.db
+      .select({ id: tasks.entityId })
+      .from(tasks)
+      .where(and(eq(tasks.kind, 'deliver_application'), eq(tasks.status, 'needs_candidate')))
+      .all()
+      .map((r) => r.id),
+  );
+  const done: number[] = [];
+  for (const { app, posting } of rows) {
+    if (!READABLE_STAGES.includes(posting.stage)) continue;
+    if (handedOff.has(app.id) || (app.stage === 'needs_candidate' && app.submitAttemptedAt)) {
+      continue;
+    }
+    const target = applyTarget(tx.db, posting);
+    if ((signInSiteOf(target)?.key ?? platformOf(target)) !== site) continue;
+    const current =
+      posting.formStatus === 'verified' &&
+      (posting.form?.signedIn === true || platformOf(target) !== null);
+    if (current && !isSignInNote(app.note)) continue;
+    tx.db
+      .update(postings)
+      .set({ form: null, formStatus: null, formNote: null, formReadAt: null })
+      .where(eq(postings.id, posting.id))
+      .run();
+    requestPrepare(tx, app, {
+      rewrite: false,
+      why: `you signed in to ${siteHost(url)}: reading its form again`,
+    });
+    done.push(app.id);
+  }
+  return done;
 }
 
 /** Over a platform's daily cap (or the candidate is using it): the delivery runs again later. */

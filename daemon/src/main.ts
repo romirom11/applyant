@@ -17,7 +17,11 @@ import { closeDb, openDb, openReadDb } from './db/client.ts';
 import { ReadPool } from './db/read-pool.ts';
 import { agentRuns } from './db/schema.ts';
 import type { Deps } from './deps.ts';
-import { catchUpDeliveries, deliverApplication } from './domain/applications/deliver.ts';
+import {
+  catchUpDeliveries,
+  deliverApplication,
+  refreshAfterSignIn,
+} from './domain/applications/deliver.ts';
 import { interviewEvent } from './domain/applications/interview-event.ts';
 import { requestMailSync, syncMail } from './domain/applications/mail-status.ts';
 import { prepareApplication } from './domain/applications/prepare.ts';
@@ -149,8 +153,19 @@ export async function runDaemon(config: Config = loadConfig()): Promise<() => Pr
     userDataDir: config.browserDir,
     profile: submit,
     log: log.child({ part: 'login-window' }),
-    onClosed: ({ platform }) => {
+    onClosed: ({ url, platform }) => {
       if (platform) guardrails.markSignedIn(platform);
+      // Djinni shows its real form only once signed in: unsent applications there are read and
+      // prepared again.
+      try {
+        const ids = runInTx(db, bus, { now: new Date() }, (tx) => refreshAfterSignIn(tx, url));
+        if (ids.length) log.info('reading forms again after a sign-in', { url, applications: ids });
+      } catch (err) {
+        log.warn('could not refresh applications after a sign-in', {
+          url,
+          err: err instanceof Error ? err.message : String(err),
+        });
+      }
     },
   });
   const guardrails = new Guardrails({ db, bus, activity: profileActivity(login, submit) });

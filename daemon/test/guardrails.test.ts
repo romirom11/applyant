@@ -296,6 +296,44 @@ describe('challenges pause the platform and are never solved', () => {
     expect(guardrails.status('linkedin').applicationsToday).toBe(1);
   });
 
+  it("LinkedIn's sign-in wall at delivery is a challenge: LinkedIn pauses, the page stays open", async () => {
+    t = tempDb();
+    const bus = new EventBus();
+    const guardrails = new Guardrails({ db: t.db, bus, pacing: NO_PACING });
+    h = await prepareHarness(t, {}, { deps: { guardrails } });
+    const { context } = await (
+      h.submit as unknown as { ensure(): Promise<{ context: BrowserContext }> }
+    ).ensure();
+    // A session LinkedIn no longer trusts: the job's apply page sends it to the authwall.
+    await context.route('https://www.linkedin.com/**', (route) =>
+      new URL(route.request().url()).pathname.startsWith('/authwall')
+        ? route.fulfill({
+            contentType: 'text/html',
+            body: readFileSync(join(SITES, 'form-signin.html'), 'utf8'),
+          })
+        : route.fulfill({
+            status: 302,
+            headers: { location: 'https://www.linkedin.com/authwall?trk=apply' },
+          }),
+    );
+    const run = await runRead(browser, site.url('/linkedin-apply.html'));
+    closers.push(run.close);
+    setProfile(t.db, SYNTHETIC_PROFILE, now);
+    const id = seedPosting(t.db, run.read, { now, stage: 'verified' });
+    const apply = 'https://www.linkedin.com/jobs/view/4002/apply';
+    t.db.update(postings).set({ applyUrl: apply }).where(eq(postings.id, id)).run();
+    const app = runInTx(t.db, h.bus, { now }, (tx) => ensureApplication(tx, id, 't').app.id);
+    await h.worker.idle();
+    runInTx(t.db, h.bus, { now }, (tx) => approveApplication(tx, app));
+    await h.worker.idle();
+
+    const view = applicationView(t.db, app);
+    expect(view.handOff?.reason).toMatch(/LinkedIn asked to verify the session \(\/authwall\)/);
+    expect(guardrails.status('linkedin').pausedAt).not.toBeNull();
+    const pages = await h.submit.openPages();
+    expect(pages.some((p) => p.url().startsWith('https://www.linkedin.com/authwall'))).toBe(true);
+  });
+
   it('Easy Apply: the modal form is filled and sent through the form engine, as one guarded application', async () => {
     t = tempDb();
     const asked: CaptchaChallenge[] = [];
@@ -470,7 +508,7 @@ describe('the sign-in window (a fake Chrome binary)', () => {
     );
     expect(holds).toBe(0);
     await expect(login.open('ftp://example.test')).rejects.toThrow(/not a web address/);
-    await expect(login.open('myspace')).rejects.toThrow(/neither linkedin, xing nor a URL/);
+    await expect(login.open('myspace')).rejects.toThrow(/neither linkedin, xing, djinni nor a URL/);
     const t2 = await login.open('https://acme.wd3.myworkdayjobs.com/', { force: true });
     expect(t2.platform).toBeNull();
     expect(holds).toBe(1);

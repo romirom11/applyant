@@ -1,0 +1,48 @@
+<!doctype html>
+<!-- Trimmed from Djinni's real job page as a signed-out visitor sees it (2026-10): the header
+     offers Log In / Sign Up, and "Apply for the job" opens the anonymous form (anon_apply:
+     Message, Email, Your name). "Send application" there only leads on to a sign-in. -->
+<html lang="en"><head><meta charset="utf-8"><title>AI Product Engineer · Djinni</title></head><body>
+<nav class="navbar">
+  <div class="collapse navbar-collapse">
+    <ul class="nav navbar-nav">
+      <li class="nav-item"><a href="/developers/" class="nav-link">Candidates</a></li>
+      <li class="nav-item active"><a href="/jobs/" class="nav-link">Jobs</a></li>
+    </ul>
+  </div>
+  <ul class="nav navbar-nav ms-auto">
+    <li class="nav-item"><a class="sign-in-link nav-link" href="/login?lang=en&from=job_detail&next=/jobs/843207-ai-product-engineer/">Log In</a></li>
+    <li class="nav-item"><a class="sign-in-link nav-link" href="/signup?lang=en&from=job_detail">Sign Up</a></li>
+  </ul>
+</nav>
+<h1>AI Product Engineer</h1>
+<p>We build AI solutions for our customers.</p>
+<div class="js-inbox-action-btns">
+  <button class="btn btn-primary js-inbox-toggle-reply-form" id="toggle">Apply for the job</button>
+</div>
+<form method="post" id="apply_form" class="mt-5 js-inbox-reply-form" style="display:none">
+  <h2 id="job-application-heading">Job application</h2>
+  <div class="card card-body" aria-labelledby="job-application-heading">
+    <input type="hidden" name="anon_apply" value="true">
+    <h3>Message &amp; contact details</h3>
+    <label class="form-label" for="message">Message</label>
+    <textarea class="form-control" id="message" name="message" rows="6"
+      placeholder="Tell what interests you in this job and why you'd be a good fit."></textarea>
+    <label for="email" class="form-label">Email</label>
+    <input type="email" name="email" id="email" class="form-control" required value="" maxlength="320">
+    <label for="name_input" class="form-label">Your name</label>
+    <input type="text" name="name" id="name_input" class="form-control" value="" minlength="2" maxlength="255">
+    <button class="btn btn-primary btn-lg" name="job_apply" id="job_apply" type="submit">Send application</button>
+  </div>
+</form>
+<script>
+  document.getElementById('toggle').addEventListener('click', () => {
+    window.__opened = (window.__opened ?? 0) + 1;
+    document.getElementById('apply_form').style.display = 'block';
+  });
+  document.getElementById('apply_form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    fetch('/jobs/843207-ai-product-engineer/', { method: 'POST', body: new FormData(e.target) });
+  });
+</script>
+</body></html>
