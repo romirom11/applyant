@@ -6,7 +6,16 @@
 // store action a button calls, then renders the window into dir/NN-name.png. The window draws
 // itself into a bitmap, so no screen-recording permission is needed. The app quits at the end;
 // dir/log.txt says what each step saw.
+//
+//   Applyant --script steps.json --out dir/ --live [--behind] [--ambient]
+//
+// The same in the app's own window, on screen, captured by the window server: the toolbar,
+// materials and the job header's glow look as they do for a person (this needs the screen
+// recording permission of whatever started it). `--behind` leaves the window behind the other
+// apps' (the capture still gets it), so a run doesn't take the screen. `--ambient` keeps the endless motion going as in
+// the window in front, to measure what it costs while another app has the screen.
 import AppKit
+import ApplyantAPI
 import ApplyantKit
 import SwiftUI
 import ServiceManagement
@@ -16,7 +25,10 @@ struct ScriptStep: Decodable {
     var name: String
     var section: String?
     var posting: Int64?
+    /// An application: its job opens on the Application tab.
     var review: Int64?
+    /// The job detail's tab: job · application · company.
+    var tab: String?
     /// skip · interested · unskip · prepare · confirmAll · confirmFacts · editAnswer · setField · approve · submit · setCvMode ·
     /// startInterview · answerInterview · dismissInterview · pauseStrategy · resumeStrategy · runStrategy ·
     /// sourceOff · sourceOn (value: a source key or kind) · planSearch · rebuildRecipe (value: a source
@@ -29,7 +41,8 @@ struct ScriptStep: Decodable {
     /// screen, or every one with value "all") · overviewWindow (value: 7 | 30 | all) · addPosting (value:
     /// URL; renders the Add posting sheet) · openAgentRuns (model runs; value "search": the search
     /// runs) · setApplicationNotes (text) · addApplicationContact (contact) · deleteApplicationContact
-    /// (value: contact id) · useCvTemplate (value: a folder) · resetCvTemplate · openCvTemplate · wait
+    /// (value: contact id) · useCvTemplate (value: a folder) · resetCvTemplate · openCvTemplate · toast
+    /// (value "sent" or "skipped": the toast those show, with nothing done) · wait
     var action: String?
     var application: Int64?
     var facts: [Int64]?
@@ -62,6 +75,8 @@ struct ScriptStep: Decodable {
     var contact: [String: String]?
     var width: Double?
     var height: Double?
+    /// light · dark: the app's appearance from this step on.
+    var appearance: String?
     /// The setup window instead of the main one, on this step (connections · import ·
     /// preferences · interview); "main" goes back. `project`: the Projects section, this project open;
     /// sheet "repositories": its repository picker. A sheet is its own window, so the setup is
@@ -73,39 +88,75 @@ struct ScriptStep: Decodable {
     var sheet: String?
     /// The Projects section: open this project (its id).
     var project: Int64?
+    /// New's filter from this step on: good · all.
+    var newFilter: String?
+    /// Scrolls the scroll view under this point of the window (x, y from its top left, in
+    /// points) down by `scrollBy` points, before the render.
+    var scrollAt: [Double]?
+    var scrollBy: Double?
 }
 
 @MainActor
 final class ScriptRunner {
     private let store: AppStore
+    private let toasts: Toasts
     private let steps: [ScriptStep]
     private let out: URL
+    /// The app's own window on screen, captured by the window server (`--live`).
+    private let live: Bool
+    /// Opens the app's main window (the delegate's).
+    var showWindow: (() -> Void)?
+    /// The same without bringing the app forward (`--behind`).
+    var openWindowQuietly: (() -> Void)?
+    /// `--live --behind`: the window stays behind whatever the person at the Mac is using.
+    private let behind: Bool
     private var window: NSWindow?
     private var log: [String] = []
 
-    init?(arguments: [String], store: AppStore) {
+    init?(arguments: [String], store: AppStore, toasts: Toasts) {
         guard let i = arguments.firstIndex(of: "--script"), i + 1 < arguments.count,
               let o = arguments.firstIndex(of: "--out"), o + 1 < arguments.count,
               let data = try? Data(contentsOf: URL(fileURLWithPath: arguments[i + 1])),
               let steps = try? JSONDecoder().decode([ScriptStep].self, from: data)
         else { return nil }
         self.store = store
+        self.toasts = toasts
         self.steps = steps
         out = URL(fileURLWithPath: arguments[o + 1])
+        live = arguments.contains("--live")
+        behind = arguments.contains("--behind")
+        EndlessMotion.always = arguments.contains("--ambient")
     }
 
     func run() async {
         try? FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
-        let window = UnconstrainedWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 1440, height: 900),
-            styleMask: [.titled, .closable, .resizable],
-            backing: .buffered,
-            defer: false
-        )
-        window.contentView = NSHostingView(rootView: MainView(store: store))
-        window.setFrameOrigin(NSPoint(x: -4000, y: -4000))  // off screen: nobody needs to see it
-        window.orderFront(nil)
-        self.window = window
+        if live {
+            for _ in 0..<100 {
+                if behind { openWindowQuietly?() } else { showWindow?() }
+                if let main = NSApp.windows.first(where: { $0.isVisible && $0.styleMask.contains(.titled) && $0.frame.width >= 600 }) {
+                    window = main
+                    if behind { main.orderBack(nil) }
+                    break
+                }
+                try? await Task.sleep(for: .milliseconds(100))
+            }
+        } else {
+            let window = UnconstrainedWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 1440, height: 900),
+                styleMask: [.titled, .closable, .resizable],
+                backing: .buffered,
+                defer: false
+            )
+            window.contentView = NSHostingView(rootView: MainView(store: store, toasts: toasts))
+            window.setFrameOrigin(NSPoint(x: -4000, y: -4000))  // off screen: nobody needs to see it
+            window.orderFront(nil)
+            self.window = window
+        }
+        guard let window else {
+            note("no window to render")
+            NSApp.terminate(nil)
+            return
+        }
 
         await waitUntil(seconds: 20) { self.store.connection == .connected }
         note("connected: \(store.connection)")
@@ -115,6 +166,7 @@ final class ScriptRunner {
             if let w = step.width, let h = step.height {
                 window.setContentSize(NSSize(width: w, height: h))
             }
+            if let at = step.scrollAt, at.count == 2, let by = step.scrollBy { scroll(window, at: NSPoint(x: at[0], y: at[1]), by: by) }
             try? await Task.sleep(for: .milliseconds(600))
             let file = out.appendingPathComponent(String(format: "%02d-%@.png", n + 1, step.name))
             render(to: file)
@@ -127,9 +179,12 @@ final class ScriptRunner {
     }
 
     private func perform(_ s: ScriptStep) async {
+        if let appearance = s.appearance {
+            NSApp.appearance = NSAppearance(named: appearance == "dark" ? .darkAqua : .aqua)
+        }
         if let o = s.onboarding, let window {
             if o == "main" {
-                window.contentView = NSHostingView(rootView: MainView(store: store))
+                window.contentView = NSHostingView(rootView: MainView(store: store, toasts: toasts))
                 window.setContentSize(NSSize(width: 1440, height: 900))
             } else {
                 store.showOnboarding = false
@@ -165,7 +220,8 @@ final class ScriptRunner {
             default: break
             }
         }
-        if let section = s.section.flatMap(Section.init(rawValue:)) {
+        // A section by its raw value ("readyToReview") or its case name ("toReview").
+        if let name = s.section, let section = Section(rawValue: name) ?? Section.allCases.first(where: { "\($0)" == name }) {
             store.navigation.section = section
             store.navigation.postingId = nil
             store.navigation.reviewing = nil
@@ -173,8 +229,11 @@ final class ScriptRunner {
         if let posting = s.posting { store.navigation.postingId = posting }
         if let review = s.review {
             store.navigation.reviewing = review
+            store.navigation.tab = .application
             if let app = store.applications[review] { store.navigation.postingId = app.postingID }
         }
+        if let tab = s.tab.flatMap(DetailTab.init(rawValue:)) { store.navigation.tab = tab }
+        if let filter = s.newFilter.flatMap(NewFilter.init(rawValue:)) { store.navigation.newFilter = filter }
         if let id = s.searchStrategy {
             store.navigation.section = .search
             store.navigation.search = .strategy(id)
@@ -205,7 +264,7 @@ final class ScriptRunner {
         switch s.action {
         case "skip": await store.skip(posting: s.posting ?? 0, reason: s.reason ?? "")
         case "interested": await store.markInterested(posting: s.posting ?? 0)
-        case "unskip": await store.backToInbox(posting: s.posting ?? 0)
+        case "unskip": await store.undoDecision(posting: s.posting ?? 0)
         case "prepare":
             if let id = await store.prepare(posting: s.posting ?? 0) { store.navigation.reviewing = id }
         case "confirmAll": await store.confirmFacts(application: app, factIds: [])
@@ -261,6 +320,40 @@ final class ScriptRunner {
                 note("notifications: delivered now = \(delivered.map(\.request.identifier))")
             }
         case "regenerate": await store.regenerate(application: app)
+        case "toast":
+            // Only the picture: nothing is approved or skipped.
+            if s.value == "skipped" {
+                toasts.show(.init(systemImage: "xmark.circle", title: "Skipped", detail: "Senior Python Engineer") {})
+            } else {
+                toasts.show(.init(systemImage: "paperplane.fill", title: "Sent to Kalepa", detail: "Applyant fills the form and sends it now", celebrates: true))
+            }
+        case "pretend":
+            // Events made up here, applied to this window's store only: the daemon never hears.
+            let parts = (s.value ?? "").split(separator: ":").map(String.init)
+            func event(_ kind: String, _ entity: Int64, _ type: Applyant_V1_TaskEventType, _ message: String = "") -> DaemonEvent {
+                var e = DaemonEvent()
+                e.id = 0
+                e.message = message
+                e.payload = .task(.with {
+                    $0.taskID = 900_000 + entity
+                    $0.taskKind = kind
+                    $0.entityID = entity
+                    $0.type = type
+                })
+                return e
+            }
+            if parts.first == "deliver", parts.count == 3, let app = Int64(parts[1]) {
+                let counts = parts[2].split(separator: "/").map(String.init)
+                await store.apply(event("deliver_application", app, .started), live: false)
+                if counts.count == 2 {
+                    await store.apply(event("deliver_application", app, .progress, "\(counts[1]) fields"), live: false)
+                    await store.apply(event("deliver_application", app, .progress, "filling \(counts[0])/\(counts[1]): Email"), live: false)
+                }
+                note("pretend: delivering application \(app)")
+            } else if parts.first == "task", parts.count == 2 {
+                await store.apply(event(parts[1], 1, .started), live: false)
+                note("pretend: \(parts[1]) running")
+            }
         case "startInterview": await store.startInterview(project: s.interviewProject ?? 0)
         case "answerInterview", "dismissInterview":
             // The open question of the thread on screen.
@@ -447,6 +540,25 @@ final class ScriptRunner {
         }
     }
 
+    /// The innermost scroll view under the point, scrolled down (a long page's lower half).
+    private func scroll(_ window: NSWindow, at point: NSPoint, by distance: Double) {
+        guard let root = window.contentView else { return }
+        let inWindow = NSPoint(x: point.x, y: root.bounds.height - point.y)
+        func scrollViews(_ view: NSView) -> [NSScrollView] {
+            ((view as? NSScrollView).map { [$0] } ?? []) + view.subviews.flatMap(scrollViews)
+        }
+        let hits = scrollViews(root).filter { $0.convert($0.bounds, to: nil).contains(inWindow) }
+        guard let target = hits.last else {
+            note("scroll: no scroll view at \(point)")
+            return
+        }
+        let clip = target.contentView
+        let maxY = max((target.documentView?.frame.height ?? 0) - clip.bounds.height, 0)
+        let y = clip.isFlipped ? min(clip.bounds.origin.y + distance, maxY) : max(clip.bounds.origin.y - distance, 0)
+        clip.scroll(to: NSPoint(x: clip.bounds.origin.x, y: y))
+        target.reflectScrolledClipView(clip)
+    }
+
     private func waitUntil(seconds: Double, _ done: @escaping () -> Bool) async {
         let deadline = Date().addingTimeInterval(seconds)
         while Date() < deadline {
@@ -456,6 +568,14 @@ final class ScriptRunner {
     }
 
     private func render(to file: URL) {
+        if live, let window {
+            let capture = Process()
+            capture.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+            capture.arguments = ["-x", "-o", "-l", "\(window.windowNumber)", file.path]
+            try? capture.run()
+            capture.waitUntilExit()
+            return
+        }
         guard let view = window?.contentView else { return }
         view.layoutSubtreeIfNeeded()
         guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
@@ -503,7 +623,7 @@ final class ScriptRunner {
         if window?.contentView is NSHostingView<OnboardingView> {
             parts.append("onboarding=\(store.onboarding.current.rawValue) import=[\(store.importRows.map { "\($0.title): \($0.line)" }.joined(separator: " | "))] so far=\(OnboardingText.importProgress(store.setup))")
         }
-        parts.append("inbox=\(store.count(.inbox)) ready=\(store.count(.readyToReview)) applied=\(store.count(.applied)) interview=\(store.count(.interview))")
+        parts.append("new=\(store.count(.new)) toReview=\(store.count(.toReview)) applied=\(store.count(.applied)) interview=\(store.count(.interview))")
         return parts.joined(separator: " ")
     }
 

@@ -1,0 +1,108 @@
+{
+ "title": "Workable",
+ "totalSize": 7,
+ "nextPageToken": null,
+ "jobs": [
+  {
+   "id": "f655c713-9cfb-43ce-b00a-70863617b415",
+   "title": "Laravel Developer",
+   "state": "published",
+   "description": "<h2>Company Description</h2><p>DOTSOFT is one of the most innovative and pioneering ICT companies in Greece, with long experience and expertise in developing integrated information systems and managing complex projects. With modern infrastructure, well-trained employees, investments in cutting-edge technologies and strategic partnerships with leading companies, it provides a wide range of high-quality products and services that add value to its clientele.</p><h2>Job Description</h2><ul><li><strong>Design and develop</strong> robust and scalable web applications using the Laravel framework, fro",
+   "socialSharingDescription": "",
+   "employmentType": "Full-time",
+   "benefitsSection": "",
+   "requirementsSection": "",
+   "url": "https://jobs.workable.com/view/wqgRfqgECwdfAbsan5daMx/laravel-developer-in-thessaloniki-at-dotsoft",
+   "language": "",
+   "locations": [
+    "Thessaloniki, Greece"
+   ],
+   "location": {
+    "subregion": "Thessaloniki",
+    "countryName": "Greece"
+   },
+   "created": "2026-04-06T10:00:49.653Z",
+   "updated": "2026-04-06T10:00:49.653Z",
+   "company": {
+    "id": "6564bf774e6d92c79ecd9ec0",
+    "title": "Dotsoft",
+    "website": "https://dotsoft.gr/el",
+    "image": "https://production-job-board-public.s3.amazonaws.com/logos/dd637c22-4bae-4cf5-98fa-a4d679e2fd62",
+    "description": "",
+    "url": "https://www.igwork.gr/company/6564bf774e6d92c79ecd9ec0/jobs-at-dotsoft",
+    "socialSharingDescription": "Η DOTSOFT Α.Ε. είναι μία από τις πιο καινοτόμες και πρωτοπόρες εταιρείες πληροφορικής και επικοινωνιών, με μακρά τεχνογνωσία και εμπειρία στην ανάπτυξη και υποστήριξη σύνθετων έργων πληροφορικής. Η DOTSOFT Α.Ε επενδύει στην καινοτομία και στην ανάπτυξη..."
+   },
+   "isFeatured": false,
+   "workplace": "on_site",
+   "externalDomain": "https://www.igwork.gr"
+  },
+  {
+   "department": "NETWORK MANAGEMENT & BUSINESS INFORMATION SYSTEMS",
+   "id": "865711b5-af52-47b4-9766-ea979757905b",
+   "title": "Software Engineer - MIS & Tools",
+   "state": "published",
+   "description": "<p><strong>We are evolving — and we see you in our future!</strong></p><p>Are you a passionate <strong>Software Engineer</strong> who enjoys building smart solutions, automating processes and turning complex challenges into practical applications?</p><p>At <strong>VICTUS Networks</strong>, technology goes beyond telecommunications. It's also about developing the digital tools, platforms and automations that make our operations smarter, faster and more efficient.</p><p>We are looking for a <strong>Software Engineer</strong> to join our <strong>MIS &amp; Tools team</strong> and help us shape the",
+   "socialSharingDescription": "",
+   "employmentType": "Full-time",
+   "benefitsSection": "",
+   "requirementsSection": "<h3>What You'll Bring</h3><ul><li>Degree in <strong>Computer Science, Software Engineering, Information Technology</strong> or a related field.</li><li>At least <strong>2 years of relevant experience</strong> in software development.</li><li>Strong knowledge of <strong>PHP (8.0+) and Laravel</strong>.</li><li>Experience with <strong>JavaScript, HTML, CSS</strong> and modern web development technologies.</li><li>Familiarity with <strong>Vue.js</strong> and MVC architecture.</li><li>Good knowledge of relational databases and SQL (MySQL, Oracle, MSSQL or similar).</li><li>Experience in developing",
+   "url": "https://jobs.workable.com/view/hAa2vhXXLKtQiT7EZpFUMR/hybrid-software-engineer---mis-%26-tools-in-athens-at-victus-networks",
+   "language": "en",
+   "locations": [
+    "Athens, Attica, Greece"
+   ],
+   "location": {
+    "city": "Athens",
+    "subregion": "Attica",
+    "countryName": "Greece"
+   },
+   "created": "2026-10-14T13:25:29.445Z",
+   "updated": "2026-10-14T13:25:29.445Z",
+   "company": {
+    "id": "74ae871f-f641-4033-b030-503486699d77",
+    "title": "VICTUS NETWORKS",
+    "website": "http://www.victus.gr",
+    "image": "https://workablehr.s3.amazonaws.com/uploads/account/logo/217445/CoverVictus_silver_skouro4web.png",
+    "description": "",
+    "url": "https://jobs.workable.com/company/fpFHUB8ytTZLiW1t8Hjnei/jobs-at-victus-networks",
+    "socialSharingDescription": "We shape the future networks, working at the forefront of technology and enabling people to be confidently connected.VICTUS Networks emerged in the telecoms market in 2014 through a ground breaking deal between Vodafone Greece and Wind Hellas.The compa..."
+   },
+   "isFeatured": false,
+   "workplace": "hybrid"
+  },
+  {
+   "id": "d2a76be4-1569-4a0b-834f-262e146e8126",
+   "title": "Group Web Developer & Digital Platforms Engineer",
+   "state": "published",
+   "description": "<p>Στον <strong>Όμιλο SABO</strong> αναζητούμε έναν/μία <strong>Group Web Developer &amp; Digital Platforms Engineer</strong> που θα συμβάλει ενεργά στη δημιουργία και εξέλιξη του ψηφιακού οικοσυστήματος του Ομίλου. Αν σου αρέσει να <strong>δημιουργείς, να λύνεις προβλήματα και να εξελίσσεις digital λύσεις</strong>, αυτή είναι μια ευκαιρία να δεις τις ιδέες σου να γίνονται πραγματικότητα. </p><p><strong>Ο ρόλος σου</strong></p><p>Θα έχεις ενεργό ρόλο σε όλο το <strong>web development lifecycle</strong>, από τον σχεδιασμό και την ανάπτυξη έως το deployment και τη συνεχή βελτιστοποίηση. Συγκεκρι",
+   "socialSharingDescription": "",
+   "employmentType": "Full-time",
+   "benefitsSection": "",
+   "requirementsSection": "",
+   "url": "https://jobs.workable.com/view/s1HTFyuUn2ARbig3cfZ8No/group-web-developer-%26-digital-platforms-engineer-in-chalcis-at-sabo-sa",
+   "language": "",
+   "locations": [
+    "Chalcis, Euboea, Greece"
+   ],
+   "location": {
+    "city": "Chalcis",
+    "subregion": "Euboea",
+    "countryName": "Greece"
+   },
+   "created": "2026-09-17T06:16:48.491Z",
+   "updated": "2026-09-17T06:16:48.491Z",
+   "company": {
+    "id": "669a7499b2440ac7f6d2fa7c",
+    "title": "Sabo SA",
+    "website": "https://www.sabo.gr/",
+    "image": "https://production-job-board-public.s3.amazonaws.com/logos/17eece6e-d6bb-448b-9a24-5e7e09172c53",
+    "description": "",
+    "url": "https://www.igwork.gr/company/669a7499b2440ac7f6d2fa7c/jobs-at-sabo-sa",
+    "socialSharingDescription": "Η SABO είναι μια ελληνική βιομηχανική εταιρεία, με έδρα το Βασιλικό Χαλκίδας, στην Εύβοια. Διατηρεί θυγατρικές στη Βραζιλία, τη Ρουμανία και την Ιταλία και αποτελούν πεδίο δράσης της περισσότερες από 50 χώρες. Για 40 χρόνια υποστηρίζουμε την ανάπτυξη τ..."
+   },
+   "isFeatured": false,
+   "workplace": "on_site",
+   "externalDomain": "https://www.igwork.gr"
+  }
+ ]
+}

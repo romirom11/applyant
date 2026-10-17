@@ -1,0 +1,41 @@
+<!doctype html>
+<!-- Synthetic: the same Djinni job page for a signed-in candidate, as far as delivery cares. No
+     Log In / Sign Up in the header (the candidate's menu instead), no anon_apply; the form is the
+     message to the recruiter, sent with the candidate's Djinni profile. -->
+<html lang="en"><head><meta charset="utf-8"><title>AI Product Engineer · Djinni</title></head><body>
+<nav class="navbar">
+  <ul class="nav navbar-nav">
+    <li class="nav-item"><a href="/jobs/" class="nav-link">Jobs</a></li>
+    <li class="nav-item"><a href="/my/inbox/" class="nav-link">Inbox</a></li>
+  </ul>
+  <ul class="nav navbar-nav ms-auto">
+    <li class="nav-item dropdown"><a href="/my/profile/" class="nav-link">Alex P.</a></li>
+  </ul>
+</nav>
+<h1>AI Product Engineer</h1>
+<p>We build AI solutions for our customers.</p>
+<div class="js-inbox-action-btns">
+  <button class="btn btn-primary js-inbox-toggle-reply-form" id="toggle">Apply for the job</button>
+</div>
+<form method="post" id="apply_form" class="mt-5 js-inbox-reply-form" style="display:none">
+  <h2 id="job-application-heading">Job application</h2>
+  <div class="card card-body" aria-labelledby="job-application-heading">
+    <label class="form-label" for="message">Message</label>
+    <textarea class="form-control" id="message" name="message" rows="6"
+      placeholder="Tell what interests you in this job and why you'd be a good fit."></textarea>
+    <button class="btn btn-primary btn-lg" name="job_apply" id="job_apply" type="submit">Send application</button>
+  </div>
+</form>
+<div id="sent" style="display:none"><p>Thank you! Your application was sent to the recruiter.</p></div>
+<script>
+  document.getElementById('toggle').addEventListener('click', () => {
+    document.getElementById('apply_form').style.display = 'block';
+  });
+  document.getElementById('apply_form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    fetch('/jobs/843207-ai-product-engineer/', { method: 'POST', body: new FormData(e.target) });
+    e.target.remove();
+    document.getElementById('sent').style.display = 'block';
+  });
+</script>
+</body></html>

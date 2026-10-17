@@ -29,7 +29,8 @@ func company(_ id: Int64, _ name: String, flags: [(String, String)] = [], resear
     @Test func aCompanyReadsAsItsStateAndRedFlags() {
         let clean = company(1, "Acme")
         #expect(CompanyText.flags(clean) == "No red flags")
-        #expect(CompanyText.chips(clean).map(\.text) == ["No red flags"])
+        // No red flags is the usual case: nothing to set the row apart.
+        #expect(CompanyText.chips(clean).map(\.text) == [])
         let flagged = company(2, "Globex", flags: [("layoffs", "high"), ("reviews", "medium")], fresh: false)
         #expect(CompanyText.flags(flagged) == "2 red flags")
         #expect(CompanyText.chips(flagged).map(\.text) == ["2 red flags", "Stale"])
@@ -39,13 +40,36 @@ func company(_ id: Int64, _ name: String, flags: [(String, String)] = [], resear
         var queued = Company.with { $0.id = 3; $0.name = "Initech"; $0.status = "queued"; $0.researching = true }
         #expect(CompanyText.state(queued) == "Researching…")
         #expect(CompanyText.flags(queued) == nil)
-        #expect(CompanyText.buttonTitle(nil) == "Company research")
-        #expect(CompanyText.buttonTitle(clean) == "Research again")
+        #expect(CompanyText.buttonTitle(nil) == "Research Company")
+        #expect(CompanyText.buttonTitle(clean) == "Research Again")
+        #expect(CompanyText.flagKind(flagged.redFlags[0]) == "Layoffs")
+        #expect(CompanyText.severityChip(flagged.redFlags[0]) == Chip(text: "High", tone: .warning))
+        #expect(CompanyText.sourcesLabel(2) == "2 sources")
+        #expect(CompanyText.sourcesLabel(0) == nil)
         queued.researching = false
         queued.status = "failed"
         #expect(CompanyText.chips(queued).map(\.text) == ["Failed"])
         #expect(Section.companies.isBuilt)
         #expect(Score.componentTitles["company"] == "Company")
+    }
+
+    @Test func aProfilesFactsAndDatesAreShort() {
+        var c = company(4, "Kalepa")
+        c.sections = [
+            .with { $0.key = "founders"; $0.findings = [.with { $0.text = "Founded in 2018 in New York by Paul Monasterio" }] },
+            .with { $0.key = "funding"; $0.findings = [.with { $0.text = "Raised a $40M Series B in 2023 led by Avenir" }] },
+            .with { $0.key = "size"; $0.findings = [.with { $0.text = "About 120 employees across the US and Europe" }] },
+            .with { $0.key = "remote"; $0.findings = [.with { $0.text = "Offices in New York and Tel Aviv; remote in Europe" }] },
+        ]
+        let facts = CompanyText.keyFacts(c)
+        #expect(facts.map(\.label) == ["Founded", "Funding", "Size", "Offices"])
+        #expect(facts.map(\.value).prefix(3) == ["2018", "$40M Series B", "120 employees"])
+        #expect(facts.allSatisfy { $0.value.count <= 28 })
+        #expect(facts[1].full == "Raised a $40M Series B in 2023 led by Avenir")
+        #expect(CompanyText.eyebrow(date: "2022-05-17") == "MAY 2022")
+        #expect(CompanyText.eyebrow(date: "2021-09") == "SEP 2021")
+        #expect(CompanyText.eyebrow(date: "2020") == "2020")
+        #expect(CompanyText.chips(company(5, "Globex", flags: [("pay", "low")])).map(\.text) == ["1 red flag"])
     }
 
     @Test func companiesLoadAndFollowResearchEvents() async throws {

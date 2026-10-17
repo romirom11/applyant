@@ -7,6 +7,7 @@
 import { and, asc, count, desc, eq, gte, inArray } from 'drizzle-orm';
 import { type ElementRef, refKey } from '../../browser/form-types.ts';
 import { platformOf } from '../../browser/guardrails.ts';
+import { isSignInNote } from '../../browser/sign-in.ts';
 import type { Conn } from '../../db/client.ts';
 import {
   type AnswerRow,
@@ -656,6 +657,8 @@ export function applicationView(conn: Conn, id: number): ApplicationView {
   }
   const blockers: string[] = [];
   if (app.stage === 'preparing') blockers.push('still being prepared');
+  // Delivery (or Read) found the site signed out: the candidate signs in first.
+  if (app.stage === 'needs_candidate' && isSignInNote(app.note)) blockers.push(app.note as string);
   if (posting.decision === 'skipped') blockers.push('you skipped this posting');
   if (missing.length) {
     blockers.push(

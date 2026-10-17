@@ -51,7 +51,7 @@ public protocol DaemonAPI: Sendable {
 
     func skip(posting id: Int64, reason: String) async throws -> Posting
     func markInterested(posting id: Int64) async throws -> Posting
-    /// Takes a skip (or an interest) back: the posting returns to the Inbox undecided.
+    /// Takes a skip (or a save) back: the posting is undecided again.
     func undoDecision(posting id: Int64) async throws -> Posting
     /// Starts (or re-starts) preparation: for a posting, or an application (`rewrite` redrafts all).
     func prepare(posting id: Int64) async throws -> Application

@@ -111,7 +111,7 @@ export function registerPlatforms(
   platforms
     .command('signin <target>')
     .description(
-      "open Applyant's browser profile (plain Chrome, no automation) to sign in once: linkedin, xing or a URL",
+      "open Applyant's browser profile (plain Chrome, no automation) to sign in once: linkedin, xing, djinni or a URL",
     )
     .option('--force', "close windows left open for you in Applyant's browser first")
     .option(

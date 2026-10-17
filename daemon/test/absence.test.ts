@@ -3,7 +3,7 @@
 import { eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { type EventRow, postings } from '../src/db/schema.ts';
-import { addSource } from '../src/domain/search/sources.ts';
+import { addSource, setSourceEnabled } from '../src/domain/search/sources.ts';
 import { type TempDb, tempDb } from './helpers/db.ts';
 import { recordedFetch, type SearchHarness, searchHarness } from './helpers/search.ts';
 
@@ -177,6 +177,80 @@ describe('absence from a source', () => {
       closed: 0,
       reverify: 1,
     });
+    expect(reverifyCount()).toBe(before + 1);
+  });
+
+  it("a partial source that stops listing it asks nothing while the board's complete list still has it", async () => {
+    const remoteok = (...ids: number[]) =>
+      h.fetch.replies.set('https://remoteok.com/api', {
+        body: JSON.stringify([
+          { legal: 'notice' },
+          ...ids.map((id) => ({
+            id: String(id),
+            position: id === 1 ? 'Senior AI Engineer' : 'Staff AI Engineer',
+            company: 'Acme AI',
+            url: `https://remoteok.com/remote-jobs/${id}`,
+            apply_url: `https://boards.greenhouse.io/acmeai/jobs/${id}`,
+          })),
+        ]),
+      });
+    remoteok(1, 2);
+    await h.run({
+      name: 'AI',
+      queries: ['ai engineer'],
+      sources: ['greenhouse', 'board:remoteok'],
+    });
+    scoredLongAgo('Staff AI Engineer');
+    remoteok(1);
+    later(6);
+    const before = reverifyCount();
+    const run = await h.again(1);
+    expect(h.runRow(run)?.results.find((r) => r.sourceKey === 'board:remoteok')).toMatchObject({
+      reverify: 0,
+    });
+    expect(reverifyCount()).toBe(before);
+    // Once the board stops listing it too, it's checked (RemoteOK's link is still open).
+    reply(board(job(1, 'Senior AI Engineer')));
+    later(6);
+    const last = await h.again(1);
+    expect(h.runRow(last)?.results.find((r) => r.sourceKey === 'greenhouse:acmeai')).toMatchObject({
+      closed: 0,
+      reverify: 1,
+    });
+    expect(reverifyCount()).toBe(before + 1);
+  });
+
+  it("a complete list nobody has read for days doesn't vouch for it any more", async () => {
+    const remoteok = (...ids: number[]) =>
+      h.fetch.replies.set('https://remoteok.com/api', {
+        body: JSON.stringify([
+          { legal: 'notice' },
+          ...ids.map((id) => ({
+            id: String(id),
+            position: 'Senior AI Engineer',
+            company: 'Acme AI',
+            url: `https://remoteok.com/remote-jobs/${id}`,
+            apply_url: `https://boards.greenhouse.io/acmeai/jobs/${id}`,
+          })),
+        ]),
+      });
+    remoteok(1);
+    await h.run({
+      name: 'AI',
+      queries: ['ai engineer'],
+      sources: ['greenhouse', 'board:remoteok'],
+    });
+    // The Greenhouse kind is switched off: its board's last (complete) read still lists the
+    // posting, but nobody reads that board any more.
+    setSourceEnabled(t.db, 'greenhouse', false);
+    remoteok();
+    later(4 * 24);
+    scoredLongAgo('Senior AI Engineer');
+    const before = reverifyCount();
+    const run = await h.again(1);
+    expect(h.runRow(run)?.results).toEqual([
+      expect.objectContaining({ sourceKey: 'board:remoteok', reverify: 1 }),
+    ]);
     expect(reverifyCount()).toBe(before + 1);
   });
 

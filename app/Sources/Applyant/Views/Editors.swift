@@ -28,7 +28,7 @@ struct PreferencesEditor: View {
                     Stepper(PreferenceChoices.dailyCap(form.dailyCap), value: Binding(
                         get: { form.dailyCap }, set: { form.dailyCap = $0; saved = false }
                     ), in: 0 ... 50)
-                    Text(PreferenceChoices.dailyCapNote).font(.caption).foregroundStyle(.secondary)
+                    Text(PreferenceChoices.dailyCapNote).textRole(.meta)
                 }
                 ForEach(PreferencesForm.components, id: \.self) { c in
                     Stepper("\(PreferenceChoices.weight(c)): \(form.weights[c] ?? 0)", value: Binding(
@@ -38,13 +38,13 @@ struct PreferencesEditor: View {
             } header: {
                 Text("Score")
             } footer: {
-                Text("How much each part counts in a posting's score (relative weights).").font(.caption).foregroundStyle(.secondary)
+                Text("How much each part counts in a posting's score (relative weights).").textRole(.meta)
             }
             HStack {
-                if saved { Label("Saved", systemImage: "checkmark.circle.fill").foregroundStyle(.green) }
+                if saved { Label("Saved", systemImage: "checkmark.circle.fill").foregroundStyle(Theme.good) }
                 Spacer()
                 Button("Revert") { reload() }.disabled(!form.hasChanges)
-                Button("Save preferences") {
+                Button("Save Preferences") {
                     let f = form
                     Task {
                         saved = await store.savePreferences(f)
@@ -55,6 +55,7 @@ struct PreferencesEditor: View {
             }
         }
         .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
         .task {
             guard !loaded else { return }
             await store.openPreferences()
@@ -75,7 +76,7 @@ struct PreferencesSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text("Preferences").font(.title2.bold())
+                Text("Preferences").textRole(.title)
                 Spacer()
                 Button("Done", action: close).keyboardShortcut(.cancelAction)
             }
@@ -98,32 +99,32 @@ struct StrategyEditorSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(strategy == nil ? "New search" : "Edit search").font(.title2.bold())
+            Text(strategy == nil ? "New search" : "Edit search").textRole(.title)
             Text("A search (a “strategy”) looks for job titles in the sources you pick, on a schedule.")
-                .font(.callout).foregroundStyle(.secondary)
+                .textRole(.body, color: Theme.secondaryText)
             Form {
                 TextField("Name", text: $form.name, prompt: Text("AI Engineer · Remote EU"))
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Looks for (one title phrase per line)")
                     TextEditor(text: $form.queries)
-                        .font(.body)
-                        .frame(minHeight: 70)
+                        .glassEditor(minHeight: 70)
                     Text("A listing matches when every word of one phrase is in its title; \"-word\" excludes. Empty: every listing.")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .textRole(.meta)
                 }
                 Toggle("Remote jobs", isOn: $form.remote)
                 TextField("Also in", text: $form.locations, prompt: Text("Athens, Cyprus, Germany (empty: anywhere)"))
                 TextField("Reads", text: $form.sources, prompt: Text("all"))
                 Text("Which sources this search reads: “all” (every source switched on in Search), or a comma-separated list of kinds (\(store.search.kinds.map(\.kind).joined(separator: ", "))) or single sources by the short name under each one in Search (for example board:hn).")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .textRole(.meta)
                 Stepper("Every \(form.everyHours) h", value: $form.everyHours, in: 1 ... 168)
                 Toggle("Paused (doesn't run until resumed)", isOn: $form.paused)
             }
             .formStyle(.grouped)
+            .scrollContentBackground(.hidden)
             HStack {
                 Spacer()
                 Button("Cancel", action: close).keyboardShortcut(.cancelAction)
-                Button(strategy == nil ? "Add strategy" : "Save") {
+                Button(strategy == nil ? "Add Search" : "Save") {
                     let f = form
                     Task { if await store.saveStrategy(f, id: strategy?.id) != nil { close() } }
                 }
@@ -150,14 +151,13 @@ struct AddBoardOrPage: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
                 TextField("Add a board or career page URL", text: $input)
-                    .textFieldStyle(.roundedBorder)
-                    .controlSize(.small)
+                    .textFieldStyle(.glass)
                     .onSubmit(add)
                 Button("Add", action: add)
                     .controlSize(.small)
                     .disabled(SourceInput.url(input) == nil)
             }
-            if let added { Text(added).font(.caption).foregroundStyle(.secondary).lineLimit(2) }
+            if let added { Text(added).textRole(.meta).lineLimit(2) }
         }
         .help("A company's careers page or a job board: its feed or ATS board is found, or a listing recipe is built")
     }

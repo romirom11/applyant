@@ -221,6 +221,8 @@ public final class AppStore {
         applyMailbox(try? await box)
         mailQueue = (try? await queue) ?? []
         platforms = try? await api.listPlatforms()
+        // New's good-match bar follows the threshold, which may have changed meanwhile.
+        if let p = try? await api.getPreferences() { searchPreferences = p }
         if let status = try? await api.setupStatus(refresh: false) { applySetup(status) }
         await refreshUnconfirmedFacts(api)
         postings = Dictionary(p.map { ($0.id, $0) }, uniquingKeysWith: { _, last in last })
@@ -348,7 +350,7 @@ public final class AppStore {
                 applicationId: app.id,
                 postingId: app.postingID,
                 title: headline(app) + (app.hasScore ? " · \(app.score)" : ""),
-                body: "Ready to review"
+                body: "Ready to send: review it in To review"
             ))
         case .needsCandidate:
             onNotify?(StoreNotification(
@@ -456,8 +458,8 @@ public final class AppStore {
         if postingDetails[id] != nil { await openPosting(id) }
     }
 
-    /// A skipped posting goes back to the Inbox, undecided.
-    public func backToInbox(posting id: Int64) async {
+    /// A skipped (or saved) posting is undecided again: back in New, or with its application.
+    public func undoDecision(posting id: Int64) async {
         guard let api, let p = await attempt({ try await api.undoDecision(posting: id) }) else { return }
         postings[id] = p
         if postingDetails[id] != nil { await openPosting(id) }
@@ -512,13 +514,16 @@ public final class AppStore {
         record(app)
     }
 
-    public func approve(application id: Int64) async {
+    /// True when the daemon took it (delivery starts on its own).
+    @discardableResult
+    public func approve(application id: Int64) async -> Bool {
         guard let app = applicationDetails[id] ?? applications[id], ReviewRules.canApprove(app) else {
             lastError = "This application can't be approved yet."
-            return
+            return false
         }
-        guard let api, let approved = await attempt({ try await api.approve(application: id) }) else { return }
+        guard let api, let approved = await attempt({ try await api.approve(application: id) }) else { return false }
         record(approved)
+        return true
     }
 
     /// "Back to review": an approved application whose delivery stopped goes back to be corrected
@@ -1385,7 +1390,10 @@ public final class AppStore {
         return LanguageRows.parse(drafted).map(\.code)
     }
 
-    public func loadSpokenLanguages() async {
+    public func loadSpokenLanguages() async { await loadPreferences() }
+
+    /// The preferences, quietly, once (the dictation languages, New's good-match bar).
+    public func loadPreferences() async {
         guard let api, searchPreferences == nil else { return }
         if let p = try? await api.getPreferences() { searchPreferences = p }
     }
@@ -1472,7 +1480,7 @@ public final class AppStore {
 
     // MARK: Minor gaps: add posting, model runs, notes and contacts, interview prep, CV template
 
-    /// Inbox → Add posting…: AddPosting, then the postings list again. What the sheet says (a
+    /// New → Add posting…: AddPosting, then the postings list again. What the sheet says (a
     /// refusal is said there, not in the alert); nil for an empty field.
     public func addPosting(_ input: String) async -> AddPostingOutcome? {
         let s = input.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1584,59 +1592,120 @@ public final class AppStore {
 
     // MARK: Lists
 
-    public func items(_ section: Section) -> [ListItem] {
+    /// What a list shows: To review in its groups, New under its filter, the rest in one group.
+    public func groups(_ section: Section) -> [ListGroup] {
         switch section {
-        case .inbox:
-            return postings.values
-                .filter { $0.stage == .scored && $0.decision != "skipped" }
-                .sorted(by: byScore)
-                .map { item($0) }
-        case .interested:
-            return postings.values.filter { $0.decision == "interested" }.sorted(by: byScore).map { item($0) }
+        case .toReview:
+            // A skipped posting's application waits for nothing (a hand-off still needs finishing).
+            let open = applications.values.filter { app in
+                app.stage == .approved || postings[app.postingID]?.decision != "skipped"
+            }
+            let byGroup = Dictionary(grouping: open) { JobLists.ReviewGroup.of($0) }
+            return JobLists.ReviewGroup.allCases.compactMap { group in
+                let apps = byGroup[group] ?? []
+                guard !apps.isEmpty else { return nil }
+                return ListGroup(id: group.rawValue, title: group.title, items: applicationItems(apps))
+            }
+        case .new:
+            let floor = navigation.newFilter == .good ? goodMatchScore : Int32.min
+            return single(newPostings.filter { ($0.hasScore ? $0.score : -1) >= floor }.map { item($0) })
+        case .saved:
+            return single(postings.values.filter { $0.decision == "interested" }.sorted(by: byScore).map { item($0) })
         case .skipped:
-            return postings.values
+            return single(postings.values
                 .filter { $0.stage == .skipped || $0.decision == "skipped" }
                 .sorted { $0.firstSeenAt.date > $1.firstSeenAt.date }
-                .map { item($0) }
-        case .readyToReview:
-            return applicationItems { ($0.stage == .readyForReview || $0.stage == .needsCandidate) && postings[$0.postingID]?.decision != "skipped" }
-        case .preparing:
-            return applicationItems { $0.stage == .preparing && postings[$0.postingID]?.decision != "skipped" }
+                .map { item($0) })
         case .applied:
             // Sent, and where the mail (or the candidate) left them: rejections and withdrawals
-            // stay here, marked.
-            return applicationItems { [.approved, .applied, .rejected, .withdrawn].contains($0.stage) }
+            // stay here, marked. A delivery waiting on the candidate is in To review.
+            return single(applicationItems(applications.values.filter { Navigation.section(for: $0) == .applied }))
         case .interviews:
-            return applicationItems { $0.stage == .interview }
+            return single(applicationItems(applications.values.filter { $0.stage == .interview }))
         case .offers:
-            return applicationItems { $0.stage == .offer }
+            return single(applicationItems(applications.values.filter { $0.stage == .offer }))
         default:
             return []
         }
     }
 
+    /// A list's rows, top to bottom.
+    public func items(_ section: Section) -> [ListItem] { groups(section).flatMap(\.items) }
+
     public func count(_ section: Section) -> Int {
-        if section == .interview { return openInterviewCount }
+        switch section {
+        case .interview: return openInterviewCount
         // A badge on Search only while a run is going.
-        if section == .search { return search.strategies.filter(\.running).count + (planning ? 1 : 0) }
-        if section == .agentRuns { return 0 }
+        case .search: return search.strategies.filter(\.running).count + (planning ? 1 : 0)
+        case .agentRuns, .skipped: return 0
         // A badge on Companies only while research is going.
-        if section == .companies { return companies.filter(\.researching).count }
-        if section == .whichApplication { return mailQueue.count }
-        if section == .projects { return unconfirmedFacts.count }
-        return section.isBuilt ? items(section).count : 0
+        case .companies: return companies.filter(\.researching).count
+        case .whichApplication: return mailQueue.count
+        case .projects: return unconfirmedFacts.count
+        // What waits for the candidate: what needs them and what's ready to send.
+        case .toReview: return groups(.toReview).filter { $0.id != JobLists.ReviewGroup.preparing.rawValue }.map(\.items.count).reduce(0, +)
+        // New counts its good matches, whichever filter is on.
+        case .new: return newPostings.filter { $0.hasScore && $0.score >= goodMatchScore }.count
+        default: return items(section).count
+        }
+    }
+
+    /// New's good-match bar (JobLists.goodMatchScore), from the auto-prepare threshold.
+    public var goodMatchScore: Int32 { JobLists.goodMatchScore(threshold: searchPreferences?.threshold) }
+
+    /// How many of New's postings its filter hides now.
+    public var newHidden: Int {
+        navigation.newFilter == .good ? newPostings.count - count(.new) : 0
+    }
+
+    /// Scored postings nobody decided on that have no application at any stage: once one
+    /// starts, the posting is in To review (or further on) instead.
+    private var newPostings: [Posting] {
+        let applied = Set(applications.values.map(\.postingID))
+        return postings.values
+            .filter { $0.stage == .scored && $0.decision.isEmpty && !$0.hasApplicationID && !applied.contains($0.id) }
+            .sorted(by: byScore)
     }
 
     /// Applications waiting on the candidate: missing values, or a delivery to finish by hand.
     public var needsYou: [Application] {
-        applications.values
-            .filter { $0.stage == .needsCandidate || ($0.stage == .approved && $0.hasHandOff) }
-            .sorted { $0.id < $1.id }
+        review(.needsYou).compactMap { $0.applicationId.flatMap { applications[$0] } }.sorted { $0.id < $1.id }
     }
 
-    private func applicationItems(_ include: (Application) -> Bool) -> [ListItem] {
-        applications.values.filter(include)
-            .sorted { ($0.hasScore ? $0.score : -1, $0.id) > ($1.hasScore ? $1.score : -1, $1.id) }
+    /// One of To review's groups (the menu bar's counters and shortcuts).
+    public func review(_ group: JobLists.ReviewGroup) -> [ListItem] {
+        groups(.toReview).first { $0.id == group.rawValue }?.items ?? []
+    }
+
+    /// Opens a posting in the list it's in now (a company's postings).
+    public func showPosting(_ id: Int64) {
+        guard let posting = postings[id] else {
+            navigation.section = .new
+            navigation.postingId = id
+            navigation.reviewing = nil
+            return
+        }
+        let app = posting.hasApplicationID ? applications[posting.applicationID] : applications.values.first { $0.postingID == id }
+        navigation.showPosting(posting, application: app)
+    }
+
+    /// Runs an action on the job open in the detail (Approve, Skip). When it worked and the job
+    /// left the list it was picked from, the next one in that list opens instead of an empty pane.
+    public func advancing(_ action: () async -> Bool) async {
+        let section = navigation.section
+        let before = items(section)
+        guard let current = navigation.postingId, await action() else { return }
+        // The candidate moved on while it ran.
+        guard navigation.section == section, navigation.postingId == current else { return }
+        navigation.select(ListSelection.next(after: current, before: before, now: items(section)))
+    }
+
+    private func single(_ items: [ListItem]) -> [ListGroup] {
+        items.isEmpty ? [] : [ListGroup(id: "all", title: "", items: items)]
+    }
+
+    private func applicationItems(_ apps: [Application]) -> [ListItem] {
+        apps.sorted { ($0.hasScore ? $0.score : -1, $0.id) > ($1.hasScore ? $1.score : -1, $1.id) }
             .map { app in
                 if let posting = postings[app.postingID] { return item(posting, application: app) }
                 return ListItem(application: app, delivery: deliveries[app.id])

@@ -60,11 +60,13 @@ struct OnboardingView: View {
                     Button(skip == "later" ? "Later" : "Skip") {
                         Task { await store.settleStep(flow.current, as: skip) }
                     }
+                    .buttonStyle(.secondary)
                 }
                 if flow.current != .preferences {
                     Button(flow.current == .interview ? "Done" : "Continue") {
                         Task { await store.settleStep(flow.current) }
                     }
+                    .buttonStyle(.primary)
                     .keyboardShortcut(.defaultAction)
                 }
             }
@@ -136,6 +138,7 @@ private struct ConnectionsStep: View {
             CaptchaSection(store: store)
         }
         .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
         // Telegram's state, the captcha key's and the mailbox's (Settings loads the same).
         .task { await store.openSettings() }
     }
@@ -276,7 +279,7 @@ struct AssistantNotesBox: View {
                 NSPasteboard.general.setString(AssistantNotes.prompt, forType: .string)
                 copied = true
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.primary)
         }
         if showingPrompt {
             ScrollView {
@@ -290,9 +293,7 @@ struct AssistantNotesBox: View {
             TextEditor(text: $answer)
                 .font(.callout)
                 .frame(minHeight: 90, maxHeight: 180)
-                .scrollContentBackground(.hidden)
-                .padding(6)
-                .background(Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+                .glassEditor(minHeight: 90)
             HStack {
                 if added {
                     Label("Added: it's being read into facts for you to confirm.", systemImage: "checkmark.circle.fill")
@@ -436,6 +437,7 @@ private struct ImportStep: View {
             }
         }
         .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
         // The list is the profile's sources: load them (sync events keep them current).
         .task { await store.openProfile() }
         .fileImporter(isPresented: $picking, allowedContentTypes: [.pdf, .plainText, UTType(filenameExtension: "docx") ?? .data]) { result in
@@ -444,12 +446,13 @@ private struct ImportStep: View {
             case let .failure(error): store.lastError = "Couldn't open the file: \(error.localizedDescription)"
             }
         }
-        .sheet(isPresented: $editingProfile) { ProfileSheet(store: store) { editingProfile = false } }
+        .sheet(isPresented: $editingProfile) { ProfileSheet(store: store) { editingProfile = false }.worldSheet() }
         .sheet(isPresented: $editingProjects) {
             ProjectsSheet(store: store) {
                 editingProjects = false
                 Task { await store.refreshSetup() }
             }
+            .worldSheet()
         }
     }
 
@@ -571,11 +574,13 @@ private struct PreferencesStep: View {
                         saving = false
                     }
                 }
+                .buttonStyle(.primary)
                 .keyboardShortcut(.defaultAction)
                 .disabled(saving)
             }
         }
         .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
         .task {
             guard !loaded else { return }
             await fill()
@@ -629,10 +634,10 @@ private struct InterviewStep: View {
                 if let target = store.navigation.interview {
                     InterviewThreadView(store: store, target: target).id(target)
                 } else {
-                    ContentUnavailableView(
-                        "Pick a project",
+                    EmptyState(
+                        title: "Pick a project",
                         systemImage: ApplyantKit.Section.interview.symbol,
-                        description: Text("Applyant asks what your CV and repositories can't show. Or choose Later: the questions wait in Questions for you.")
+                        detail: "Applyant asks what your CV and repositories can't show. Or choose Later: the questions wait in Questions for you."
                     )
                 }
             }

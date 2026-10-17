@@ -252,7 +252,96 @@ func mailbox(_ status: String = "connected", address: String = "me@gmail.com", a
 
     @Test func theNoteReadsAsASentence() {
         #expect(MailText.noteSentence("a rejection that matches no application") == "A rejection that matches no application.")
+        #expect(MailText.noteSentence("a acknowledgement that matches no application") == "An acknowledgement that matches no application.")
+        #expect(MailText.noteSentence("matches a offer and a interview, not a user") == "Matches an offer and an interview, not a user.")
         #expect(MailText.noteSentence("Is it about this one?") == "Is it about this one?")
         #expect(MailText.noteSentence("  ") == "")
+    }
+
+    @Test func aMailboxGoogleSignedOutSaysSoInPlainWords() {
+        // The live mailbox's note after Google revoked the token.
+        var box = mailbox()
+        box.note = "sync failed: Google token endpoint: invalid_grant (Token has been expired or revoked.)"
+        #expect(MailText.problem(box) == "Gmail signed Applyant out: replies aren't being read")
+        #expect(MailText.chip(box) == Chip(text: "Signed out", tone: .warning))
+        #expect(MailText.connection(box) == "Google signed Applyant out. Reconnect to keep reading replies.")
+        #expect(MailText.menuLine(box) == MailText.connection(box))
+
+        #expect(MailText.problem(nil) == nil)
+        #expect(MailText.problem(mailbox()) == nil)
+        #expect(MailText.chip(mailbox()) == Chip(text: "Connected", tone: .good))
+        var failed = mailbox("failed")
+        failed.note = "access_denied"
+        #expect(MailText.problem(failed) == nil)
+        var imap = mailbox()
+        imap.kind = "imap"
+        imap.note = "sync failed: connection reset"
+        #expect(MailText.problem(imap) == "The mailbox stopped syncing: replies aren't being read")
+    }
+
+    @Test func anEmailReadsAsParagraphs() {
+        // The BambooHR acknowledgement as the daemon stores it.
+        let bamboo = """
+        Aloplay [https://aloplay.bamboohr.com/manage/logo/?v=44]
+
+        [https://staticfe.bamboohr.com/assets/images/email/circle-check-48-heavy-header.png]
+
+        Thanks Roman!
+
+        We received your application.
+
+        Dear Roman,
+
+
+
+
+        Thank you for your interest in joining Aloplay — we’re excited to receive your
+        application! 🚀✨
+
+
+
+
+        📌 What happens next?
+        A member of our Talent Acquisition team is taking a closer look at your
+        experience. If there’s a strong match, we’ll be in touch soon 💬✨
+
+
+
+
+        Warm regards,
+        Aloplay Talent Acquisition Team
+
+        BambooHR [https://staticfe.bamboohr.com/assets/images/email/footer-logo.png]
+        https://www.bamboohr.com
+
+        [https://email.app.bamboohr.com/o/eJyMkLFu6jAYhZ8Gb0G2MU48eAhcruQIAgKuuGWJ_NtO4xbbEQRU3r6iZezQ7Rx9ZzmfSSFcozd68Ck23kpMNG4N8Iy7gmU5sSwDR0XmTFu0ThDIDUUmhV7H-2NvvG04YYQTZK6XIQXp7hU-HqYdxG11nCuu3l4-6j8Lutqpiwr1Df7POoinH9i0g8M_v_bVDijpwM-W9rDtwVcCWWlYjpwkucCCcYoF6uSEYd1OxIQSI9op5IK2hEPBClsAYKyR_9WdEcO678egA6TUnccmBXSW71fr47g_-5se3Ijh16D96YsNstzvmnKzWap5uVfrupmv679qu_oui1WplmhwUcfhYeiZnpJukn4GAAD__8GXdMM]
+        """
+        #expect(MailText.readable(bamboo) == [
+            "Aloplay",
+            "Thanks Roman!",
+            "We received your application.",
+            "Dear Roman,",
+            "Thank you for your interest in joining Aloplay — we’re excited to receive your application! 🚀✨",
+            "📌 What happens next? A member of our Talent Acquisition team is taking a closer look at your experience. If there’s a strong match, we’ll be in touch soon 💬✨",
+            "Warm regards,\nAloplay Talent Acquisition Team",
+            "BambooHR https://www.bamboohr.com",
+        ])
+
+        // A greeting and a sign-off in one block start paragraphs of their own; a long link
+        // becomes its host.
+        let wrapped = "Hi Roman,\nThanks for applying.\nTrack it at https://www.greenhouse.io/applications/track?token=8f1c2b9a7d\nBest,\nMaria"
+        #expect(MailText.readable(wrapped) == ["Hi Roman,", "Thanks for applying. Track it at greenhouse.io ↗", "Best,\nMaria"])
+        #expect(MailText.readable("Hi Roman, thanks for applying.\nWe'll be in touch.") == ["Hi Roman, thanks for applying. We'll be in touch."])
+    }
+
+    @Test func theSenderIsANameWithoutItsAddress() {
+        #expect(MailText.sender("Maria Lopez <maria@acme.example>") == "Maria Lopez")
+        #expect(MailText.sender("\"Aloplay\" <notifications@app.bamboohr.com>") == "Aloplay")
+        #expect(MailText.sender("<no-reply@ashbyhq.com>") == "no-reply@ashbyhq.com")
+        #expect(MailText.sender("no-reply@ashbyhq.com") == "no-reply@ashbyhq.com")
+        var e = email(1, subject: "x")
+        #expect(MailText.sender(e) == "no-reply@greenhouse.io")
+        e.fromName = "Greenhouse"
+        #expect(MailText.sender(e) == "Greenhouse")
     }
 }

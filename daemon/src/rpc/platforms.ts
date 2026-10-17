@@ -92,7 +92,10 @@ export function platformRpcs(
     async signIn(req) {
       const s = need();
       if (!req.target.trim()) {
-        throw new ConnectError('sign in where? give linkedin, xing or a URL', Code.InvalidArgument);
+        throw new ConnectError(
+          'sign in where? give linkedin, xing, djinni or a URL',
+          Code.InvalidArgument,
+        );
       }
       try {
         const t = await s.login.open(req.target, { force: req.force });

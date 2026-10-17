@@ -1,6 +1,7 @@
 // Deliver mode: fill the real, live application form with the prepared values and submit it.
 // Shares `fillStep` with Read; the difference is what a missing or unfillable control means:
-// Read just notes it, Deliver either escalates to the field/step agent or hands off.
+// Read just notes it, Deliver either escalates to the field/step agent or hands off. A page that
+// asks the candidate to sign in (sign-in.ts) stops it before anything is filled or pressed.
 import type { Locator, Page } from 'playwright';
 import { type CaptchaStep, captchaStep } from './captcha.ts';
 import {
@@ -16,6 +17,7 @@ import {
 } from './form-engine.ts';
 import { dismissConsent, followApply } from './form-read.ts';
 import { refKey } from './form-types.ts';
+import { signInWall } from './sign-in.ts';
 import { type SnapField, snapshotForm } from './snapshot.ts';
 
 export interface DeliverJudge {
@@ -74,8 +76,16 @@ export type DeliverFormResult =
       /** The submit control was pressed before this: the application may have been sent. */
       afterSubmit?: boolean;
     }
-  /** A control only live delivery revealed, resolvable from the profile: back to Prepare, not sent. */
-  | { kind: 'new_field'; step: number; field: SnapField; value: string };
+  /**
+   * A control only live delivery revealed, resolvable from the profile: back to Prepare, not
+   * sent. Never after submit was pressed (that is a hand-off).
+   */
+  | { kind: 'new_field'; step: number; field: SnapField; value: string }
+  /**
+   * The page asks the candidate to sign in (a sign-in page, a password, a site's signed-out
+   * page) before submit was ever pressed: nothing was sent.
+   */
+  | { kind: 'sign_in'; step: number; url: string; reason: string };
 
 export { detectCaptcha } from './captcha.ts';
 
@@ -127,6 +137,28 @@ export const AFTER_SUBMIT =
 export async function deliverForm(page: Page, o: DeliverFormOptions): Promise<DeliverFormResult> {
   const pressed = { submit: false };
   const result = await deliverSteps(page, o, pressed);
+  if (result.kind === 'sign_in' && pressed.submit) {
+    // Too late for "nothing was sent": the candidate checks first, as after any press.
+    return {
+      kind: 'handoff',
+      scope: 'step',
+      step: result.step,
+      fieldLabel: null,
+      reason: `${AFTER_SUBMIT}After that the site showed a sign-in page (${result.reason}).`,
+      afterSubmit: true,
+    };
+  }
+  if (result.kind === 'new_field' && pressed.submit) {
+    // Not back to review either: approving it again would press submit a second time.
+    return {
+      kind: 'handoff',
+      scope: 'field',
+      step: result.step,
+      fieldLabel: result.field.label,
+      reason: `${AFTER_SUBMIT}After that the site asked for "${result.field.label || result.field.kind}", which wasn't prepared.`,
+      afterSubmit: true,
+    };
+  }
   return result.kind === 'handoff' && pressed.submit
     ? { ...result, reason: AFTER_SUBMIT + result.reason, afterSubmit: true }
     : result;
@@ -142,10 +174,16 @@ async function deliverSteps(
   await page.goto(o.url, { waitUntil: 'domcontentloaded' });
   await settle(page, 500);
   await dismissConsent(page);
+  // Signed out (Djinni's anonymous form, a redirect to a sign-in page): nothing is touched.
+  const wall = await signInWall(page);
+  if (wall) return { kind: 'sign_in', step: 1, url: page.url(), reason: wall };
   // A job page whose form opens from its Apply button (LinkedIn's Easy Apply modal, Xing's
   // apply dialog): pressed like Read pressed it.
   const found = (await waitForForm(page, 10_000)) || (await followApply(page, o.signal));
   if (!found) {
+    // The Apply button may have led to a sign-in that has no form controls of its own.
+    const led = await signInWall(page);
+    if (led) return { kind: 'sign_in', step: 1, url: page.url(), reason: led };
     return {
       kind: 'handoff',
       scope: 'step',
@@ -159,6 +197,10 @@ async function deliverSteps(
   for (let i = 0; i < maxSteps; i++) {
     o.signal?.throwIfAborted();
     const step = i + 1;
+    // Every step, before a field is touched: a sign-in is the candidate's, never a form to fill
+    // (the Apply button, or the previous step's control, may have led to one).
+    const signIn = await signInWall(page);
+    if (signIn) return { kind: 'sign_in', step, url: page.url(), reason: signIn };
     const snap = await snapshotForm(page);
     if (!snap) {
       return {

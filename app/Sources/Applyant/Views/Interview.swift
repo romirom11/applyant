@@ -9,34 +9,46 @@ struct InterviewList: View {
 
     var body: some View {
         let rows = store.interviewRows
-        Group {
+        let world = Theme.world(.interview)
+        VStack(alignment: .leading, spacing: 0) {
+            ModuleHeader(section: .interview, subtitle: rows.waiting.isEmpty ? "Nothing waits for an answer" : "\(rows.waiting.count) waiting for your answer")
+                .columnHeader()
             if rows.waiting.isEmpty && rows.projects.isEmpty {
-                ContentUnavailableView {
-                    Label("No projects yet", systemImage: ApplyantKit.Section.interview.symbol)
-                } description: {
-                    Text("Questions are asked about your projects. Import your CV or add a project first.")
-                } actions: {
+                EmptyState(
+                    title: "No projects yet",
+                    systemImage: ApplyantKit.Section.interview.symbol,
+                    detail: "Questions are asked about your projects. Import your CV or add a project first.",
+                    art: .projects
+                ) {
                     Button("Open Projects") {
                         store.showOnboarding = false
                         store.navigation.section = .projects
                     }
+                    .buttonStyle(.primary)
                     if store.showOnboarding {
-                        Button("Back to Import") { store.onboarding.open(.importing) }
+                        Button("Back to Import") { store.onboarding.open(.importing) }.buttonStyle(.secondary)
                     }
                 }
             } else {
-                List(selection: Binding(
-                    get: { store.navigation.interview },
-                    set: { store.navigation.interview = $0 }
-                )) {
-                    if !rows.waiting.isEmpty {
-                        SwiftUI.Section("Waiting for you") {
-                            ForEach(rows.waiting) { InterviewRowView(row: $0).tag($0.target) }
+                // One header per application: its questions under it, with nothing repeated.
+                let groups = InterviewText.groups(rows.waiting)
+                CardList(
+                    selection: Binding(get: { store.navigation.interview }, set: { store.navigation.interview = $0 }),
+                    order: groups.flatMap { $0.rows.map(\.target) } + rows.projects.map(\.target),
+                    tint: world.main
+                ) {
+                    ForEach(groups) { group in
+                        CardListHeader(title: group.title, count: group.rows.count)
+                            .lineLimit(1)
+                            .help(group.title)
+                        ForEach(group.rows) { row in
+                            SelectableCard(id: row.target) { InterviewRowView(row: row) }
                         }
                     }
                     if !rows.projects.isEmpty {
-                        SwiftUI.Section("Projects") {
-                            ForEach(rows.projects) { InterviewRowView(row: $0).tag($0.target) }
+                        CardListHeader(title: "Projects", count: rows.projects.count, tint: world.main)
+                        ForEach(rows.projects) { row in
+                            SelectableCard(id: row.target) { InterviewRowView(row: row) }
                         }
                     }
                 }
@@ -51,13 +63,15 @@ struct InterviewRowView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(row.title).font(.headline).lineLimit(2)
-            Text(row.subtitle).font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
+            Text(row.title).textRole(.rowTitle).lineLimit(2)
+            // An application's question needs only itself: the header names the application.
+            if case .project = row.target, !row.subtitle.isEmpty {
+                Text(row.subtitle).textRole(.meta).lineLimit(2)
+            }
             if !row.chips.isEmpty {
-                HStack(spacing: 4) { ForEach(row.chips, id: \.text) { ChipView(chip: $0) } }
+                HStack(spacing: 4) { ForEach(row.chips, id: \.text) { ChipView(chip: $0) } }.padding(.top, 2)
             }
         }
-        .padding(.vertical, 3)
     }
 }
 
@@ -65,7 +79,6 @@ struct InterviewThreadView: View {
     let store: AppStore
     let target: InterviewTarget
     @State private var answer = ""
-    @FocusState private var answering: Bool
     @State private var dictation = Dictation()
 
     var body: some View {
@@ -74,23 +87,21 @@ struct InterviewThreadView: View {
                 VStack(spacing: 0) {
                     ScrollViewReader { proxy in
                         ScrollView {
-                            VStack(alignment: .leading, spacing: 14) {
+                            VStack(alignment: .leading, spacing: Theme.blockSpacing) {
                                 header(thread)
-                                ForEach(thread.questions, id: \.id) { q in
-                                    exchange(q).id(q.id)
+                                ForEach(Array(thread.questions.enumerated()), id: \.element.id) { index, q in
+                                    QuestionExchange(question: q).id(q.id).entrance(index + 1)
                                 }
                                 footer(thread)
                             }
-                            .padding(20)
-                            .frame(maxWidth: 760, alignment: .leading)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .animation(Theme.Motion.smooth, value: thread.questions.map(\.status))
+                            .pageColumn()
                         }
                         .onChange(of: thread.questions.last?.id) { _, last in
                             if let last { withAnimation { proxy.scrollTo(last, anchor: .bottom) } }
                         }
                     }
                     if let open = InterviewText.openQuestion(thread) {
-                        Divider()
                         composer(open)
                     }
                 }
@@ -105,149 +116,92 @@ struct InterviewThreadView: View {
 
     @ViewBuilder
     private func header(_ thread: InterviewThread) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            if thread.hasProject {
-                let p = thread.project
-                Text(p.project.name).font(.title2.weight(.semibold))
-                Text(p.gaps.isEmpty
+        if thread.hasProject {
+            let p = thread.project
+            PageHeader(
+                title: p.project.name,
+                subtitle: p.gaps.isEmpty
                     ? "Its facts cover your role, what you built, the team and the results."
-                    : "Its facts don't show yet: " + p.gapLabels.joined(separator: "; ") + ".")
-                    .foregroundStyle(.secondary)
-            } else if let first = thread.questions.first {
-                Text(first.hasApplication ? first.application : "An application").font(.title2.weight(.semibold))
-                Text("The application asks this, and nothing Applyant knows answers it yet. Your answer is saved as facts and used for this application and later ones.")
-                    .foregroundStyle(.secondary)
-            }
-        }
-    }
-
-    private func exchange(_ q: InterviewQuestion) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .top, spacing: 8) {
-                Image(systemName: "bubble.left.fill").foregroundStyle(.secondary)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(q.text).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
-                    if q.hasContext {
-                        Text(q.origin == "application" ? "Missing: \(q.context)" : q.context)
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
-                }
-            }
-            .padding(10)
-            .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
-
-            if q.hasAnswer {
-                HStack {
-                    Spacer(minLength: 60)
-                    Text(q.answer)
-                        .textSelection(.enabled)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(10)
-                        .background(Color.accentColor.opacity(0.14), in: RoundedRectangle(cornerRadius: 10))
-                }
-            }
-            switch q.status {
-            case "processing":
-                Label("Reading your answer…", systemImage: "hourglass").font(.callout).foregroundStyle(.secondary)
-            case "dismissed":
-                Label("Left for later", systemImage: "clock").font(.callout).foregroundStyle(.secondary)
-            case "open" where q.hasNote:
-                Label(q.note, systemImage: "exclamationmark.triangle").font(.callout).foregroundStyle(.orange)
-            default:
-                EmptyView()
-            }
-            if !q.facts.isEmpty {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Saved as facts").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                    ForEach(q.facts, id: \.id) { f in
-                        Label {
-                            Text(f.text + (f.hasProjectSlug ? "  · \(f.projectSlug)" : "")).font(.callout)
-                        } icon: {
-                            Image(systemName: "checkmark.seal.fill").foregroundStyle(.green)
-                        }
-                    }
-                }
-                .padding(.leading, 26)
-            } else if q.status == "answered" {
-                Text(q.hasNote ? q.note : "Nothing saved from this answer")
-                    .font(.caption).foregroundStyle(.secondary).padding(.leading, 26)
-            }
+                    : "Its facts don't show yet: " + p.gapLabels.joined(separator: "; ") + "."
+            ) { ArtView(.projects, size: 56) }
+        } else if let first = thread.questions.first {
+            PageHeader(
+                title: first.hasApplication ? first.application : "An application",
+                subtitle: "Nothing Applyant knows answers this yet. Your answer is saved as facts for this application and later ones."
+            ) { ArtView(.questions, size: 56) }
         }
     }
 
     @ViewBuilder
     private func footer(_ thread: InterviewThread) -> some View {
         if thread.pending && InterviewText.openQuestion(thread) == nil {
-            HStack(spacing: 8) {
-                ProgressView().controlSize(.small)
+            HStack(spacing: 10) {
+                TypingDots()
                 Text(thread.questions.contains { $0.status == "processing" } ? "Reading your answer…" : "Writing a question…")
-                    .foregroundStyle(.secondary)
+                    .textRole(.body, color: Theme.secondaryText)
             }
+            .bubble(mine: false)
+            .transition(.opacity.combined(with: .move(edge: .bottom)))
         } else if InterviewText.canAskMore(thread) {
             let p = thread.project
             HStack {
                 if !thread.questions.isEmpty {
-                    Text(p.gaps.isEmpty ? "That's all for now." : "Nothing more asked for now.").foregroundStyle(.secondary)
+                    Text(p.gaps.isEmpty ? "That's all for now." : "Nothing more asked for now.")
+                        .textRole(.body, color: Theme.secondaryText)
                 }
                 Spacer()
-                Button(p.asked == 0 ? "Start the interview" : "Ask me more") {
+                Button {
                     Task { await store.startInterview(project: p.project.id) }
+                } label: {
+                    Label(p.asked == 0 ? "Start the Interview" : "Ask Me More", systemImage: "sparkles")
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.primary)
             }
         } else if !thread.hasProject, let q = thread.questions.last, q.hasApplicationID, q.status != "open", q.status != "processing" {
             HStack {
                 Text(q.status == "dismissed"
                     ? "Left for you to answer in review."
                     : "Your answer went to the application; it's prepared again with it.")
-                    .foregroundStyle(.secondary)
+                    .textRole(.body, color: Theme.secondaryText)
                 Spacer()
                 if let app = store.applications[q.applicationID] {
-                    Button("Open the application") {
-                        store.navigation.showReview(application: app.id, posting: app.postingID, stage: app.stage)
+                    Button("Open Application") {
+                        store.navigation.showReview(app)
                     }
+                    .buttonStyle(.secondary)
                 }
             }
         }
     }
 
+    /// The one composer (Chat's too): Later and dictation beside Send.
     private func composer(_ q: InterviewQuestion) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            TextEditor(text: $answer)
-                .font(.body)
-                .frame(minHeight: 70, maxHeight: 160)
-                .focused($answering)
-                .overlay(alignment: .topLeading) {
-                    if answer.isEmpty {
-                        Text("Your answer, in your own words: it's saved as a fact you stand behind")
-                            .foregroundStyle(.tertiary).padding(.top, 1).padding(.leading, 5).allowsHitTesting(false)
-                    }
-                }
-                .scrollContentBackground(.hidden)
-                .padding(6)
-                .background(Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+        VStack(alignment: .leading, spacing: Theme.Space.s) {
             if case let .failed(why) = dictation.state {
-                Text(why).font(.caption).foregroundStyle(.orange)
+                MetaLine(why, systemImage: "exclamationmark.triangle.fill", tone: .warning)
             } else if dictation.listening {
-                Text("Listening: speak, then press Stop. You can correct the text before sending.")
-                    .font(.caption).foregroundStyle(.secondary)
+                MetaLine("Listening: speak, then press Stop. You can correct the text before sending.", systemImage: "waveform")
             }
-            HStack {
+            Composer(
+                text: $answer,
+                placeholder: "Your answer…",
+                canSend: !answer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ) {
                 Button("Later") {
                     dictation.stop()
                     Task { await store.dismissInterview(target, question: q.id) }
                 }
+                .buttonStyle(.secondary)
                 .help(q.hasApplicationID ? "You can write this answer yourself in review" : "Skip this question for now")
                 DictateButton(dictation: dictation, spoken: store.spokenLanguages, text: $answer)
-                Spacer()
-                Button("Send") { send(q) }
-                    .buttonStyle(.borderedProminent)
-                    .keyboardShortcut(.return, modifiers: .command)
-                    .disabled(answer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            } send: {
+                send(q)
             }
+            .help("Your answer, in your own words: it's saved as a fact you stand behind")
         }
-        .padding(14)
-        .onAppear { answering = true }
+        .padding(Theme.cardPadding)
+        .glass(radius: Theme.panelRadius)
+        .pageColumn()
         .task { await store.loadSpokenLanguages() }
         .onDisappear { dictation.stop() }
     }
@@ -258,6 +212,90 @@ struct InterviewThreadView: View {
         dictation.stop()
         answer = ""
         Task { await store.answerInterview(target, question: q.id, text: text) }
+    }
+}
+
+/// A question and what came of it: Applyant's bubble (why it's asked folded under it), the
+/// candidate's answer, and the facts it was saved as.
+private struct QuestionExchange: View {
+    let question: InterviewQuestion
+    @State private var showsWhy = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        let q = question
+        VStack(alignment: .leading, spacing: Theme.Space.s) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Theme.brand)
+                    .padding(.top, 2)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: Theme.Space.xs) {
+                    Text(q.text)
+                        .textRole(.prose)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if q.hasContext, !q.context.isEmpty {
+                        DisclosureLine("Why it's asked", isExpanded: $showsWhy)
+                        if showsWhy {
+                            Text(q.context)
+                                .textRole(.body, color: Theme.secondaryText)
+                                .textSelection(.enabled)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .transition(.reveal(reduceMotion: reduceMotion))
+                        }
+                    }
+                }
+            }
+            .bubble(mine: false)
+            // The page is as wide as the window; a message keeps a reading measure.
+            .frame(maxWidth: Theme.bubbleWidth, alignment: .leading)
+            .padding(.trailing, 60)
+            .animation(Theme.Motion.pick(Theme.Motion.disclose, reduceMotion: reduceMotion), value: showsWhy)
+
+            if q.hasAnswer {
+                HStack {
+                    Spacer(minLength: 60)
+                    Text(q.answer)
+                        .textRole(.prose, color: .white)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .bubble(mine: true)
+                        .frame(maxWidth: Theme.bubbleWidth, alignment: .trailing)
+                }
+            }
+            switch q.status {
+            case "processing":
+                MetaLine("Reading your answer…", systemImage: "hourglass")
+            case "dismissed":
+                MetaLine("Left for later", systemImage: "clock")
+            case "open" where q.hasNote:
+                Callout(.warning, title: q.note)
+            default:
+                EmptyView()
+            }
+            if !q.facts.isEmpty {
+                VStack(alignment: .leading, spacing: Theme.Space.xs) {
+                    Text("Saved as facts").textRole(.label)
+                    ForEach(q.facts, id: \.id) { f in
+                        Label {
+                            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                Text(f.text).textRole(.body)
+                                if f.hasProjectSlug { Text(f.projectSlug).textRole(.meta) }
+                            }
+                        } icon: {
+                            Image(systemName: "checkmark.seal.fill").foregroundStyle(Theme.good)
+                        }
+                    }
+                }
+                .padding(.leading, 26)
+            } else if q.status == "answered" {
+                Text(q.hasNote ? q.note : "Nothing saved from this answer")
+                    .textRole(.meta)
+                    .padding(.leading, 26)
+            }
+        }
     }
 }
 
@@ -283,7 +321,7 @@ private struct DictateButton: View {
             } label: {
                 Label(dictation.listening ? "Stop" : "Dictate", systemImage: dictation.listening ? "stop.circle.fill" : "mic")
             }
-            .tint(dictation.listening ? .red : nil)
+            .tint(dictation.listening ? Theme.bad : nil)
             .keyboardShortcut("d", modifiers: .command)
             .help("Speak your answer (⌘D starts and stops): it's turned into text here by the Mac's speech recognition")
             Picker("Language", selection: Binding(

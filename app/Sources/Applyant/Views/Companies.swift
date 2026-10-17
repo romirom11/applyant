@@ -9,29 +9,41 @@ struct CompaniesList: View {
     let store: AppStore
 
     var body: some View {
-        Group {
+        let researching = store.companies.filter(\.researching).count
+        VStack(alignment: .leading, spacing: 0) {
+            ModuleHeader(section: .companies, subtitle: "\(store.companies.count) researched" + (researching > 0 ? " · \(researching) researching now" : ""))
+                .columnHeader()
             if store.companies.isEmpty {
-                ContentUnavailableView(
-                    "No company researched yet",
+                EmptyState(
+                    title: "No company researched yet",
                     systemImage: ApplyantKit.Section.companies.symbol,
-                    description: Text("Preparing an application researches its company. Company research on a posting does it now.")
+                    detail: "Preparing an application researches its company. Company research on a posting does it now.",
+                    art: .companies
                 )
             } else {
-                List(store.companies, id: \.id, selection: Binding(
-                    get: { store.navigation.company },
-                    set: { store.navigation.company = $0 }
-                )) { c in
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(c.name).font(.headline)
-                        Text(CompanyText.state(c) + " · \(c.postings.count) posting\(c.postings.count == 1 ? "" : "s")")
-                            .font(.subheadline).foregroundStyle(.secondary)
-                        let chips = CompanyText.chips(c)
-                        if !chips.isEmpty {
-                            HStack(spacing: 4) { ForEach(chips, id: \.text) { ChipView(chip: $0) } }
+                CardList(
+                    selection: Binding(get: { store.navigation.company }, set: { store.navigation.company = $0 }),
+                    order: store.companies.map(\.id),
+                    tint: Theme.world(.companies).main
+                ) {
+                    ForEach(store.companies, id: \.id) { c in
+                        SelectableCard(id: c.id) {
+                            HStack(alignment: .top, spacing: 12) {
+                                CompanyAvatar(name: c.name, size: 34)
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(c.name).textRole(.rowTitle).lineLimit(1)
+                                    Text(CompanyText.state(c) + " · \(c.postings.count) posting\(c.postings.count == 1 ? "" : "s")")
+                                        .textRole(.meta).lineLimit(1)
+                                    let chips = CompanyText.chips(c)
+                                    if !chips.isEmpty {
+                                        HStack(spacing: 4) { ForEach(chips, id: \.text) { ChipView(chip: $0) } }.padding(.top, 2)
+                                    }
+                                }
+                                .shimmer(c.researching)
+                            }
                         }
+                        .sheen(c.researching, radius: 15)
                     }
-                    .padding(.vertical, 3)
-                    .tag(c.id)
                 }
             }
         }
@@ -46,10 +58,11 @@ struct CompanyDetail: View {
         if let id = store.navigation.company {
             CompanyProfile(store: store, companyId: id).id(id)
         } else {
-            ContentUnavailableView(
-                "Companies",
+            EmptyState(
+                title: "Companies",
                 systemImage: ApplyantKit.Section.companies.symbol,
-                description: Text("Pick a company on the left: what it does, its red flags, and where each finding comes from.")
+                detail: "Pick a company on the left: what it does, its red flags, and where each finding comes from.",
+                art: .companies
             )
         }
     }
@@ -62,19 +75,24 @@ struct CompanyProfile: View {
     var body: some View {
         Group {
             if let c = store.companyDetails[companyId] ?? store.companyListing(companyId) {
+                let facts = CompanyText.keyFacts(c)
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 16) {
+                    VStack(alignment: .leading, spacing: Theme.blockSpacing) {
                         header(c)
-                        if c.hasSummary { Text(c.summary).textSelection(.enabled) }
-                        if c.hasSummary { RedFlagsBox(flags: c.redFlags) }
-                        ForEach(c.sections, id: \.key) { section($0) }
-                        if c.hasNote {
-                            Text(c.note).font(.caption).foregroundStyle(.secondary)
+                        if c.hasSummary { Lead(c.summary).entrance(1) }
+                        if !facts.isEmpty {
+                            StatStrip(facts.map { StatStrip.Item(label: $0.label, value: $0.value, help: $0.full) }).entrance(1)
                         }
-                        if !c.postings.isEmpty { postings(c) }
+                        if !c.redFlags.isEmpty { RedFlagsList(flags: c.redFlags).entrance(2) }
+                        ForEach(Array(c.sections.enumerated()), id: \.element.key) { index, section in
+                            CompanyFindings(section: section).entrance(3 + index)
+                        }
+                        if c.hasNote {
+                            Text(c.note).textRole(.body, color: Theme.secondaryText).fixedSize(horizontal: false, vertical: true)
+                        }
+                        if !c.postings.isEmpty { postings(c).entrance(4 + c.sections.count) }
                     }
-                    .padding(20)
-                    .frame(maxWidth: 820, alignment: .leading)
+                    .pageColumn()
                 }
             } else {
                 ProgressView()
@@ -84,101 +102,158 @@ struct CompanyProfile: View {
     }
 
     private func header(_ c: Company) -> some View {
-        HStack(alignment: .firstTextBaseline) {
+        HStack(alignment: .center, spacing: 14) {
+            CompanyAvatar(name: c.name, size: 56).popIn(0)
             VStack(alignment: .leading, spacing: 4) {
-                Text(c.name).font(.title2.weight(.semibold))
+                Text(c.name).textRole(.title)
                 HStack(spacing: 8) {
-                    Text(CompanyText.state(c)).foregroundStyle(.secondary)
-                    if c.hasWebsite, let url = URL(string: c.website) { Link(CompanyText.sourceLabel(c.website), destination: url) }
+                    Text(CompanyText.state(c)).textRole(.meta)
+                    if c.hasWebsite, let url = URL(string: c.website) {
+                        Link(CompanyText.sourceLabel(c.website), destination: url).font(.system(size: 12)).foregroundStyle(Theme.accent)
+                    }
+                    // Nothing found is worth saying, quietly: a chip, not a card.
+                    if c.hasSummary && c.redFlags.isEmpty && !c.researching {
+                        ChipView(chip: Chip(text: "No red flags", tone: .good), help: "The research found nothing worrying")
+                    }
                 }
             }
             Spacer()
             if c.researching {
-                ProgressView().controlSize(.small)
+                HStack(spacing: 6) {
+                    LiveDot(color: Theme.world(.companies).main, size: 6)
+                    Text("Researching…").textRole(.meta)
+                }
+                .shimmer()
             } else {
-                Button(c.hasSummary ? "Research again" : "Research") {
+                Button {
                     Task { await store.researchCompany(.id(c.id), refresh: true) }
+                } label: {
+                    Label(c.hasSummary ? "Research Again" : "Research", systemImage: "sparkle.magnifyingglass")
                 }
+                .buttonStyle(.secondary)
             }
-        }
-    }
-
-    private func section(_ s: CompanySection) -> some View {
-        GroupBox(s.label) {
-            VStack(alignment: .leading, spacing: 8) {
-                ForEach(Array(s.findings.enumerated()), id: \.offset) { _, f in
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text((f.hasDate ? "\(f.date) · " : "") + f.text).textSelection(.enabled)
-                        SourceLinks(urls: f.sources)
-                    }
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(6)
         }
     }
 
     private func postings(_ c: Company) -> some View {
-        GroupBox("Postings") {
-            VStack(alignment: .leading, spacing: 4) {
+        Card(title: "Postings", systemImage: "list.bullet.rectangle") {
+            VStack(alignment: .leading, spacing: 6) {
                 ForEach(c.postings, id: \.id) { p in
                     Button {
-                        store.navigation.section = .inbox
-                        store.navigation.postingId = p.id
-                        store.navigation.reviewing = nil
+                        store.showPosting(p.id)
                     } label: {
-                        HStack {
-                            Text(p.hasScore ? "\(p.score)" : "–").monospacedDigit().frame(width: 30, alignment: .leading)
-                            Text(p.hasTitle ? p.title : "Posting \(p.id)")
+                        HStack(spacing: 10) {
+                            ScoreRing(score: p.hasScore ? p.score : nil, size: 26)
+                            Text(p.hasTitle ? p.title : "Posting \(p.id)").textRole(.itemTitle)
+                            Spacer(minLength: 0)
                         }
+                        .contentShape(Rectangle())
                     }
-                    .buttonStyle(.link)
+                    .buttonStyle(.plain)
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(6)
         }
     }
 }
 
-struct RedFlagsBox: View {
+/// One section of a company's research: each finding a claim, its date over it and its sources
+/// in the margin.
+struct CompanyFindings: View {
+    let section: CompanySection
+
+    var body: some View {
+        Card(title: section.label) {
+            VStack(alignment: .leading, spacing: Theme.rowSpacing + 4) {
+                ForEach(Array(section.findings.enumerated()), id: \.offset) { _, f in
+                    FindingRow(finding: f)
+                }
+            }
+        }
+    }
+}
+
+private struct FindingRow: View {
+    let finding: Applyant_V1_CompanyFinding
+    @State private var open = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        let eyebrow = finding.hasDate ? CompanyText.eyebrow(date: finding.date) : nil
+        if let margin = CompanyText.sourcesLabel(finding.sources.count) {
+            EvidenceRow(
+                finding.text,
+                eyebrow: eyebrow,
+                margin: margin,
+                isExpanded: $open.animation(Theme.Motion.pick(Theme.Motion.disclose, reduceMotion: reduceMotion))
+            ) {
+                SourceLinks(urls: finding.sources)
+            }
+        } else {
+            EvidenceRow(finding.text, eyebrow: eyebrow)
+        }
+    }
+}
+
+/// The red flags, each the one way a condition is stated: what kind, what was found, how bad,
+/// and where it was read.
+struct RedFlagsList: View {
     let flags: [CompanyRedFlag]
 
     var body: some View {
-        GroupBox {
-            VStack(alignment: .leading, spacing: 8) {
-                Label(flags.isEmpty ? "No red flags found" : "Red flags", systemImage: flags.isEmpty ? "checkmark.shield" : "exclamationmark.triangle")
-                    .font(.headline)
-                    .foregroundStyle(flags.isEmpty ? .green : .orange)
-                ForEach(Array(flags.enumerated()), id: \.offset) { _, f in
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(CompanyText.flagTitle(f)).font(.callout.weight(.semibold))
-                        Text(f.text).textSelection(.enabled)
-                        SourceLinks(urls: f.sources)
-                    }
-                }
+        VStack(alignment: .leading, spacing: Theme.rowSpacing) {
+            ForEach(Array(flags.enumerated()), id: \.offset) { _, f in
+                RedFlagCallout(flag: f)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(6)
         }
     }
 }
 
+struct RedFlagCallout: View {
+    let flag: CompanyRedFlag
+    @Environment(\.openURL) private var openURL
+
+    var body: some View {
+        Callout(.warning, title: CompanyText.flagKind(flag), detail: flag.text, systemImage: "exclamationmark.triangle.fill") {
+            HStack(spacing: 8) {
+                ChipView(chip: CompanyText.severityChip(flag), help: "How serious the research thinks it is")
+                if let label = CompanyText.sourcesLabel(flag.sources.count) {
+                    Menu(label) {
+                        ForEach(flag.sources, id: \.self) { u in
+                            if let url = URL(string: u) {
+                                Button(CompanyText.sourceLabel(u)) { openURL(url) }
+                            }
+                        }
+                    }
+                    .menuStyle(.button)
+                    .buttonStyle(.secondary)
+                    .controlSize(.small)
+                    .fixedSize()
+                    .help("Where it was read")
+                }
+            }
+        }
+    }
+}
+
+/// A finding's sources, as short links.
 struct SourceLinks: View {
     let urls: [String]
 
     var body: some View {
-        HStack(spacing: 8) {
+        FlowRow(spacing: 10) {
             ForEach(urls, id: \.self) { u in
                 if let url = URL(string: u) {
-                    Link(CompanyText.sourceLabel(u), destination: url).font(.caption)
+                    Link(CompanyText.sourceLabel(u) + " ↗", destination: url)
+                        .font(.system(size: 12))
+                        .foregroundStyle(Theme.accent)
+                        .help(u)
                 }
             }
         }
     }
 }
 
-/// The short version: on a posting (with Company research) and in review's evidence panel.
+/// The short version: the job detail's Company tab, and the review's evidence panel.
 struct CompanyCard: View {
     let store: AppStore
     let company: Company?
@@ -187,31 +262,29 @@ struct CompanyCard: View {
     var compact = false
 
     var body: some View {
-        GroupBox {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text(company.map { "About \($0.name)" } ?? "Company research").font(.headline)
-                    Spacer()
-                    if let c = company { Text(CompanyText.state(c)).font(.caption).foregroundStyle(.secondary) }
+        Card {
+            VStack(alignment: .leading, spacing: Theme.rowSpacing + 4) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    CardTitle(title: company.map { "About \($0.name)" } ?? "Company research", systemImage: "building.2")
+                    Spacer(minLength: 0)
+                    if let c = company, c.hasSummary, c.redFlags.isEmpty, !c.researching {
+                        ChipView(chip: Chip(text: "No red flags", tone: .good), help: "The research found nothing worrying")
+                    }
+                    if let c = company { Text(CompanyText.state(c)).textRole(.meta).lineLimit(1) }
                 }
                 if let c = company, c.hasSummary {
-                    Text(c.summary).lineLimit(compact ? 5 : nil).textSelection(.enabled)
-                    if c.redFlags.isEmpty {
-                        Text("No red flags found").font(.caption).foregroundStyle(.green)
-                    } else {
-                        ForEach(Array(c.redFlags.enumerated()), id: \.offset) { _, f in
-                            Text("! \(CompanyText.flagTitle(f)): \(f.text)").font(.caption).foregroundStyle(.orange)
-                        }
-                    }
+                    Prose(c.summary, size: compact ? .compact : .regular, collapsedLines: 4)
+                    if !c.redFlags.isEmpty { RedFlagsList(flags: c.redFlags) }
                 } else if company?.researching == true {
-                    Text("Researching the company…").foregroundStyle(.secondary)
+                    Text("Researching the company…").textRole(.body, color: Theme.secondaryText)
                 } else if let c = company, c.hasNote {
-                    Text(c.note).font(.caption).foregroundStyle(.secondary)
+                    Text(c.note).textRole(.body, color: Theme.secondaryText).fixedSize(horizontal: false, vertical: true)
                 } else {
                     Text("Not researched yet. Preparing an application researches the company.")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .textRole(.body, color: Theme.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                HStack {
+                FlowRow(spacing: 8) {
                     if let c = company, c.hasSummary {
                         Button("Open in Companies") {
                             store.navigation.section = .companies
@@ -227,10 +300,10 @@ struct CompanyCard: View {
                     }
                     if company?.researching == true { ProgressView().controlSize(.small) }
                 }
+                .buttonStyle(.secondary)
                 .controlSize(compact ? .small : .regular)
+                .padding(.top, 2)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(6)
         }
     }
 }

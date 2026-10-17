@@ -158,6 +158,19 @@ describe('delivery that may already have sent', () => {
     expect(view.handOff?.reason).toContain(AFTER_SUBMIT.trim());
     expect(presses()).toBe(1);
   });
+
+  it('a field that turns up after the press is a hand-off, never back to review', async () => {
+    const id = await deliver('/form-deliver-moved.html');
+    const view = applicationView(t.db, id);
+    // Back in review, approving it again would press "Apply" a second time.
+    expect(view.app.stage).toBe('approved');
+    expect(view.app.submitAttemptedAt).toBeTruthy();
+    expect(view.receipt).toBeNull();
+    expect(view.handOff?.reason).toContain(AFTER_SUBMIT.trim());
+    expect(view.handOff?.reason).toContain('"Phone"');
+    expect(view.fields.some((f) => f.label === 'Phone')).toBe(false);
+    expect(presses()).toBe(1);
+  });
 });
 
 describe('a delivery interrupted after submit was pressed', () => {

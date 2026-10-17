@@ -110,6 +110,23 @@ export function boardFromUrl(raw: string): AtsBoard | null {
   return null;
 }
 
+/** The board's own job list page (what the watch list is given). */
+export function boardUrl(board: AtsBoard): string {
+  const t = encodeURIComponent(board.token);
+  switch (board.ats) {
+    case 'greenhouse':
+      return `https://job-boards.greenhouse.io/${t}`;
+    case 'ashby':
+      return `https://jobs.ashbyhq.com/${t}`;
+    case 'lever':
+      return `https://jobs.lever.co/${t}`;
+    case 'workable':
+      return `https://apply.workable.com/${t}`;
+    case 'smartrecruiters':
+      return `https://careers.smartrecruiters.com/${t}`;
+  }
+}
+
 const URL_IN_HTML =
   /https?:\/\/[^\s"'<>()\\]+|\/\/(?:[a-z0-9-]+\.)*(?:greenhouse\.io|ashbyhq\.com|lever\.co|workable\.com|smartrecruiters\.com)[^\s"'<>()\\]*/gi;
 

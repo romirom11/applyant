@@ -34,25 +34,48 @@ public enum SearchText {
         return "\(minutes) min"
     }
 
-    /// "38 found · 29 verified · 12 interested (41%)", as the PRD's table reads.
+    /// "38 found · 29 verified · 12 interested (41%)", as the PRD's table reads; a count of
+    /// nothing is left out ("38 found · 29 verified"), and "Nothing found yet" before anything.
     public static func stats(_ s: Applyant_V1_SearchStats) -> String {
-        var parts = ["\(s.found) found", "\(s.verified) verified"]
+        guard s.found > 0 else { return "Nothing found yet" }
+        var parts = ["\(s.found) found"]
+        if s.verified > 0 { parts.append("\(s.verified) verified") }
         if s.interested > 0 {
             let share = s.verified > 0 ? " (\(Int((100 * Double(s.interested) / Double(s.verified)).rounded()))%)" : ""
             parts.append("\(s.interested) interested\(share)")
-        } else {
-            parts.append("0 interested")
         }
         return parts.joined(separator: " · ")
     }
 
+    /// Who made most of the searches, said once over the list ("Planned by Applyant"); nil when
+    /// most are the candidate's own.
+    public static func origin(_ list: SearchList) -> String? {
+        let agent = list.strategies.filter { $0.origin == "agent" }.count
+        return agent * 2 > list.strategies.count ? "Planned by Applyant" : nil
+    }
+
+    /// How often most searches are set to run ("every 6 h" on most of them goes without saying).
+    static func usualEvery(_ list: SearchList) -> Int32? {
+        let counts = Dictionary(grouping: list.strategies, by: \.everyMinutes).mapValues(\.count)
+        return counts.max { ($0.value, $1.key) < ($1.value, $0.key) }?.key
+    }
+
+    /// Each search's row: what it found, and a chip only where it differs from the others
+    /// (paused, a cadence of its own, made by the other hand, a problem).
     public static func strategyRows(_ list: SearchList) -> [SearchRow] {
-        list.strategies.map { s in
+        let usual = usualEvery(list)
+        let agentLed = origin(list) != nil
+        return list.strategies.map { s in
             var chips: [Chip] = []
             if s.running { chips.append(Chip(text: "Running…", tone: .accent)) }
-            chips.append(s.state == "paused" ? Chip(text: "Paused", tone: .neutral) : Chip(text: "Every \(every(effectiveEvery(s)))", tone: .good))
+            if s.state == "paused" {
+                chips.append(Chip(text: "Paused", tone: .neutral))
+            } else if effectiveEvery(s) != usual {
+                chips.append(Chip(text: "Every \(every(effectiveEvery(s)))", tone: .neutral))
+            }
             if s.hasCadenceNote { chips.append(Chip(text: "Runs less often", tone: .warning)) }
-            if s.origin == "agent" { chips.append(Chip(text: "Agent-generated", tone: .accent)) }
+            if agentLed, s.origin != "agent" { chips.append(Chip(text: "Yours", tone: .neutral)) }
+            if !agentLed, s.origin == "agent" { chips.append(Chip(text: "Planned by Applyant", tone: .accent)) }
             if s.sourceKeys.isEmpty { chips.append(Chip(text: "No source on", tone: .warning)) }
             if s.hasLastRun, s.lastRun.status == "failed" { chips.append(Chip(text: "Last run failed", tone: .warning)) }
             return SearchRow(
@@ -78,6 +101,40 @@ public enum SearchText {
         case "failed": return "The last plan failed: \(p.hasNote ? p.note : "no reason given")"
         default: return p.hasNote ? p.note : "Planned \(who)"
         }
+    }
+
+    /// The planner's last run in one line: "Last plan · 4 new searches, 14 boards"; its note is
+    /// behind Details….
+    public static func planLine(_ p: SearchPlan) -> String {
+        switch p.status {
+        case "queued": return "Planning searches…"
+        case "failed": return "The last plan failed"
+        default:
+            let searches = p.strategyIds.count, boards = p.boardKeys.count
+            guard searches + boards > 0 else { return "Last plan · nothing new" }
+            var parts: [String] = []
+            if searches > 0 { parts.append("\(searches) new search\(searches == 1 ? "" : "es")") }
+            if boards > 0 { parts.append("\(boards) board\(boards == 1 ? "" : "s")") }
+            return "Last plan · " + parts.joined(separator: ", ")
+        }
+    }
+
+    /// The detail pane with nothing picked: how the searching stands, as label and value.
+    public static func summary(_ list: SearchList, runs: [SearchRun]) -> [(label: String, value: String)] {
+        let on = list.strategies.filter { $0.state != "paused" }.count
+        let sources = list.sources.filter { $0.enabled && $0.kindEnabled }.count
+        var items = [
+            (label: "Searches", value: "\(on) of \(list.strategies.count) on"),
+            (label: "Sources", value: "\(sources) of \(list.sources.count) on"),
+        ]
+        let finished = runs.filter { $0.status != "queued" }
+        if !finished.isEmpty {
+            let added = finished.map(\.added).reduce(0, +)
+            items.append((label: "Recent runs", value: "\(finished.count) · \(added) new"))
+            let failed = finished.filter { $0.status == "failed" }.count
+            if failed > 0 { items.append((label: "Failed", value: "\(failed)")) }
+        }
+        return items
     }
 
     /// A career page's listing recipe as a chip.
@@ -139,6 +196,31 @@ public enum SearchText {
         "\(r.strategyName) · run \(r.id)"
     }
 
+    /// Runs started together (the same minute, the same trigger) under one header, newest
+    /// first: the schedule starts every search at once.
+    public static func runBatches(_ runs: [SearchRun], calendar: Calendar = .current) -> [RunBatch] {
+        var batches: [RunBatch] = []
+        for run in runs {
+            let minute = calendar.dateInterval(of: .minute, for: run.startedAt.date)?.start ?? run.startedAt.date
+            if let last = batches.last, last.minute == minute, last.trigger == run.trigger {
+                batches[batches.count - 1].runs.append(run)
+            } else {
+                batches.append(RunBatch(minute: minute, trigger: run.trigger, runs: [run]))
+            }
+        }
+        return batches
+    }
+
+    /// A run's row in its batch: a chip only for what sets it apart (running, failed, new
+    /// postings); the batch's header says when and why.
+    public static func runRowChips(_ r: SearchRun) -> [Chip] {
+        switch r.status {
+        case "queued": [Chip(text: "Running…", tone: .accent)]
+        case "failed": [Chip(text: "Failed", tone: .warning)]
+        default: r.added > 0 ? [Chip(text: "\(r.added) new", tone: .good)] : []
+        }
+    }
+
     public static func runChips(_ r: SearchRun) -> [Chip] {
         var chips: [Chip] = []
         switch r.status {
@@ -193,6 +275,18 @@ public enum SearchText {
         case .closed: "closed"
         default: "\(s)"
         }
+    }
+}
+
+/// Search runs started together: "Oct 17, 21:00 · on schedule" over its runs.
+public struct RunBatch: Identifiable, Equatable, Sendable {
+    public let minute: Date
+    public let trigger: String
+    public internal(set) var runs: [SearchRun]
+    public var id: String { "\(minute.timeIntervalSince1970)-\(trigger)" }
+
+    public var title: String {
+        minute.formatted(.dateTime.month(.abbreviated).day().hour().minute()) + " · " + SearchText.trigger(trigger)
     }
 }
 

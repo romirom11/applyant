@@ -13,54 +13,58 @@ struct HandOffCard: View {
 
     var body: some View {
         let h = app.handOff
-        GroupBox {
-            VStack(alignment: .leading, spacing: 6) {
-                Label(ApproveText.mayHaveBeenSent(app) ? "This one may already be sent" : "Finish this one in the browser", systemImage: "hand.raised.fill")
-                    .font(.headline)
-                    .foregroundStyle(.orange)
-                Text(h.reason)
-                if h.hasDetail { Text(h.detail).font(.callout).foregroundStyle(.secondary) }
-                if let place = place(h) { Text(place).font(.callout) }
-                Text("The Chrome window is open with the form filled. Finish it there and press submit.")
-                    .font(.callout).foregroundStyle(.secondary)
-                let sent = ApproveText.mayHaveBeenSent(app)
-                if sent {
-                    Text("Check the site or your mailbox for a confirmation before anything else.")
-                        .font(.callout.weight(.medium))
-                }
-                HStack {
+        let sent = ApproveText.mayHaveBeenSent(app)
+        Card {
+            VStack(alignment: .leading, spacing: Theme.rowSpacing + 2) {
+                // Why it stopped, and the one thing to do now.
+                Callout(
+                    .warning,
+                    title: sent ? "This one may already be sent" : "Finish this one in the browser",
+                    detail: FieldText.plain(h.reason),
+                    systemImage: "hand.raised.fill"
+                ) {
                     if sent {
-                        Button("I submitted it") { confirmSubmitted = true }.buttonStyle(.borderedProminent)
-                        Button("Show the browser window") { noWindow = !ChromeWindow.bringForward() }
+                        Button("I Submitted It") { confirmSubmitted = true }.buttonStyle(.primary)
                     } else {
-                        Button("Show the browser window") { noWindow = !ChromeWindow.bringForward() }
-                            .buttonStyle(.borderedProminent)
-                        Button("I submitted it") { confirmSubmitted = true }
+                        Button("Show Browser Window") { noWindow = !ChromeWindow.bringForward() }.buttonStyle(.primary)
                     }
-                    Button("Try delivery again…") { confirmRetry = true }
+                }
+                if h.hasDetail { Text(FieldText.plain(h.detail)).textRole(.body, color: Theme.secondaryText).fixedSize(horizontal: false, vertical: true) }
+                if let place = place(h) { MetaLine(place, systemImage: "mappin.and.ellipse") }
+                Text(sent
+                    ? "Check the site or your mailbox for a confirmation before anything else."
+                    : "The Chrome window is open with the form filled. Finish it there and press submit.")
+                    .textRole(.body, color: sent ? Theme.text : Theme.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+                FlowRow(spacing: 8) {
+                    if sent {
+                        Button("Show Browser Window") { noWindow = !ChromeWindow.bringForward() }
+                    } else {
+                        Button("I Submitted It") { confirmSubmitted = true }
+                    }
+                    Button("Try Delivery Again…") { confirmRetry = true }
                     if ApproveText.canReturnToReview(app) {
-                        Button("Back to review") { Task { await store.returnToReview(application: app.id) } }
+                        Button("Back to Review") { Task { await store.returnToReview(application: app.id) } }
                             .help("Nothing is sent: the application goes back to review, where you can change values and answers, then approve it again")
                     }
                     if h.hasURL, let url = URL(string: h.url) {
-                        Link("Page ↗", destination: url)
+                        Link("Open Page ↗", destination: url).font(.system(size: 12)).foregroundStyle(Theme.accent)
                     }
                 }
+                .buttonStyle(.secondary)
+                .controlSize(.small)
                 if noWindow {
-                    Text("Applyant's Chrome isn't running any more. “Try delivery again…” opens the form once more.")
-                        .font(.caption).foregroundStyle(.secondary)
+                    MetaLine("Applyant's Chrome isn't running any more. Try Delivery Again… opens the form once more.", systemImage: "info.circle")
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(6)
         }
         .confirmationDialog("Did the site accept your application?", isPresented: $confirmSubmitted) {
-            Button("Yes, I submitted it") { Task { await store.markSubmitted(application: app.id) } }
+            Button("Yes, I Submitted It") { Task { await store.markSubmitted(application: app.id) } }
         } message: {
             Text("It's recorded as applied, with what the form was filled with.")
         }
         .confirmationDialog(ApproveText.retryTitle, isPresented: $confirmRetry) {
-            Button("Fill and submit it again") { Task { await store.submit(application: app.id) } }
+            Button("Fill and Submit It Again") { Task { await store.submit(application: app.id) } }
         } message: {
             Text(ApproveText.mayHaveBeenSent(app) ? ApproveText.retryAfterSubmitMessage : ApproveText.retryMessage)
         }

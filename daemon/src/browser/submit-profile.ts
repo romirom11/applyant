@@ -18,6 +18,12 @@ export interface SubmitProfileOptions {
   log: Logger;
   /** Tests only: run headless (no window to minimise/restore meaningfully). */
   headless?: boolean;
+  /**
+   * Branded Chrome keeps its cookie key in the macOS Keychain, like the sign-in window, so a
+   * sign-in there carries over. Default: on, except headless (tests run throwaway profiles and
+   * leave the Keychain alone).
+   */
+  keychain?: boolean;
 }
 
 export interface DeliveryOutcome<T> {
@@ -26,11 +32,37 @@ export interface DeliveryOutcome<T> {
   keepOpen: boolean;
 }
 
+/**
+ * Playwright and Patchright start Chrome with a mock Keychain (and a "basic" password store on
+ * Linux). Chrome encrypts cookies with a key from the Keychain, so under the mock one every
+ * cookie the sign-in window (plain Chrome) wrote is unreadable: each site looks signed out, and
+ * the automation's own cookies then replace the real session. Branded Chrome is the binary the
+ * sign-in window runs, so it may use the real Keychain without a prompt.
+ */
+export const MOCK_KEYCHAIN_ARGS = ['--use-mock-keychain', '--password-store=basic'];
+
+/** The launch options of the profile's browser: branded Chrome, or the bundled Chromium. */
+export function launchOptions(
+  browser: 'chrome' | 'bundled',
+  o: { headless: boolean; keychain: boolean },
+) {
+  // The bundled Chromium is another binary: the Keychain would ask before handing it Chrome's
+  // key, so it keeps the mock one (and sign-ins from the window don't carry over to it).
+  if (browser === 'bundled') return { headless: o.headless, viewport: null };
+  return {
+    channel: 'chrome' as const,
+    headless: o.headless,
+    viewport: null,
+    ...(o.keychain ? { ignoreDefaultArgs: MOCK_KEYCHAIN_ARGS } : {}),
+  };
+}
+
 /** Launches the persistent context: Patchright + real Chrome, else Playwright's own chromium. */
 async function launch(
   o: SubmitProfileOptions,
 ): Promise<{ context: BrowserContext; branded: boolean }> {
-  const opts = { channel: 'chrome' as const, headless: o.headless ?? false, viewport: null };
+  const headless = o.headless ?? false;
+  const opts = launchOptions('chrome', { headless, keychain: o.keychain ?? !headless });
   try {
     const { chromium: patchrightChromium } = await import('patchright');
     const context = await patchrightChromium.launchPersistentContext(o.userDataDir, opts);
@@ -45,10 +77,13 @@ async function launch(
     return { context, branded: true };
   } catch {
     // Chrome for Testing fallback: Playwright's own bundled chromium, still headed.
-    const context = await playwrightChromium.launchPersistentContext(o.userDataDir, {
-      headless: o.headless ?? false,
-      viewport: null,
-    });
+    o.log.warn(
+      "Google Chrome didn't start for the submission profile: using the bundled Chromium, which can't read the sign-in window's cookies (sign-ins don't carry over)",
+    );
+    const context = await playwrightChromium.launchPersistentContext(
+      o.userDataDir,
+      launchOptions('bundled', { headless, keychain: false }),
+    );
     return { context, branded: false };
   }
 }

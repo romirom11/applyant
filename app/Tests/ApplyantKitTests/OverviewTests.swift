@@ -145,4 +145,58 @@ func overviewReport(_ window: OverviewWindow, found: Int64) -> OverviewReport {
         #expect(OverviewText.target(report.metrics[0]) == "Target ≥ 95%")
         #expect(OverviewText.target(report.metrics[3]) == "No target: watched")
     }
+
+    /// The report on screen when the panel was redesigned (30 days to Oct 17).
+    static let real: OverviewReport = .with {
+        $0.window = .overviewWindow30Days
+        $0.since = .init(date: Date(timeIntervalSince1970: 1_789_600_000))
+        $0.funnel = [("found", "Found", 1229), ("verified", "Verified", 1078), ("interested", "Interested", 113), ("prepared", "Prepared", 109),
+                     ("approved", "Approved", 5), ("applied", "Applied", 4), ("interview", "Interview", 0), ("offer", "Offer", 0)]
+            .map { key, label, count in .with { $0.key = key; $0.label = label; $0.count = Int64(count) } }
+        func ratio(_ n: Int64, _ d: Int64) -> Applyant_V1_OverviewRatio {
+            .with { $0.numerator = n; $0.denominator = d; if d > 0 { $0.ratio = Double(n) / Double(d) } }
+        }
+        $0.metrics = [
+            .with { $0.key = "live_forms"; $0.label = "Shortlist has no dead postings"; $0.target = "≥ 95%"; $0.display = "96% · 113 of 118"
+                $0.met = true; $0.value = 113.0 / 118; $0.ratio = ratio(113, 118) },
+            .with { $0.key = "interested"; $0.label = "Shortlist is relevant"; $0.target = "≥ 50%"; $0.display = "36% · 5 of 14"
+                $0.met = false; $0.value = 5.0 / 14; $0.ratio = ratio(5, 14) },
+            .with { $0.key = "review_time"; $0.label = "An application takes little of your time"; $0.target = "≤ 15 min"
+                $0.display = "2504 min median · 5 reviews"; $0.met = false; $0.value = 2504 },
+            .with { $0.key = "unsupported_claims"; $0.label = "The agent never invents experience"; $0.target = "0"
+                $0.display = "0 of 26 sent · 8 corrected in review"; $0.met = true; $0.value = 0; $0.ratio = ratio(0, 26) },
+            .with { $0.key = "applications_per_week"; $0.label = "Applications per week"; $0.display = "0.9 / week · 4 sent"; $0.value = 4.0 / (30.0 / 7) },
+            .with { $0.key = "interview_rate"; $0.label = "Interview rate"; $0.display = "0% · 0 of 4"; $0.value = 0; $0.ratio = ratio(0, 4) },
+        ]
+    }
+
+    @Test func theFunnelWritesItsShareOnTheArrowAndNamesItsStepsAsNouns() {
+        let rows = OverviewText.funnel(Self.real.funnel)
+        #expect(rows.map(\.shortConversion) == [nil, "88%", "10%", "96%", "5%", "80%", "0%", nil])
+        #expect(rows[1].conversion == "88% of Found")
+        #expect(rows.map { OverviewText.stepLabel($0.id) }
+            == ["found", "verified", "interested", "prepared", "approved", "applied", "interviews", "offers"])
+        #expect(OverviewText.summary(Self.real) == "4 sent from 1,229 found · 2 of 4 goals met")
+    }
+
+    @Test func aMetricCardIsFourShortLines() {
+        let m = Self.real.metrics
+        #expect(m.map(OverviewText.name) == ["Live postings", "Relevance", "Review time", "Invented claims", "Pace", "Interview rate"])
+        #expect(m.map(OverviewText.headline) == ["96%", "36%", "1d 17h", "0", "0.9 / week", "0%"])
+        #expect(m.map(OverviewText.detail) == ["113 of 118", "5 of 14", "median · 5 reviews", "of 26 sentences · 8 corrected", "4 sent", "0 of 4 sent"])
+        #expect(m.map(OverviewText.goal) == ["Goal ≥ 95%", "Goal ≥ 50%", "Goal ≤ 15 min", "Goal = 0", "Watched", "Watched"])
+
+        // Nothing to measure yet: a dash, and the goal says so.
+        let empty: [OverviewMetric] = [
+            .with { $0.key = "review_time"; $0.target = "≤ 15 min"; $0.display = "—" },
+            .with { $0.key = "unsupported_claims"; $0.target = "0"; $0.display = "— · 3 corrected in review"; $0.value = 0
+                $0.ratio = .with { $0.numerator = 0; $0.denominator = 0 } },
+            .with { $0.key = "live_forms"; $0.target = "≥ 95%"; $0.display = "—"; $0.ratio = .with { $0.denominator = 0 } },
+        ]
+        #expect(empty.map(OverviewText.headline) == ["—", "—", "—"])
+        #expect(empty.map(OverviewText.detail) == ["no reviews yet", "nothing sent yet · 3 corrected", "no forms read yet"])
+        #expect(OverviewText.goal(empty[0]) == "Goal ≤ 15 min · no data yet")
+        #expect(OverviewText.goal(empty[1]) == "Goal = 0 · no data yet")
+        #expect(OverviewText.name(.with { $0.key = "new_one"; $0.label = "Something new" }) == "Something new")
+    }
 }

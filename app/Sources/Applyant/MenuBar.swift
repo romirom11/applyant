@@ -8,7 +8,7 @@ struct MenuBarLabel: View {
     let status: StatusModel
 
     var body: some View {
-        let waiting = store.count(.readyToReview)
+        let waiting = store.count(.toReview)
         HStack(spacing: 3) {
             Image(systemName: status.view.symbol)
             if waiting > 0 { Text("\(waiting)") }
@@ -38,9 +38,9 @@ struct StatusMenu: View {
         }
 
         Divider()
-        let ready = store.items(.readyToReview)
+        let ready = store.review(.ready)
         let needs = store.needsYou
-        Text(counterLine(ready: ready.count, needs: needs.count, preparing: store.count(.preparing)))
+        Text(counterLine(ready: ready.count, needs: needs.count, preparing: store.review(.preparing).count))
         if let since = store.backgroundPausedAt {
             Text(ActivityText.backgroundPaused(since: since))
         } else if let paused = store.activity.paused {
@@ -50,13 +50,13 @@ struct StatusMenu: View {
         }
         if let next = ready.first, let app = next.applicationId {
             Button("Review next: \(next.title)") {
-                store.navigation.showReview(application: app, posting: next.postingId)
+                store.navigation.showReview(application: app, posting: next.postingId, stage: .readyForReview)
                 open()
             }
         }
         ForEach(needs.prefix(3), id: \.id) { app in
             Button("Needs you: \(app.hasCompany ? app.company : "application \(app.id)")") {
-                store.navigation.showReview(application: app.id, posting: app.postingID, stage: app.stage)
+                store.navigation.showReview(app)
                 open()
             }
         }
@@ -88,7 +88,7 @@ struct StatusMenu: View {
     }
 
     private func counterLine(ready: Int, needs: Int, preparing: Int) -> String {
-        var parts = ["\(ready) ready to review"]
+        var parts = ["\(ready) ready to send"]
         if needs > 0 { parts.append("\(needs) need you") }
         if preparing > 0 { parts.append("\(preparing) preparing") }
         return parts.joined(separator: " · ")

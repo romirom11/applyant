@@ -1,8 +1,9 @@
 // The sign-in window: Applyant's own Chrome profile (`browser/`), opened as plain Chrome with no
 // automation at all (no CDP port, no --enable-automation, no Patchright), so "Sign in with
 // Google" and the sites' own bot checks see an ordinary browser. The candidate signs in to
-// LinkedIn, Xing, Workday accounts and similar sites once; the session stays in the profile and
-// later deliveries and searches reuse it.
+// LinkedIn, Xing, Djinni, Workday accounts and similar sites once; the session stays in the
+// profile and later deliveries and searches reuse it (the automated Chrome reads the same
+// Keychain-encrypted cookies: submit-profile.ts).
 //
 // Chrome allows one process per profile directory, so the automated submission browser is closed
 // first and deliveries wait until the window is closed (SubmitProfile.hold). While the window is
@@ -15,6 +16,7 @@ import { existsSync } from 'node:fs';
 import type { Secrets } from '../secrets/secrets.ts';
 import type { Logger } from '../util/log.ts';
 import { type PlatformKey, platformOf } from './guardrails.ts';
+import { SIGN_IN_SITES } from './sign-in.ts';
 
 export const SIGN_IN_URLS: Record<PlatformKey, string> = {
   linkedin: 'https://www.linkedin.com/login',
@@ -48,18 +50,24 @@ export function signInArgs(userDataDir: string, url: string): string[] {
   ];
 }
 
-/** The target of a sign-in: a guarded platform's key, or any https URL (a Workday tenant…). */
+/**
+ * The target of a sign-in: a guarded platform's key, a sign-in site's key (djinni: not a guarded
+ * platform, only a site that wants a signed-in candidate), or any https URL (a Workday tenant…).
+ */
 export function signInTarget(target: string): { url: string; platform: PlatformKey | null } {
   const key = target.trim().toLowerCase();
   if (key in SIGN_IN_URLS) {
     const platform = key as PlatformKey;
     return { url: SIGN_IN_URLS[platform], platform };
   }
+  if (Object.hasOwn(SIGN_IN_SITES, key)) {
+    return { url: SIGN_IN_SITES[key as keyof typeof SIGN_IN_SITES].signInUrl, platform: null };
+  }
   let u: URL;
   try {
     u = new URL(target.trim());
   } catch {
-    throw new Error(`sign in where? "${target}" is neither linkedin, xing nor a URL`);
+    throw new Error(`sign in where? "${target}" is neither linkedin, xing, djinni nor a URL`);
   }
   if (u.protocol !== 'https:' && u.protocol !== 'http:') {
     throw new Error(`sign in where? "${target}" is not a web address`);
@@ -79,7 +87,10 @@ export interface LoginWindowOptions {
   profile: ProfileHolder;
   log: Logger;
   chrome?: string | null;
-  /** The window closed: the platform (if any) counts as signed in. */
+  /**
+   * The window closed: the platform (if any) counts as signed in, and forms on the site may look
+   * different now (refreshAfterSignIn).
+   */
   onClosed?(o: { url: string; platform: PlatformKey | null }): void;
   spawn?: typeof spawn;
 }

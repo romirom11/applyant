@@ -1,0 +1,150 @@
+{
+ "offset": 0,
+ "limit": 100,
+ "totalFound": 38,
+ "content": [
+  {
+   "id": "744000110408601",
+   "name": "Développeur Full Stack Vue.js / PHP Laravel",
+   "company": {
+    "identifier": "ALTEN",
+    "name": "ALTEN",
+    "logo": "https://c.smartrecruiters.com/sr-company-logo-prod-aws-dc5/61d557936f3faf160ddc0a88?r=s3-eu-central-1&_1654076992922"
+   },
+   "releasedDate": "2026-02-20T15:18:53.660Z",
+   "location": {
+    "city": "Boulogne-Billancourt",
+    "region": "IDF",
+    "country": "fr",
+    "remote": false,
+    "hybrid": false
+   },
+   "industry": {},
+   "department": {},
+   "function": {},
+   "typeOfEmployment": {},
+   "experienceLevel": {},
+   "customField": [],
+   "actions": {
+    "details": "https://api.smartrecruiters.com/v1/companies/ALTEN/postings/11778943274"
+   },
+   "applyUrl": "https://jobs.smartrecruiters.com/ALTEN/744000110408601-developpeur-full-stack-vue-js-php-laravel",
+   "shortLocation": "Boulogne-Billancourt, France",
+   "releasedAgo": "8 months ago"
+  },
+  {
+   "id": "744000108203785",
+   "name": "Ingénieur développeur Senior Full‑Stack Vue.js / PHP/ Laravel_ Rabat_Casablanca (H/F)",
+   "company": {
+    "identifier": "SQLI1",
+    "name": "SQLI",
+    "logo": "https://c.smartrecruiters.com/sr-company-logo-prod-aws-dc5/64253bd08e9ae77b18bef288?r=s3-eu-central-1&_1740991115712"
+   },
+   "releasedDate": "2026-02-09T13:27:06.292Z",
+   "location": {
+    "city": "Rabat",
+    "country": "ma",
+    "remote": false,
+    "hybrid": true
+   },
+   "industry": {},
+   "department": {},
+   "function": {},
+   "typeOfEmployment": {},
+   "experienceLevel": {},
+   "customField": [],
+   "actions": {
+    "details": "https://api.smartrecruiters.com/v1/companies/SQLI1/postings/11680859434"
+   },
+   "applyUrl": "https://jobs.smartrecruiters.com/SQLI1/744000108203785-ingenieur-developpeur-senior-full-stack-vue-js-php-laravel-rabat-casablanca-h-f-",
+   "shortLocation": "Rabat, Morocco",
+   "releasedAgo": "8 months ago"
+  },
+  {
+   "id": "744000074527197",
+   "name": "Senior Backend Developer (PHP/Laravel)",
+   "company": {
+    "identifier": "JobsForHumanity",
+    "name": "Jobs for Humanity",
+    "logo": "https://c.smartrecruiters.com/sr-company-logo-prod-aws-dc5/600991847e242e4dc5c536b8?r=s3-eu-central-1&_1760514366219"
+   },
+   "releasedDate": "2025-08-05T11:55:57.559Z",
+   "location": {
+    "city": "Beirut",
+    "country": "lb",
+    "remote": true,
+    "hybrid": false
+   },
+   "industry": {},
+   "department": {},
+   "function": {},
+   "typeOfEmployment": {},
+   "experienceLevel": {},
+   "customField": [],
+   "actions": {
+    "details": "https://api.smartrecruiters.com/v1/companies/JobsForHumanity/postings/10407686698"
+   },
+   "applyUrl": "https://jobs.smartrecruiters.com/JobsForHumanity/744000074527197-senior-backend-developer-php-laravel-",
+   "shortLocation": "Beirut, Lebanon",
+   "releasedAgo": "a year ago"
+  },
+  {
+   "id": "744000044932732",
+   "name": "Senior Back End Engineer - PHP Laravel ($5000+/month)",
+   "company": {
+    "identifier": "JobsForHumanity",
+    "name": "Jobs for Humanity",
+    "logo": "https://c.smartrecruiters.com/sr-company-logo-prod-aws-dc5/600991847e242e4dc5c536b8?r=s3-eu-central-1&_1760514366219"
+   },
+   "releasedDate": "2025-02-27T17:02:54.251Z",
+   "location": {
+    "city": "Beirut",
+    "region": "Beirut Governorate",
+    "country": "lb",
+    "remote": true,
+    "hybrid": false
+   },
+   "industry": {},
+   "department": {},
+   "function": {},
+   "typeOfEmployment": {},
+   "experienceLevel": {},
+   "customField": [],
+   "actions": {
+    "details": "https://api.smartrecruiters.com/v1/companies/JobsForHumanity/postings/9343044138"
+   },
+   "applyUrl": "https://jobs.smartrecruiters.com/JobsForHumanity/744000044932732-senior-back-end-engineer-php-laravel-5000-month-",
+   "shortLocation": "Beirut, Lebanon",
+   "releasedAgo": "2 years ago"
+  },
+  {
+   "id": "743999973763033",
+   "name": "Sr. Backend Developer (Laravel)",
+   "company": {
+    "identifier": "Shebaxyz3",
+    "name": "Sheba.xyz",
+    "logo": "https://c.smartrecruiters.com/sr-company-logo-prod-aws-dc5/624a976ff286df102271e078?r=s3-eu-central-1&_1674534936502"
+   },
+   "releasedDate": "2024-03-14T05:36:54.110Z",
+   "location": {
+    "city": "Dhaka",
+    "region": "Dhaka Division",
+    "country": "bd",
+    "remote": false,
+    "hybrid": false
+   },
+   "industry": {},
+   "department": {},
+   "function": {},
+   "typeOfEmployment": {},
+   "experienceLevel": {},
+   "customField": [],
+   "actions": {
+    "details": "https://api.smartrecruiters.com/v1/companies/Shebaxyz3/postings/5791914026"
+   },
+   "applyUrl": "https://jobs.smartrecruiters.com/Shebaxyz3/743999973763033-sr-backend-developer-laravel-",
+   "shortLocation": "Dhaka, Bangladesh",
+   "releasedAgo": "3 years ago"
+  }
+ ]
+}

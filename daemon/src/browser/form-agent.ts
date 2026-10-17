@@ -52,7 +52,7 @@ export interface FormAgentRunContext {
 }
 
 const TOOLS_LINE =
-  'Use `snapshot` first to see the page (all frames, roles and accessible names). Then `fill`, `select`, `upload` or `click` on what you find, using the same ref shape (frame, role, name, nth) the snapshot shows. Call `snapshot` again after anything that might change the page. Never invent a value: use only the one given to you. Never click a control that would submit or finish the whole application.';
+  'Use `snapshot` first to see the page (all frames, roles and accessible names). Then `fill`, `select`, `upload` or `click` on what you find, using the same ref shape (frame, role, name, nth) the snapshot shows. Call `snapshot` again after anything that might change the page. Never invent a value: use only the one given to you. Never click a control that would submit or finish the whole application. Never sign in, sign up or create an account: no "Log in", "Login with GitHub", "Continue with Google", "Register" or the like, and never type a password; if the page asks for one, stop and return done: false.';
 
 const FIELD_AGENT_SYSTEM = `You operate one control of a job application form that ordinary automation (getByRole + fill/selectOption/click) could not. ${TOOLS_LINE}
 

@@ -10,6 +10,7 @@
 import type { FillValue } from '../../browser/form-engine.ts';
 import type { ReadJudge } from '../../browser/form-read.ts';
 import { FIELD_MEANINGS, type FieldMeaning, isFieldMeaning } from '../../browser/form-types.ts';
+import { signInSiteOf } from '../../browser/sign-in.ts';
 import type { SnapField } from '../../browser/snapshot.ts';
 import type { ChoiceQuestion, Decide } from '../../models/decide.ts';
 import { JEV_MAX_OPTIONS } from '../../models/providers/jev.ts';
@@ -20,6 +21,8 @@ export interface FormJudgeOptions {
   profile: StandardProfile;
   /** The posting the form belongs to (context for the decisions). */
   job: { title: string | null; company: string | null };
+  /** Where the form is (site rules: Djinni's message is the cover letter). */
+  url?: string | null;
   taskId: number | null;
   signal: AbortSignal;
   progress?(message: string): void;
@@ -49,14 +52,29 @@ const AUTOCOMPLETE: Record<string, FieldMeaning> = {
   'organization-title': 'current_title',
 };
 
-/** Meanings the HTML itself states; everything else is field_classify's call. */
-export function ruleMeaning(f: SnapField): FieldMeaning | null {
+/** A text box the label calls a cover letter, or a message to whoever reads the application. */
+const LETTER =
+  /\bcover(ing)? letter|\bmotivation(al)? letter|\bletter of motivation|\bmessage (to|for) (the )?(employer|recruiter|hiring (manager|team)|company|team)\b|супровідн\S* лист|мотиваційн\S* лист|сопроводительн\S* письм|мотивационн\S* письм|anschreiben|motivationsschreiben|lettre de motivation|carta de presentaci[oó]n/i;
+/** Djinni's form is a message to the recruiter and the contact details: the message is the letter. */
+const DJINNI_MESSAGE = /^(your )?message$|^повідомлення$|^сообщение$/i;
+
+/** Meanings the HTML (or the site) itself states; everything else is field_classify's call. */
+export function ruleMeaning(f: SnapField, url?: string | null): FieldMeaning | null {
   for (const token of f.hint.autocomplete.toLowerCase().split(/\s+/)) {
     const m = AUTOCOMPLETE[token];
     if (m) return m;
   }
   if (f.kind === 'text' && f.hint.type === 'email') return 'email';
   if (f.kind === 'text' && f.hint.type === 'tel') return 'phone';
+  if (f.kind === 'textarea') {
+    if (LETTER.test(f.label)) return 'cover_letter';
+    if (
+      signInSiteOf(url)?.key === 'djinni' &&
+      (DJINNI_MESSAGE.test(f.label.trim()) || f.hint.name === 'message')
+    ) {
+      return 'cover_letter';
+    }
+  }
   return null;
 }
 
@@ -211,7 +229,7 @@ export class FormJudge implements ReadJudge {
     const ask: Record<string, ChoiceQuestion> = {};
     const byId = new Map<string, SnapField>();
     for (const f of fields) {
-      const rule = ruleMeaning(f);
+      const rule = ruleMeaning(f, this.o.url);
       if (rule) {
         f.meaning = rule;
         continue;

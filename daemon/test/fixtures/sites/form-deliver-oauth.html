@@ -1,0 +1,19 @@
+<!doctype html>
+<!-- Synthetic: an apply form whose only submit button signs in with GitHub (Djinni's "Login with
+     GitHub" is a submit button too). Delivery must never press it. -->
+<html lang="en"><head><meta charset="utf-8"><title>Apply · OAuth Co</title></head><body>
+<h1>Apply to OAuth Co</h1>
+<form id="apply" novalidate onsubmit="return false">
+  <div><label for="name">Full Name *</label><input id="name" required></div>
+  <button id="gh" type="submit" name="provider" value="github">Login with GitHub</button>
+  <button id="google" type="submit" name="provider" value="google">Continue with Google</button>
+</form>
+<script>
+  for (const id of ['gh', 'google']) {
+    document.getElementById(id).addEventListener('click', () => {
+      window.__pressed = (window.__pressed ?? 0) + 1;
+      fetch('/attempt', { method: 'POST', body: id }).catch(() => {});
+    });
+  }
+</script>
+</body></html>

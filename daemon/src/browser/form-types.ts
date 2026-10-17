@@ -127,6 +127,11 @@ export interface FormRead {
   requirements: Requirements;
   /** What Read couldn't do or noticed: a step it couldn't pass, options that load as you type. */
   notes: string[];
+  /**
+   * Read in Applyant's signed-in profile: a site that shows its real form only to signed-in
+   * candidates (Djinni). Unset for the anonymous reader.
+   */
+  signedIn?: boolean;
 }
 
 export function refKey(ref: ElementRef): string {

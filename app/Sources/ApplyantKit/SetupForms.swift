@@ -68,6 +68,17 @@ public struct ProfileForm: Equatable, Sendable {
     }
 
     public var hasChanges: Bool { !changes.isEmpty }
+
+    /// Whether a field has no value yet (its row says "Not set", with a dot).
+    public func isUnset(_ key: String) -> Bool {
+        self[key].trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// The Profile header's line: "16 fields · 5 not set", or "16 fields, all set".
+    public var summary: String {
+        let unset = Self.fields.filter { isUnset($0.key) }.count
+        return "\(Self.fields.count) fields" + (unset == 0 ? ", all set" : " · \(unset) not set")
+    }
 }
 
 // MARK: Knowledge sources
@@ -140,6 +151,29 @@ public enum KnowledgeText {
             let when = s.lastSyncedAt.date.formatted(date: .abbreviated, time: .shortened)
             return "Synced \(when)" + (s.hasSyncNote && !s.syncNote.isEmpty ? " · \(s.syncNote)" : "")
         }
+    }
+
+    /// The visible line under a source, short and in words: "Synced Sep 30 · 9 profile fields
+    /// filled", "Synced Oct 1 · 56 new facts · 9 projects created"; the full note is the help.
+    public static func syncHeadline(_ s: KnowledgeSource) -> String {
+        guard syncState(s) == .synced else { return syncLine(s) }
+        let when = "Synced " + s.lastSyncedAt.date.formatted(.dateTime.month(.abbreviated).day())
+        let parts = s.hasSyncNote ? s.syncNote.components(separatedBy: " · ").compactMap(noteHeadline) : []
+        return ([when] + parts).joined(separator: " · ")
+    }
+
+    /// One part of a sync note in words, or nil for the bookkeeping only the help shows.
+    static func noteHeadline(_ part: String) -> String? {
+        if let range = part.range(of: "profile filled from the CV: ") {
+            let n = part[range.upperBound...].split(separator: ",").count
+            return "\(n) profile field\(n == 1 ? "" : "s") filled"
+        }
+        if let range = part.range(of: #"^\d+ new facts?"#, options: .regularExpression) {
+            return part[range].hasPrefix("0 ") ? nil : String(part[range])
+        }
+        if part.range(of: #"^\d+ projects? created$"#, options: .regularExpression) != nil { return part }
+        if part.hasPrefix("unchanged") { return "unchanged" }
+        return nil
     }
 
     public static func chip(_ s: KnowledgeSource) -> Chip {
@@ -344,6 +378,17 @@ public struct PreferencesForm: Equatable, Sendable {
     }
 
     public var hasChanges: Bool { !changes.isEmpty }
+
+    /// Whether a field has no value yet (its row says "Not set", with a dot).
+    public func isUnset(_ key: String) -> Bool {
+        self[key].trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// The Profile header's line: "16 fields · 5 not set", or "16 fields, all set".
+    public var summary: String {
+        let unset = Self.fields.filter { isUnset($0.key) }.count
+        return "\(Self.fields.count) fields" + (unset == 0 ? ", all set" : " · \(unset) not set")
+    }
 }
 
 public struct PreferencesFormSnapshot: Equatable, Sendable {

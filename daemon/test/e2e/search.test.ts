@@ -110,6 +110,10 @@ describe('search from the CLI', () => {
       'board:arbeitnow',
       'board:jobicy',
       'board:djinni',
+      // Job searches across every company on the ATSs (web search starts off).
+      'board:workable-search',
+      'board:smartrecruiters-search',
+      'board:ats-web-search',
       // LinkedIn and Xing: built in, read only once Applyant's browser is signed in (phase 14).
       'linkedin:jobs',
       'xing:jobs',
