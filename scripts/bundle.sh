@@ -109,6 +109,8 @@ BUILD_NUMBER="$(git -C "$ROOT" rev-list --count HEAD 2>/dev/null || echo 1)"
 sed "s/__BUILD__/$BUILD_NUMBER/" "$ROOT/app/Bundle/Info.plist" > "$C/Info.plist"
 printf 'APPL????' > "$C/PkgInfo"
 cp "$ROOT/app/Bundle/AppIcon.icns" "$C/Resources/AppIcon.icns"
+# The 3D illustrations (Art.swift loads them from here).
+cp -R "$ROOT/app/Bundle/Art" "$C/Resources/Art"
 plutil -lint "$C/Info.plist" >/dev/null
 sed "s/__BUILD__/$BUILD_NUMBER/" "$ROOT/app/Bundle/ShareExtension-Info.plist" > "$APPEX/Contents/Info.plist"
 printf 'XPC!????' > "$APPEX/Contents/PkgInfo"
