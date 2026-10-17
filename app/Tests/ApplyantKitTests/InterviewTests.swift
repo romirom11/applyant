@@ -59,12 +59,30 @@ func projectInterview(_ id: Int64, _ name: String, gaps: [String], asked: Int32 
         #expect(rows.waiting.map(\.target) == [.project(1), .question(7), .question(8)])
         #expect(rows.waiting.map(\.title) == ["Harbor", "Have you led a team?", "Kubernetes in production?"])
         #expect(rows.waiting[1].subtitle == "For Acme · Senior AI Engineer")
-        #expect(rows.waiting.map { $0.chips.first?.text } == ["Needs your answer", "Needs your answer", "Reading your answer…"])
+        // The header says they wait: only a row being read says so.
+        #expect(rows.waiting.map { $0.chips.first?.text } == [nil, nil, "Reading your answer…"])
         // Harbor is already waiting above; the rest by how much is missing.
         #expect(rows.projects.map(\.title) == ["Lantern", "Quay", "Beacon"])
         #expect(rows.projects[0].subtitle == "Missing: What you built, Your role, The team, Results")
         #expect(rows.projects.map { $0.chips.first?.text } == ["Not interviewed", "Writing a question…", "2 asked"])
         #expect(rows.projects[2].subtitle == "Nothing missing")
+    }
+
+    @Test func waitingQuestionsStandUnderTheirApplication() {
+        let rows = InterviewText.rows(
+            questions: [
+                question(1, "Maths at high school?", application: (9, "Canonical · Python Software Engineer")),
+                question(2, "How big was the team?", project: (1, "Harbor")),
+                question(3, "Remote for how long?", application: (4, "n8n · Platform Engineer")),
+                question(4, "In person 2–4 times a year?", application: (9, "Canonical · Python Software Engineer")),
+                question(5, "Startups?", application: (12, "")),
+            ],
+            projects: []
+        )
+        let groups = InterviewText.groups(rows.waiting)
+        #expect(groups.map(\.title) == ["Canonical · Python Software Engineer", "Project questions", "n8n · Platform Engineer", "Application 12"])
+        #expect(groups.map { $0.rows.map(\.target) } == [[.question(1), .question(4)], [.project(1)], [.question(3)], [.question(5)]])
+        #expect(InterviewText.groups([]).isEmpty)
     }
 
     @Test func loadsTheInterviewCountsOpenQuestionsAndFollowsItsEvents() async throws {
@@ -124,5 +142,29 @@ func projectInterview(_ id: Int64, _ name: String, gaps: [String], asked: Int32 
         #expect(nav.section == .interview)
         #expect(nav.interview == .question(7))
         #expect(nav.reviewing == nil && nav.postingId == nil)
+    }
+
+    // What the interview's answers feed: the profile's form and its sources, as Profile reads them.
+    @Test func theProfileSaysWhatIsNotSetAndItsSourcesInWords() {
+        var form = ProfileForm(entries: [
+            .with { $0.key = "full_name"; $0.values = ["Roman Kudin"] },
+            .with { $0.key = "email"; $0.values = ["me@example.com"] },
+        ])
+        #expect(form.isUnset("current_company") && !form.isUnset("email"))
+        #expect(form.summary == "16 fields · 14 not set")
+        for field in ProfileForm.fields { form[field.key] = "x" }
+        #expect(form.summary == "16 fields, all set")
+
+        var s = KnowledgeSource.with { $0.kind = .file; $0.locator = "/Users/me/cv.pdf" }
+        s.lastSyncedAt = .init(date: Date(timeIntervalSince1970: 1_790_000_000))
+        s.syncNote = "unchanged since the last sync · profile filled from the CV: full_name, email, phone, location, links.github, links.linkedin, work_authorization, relocation, salary_expectation"
+        let headline = KnowledgeText.syncHeadline(s)
+        #expect(headline.hasPrefix("Synced ") && headline.hasSuffix(" · unchanged · 9 profile fields filled"))
+        s.syncNote = "56 new facts, 0 already known, 0 dropped · 9 projects created · profile filled from the CV: links.website"
+        #expect(KnowledgeText.syncHeadline(s).hasSuffix(" · 56 new facts · 9 projects created · 1 profile field filled"))
+        s.syncNote = "0 new facts, 4 already known, 0 dropped"
+        #expect(!KnowledgeText.syncHeadline(s).contains("·"))
+        s.syncNote = "sync failed: 404 not found"
+        #expect(KnowledgeText.syncHeadline(s) == "Sync failed: 404 not found")
     }
 }

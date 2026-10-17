@@ -36,7 +36,7 @@ public enum Section: String, CaseIterable, Identifiable, Sendable {
         case .applied: "Applied"
         case .interviews: "Interviews"
         case .offers: "Offers"
-        case .whichApplication: "Which application?"
+        case .whichApplication: "Replies"
         case .profile: "Profile"
         case .projects: "Projects"
         case .interview: "Questions for you"
@@ -214,11 +214,14 @@ public struct Chip: Equatable, Sendable {
     public let tone: Tone
     /// Work under way (preparing, delivering): the chip shows it's alive.
     public let live: Bool
+    /// All of it, for the chip's tooltip, when the text is a short form ("English: B1 < fluent").
+    public let help: String?
 
-    public init(text: String, tone: Tone, live: Bool = false) {
+    public init(text: String, tone: Tone, live: Bool = false, help: String? = nil) {
         self.text = text
         self.tone = tone
         self.live = live
+        self.help = help
     }
 }
 
@@ -237,12 +240,15 @@ public struct ListItem: Identifiable, Equatable, Sendable {
         applicationId = application?.id
         score = posting.hasScore ? posting.score : nil
         title = posting.hasTitle ? posting.title : posting.canonicalURL
-        subtitle = [posting.hasCompany ? posting.company : nil, posting.hasSalaryText ? posting.salaryText : nil]
-            .compactMap { $0 }.joined(separator: " · ")
+        let company = posting.hasCompany ? posting.company : nil
+        // Sent: when it went says more than the salary that was read before.
+        let second = application.flatMap(Self.sent) ?? (posting.hasSalaryText ? posting.salaryText : nil)
+        subtitle = [company, second].compactMap { $0 }.joined(separator: " · ")
         var chips: [Chip] = []
-        if let application { chips.append(StageText.chip(application, delivery: delivery)) }
-        else if posting.stage == .skipped { chips.append(Chip(text: "Skipped", tone: .neutral)) }
-        if let deviation = Score.mainDeviation(posting) { chips.append(Chip(text: deviation, tone: .warning)) }
+        // Skipped is what it is, whatever its application had reached.
+        if posting.stage == .skipped || posting.decision == "skipped" { chips.append(Chip(text: "Skipped", tone: .neutral)) }
+        else if let application { chips.append(StageText.chip(application, delivery: delivery)) }
+        if let deviation = Score.deviation(posting) { chips.append(Chip(text: deviation.short, tone: .warning, help: deviation.full)) }
         if let ats = Source.ats(posting.hasApplyURL ? posting.applyURL : posting.canonicalURL) {
             chips.append(Chip(text: ats, tone: .neutral))
         }
@@ -255,8 +261,27 @@ public struct ListItem: Identifiable, Equatable, Sendable {
         applicationId = application.id
         score = application.hasScore ? application.score : nil
         title = application.hasTitle ? application.title : application.postingURL
-        subtitle = application.hasCompany ? application.company : ""
+        subtitle = [application.hasCompany ? application.company : nil, Self.sent(application)].compactMap { $0 }.joined(separator: " · ")
         chips = [StageText.chip(application, delivery: delivery)]
+    }
+
+    /// The row's chips in a list: a stage chip that only repeats the list it's in goes (Applied
+    /// in Applied, Interview in Interviews); a rejection or a withdrawal in Applied still says so.
+    public func chips(in section: Section) -> [Chip] {
+        let own: String? = switch section {
+        case .applied: StageText.name(.applied)
+        case .interviews: StageText.name(.interview)
+        case .offers: StageText.name(.offer)
+        default: nil
+        }
+        guard let own, applicationId != nil else { return chips }
+        return chips.filter { $0.text != own }
+    }
+
+    /// "Sent Oct 3", once it's sent.
+    static func sent(_ app: Application) -> String? {
+        guard StageRules.isSent(app.stage), let date = SentText.date(app) else { return nil }
+        return "Sent " + date.formatted(.dateTime.month(.abbreviated).day())
     }
 }
 
@@ -333,15 +358,59 @@ public enum Score {
         return (min(earned, of), of)
     }
 
-    /// The component that costs the most points and says why ("Salary 7% below target").
-    public static func mainDeviation(_ p: Posting) -> String? {
-        if let dealbreaker = p.dealbreakers.first { return "Dealbreaker: \(dealbreaker)" }
+    /// The component that costs the most points, short enough for a row's chip ("English: B1 <
+    /// fluent", at most 24 characters).
+    public static func mainDeviation(_ p: Posting) -> String? { deviation(p)?.short }
+
+    /// The same, with the scorer's whole sentence for the chip's tooltip.
+    public static func deviation(_ p: Posting) -> (short: String, full: String)? {
+        if let dealbreaker = p.dealbreakers.first {
+            let full = "Dealbreaker: \(dealbreaker)"
+            return (full.count <= chipLength ? full : clipped(dealbreaker, to: chipLength), full)
+        }
         let lossy = p.breakdown
             // Must-haves and nice-to-haves are the score itself, not a deviation to flag.
             .filter { $0.weight > 0 && !$0.uncertain && $0.hasNote && $0.value < 1 && $0.key != "must" && $0.key != "nice" }
             .max { lost($0) < lost($1) }
         guard let c = lossy, lost(c) >= 2 else { return nil }
-        return c.note
+        return (shortNote(c.key, c.note), c.note)
+    }
+
+    /// A chip's text never runs past this.
+    public static let chipLength = 24
+
+    /// The scorer's note, short: "English (fluent) · you have B1" → "English: B1 < fluent",
+    /// "Salary $4k · 7% below target" → "Salary 7% below target", else its first part.
+    static func shortNote(_ key: String, _ note: String) -> String {
+        let parts = note.components(separatedBy: " · ").map { $0.trimmingCharacters(in: .whitespaces) }
+        let head = parts.first ?? note
+        switch key {
+        case "language":
+            // "English (fluent)" + "you have B1" | "you don't list it".
+            let name = head.components(separatedBy: " (").first ?? head
+            let level = head.range(of: #"\(([^)]*)\)"#, options: .regularExpression).map { String(head[$0].dropFirst().dropLast()) }
+            if let have = parts.first(where: { $0.hasPrefix("you have ") })?.dropFirst("you have ".count), let level {
+                return clipped("\(name): \(have) < \(level)", to: chipLength)
+            }
+            if parts.contains("you don't list it") { return clipped("\(name) not listed", to: chipLength) }
+            return clipped(name, to: chipLength)
+        case "salary":
+            if let versus = parts.first(where: { $0.hasSuffix("below target") }) {
+                return clipped(versus.hasPrefix("Salary") ? versus : "Salary " + versus, to: chipLength)
+            }
+            if head.hasPrefix("Salary below your floor") { return "Salary below your floor" }
+            return clipped(head, to: chipLength)
+        default:
+            return clipped(head, to: chipLength)
+        }
+    }
+
+    /// At most `n` characters, cut at a word with "…".
+    static func clipped(_ s: String, to n: Int) -> String {
+        guard s.count > n else { return s }
+        let cut = s.prefix(n - 1)
+        let word = cut.lastIndex(of: " ").map { cut[..<$0] } ?? cut
+        return word.trimmingCharacters(in: CharacterSet(charactersIn: " ,;:·(")) + "…"
     }
 
     private static func lost(_ c: Applyant_V1_ScoreComponent) -> Double { c.weight * (1 - c.value) }
@@ -472,4 +541,73 @@ public enum ReviewRules {
     }
 
     public static func unconfirmedFacts(_ app: Application) -> Set<Int64> { Set(app.unconfirmedFactIds) }
+
+    /// The sentences an answer's paragraphs start with (never its first): after a greeting
+    /// ("Dear team,") or a line ending in a colon, at a sign-off ("Best regards"), or where the
+    /// draft itself began a new line. The sentences come without their line breaks otherwise.
+    public static func paragraphStarts(_ sentences: [Applyant_V1_AnswerSentence]) -> Set<Int32> {
+        let signOffs = ["best regards", "kind regards", "regards", "best,", "sincerely", "thank you", "thanks", "cheers", "warm regards", "з повагою"]
+        var starts = Set<Int32>()
+        for (i, s) in sentences.enumerated() where i > 0 {
+            let previous = sentences[i - 1].text.trimmingCharacters(in: .whitespaces)
+            let lower = s.text.trimmingCharacters(in: .whitespaces).lowercased()
+            if s.text.hasPrefix("\n") || previous.hasSuffix(":") || previous.hasSuffix(",") && previous.count < 40
+                || signOffs.contains(where: { lower.hasPrefix($0) }) {
+                starts.insert(s.index)
+            }
+        }
+        return starts
+    }
+
+    /// Answers waiting on something only the candidate knows.
+    public static func answersNeedingYou(_ app: Application) -> [Applyant_V1_Answer] {
+        activeAnswers(app).filter { $0.status == "needs_candidate" }
+    }
+
+    /// Highlighted sentences to check in the answers that are sent; one resting on an
+    /// unconfirmed fact is the facts' to-do instead.
+    public static func sentencesToCheck(_ app: Application) -> [(answer: Applyant_V1_Answer, sentence: Applyant_V1_AnswerSentence)] {
+        activeAnswers(app).filter { $0.status != "needs_candidate" }.flatMap { a in
+            a.sentences.filter { flagText($0) != nil && $0.flag != "unconfirmed" }.map { (a, $0) }
+        }
+    }
+
+    /// What's left before it can be sent, from the application's own data, so the hero's chips,
+    /// the Application tab and any count agree. Nothing once it's approved or sent.
+    public static func todo(_ app: Application) -> [ReviewTodo] {
+        guard [.readyForReview, .needsCandidate].contains(app.stage) else { return [] }
+        let counts: [(ReviewTodo.Kind, Int)] = [
+            (.values, problemFields(app).count),
+            (.answers, answersNeedingYou(app).count),
+            (.sentences, sentencesToCheck(app).count),
+            (.facts, Set(app.unconfirmedFactIds).count),
+            (.cv, app.hasCv ? app.cv.stale.count : 0),
+        ]
+        return counts.filter { $0.1 > 0 }.map { ReviewTodo(kind: $0.0, count: $0.1) }
+    }
+}
+
+/// One kind of thing left to do before an application can go: "3 values only you can give".
+public struct ReviewTodo: Identifiable, Equatable, Sendable {
+    public enum Kind: String, Sendable { case values, answers, sentences, facts, cv }
+    public let kind: Kind
+    public let count: Int
+
+    public init(kind: Kind, count: Int) {
+        self.kind = kind
+        self.count = count
+    }
+
+    public var id: Kind { kind }
+
+    public var title: String {
+        let one = count == 1
+        return switch kind {
+        case .values: one ? "1 value only you can give" : "\(count) values only you can give"
+        case .answers: one ? "1 question only you can answer" : "\(count) questions only you can answer"
+        case .sentences: one ? "1 sentence to check" : "\(count) sentences to check"
+        case .facts: one ? "1 fact to confirm" : "\(count) facts to confirm"
+        case .cv: one ? "1 CV line to fix" : "\(count) CV lines to fix"
+        }
+    }
 }

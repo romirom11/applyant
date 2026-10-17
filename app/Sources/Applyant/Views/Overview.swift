@@ -1,40 +1,69 @@
 // Home, the screen the window opens on, built like CleanMyMac's Smart Care but dense: a
 // greeting and a line on where things stand, a compact grid of glass tiles (a number that says
 // what it counts, a caption and a 3D object peeking in from the corner; on a wide window the
-// funnel's tile too), the strip of what Applyant is working on while it works, the next few
-// jobs ready to send beside the round button, and, folded away under them, how it's going: the
-// funnel (found → … → offer) and the success metrics, for 7 days, 30 days or all time.
+// funnel's tile too), how it's going opening right under the grid when its tile is clicked
+// (the funnel and the success metrics, for 7 days, 30 days or all time), the strip of what
+// Applyant is working on while it works, and the next few jobs ready to send beside the round
+// button.
 import ApplyantAPI
 import ApplyantKit
 import SwiftUI
 
 struct HomeView: View {
     @Bindable var store: AppStore
-    @AppStorage("home.showsMetrics") private var showsMetrics = false
+    /// How it's going, open for this visit only. `--show-how-its-going` opens it at launch (for
+    /// screenshots).
+    @State private var showsMetrics = CommandLine.arguments.contains("--show-how-its-going")
+    /// The column's width, measured: the grid, the panel's notch and the round button follow it.
+    @State private var measured: CGFloat = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         let input = store.homeInput
         let live = HomeText.live(input)
         GeometryReader { geo in
+            // Until measured, the window less the page's margins.
+            let total = measured > 0 ? measured : max(min(geo.size.width, 1500) - Theme.pagePadding * 2, 0)
+            let columns = HomeGrid.columns(width: total)
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: Theme.blockSpacing) {
                     greeting(input)
-                    HomeGridView(store: store, input: input, live: live, tileHeight: HomeGrid.tileHeight(window: geo.size.height), showsMetrics: $showsMetrics)
+                        // The greeting takes the width offered, whatever the grid's fixed widths
+                        // add up to: the column's measure.
+                        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { measured = $0 }
+                    HomeGridView(
+                        store: store, input: input, live: live, columns: columns, total: total,
+                        tileHeight: HomeGrid.tileHeight(window: geo.size.height), showsMetrics: $showsMetrics
+                    )
+                    if columns < 4 {
+                        MetricsLine(store: store, showsMetrics: $showsMetrics)
+                    }
+                    if showsMetrics {
+                        // Hangs from what opened it: the funnel's tile, or the line's chevron.
+                        let anchor = columns < 4
+                            ? 24
+                            : total - HomeGrid.width(.funnel, columns: columns, total: total, spacing: Theme.blockSpacing) / 2
+                        AnchoredPanel(anchorX: anchor) {
+                            HomeMetrics(store: store, width: total - Theme.cardPadding * 2) { toggleMetrics() }
+                        }
+                        .transition(.reveal(reduceMotion: reduceMotion))
+                    }
                     if let live {
                         ActivityStrip(tile: live.tile, live: live)
                             .transition(.blurIn(reduceMotion: reduceMotion))
                     }
-                    HStack(alignment: .center, spacing: 16) {
+                    HStack(alignment: .center, spacing: Theme.blockSpacing) {
                         UpNextCard(store: store, input: input)
+                            .frame(maxWidth: .infinity)
+                        // The round button stands in the last column, centred on it.
                         actionButton(input, live: live)
+                            .frame(width: HomeGrid.width(.tile(.ready), columns: columns, total: total, spacing: Theme.blockSpacing))
                     }
                     .entrance(3)
-                    metrics
-                        .padding(.top, 6)
                 }
                 .animation(Theme.Motion.pick(Theme.Motion.smooth, reduceMotion: reduceMotion), value: live)
-                .padding(.horizontal, 26)
+                .animation(Theme.Motion.pick(Theme.Motion.disclose, reduceMotion: reduceMotion), value: showsMetrics)
+                .padding(.horizontal, Theme.pagePadding)
                 .padding(.top, 10)
                 .padding(.bottom, 28)
                 .frame(maxWidth: 1500)
@@ -42,6 +71,7 @@ struct HomeView: View {
             }
             .scrollIndicators(.automatic)
         }
+        .focusedSceneValue(\.showsHowItsGoing, $showsMetrics)
         .task {
             await store.openProfile()
             await store.openSearch()
@@ -49,15 +79,17 @@ struct HomeView: View {
         .task(id: store.overviewWindow) { await store.openOverview() }
     }
 
+    private func toggleMetrics() {
+        withAnimation(Theme.Motion.pick(Theme.Motion.disclose, reduceMotion: reduceMotion)) { showsMetrics.toggle() }
+    }
+
     private func greeting(_ input: HomeInput) -> some View {
         let name = store.candidateProfile?.profile.first { $0.key == "full_name" }?.values.first
         return VStack(alignment: .leading, spacing: 4) {
             Text(HomeText.greeting(name: name, at: Date()))
-                .font(Theme.displayTitle)
-                .foregroundStyle(Theme.text)
+                .textRole(.display)
             Text(HomeText.state(input))
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(Theme.secondaryText)
+                .textRole(.prose, color: Theme.secondaryText)
                 .contentTransition(.numericText())
                 .animation(Theme.Motion.smooth, value: HomeText.state(input))
         }
@@ -81,35 +113,14 @@ struct HomeView: View {
             }
             .keyboardShortcut(.return, modifiers: .command)
             .help(action == .review ? "Open To review on its first job (⌘↩)" : action == .browse ? "Open New's good matches (⌘↩)" : "Open Search (⌘↩)")
-            Text("⌘↩").font(.system(size: 12, weight: .medium)).foregroundStyle(Theme.tertiaryText)
+            Text("⌘↩").textRole(.meta)
         }
-        .frame(width: 150)
     }
+}
 
-    /// How it's going, folded away under a disclosure (the wide grid's funnel tile opens it too).
-    private var metrics: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Button {
-                withAnimation(Theme.Motion.pick(Theme.Motion.snappy, reduceMotion: reduceMotion)) { showsMetrics.toggle() }
-            } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(Theme.secondaryText)
-                        .rotationEffect(.degrees(showsMetrics ? 90 : 0))
-                    Text("How it's going").font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.text)
-                    Text("The funnel and the success metrics").font(.system(size: 13)).foregroundStyle(Theme.secondaryText)
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityValue(showsMetrics ? "Shown" : "Hidden")
-            if showsMetrics {
-                HomeMetrics(store: store)
-                    .transition(.opacity)
-            }
-        }
-    }
+extension FocusedValues {
+    /// Home's How it's going, for View › Show How It's Going.
+    @Entry var showsHowItsGoing: Binding<Bool>?
 }
 
 // MARK: - The grid
@@ -120,98 +131,90 @@ private struct HomeGridView: View {
     let store: AppStore
     let input: HomeInput
     let live: HomeLive?
+    let columns: Int
+    let total: CGFloat
     let tileHeight: CGFloat
     @Binding var showsMetrics: Bool
-    private let spacing: CGFloat = 14
 
     var body: some View {
-        GeometryReader { geo in
-            let columns = HomeGrid.columns(width: geo.size.width)
-            VStack(spacing: spacing) {
-                ForEach(Array(HomeGrid.rows(columns: columns).enumerated()), id: \.offset) { r, row in
-                    HStack(spacing: spacing) {
-                        ForEach(Array(row.enumerated()), id: \.element) { i, slot in
-                            Group {
-                                switch slot {
-                                case let .tile(tile):
-                                    HomeTileView(store: store, tile: tile, figure: HomeText.figure(tile, input), input: input, live: live?.tile == tile ? live : nil)
-                                case .funnel:
-                                    FunnelTile(store: store, showsMetrics: $showsMetrics)
-                                }
+        VStack(alignment: .leading, spacing: Theme.blockSpacing) {
+            ForEach(Array(HomeGrid.rows(columns: columns).enumerated()), id: \.offset) { r, row in
+                HStack(spacing: Theme.blockSpacing) {
+                    ForEach(Array(row.enumerated()), id: \.element) { i, slot in
+                        let size = CGSize(width: HomeGrid.width(slot, columns: columns, total: total, spacing: Theme.blockSpacing), height: tileHeight)
+                        Group {
+                            switch slot {
+                            case let .tile(tile):
+                                HomeTileView(store: store, tile: tile, figure: HomeText.figure(tile, input), live: live?.tile == tile ? live : nil, size: size)
+                            case .funnel:
+                                FunnelTile(store: store, showsMetrics: $showsMetrics, size: size)
                             }
-                            .frame(width: HomeGrid.width(slot, columns: columns, total: geo.size.width, spacing: spacing), height: tileHeight)
-                            .entrance(1 + r * 2 + i / 2)
                         }
-                        Spacer(minLength: 0)
+                        .frame(width: size.width, height: size.height)
+                        .entrance(1 + r * 2 + i / 2)
                     }
                 }
             }
         }
-        .frame(height: tileHeight * 2 + spacing)
     }
 }
 
 /// One tile: its label, the big number and the caption saying what it counts, its 3D object
 /// peeking in from the top right; tinted in its colour, with what it's doing as its caption,
-/// while Applyant works on it. A click opens its section.
+/// while Applyant works on it. A click (or Space when focused) opens its section.
 private struct HomeTileView: View {
     let store: AppStore
     let tile: HomeTile
     let figure: HomeFigure
-    let input: HomeInput
     let live: HomeLive?
+    let size: CGSize
     @State private var hovering = false
     @State private var pointer: CGPoint = .zero
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: 18, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: Theme.cornerRadius, style: .continuous)
         let tint = HomeTileView.color(tile)
-        GeometryReader { geo in
-            let art: CGFloat = min(88, geo.size.height * 0.56)
+        let art: CGFloat = min(88, size.height * 0.56)
+        Button { open(tile.section) } label: {
             ZStack(alignment: .topLeading) {
                 // The object peeks in from the corner, cut by the tile's edge.
                 ArtView(live != nil ? HomeTileView.liveArt(tile) : HomeTileView.art(tile), size: art, tilt: hovering ? pointer : .zero)
-                    .offset(x: geo.size.width - art * 0.82, y: -art * 0.14)
+                    .offset(x: size.width - art * 0.82, y: -art * 0.14)
+                    .accessibilityHidden(true)
                 content
-                    .padding(16)
-                    .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
+                    .padding(Theme.cardPadding)
+                    .frame(width: size.width, height: size.height, alignment: .topLeading)
             }
-            .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
+            .frame(width: size.width, height: size.height, alignment: .topLeading)
             .background {
-                ZStack {
-                    shape.fill(hovering ? Theme.glassFillHover : Theme.glassFill)
-                    if live != nil {
-                        shape.fill(LinearGradient(colors: [tint.opacity(0.06), tint.opacity(0.22)], startPoint: .top, endPoint: .bottom))
-                            .transition(.opacity)
-                    }
+                if live != nil {
+                    shape.fill(LinearGradient(colors: [tint.opacity(0.06), tint.opacity(0.22)], startPoint: .top, endPoint: .bottom))
+                        .transition(.opacity)
                 }
             }
             .clipShape(shape)
-            .overlay { shape.strokeBorder(live != nil ? AnyShapeStyle(tint.opacity(0.55)) : AnyShapeStyle(Theme.glassEdge), lineWidth: 1) }
-            .contentShape(shape)
             .onContinuousHover { phase in
                 switch phase {
                 case let .active(at):
                     hovering = true
-                    pointer = CGPoint(x: (at.x / max(geo.size.width, 1) - 0.5) * 2, y: (at.y / max(geo.size.height, 1) - 0.5) * 2)
+                    pointer = CGPoint(x: (at.x / max(size.width, 1) - 0.5) * 2, y: (at.y / max(size.height, 1) - 0.5) * 2)
                 case .ended:
                     hovering = false
                     pointer = .zero
                 }
             }
-            .onTapGesture { open(tile.section) }
-            .animation(Theme.Motion.fade, value: hovering)
             .animation(Theme.Motion.smooth, value: live)
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(.isButton)
+        .buttonStyle(.tile(tint: live != nil ? tint : nil))
         .help("Open \(tile.section.title)")
     }
 
+    /// The label on top; the number and its one-line caption at the bottom, so every number in
+    /// a row stands on the same baseline.
     private var content: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 6) {
-                Text(tile.title).font(Theme.tileLabel).foregroundStyle(Theme.secondaryText)
+                Text(tile.title).textRole(.label).lineLimit(1)
                 if live != nil {
                     LiveDot(color: HomeTileView.color(tile), size: 6)
                 } else if tile == .needsYou && figure.value > 0 {
@@ -219,52 +222,35 @@ private struct HomeTileView: View {
                 }
             }
             Spacer(minLength: 0)
-            CountingNumber(value: figure.value)
-                .font(Theme.number(36))
-                .foregroundStyle(Theme.text)
-            if let live {
-                Text(live.title)
-                    .font(.system(size: 13, weight: .medium))
+            VStack(alignment: .leading, spacing: 2) {
+                CountingNumber(value: figure.value)
+                    .font(Theme.figure)
                     .foregroundStyle(Theme.text)
-                    .lineLimit(1)
-                    .contentTransition(.opacity)
-            } else if let done = figure.done {
-                HStack(spacing: 6) {
-                    Circle().fill(Theme.good).frame(width: 7, height: 7)
-                    Text(done).font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.good)
-                }
-            } else {
-                Text(figure.caption).font(.system(size: 13)).foregroundStyle(Theme.secondaryText).lineLimit(1)
+                caption
             }
-            extras
+        }
+    }
+
+    @ViewBuilder
+    private var caption: some View {
+        if let live {
+            Text(live.title)
+                .textRole(.body, color: Theme.text)
+                .lineLimit(1)
+                .contentTransition(.opacity)
+        } else if let done = figure.done {
+            HStack(spacing: 6) {
+                Circle().fill(Theme.good).frame(width: 7, height: 7)
+                Text(done).textRole(.body, color: Theme.secondaryText).lineLimit(1)
+            }
+        } else {
+            Text(figure.caption).textRole(.body, color: Theme.secondaryText).lineLimit(1)
         }
     }
 
     private func open(_ section: ApplyantKit.Section) {
         store.navigation.section = section
         store.navigation.select(nil)
-    }
-
-    /// Applied's way on to Interviews and Offers; Search's Resume while paused.
-    @ViewBuilder
-    private var extras: some View {
-        switch tile {
-        case .applied:
-            HStack(spacing: 6) {
-                Button("Interviews \(input.interviews)") { open(.interviews) }
-                Button("Offers \(input.offers)") { open(.offers) }
-            }
-            .buttonStyle(.secondary)
-            .controlSize(.small)
-            .padding(.top, 6)
-        case .search where input.pausedAt != nil:
-            Button { Task { await store.setBackgroundPaused(false) } } label: { Label("Resume", systemImage: "play.fill") }
-                .buttonStyle(.secondary)
-                .controlSize(.small)
-                .padding(.top, 6)
-        default:
-            EmptyView()
-        }
     }
 
     // MARK: Each tile's colour and object
@@ -305,60 +291,73 @@ private struct HomeTileView: View {
     }
 }
 
-/// The wide grid's last tile: how far the postings got, in a few numbers (found → applied →
-/// interview → offer). A click unfolds the funnel and the metrics under Up next.
+/// The wide grid's last tile, built like the others: how far the postings got (found ›
+/// applied › interviews › offers). A click opens the funnel and the metrics right under the
+/// grid, the panel's notch pointing back at it.
 private struct FunnelTile: View {
     let store: AppStore
     @Binding var showsMetrics: Bool
-    @State private var hovering = false
+    let size: CGSize
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: 18, style: .continuous)
-        VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 6) {
-                Text("How it's going").font(Theme.tileLabel).foregroundStyle(Theme.secondaryText)
-                Text("· " + OverviewText.title(store.overviewWindow)).font(Theme.tileLabel).foregroundStyle(Theme.tertiaryText)
-                Spacer()
-                Image(systemName: showsMetrics ? "chevron.up" : "chevron.down")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(Theme.secondaryText)
-            }
-            Spacer(minLength: 0)
-            if let report = store.overview {
-                HStack(alignment: .center, spacing: 12) {
-                    let steps = HomeText.funnelSummary(OverviewText.funnel(report.funnel))
-                    ForEach(Array(steps.enumerated()), id: \.element.id) { i, step in
-                        if i > 0 {
-                            Image(systemName: "chevron.right").font(.system(size: 11, weight: .bold)).foregroundStyle(Theme.tertiaryText)
-                        }
-                        VStack(alignment: .leading, spacing: 0) {
-                            Text("\(step.count)")
-                                .font(Theme.number(30))
-                                .foregroundStyle(Theme.text)
-                                .contentTransition(.numericText(value: Double(step.count)))
-                            Text(step.label.lowercased()).font(.system(size: 13)).foregroundStyle(Theme.secondaryText).lineLimit(1)
-                        }
+        let art: CGFloat = min(88, size.height * 0.56)
+        Button {
+            withAnimation(Theme.Motion.pick(Theme.Motion.disclose, reduceMotion: reduceMotion)) { showsMetrics.toggle() }
+        } label: {
+            ZStack(alignment: .topLeading) {
+                ArtView(.overview, size: art)
+                    .offset(x: size.width - art * 0.82, y: -art * 0.14)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack(spacing: 6) {
+                        Text("How it's going · " + OverviewText.title(store.overviewWindow)).textRole(.label).lineLimit(1)
+                        // Beside the label: what the tile opens, and that it's open.
+                        Image(systemName: showsMetrics ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(Theme.glyph)
+                            .accessibilityHidden(true)
+                    }
+                    Spacer(minLength: 0)
+                    if let report = store.overview {
+                        FunnelStrip(HomeText.funnelSummary(OverviewText.funnel(report.funnel)).map {
+                            FunnelStrip.Step(id: $0.id, count: $0.count, label: OverviewText.stepLabel($0.id))
+                        }, size: .large)
+                    } else {
+                        ProgressView().controlSize(.small)
                     }
                 }
-                .minimumScaleFactor(0.8)
-            } else {
-                ProgressView().controlSize(.small)
+                .padding(Theme.cardPadding)
+                .frame(width: size.width, height: size.height, alignment: .topLeading)
             }
+            .frame(width: size.width, height: size.height, alignment: .topLeading)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadius, style: .continuous))
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(hovering ? Theme.glassFillHover : Theme.glassFill, in: shape)
-        .overlay { shape.strokeBorder(Theme.glassEdge, lineWidth: 1) }
-        .contentShape(shape)
-        .onHover { hovering = $0 }
-        .onTapGesture {
-            withAnimation(Theme.Motion.pick(Theme.Motion.snappy, reduceMotion: reduceMotion)) { showsMetrics.toggle() }
+        .buttonStyle(.tile(selected: showsMetrics))
+        .accessibilityValue(showsMetrics ? "Expanded" : "Collapsed")
+        .help("Show the funnel and the goals")
+    }
+}
+
+/// The narrow grid has no funnel tile: the same disclosure as a line under the grid, the
+/// funnel's four numbers beside it.
+private struct MetricsLine: View {
+    let store: AppStore
+    @Binding var showsMetrics: Bool
+
+    var body: some View {
+        HStack(alignment: .center, spacing: Theme.Space.xl) {
+            DisclosureLine("How it's going · " + OverviewText.title(store.overviewWindow), isExpanded: $showsMetrics)
+            if let report = store.overview {
+                FunnelStrip(HomeText.funnelSummary(OverviewText.funnel(report.funnel)).map {
+                    FunnelStrip.Step(id: $0.id, count: $0.count, label: OverviewText.stepLabel($0.id))
+                }, size: .small)
+                .frame(maxWidth: 420)
+                .accessibilityElement(children: .combine)
+            }
+            Spacer(minLength: 0)
         }
-        .animation(Theme.Motion.fade, value: hovering)
-        .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(.isButton)
-        .help(showsMetrics ? "Hide the funnel and the metrics" : "Show the funnel and the metrics")
+        .padding(.horizontal, 4)
     }
 }
 
@@ -371,21 +370,19 @@ private struct ActivityStrip: View {
     let live: HomeLive
 
     var body: some View {
-        HStack(alignment: .center, spacing: 16) {
+        HStack(alignment: .center, spacing: Theme.blockSpacing) {
             ArtView(HomeTileView.liveArt(tile), size: 58)
             VStack(alignment: .leading, spacing: 5) {
                 HStack(spacing: 8) {
                     LiveDot(color: HomeTileView.color(tile), size: 6)
                     Text(live.title)
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(Theme.text)
+                        .textRole(.heading)
                         .lineLimit(1)
                         .contentTransition(.opacity)
                 }
                 if let note = live.note {
                     Text(note)
-                        .font(.system(size: 13))
-                        .foregroundStyle(Theme.secondaryText)
+                        .textRole(.body, color: Theme.secondaryText)
                         .lineLimit(1)
                         .contentTransition(.numericText())
                 }
@@ -405,9 +402,9 @@ private struct ActivityStrip: View {
                 .animation(Theme.Motion.smooth, value: live.items)
             }
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, Theme.cardPadding)
         .padding(.vertical, 12)
-        .glass(radius: 18, tint: HomeTileView.color(tile))
+        .glass(tint: HomeTileView.color(tile))
         .accessibilityElement(children: .combine)
     }
 }
@@ -421,19 +418,15 @@ private struct LiveItemRow: View {
         HStack(spacing: 10) {
             Image(systemName: item.done ? "checkmark.circle.fill" : current ? "circle.dotted" : "circle")
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(item.done ? Theme.good : current ? Theme.text : Theme.tertiaryText)
+                .foregroundStyle(item.done ? Theme.good : current ? Theme.text : Theme.glyph)
                 .symbolEffect(.rotate, options: .repeating, isActive: current)
                 .contentTransition(.symbolEffect(.replace))
             Text(item.title)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(item.done || current ? Theme.text : Theme.secondaryText)
+                .textRole(.itemTitle, color: item.done || current ? Theme.text : Theme.secondaryText)
                 .lineLimit(1)
             Spacer(minLength: 8)
             if let detail = item.detail {
-                Text(detail)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(Theme.secondaryText)
-                    .lineLimit(1)
+                Text(detail).textRole(.meta).lineLimit(1)
             }
         }
     }
@@ -449,27 +442,32 @@ private struct UpNextCard: View {
 
     var body: some View {
         let jobs = HomeText.upNext(input)
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: Theme.rowSpacing) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text("Up next").font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.text)
+                Text("Up next").textRole(.heading)
                 if let line = HomeText.upNextLine(shown: jobs.count, total: input.ready) {
-                    Text(line).font(.system(size: 13)).foregroundStyle(Theme.secondaryText)
+                    MetaLine(line)
                 }
                 Spacer()
                 if input.ready > jobs.count {
-                    Button("See all") {
+                    Button {
                         store.navigation.section = .toReview
                         store.navigation.select(nil)
+                    } label: {
+                        Text("See All")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(Theme.accent)
+                            .padding(.vertical, 4)
+                            .padding(.horizontal, 2)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Theme.accent)
+                    .help("Open To review")
                 }
             }
             if jobs.isEmpty {
                 Text(HomeText.upNextEmpty(input))
-                    .font(.system(size: 13))
-                    .foregroundStyle(Theme.secondaryText)
+                    .textRole(.body, color: Theme.secondaryText)
                     .padding(.vertical, 6)
             } else {
                 VStack(spacing: 2) {
@@ -482,10 +480,9 @@ private struct UpNextCard: View {
                 }
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
+        .padding(Theme.cardPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .glass(radius: 18)
+        .glass()
     }
 }
 
@@ -499,19 +496,19 @@ private struct UpNextRow: View {
             HStack(spacing: 12) {
                 ScoreRing(score: item.score, size: 30)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(item.title).font(.system(size: 13.5, weight: .semibold)).foregroundStyle(Theme.text).lineLimit(1)
+                    Text(item.title).textRole(.itemTitle).lineLimit(1)
                     if !item.subtitle.isEmpty {
-                        Text(item.subtitle).font(.system(size: 12.5)).foregroundStyle(Theme.secondaryText).lineLimit(1)
+                        Text(item.subtitle).textRole(.meta).lineLimit(1)
                     }
                 }
                 Spacer(minLength: 8)
                 Image(systemName: "chevron.right")
                     .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(Theme.tertiaryText)
+                    .foregroundStyle(Theme.glyph)
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 6)
-            .background(hovering ? Theme.glassFillHover : .clear, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .background(hovering ? Theme.glassFillHover : .clear, in: RoundedRectangle(cornerRadius: Theme.rowRadius, style: .continuous))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -523,123 +520,134 @@ private struct UpNextRow: View {
 
 // MARK: - How it's going
 
-/// Under the disclosure: the funnel in its window, and the PRD's success metrics as tiles.
+/// The panel under the grid: one line on how it's going with the window and a close button,
+/// the whole funnel as one strip (a step opens the list its postings are in now), the success
+/// metrics as equal cards, and what they measure folded away under them.
 private struct HomeMetrics: View {
     @Bindable var store: AppStore
+    /// The panel's inner width: three cards a row from 900 points, else two.
+    let width: CGFloat
+    let close: () -> Void
+    @State private var showsDefinitions = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.blockSpacing) {
-            HStack(alignment: .firstTextBaseline) {
-                if let report = store.overview {
-                    Text(OverviewText.since(report) + " · postings first seen in the window, and how far each got")
-                        .font(.system(size: 13)).foregroundStyle(Theme.secondaryText)
-                }
-                Spacer()
-                PillPicker(items: OverviewText.windows, title: OverviewText.title, selection: $store.overviewWindow)
-            }
+            header
             if let report = store.overview {
-                let rows = OverviewText.funnel(report.funnel)
-                let top = max(rows.first?.count ?? 0, 1)
-                HStack(alignment: .top, spacing: Theme.blockSpacing) {
-                    VStack(alignment: .leading, spacing: 12) {
-                        ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
-                            let list = OverviewText.section(forStep: row.id)
-                            FunnelRowView(row: row, share: Double(row.count) / Double(top), index: index)
-                                .contentShape(Rectangle())
-                                // A step opens the list its postings are in now.
-                                .onTapGesture {
-                                    guard let list else { return }
-                                    store.navigation.section = list
-                                    store.navigation.select(nil)
-                                }
-                                .help(list.map { "Open \($0.title)" } ?? "")
-                        }
-                    }
-                    .padding(Theme.cardPadding + 2)
-                    .frame(width: 360)
-                    .glass()
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 240), spacing: Theme.blockSpacing, alignment: .top)], spacing: Theme.blockSpacing) {
-                        ForEach(Array(report.metrics.enumerated()), id: \.element.key) { _, metric in
-                            MetricCard(metric: metric)
-                        }
-                    }
+                FunnelStrip(OverviewText.funnel(report.funnel).map {
+                    FunnelStrip.Step(id: $0.id, count: $0.count, label: OverviewText.stepLabel($0.id), conversion: $0.shortConversion)
+                }, size: .small) { step in
+                    guard let list = OverviewText.section(forStep: step.id) else { return }
+                    store.navigation.section = list
+                    store.navigation.select(nil)
+                }
+                EqualHeightGrid(report.metrics.map(MetricItem.init), columns: width >= 900 ? 3 : 2) { item in
+                    MetricCard(metric: item.metric)
+                }
+                DisclosureLine("What these measure", isExpanded: $showsDefinitions)
+                if showsDefinitions {
+                    definitions(report.metrics)
+                        .transition(.reveal(reduceMotion: reduceMotion))
                 }
             } else {
                 ProgressView().frame(maxWidth: .infinity, minHeight: 120)
             }
         }
+        .animation(Theme.Motion.pick(Theme.Motion.disclose, reduceMotion: reduceMotion), value: showsDefinitions)
     }
-}
 
-struct FunnelRowView: View {
-    let row: FunnelRow
-    /// The step's count against the first step's, for the bar.
-    let share: Double
-    /// Its place in the funnel: the bars grow one after another, and shift colour down it.
-    var index = 0
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(row.label).font(.system(size: 13.5, weight: .semibold)).foregroundStyle(Theme.text)
-                Spacer()
-                Text("\(row.count)")
-                    .font(Theme.number(20, weight: .bold))
-                    .foregroundStyle(Theme.text)
-                    .contentTransition(.numericText(value: Double(row.count)))
-                    .animation(Theme.Motion.snappy, value: row.count)
+    private var header: some View {
+        HStack(alignment: .center, spacing: 12) {
+            if let report = store.overview {
+                Text(OverviewText.summary(report)).textRole(.heading).lineLimit(1)
+                MetaLine(OverviewText.since(report))
+                    .help("Postings first seen in the window, and how far each got")
             }
-            Meter(value: share, color: Color(hue: 0.62 - Double(index) * 0.022, saturation: 0.55, brightness: 1), height: 6, delay: Stagger.delay(index, step: 0.06))
-            if let conversion = row.conversion {
-                Text(conversion).font(.system(size: 12)).foregroundStyle(Theme.secondaryText)
+            Spacer(minLength: 8)
+            PillPicker(items: OverviewText.windows, title: OverviewText.title, selection: $store.overviewWindow, accessibilityLabel: "Window")
+                .help("Postings first seen in the window, and how far each got")
+            Button(action: close) {
+                Image(systemName: "chevron.up")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(Theme.glyph)
+                    .frame(width: 28, height: 28)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .keyboardShortcut(.cancelAction)
+            .help("Hide How it's going (Esc)")
+            .accessibilityLabel("Hide How it's going")
+        }
+    }
+
+    /// Each metric's name beside what it measures, at reading measure.
+    private func definitions(_ metrics: [OverviewMetric]) -> some View {
+        Grid(alignment: .topLeading, horizontalSpacing: Theme.Space.l, verticalSpacing: Theme.Space.s) {
+            ForEach(metrics.filter { !$0.definition.isEmpty }, id: \.key) { m in
+                GridRow(alignment: .firstTextBaseline) {
+                    Text(OverviewText.name(m)).textRole(.itemTitle).lineLimit(1)
+                    Prose(m.definition, size: .compact)
+                }
             }
         }
     }
 }
 
-struct MetricCard: View {
+/// A metric for the equal-height grid (the report's metrics aren't Identifiable).
+private struct MetricItem: Identifiable {
+    let id: String
+    let metric: OverviewMetric
+
+    init(_ metric: OverviewMetric) {
+        id = metric.key
+        self.metric = metric
+    }
+}
+
+/// A success metric in four one-line rows: its name and standing, the number, what it's out
+/// of, and the goal. What it measures is under the pointer and read by VoiceOver.
+private struct MetricCard: View {
     let metric: OverviewMetric
     @State private var appeared = false
 
     var body: some View {
-        let standing = OverviewText.standing(metric)
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(metric.label).font(Theme.tileLabel).foregroundStyle(Theme.text)
-                Spacer()
-                mark(standing)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Text(OverviewText.name(metric)).textRole(.itemTitle).lineLimit(1)
+                Spacer(minLength: 4)
+                mark(OverviewText.standing(metric))
             }
-            Text(metric.display)
-                .font(Theme.number(26))
+            Text(OverviewText.headline(metric))
+                .font(Theme.figureSmall)
                 .foregroundStyle(Theme.text)
+                .lineLimit(1)
                 .contentTransition(.numericText())
-                .animation(Theme.Motion.snappy, value: metric.display)
-            Text(OverviewText.target(metric)).font(.system(size: 13, weight: .medium)).foregroundStyle(Theme.secondaryText)
-            if !metric.definition.isEmpty {
-                Text(metric.definition).font(.system(size: 12)).foregroundStyle(Theme.tertiaryText)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+                .animation(Theme.Motion.snappy, value: OverviewText.headline(metric))
+            Text(OverviewText.detail(metric)).textRole(.body, color: Theme.secondaryText).lineLimit(1)
+            Text(OverviewText.goal(metric)).textRole(.label).lineLimit(1)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(Theme.cardPadding)
-        .glass(tint: standing == .met ? Theme.good : standing == .missed ? Theme.warning : nil)
+        .help(metric.definition)
+        .accessibilityElement(children: .combine)
+        .accessibilityHint(metric.definition)
     }
 
+    /// ✓ on target, ⚠ below it; nothing while there's no data, or with no target at all.
     @ViewBuilder
     private func mark(_ standing: OverviewText.Standing) -> some View {
         switch standing {
         case .met:
-            Image(systemName: "checkmark.circle.fill").foregroundStyle(Theme.good).help("On target")
+            Image(systemName: "checkmark.circle.fill").foregroundStyle(Theme.good)
                 .symbolEffect(.bounce, options: .nonRepeating, value: appeared)
                 .onAppear { appeared = true }
+                .accessibilityLabel("On target")
         case .missed:
-            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(Theme.warning).help("Below target")
+            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(Theme.warning)
                 .symbolEffect(.wiggle, options: .nonRepeating, value: appeared)
                 .onAppear { appeared = true }
-        case .noData:
-            Text("No data yet").font(.system(size: 12)).foregroundStyle(Theme.secondaryText)
-        case .watched:
-            Text("Watched").font(.system(size: 12)).foregroundStyle(Theme.secondaryText)
+                .accessibilityLabel("Below target")
+        case .noData, .watched:
+            EmptyView()
         }
     }
 }

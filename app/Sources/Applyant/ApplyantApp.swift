@@ -204,18 +204,35 @@ extension FocusedValues {
     @Entry var listCommands: ListCommands?
 }
 
-/// The menu bar's Job and Go menus, and View › Show Labels: every command the window's
-/// buttons and shortcuts have, in one place.
+/// The menu bar's Job and Go menus, Settings… in the app menu, and View › Show Labels and Show
+/// How It's Going: every command the window's buttons and shortcuts have, in one place.
 struct AppCommands: Commands {
     let store: AppStore
     @FocusedValue(\.jobCommands) private var job
     @FocusedValue(\.listCommands) private var list
+    /// Home's How it's going panel; nil off Home.
+    @FocusedBinding(\.showsHowItsGoing) private var showsHowItsGoing
+    @Environment(\.openWindow) private var openWindow
     /// The rail's labels beside its icons (MainView's IconRail).
     @AppStorage("railLabels") private var railLabels = true
 
     var body: some Commands {
+        // Settings is a section of the main window: ⌘, opens the window on it.
+        CommandGroup(replacing: .appSettings) {
+            Button("Settings…") {
+                openWindow(id: "main")
+                go(.settings)
+            }
+            .keyboardShortcut(",", modifiers: .command)
+        }
         CommandGroup(before: .sidebar) {
             Button(railLabels ? "Hide Labels" : "Show Labels") { railLabels.toggle() }
+            Button(showsHowItsGoing == true ? "Hide How It's Going" : "Show How It's Going") {
+                let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+                withAnimation(Theme.Motion.pick(Theme.Motion.disclose, reduceMotion: reduceMotion)) { showsHowItsGoing?.toggle() }
+            }
+            .keyboardShortcut("0", modifiers: [.command, .option])
+            .disabled(showsHowItsGoing == nil)
             Divider()
         }
         CommandMenu("Job") {

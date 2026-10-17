@@ -103,6 +103,13 @@ public enum KeyFacts {
         return rows
     }
 
+    /// The facts the Job tab's strip shows: the ones the hero doesn't already say (it has the
+    /// workplace, the place, the salary and when it was posted).
+    public static func stripRows(_ p: Posting, description: PostingDescription) -> [KeyFact] {
+        let inHero: Set<String> = ["Workplace", "Location", "Salary", "Posted"]
+        return rows(p, description: description).filter { !inHero.contains($0.label) }
+    }
+
     private static func note(_ p: Posting, _ key: String) -> String? {
         p.breakdown.first { $0.key == key && $0.hasNote && !$0.note.isEmpty }?.note
     }
@@ -216,13 +223,65 @@ public enum MatchText {
         public let requirements: [RequirementMatch]
     }
 
-    /// Must-haves, then nice-to-haves (an empty kind is left out).
+    /// Must-haves, then nice-to-haves (an empty kind is left out), each with what's missing
+    /// first, then what's partly there, then what's met: the gaps are what to read.
     public static func requirementGroups(_ p: Posting) -> [RequirementGroup] {
         let note = { (key: String) in p.breakdown.first { $0.key == key && $0.hasNote }?.note }
         return [
-            RequirementGroup(id: "must", title: "Must-haves", note: note("must"), requirements: p.requirements.filter(\.must)),
-            RequirementGroup(id: "nice", title: "Nice-to-haves", note: note("nice"), requirements: p.requirements.filter { !$0.must }),
+            RequirementGroup(id: "must", title: "Must-haves", note: note("must"), requirements: ordered(p.requirements.filter(\.must))),
+            RequirementGroup(id: "nice", title: "Nice-to-haves", note: note("nice"), requirements: ordered(p.requirements.filter { !$0.must })),
         ].filter { !$0.requirements.isEmpty }
+    }
+
+    /// Missing, then unknown (a condition to ask about), then partial, then strong; the
+    /// posting's own order within each.
+    public static func ordered(_ requirements: [RequirementMatch]) -> [RequirementMatch] {
+        let rank = ["missing": 0, "partial": 2, "strong": 3]
+        return requirements.enumerated()
+            .sorted { (rank[$0.element.verdict] ?? 1, $0.offset) < (rank[$1.element.verdict] ?? 1, $1.offset) }
+            .map(\.element)
+    }
+
+    /// The met ones, folded into one line: "7 met · 8+ years, ownership, system design"; nil
+    /// when none is met.
+    public static func metSummary(_ group: RequirementGroup) -> String? {
+        let met = group.requirements.filter { $0.verdict == "strong" }
+        guard !met.isEmpty else { return nil }
+        let names = met.prefix(3).map { shortName($0.text) }
+        return "\(met.count) met · " + names.joined(separator: ", ") + (met.count > 3 ? "…" : "")
+    }
+
+    /// A requirement in a word or three: "Have 8+ years of software engineering experience." →
+    /// "8+ years", "Strong system design skills" → "system design skills".
+    public static func shortName(_ text: String) -> String {
+        var s = text.trimmingCharacters(in: .whitespacesAndNewlines.union(CharacterSet(charactersIn: ".")))
+        let fillers = [
+            "you have ", "you are ", "you've ", "have ", "has ", "be ", "are ", "is ", "strong ", "solid ", "proven ", "deep ",
+            "excellent ", "good ", "great ", "extensive ", "demonstrated ", "hands-on ", "practical ", "professional ",
+            "experience with ", "experience in ", "experience of ", "experience building ", "knowledge of ", "familiarity with ",
+            "understanding of ", "ability to ", "comfortable with ", "comfort with ", "proficiency in ", "proficient in ",
+            "expertise in ", "background in ", "track record of ", "a ", "an ", "the ",
+        ]
+        var changed = true
+        while changed {
+            changed = false
+            for f in fillers where s.lowercased().hasPrefix(f) && s.count > f.count {
+                s = String(s.dropFirst(f.count))
+                changed = true
+            }
+        }
+        // Up to the first break in the phrase.
+        let breaks = [",", ";", ":", " (", " – ", " — ", " - ", " and ", " or ", " of ", " with ", " in ", " for ", " to ", " that ", " who ", " using ", " such as "]
+        let cut = breaks.compactMap { s.range(of: $0)?.lowerBound }.filter { $0 > s.startIndex }.min()
+        if let cut { s = String(s[..<cut]) }
+        var words = s.split(separator: " ").prefix(3).map(String.init)
+        // An ordinary word starts lower case in a list; a name ("Python", "AWS") keeps its case.
+        let ordinary = ["ship", "ing", "tion", "sion", "ment", "ness", "ity", "ence", "ance", "ive", "ism"]
+        if let first = words.first, words.count > 1 || ordinary.contains(where: { first.lowercased().hasSuffix($0) }),
+           first.dropFirst().allSatisfy({ !$0.isUppercase }) {
+            words[0] = first.prefix(1).lowercased() + first.dropFirst()
+        }
+        return words.joined(separator: " ")
     }
 
     /// The facts a requirement rests on, one line each, under their project's name
@@ -248,10 +307,55 @@ public enum MatchText {
         p.breakdown.filter { $0.weight > 0 || $0.uncertain }
     }
 
+    /// A potential issue as a callout says it: "Dealbreaker" over "outstaffing", "Location
+    /// isn't clear" over "remote, region not stated".
+    public struct Issue: Equatable, Sendable {
+        public let title: String
+        public let detail: String?
+    }
+
+    public static func issueList(_ p: Posting) -> [Issue] {
+        p.dealbreakers.map { Issue(title: "Dealbreaker", detail: $0) }
+            + p.breakdown.filter { $0.uncertain && $0.hasNote }.map {
+                Issue(title: "\(Score.componentTitles[$0.key] ?? $0.key) isn't clear", detail: $0.note.isEmpty ? nil : $0.note)
+            }
+    }
+
     /// Dealbreakers, and what the posting doesn't say enough about to score.
     public static func issues(_ p: Posting) -> [String] {
         p.dealbreakers.map { "Dealbreaker: \($0)" }
             + p.breakdown.filter { $0.uncertain && $0.hasNote }.map { "\(Score.componentTitles[$0.key] ?? $0.key): \($0.note)" }
+    }
+}
+
+/// When a sent application went, for the hero and the lists: "Sent Oct 3 · 14 days ago · no
+/// reply yet".
+public enum SentText {
+    /// When it was sent: the recorded send, else the receipt's.
+    public static func date(_ app: Application) -> Date? {
+        if app.hasAppliedAt { return app.appliedAt.date }
+        if app.hasReceipt, app.receipt.hasSubmittedAt { return app.receipt.submittedAt.date }
+        return nil
+    }
+
+    public static func line(_ app: Application, now: Date = Date()) -> String? {
+        guard StageRules.isSent(app.stage), let sent = date(app) else { return nil }
+        let replies = app.emails.count
+        return [
+            "Sent " + sent.formatted(.dateTime.month(.abbreviated).day()),
+            ago(sent, now: now),
+            replies == 0 ? "no reply yet" : replies == 1 ? "1 reply" : "\(replies) replies",
+        ].joined(separator: " · ")
+    }
+
+    /// "14 days ago", "today".
+    static func ago(_ date: Date, now: Date) -> String {
+        let days = Calendar.current.dateComponents([.day], from: Calendar.current.startOfDay(for: date), to: Calendar.current.startOfDay(for: now)).day ?? 0
+        switch days {
+        case ..<1: return "today"
+        case 1: return "yesterday"
+        default: return "\(days) days ago"
+        }
     }
 }
 

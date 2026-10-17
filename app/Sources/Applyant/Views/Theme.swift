@@ -2,9 +2,10 @@
 // score ramp, the brand gradient, chip and verdict tints) and the springs everything moves
 // with. The window is always one deep navy world (cobalt glows drifting on it, one of them
 // tinted by the section that's open), so the colours here are made for it; tiles are
-// translucent glass over it, and colour lives in the 3D art and small accents. Views use these instead of their own numbers, so the visual language is changed
-// here. The shared pieces built from them are in Components.swift, the motion in Motion.swift
-// and Ambient.swift.
+// translucent glass over it, and colour lives in the 3D art and small accents. Views use these
+// instead of their own numbers, so the visual language is changed here. The shared pieces built
+// from them are in Components.swift, text in Reading.swift, figures and metrics in Figures.swift,
+// the motion in Motion.swift and Ambient.swift.
 import AppKit
 import ApplyantKit
 import SwiftUI
@@ -12,45 +13,143 @@ import SwiftUI
 enum Theme {
     // MARK: Spacing and shape
 
-    /// Around a detail page, and between its blocks.
-    static let pagePadding: CGFloat = 24
-    static let blockSpacing: CGFloat = 14
-    /// Inside a tile: around its content and between its rows.
-    static let cardPadding: CGFloat = 18
-    static let rowSpacing: CGFloat = 6
-    /// A glass tile's corners (CleanMyMac's are about this round).
-    static let cornerRadius: CGFloat = 20
-    /// Blocks inside a tile (a fact, a run's sources) and text fields.
-    static let innerRadius: CGFloat = 12
-    /// The list column's panel and the job's hero.
+    /// The spacing scale: every gap is one of these.
+    enum Space {
+        static let xxs: CGFloat = 2, xs: CGFloat = 4, s: CGFloat = 8, m: CGFloat = 12, l: CGFloat = 16, xl: CGFloat = 24, xxl: CGFloat = 32
+    }
+
+    /// Around a page or a tab (Home included), and between its blocks (Home's grid gap too).
+    static let pagePadding: CGFloat = 20
+    static let blockSpacing: CGFloat = 16
+    /// Inside a card or a tile: one inset everywhere, and the gap between its rows.
+    static let cardPadding: CGFloat = 16
+    static let rowSpacing: CGFloat = 8
+    /// Between paragraphs of running text (8 in a compact one).
+    static let paragraphSpacing: CGFloat = 12
+    /// A glass card's or tile's corners.
+    static let cornerRadius: CGFloat = 18
+    /// A list column's cards and Up next's rows: the panel's 24 less their 10 pt inset.
+    static let rowRadius: CGFloat = 14
+    /// Blocks inside a card (a fact, a Callout) and text fields.
+    static let innerRadius: CGFloat = 10
+    /// The list column's panel, the job's hero and Home's metrics panel.
     static let panelRadius: CGFloat = 24
-    /// Text reads best up to this width.
-    static let readableWidth: CGFloat = 960
-    /// Long text (a posting's description): about 75 characters a line.
-    static let proseWidth: CGFloat = 700
+    /// The widest a page's or a tab's column gets.
+    static let pageWidth: CGFloat = 820
+    /// Running text at 14 pt: about 75 Latin (65 Cyrillic) characters a line.
+    static let measure: CGFloat = 540
+    /// A lead sentence at 17 pt: about 75 characters.
+    static let leadMeasure: CGFloat = 600
+    /// EvidenceRow's right column ("4 facts ›", "Sep 2021").
+    static let marginColumn: CGFloat = 132
+    /// LabeledRow's label column.
+    static let labelColumn: CGFloat = 200
+    /// Kept for the views that name them: a page's width and running text's.
+    static let readableWidth: CGFloat = pageWidth
+    static let proseWidth: CGFloat = measure
     /// The rail of sections on the left.
     static let railWidth: CGFloat = 74
 
     // MARK: Type
 
-    /// Home's greeting.
+    /// Home's greeting and the job's title.
     static let displayTitle = Font.system(size: 28, weight: .bold)
-    static let heroTitle = Font.system(size: 27, weight: .bold)
-    /// A section's own title over its list ("To review").
-    static let moduleTitle = Font.system(size: 24, weight: .bold)
+    static let heroTitle = Font.system(size: 28, weight: .bold)
+    /// A section's own title over its list ("To review") and a page's title.
+    static let moduleTitle = Font.system(size: 22, weight: .bold)
     static let pageTitle = Font.system(size: 22, weight: .bold)
     static let cardTitle = Font.system(size: 14, weight: .semibold)
     /// A tile's label, top left ("Ready to send").
     static let tileLabel = Font.system(size: 12, weight: .semibold)
-    static let caption = Font.caption
+    /// Nothing is smaller than 11 points.
+    static let caption = Font.system(size: 11, weight: .medium)
     /// Above a group of rows: small, spaced capitals.
-    static let eyebrow = Font.system(size: 10.5, weight: .bold)
-    /// Long text: a little larger than body, for easy reading.
-    static let prose = Font.system(size: 14.5)
+    static let eyebrow = Font.system(size: 11, weight: .bold)
+    /// Running text.
+    static let prose = Font.system(size: 14)
 
     /// Scores and counts: rounded, with even digits.
     static func number(_ size: CGFloat, weight: Font.Weight = .bold) -> Font {
         .system(size: size, weight: weight, design: .rounded).monospacedDigit()
+    }
+
+    /// Every Home tile's figure (the funnel's too), and a metric card's or the panel's funnel.
+    static let figure = number(FigureSize.large.pointSize)
+    static let figureSmall = number(FigureSize.small.pointSize)
+
+    /// A figure's two sizes. `capHeight` is what chevrons and connectors centre on (figureMid).
+    enum FigureSize {
+        case large, small
+
+        var pointSize: CGFloat { self == .large ? 36 : 24 }
+        var font: Font { Theme.number(pointSize) }
+        var capHeight: CGFloat { NSFont.systemFont(ofSize: pointSize, weight: .bold).capHeight }
+    }
+
+    /// The type scale: twelve roles on eight text sizes, nothing under 11 points. Hierarchy comes
+    /// from size and weight first, colour second; sentences are never tertiary, amber or green.
+    enum TextRole: CaseIterable {
+        /// Home's greeting, the job's title.
+        case display
+        /// Module and page titles.
+        case title
+        /// The one-sentence take on a page.
+        case lead
+        /// Card titles, Up next, a panel's header, StatStrip's values.
+        case heading
+        /// A list column's row.
+        case rowTitle
+        /// Paragraphs: a description, an answer, mail, a company.
+        case prose
+        /// A short name in a card: a metric, a field's label, a question.
+        case itemTitle
+        /// Sentence-length claims, values, short text.
+        case body
+        /// Reasons, subtitles, captions, dates: one line.
+        case meta
+        /// Tile labels, goal lines.
+        case label
+        /// Group headers, key facts' labels, a finding's date: spaced capitals.
+        case eyebrow
+        /// A chip's words.
+        case chip
+
+        var font: Font {
+            switch self {
+            case .display: .system(size: 28, weight: .bold)
+            case .title: .system(size: 22, weight: .bold)
+            case .lead: .system(size: 17, weight: .medium)
+            case .heading: .system(size: 15, weight: .semibold)
+            case .rowTitle: .system(size: 14, weight: .semibold)
+            case .prose: .system(size: 14)
+            case .itemTitle: .system(size: 13, weight: .semibold)
+            case .body: .system(size: 13)
+            case .meta: .system(size: 12)
+            case .label: .system(size: 12, weight: .semibold)
+            case .eyebrow: .system(size: 11, weight: .bold)
+            case .chip: .system(size: 11, weight: .semibold)
+            }
+        }
+
+        var color: Color {
+            switch self {
+            case .meta, .label, .eyebrow: Theme.secondaryText
+            case .chip: Theme.chipText(.neutral)
+            default: Theme.text
+            }
+        }
+
+        var lineSpacing: CGFloat {
+            switch self {
+            case .lead: 4
+            case .rowTitle: 1
+            case .prose: 5
+            case .itemTitle, .body: 2
+            default: 0
+            }
+        }
+
+        var tracking: CGFloat { self == .eyebrow ? 0.8 : 0 }
     }
 
     // MARK: Colour
@@ -62,12 +161,18 @@ enum Theme {
     /// A surface raised off the base: a toast, a menu (#12224A).
     static let raised = Color(hex: 0x12224A)
 
-    /// Text on the world: near-white (16.7:1 on the base), a cool grey for what's secondary
-    /// (8.8:1; 7.6:1 on a card) and a dimmer one for hints (5.8:1; 5.0:1 on a card, never under
-    /// 12 points). With Increase Contrast secondary text is primary.
+    /// Text on the world, measured (WCAG) on every surface it sits on, the picked card (#303973)
+    /// the brightest of them:
+    /// - `text`, near-white: 16.7:1 on the base, 9.8:1 on a picked card;
+    /// - `secondaryText` (meta, reasons, labels): 6.76:1 on a card, at least 5.17:1 anywhere;
+    /// - `tertiaryText` (timestamps and counts only, one line, never a sentence): 7.91:1 on the
+    ///   base, 5.10:1 on a card, 4.88:1 on an amber wash, at least 4.67:1 on a picked card.
+    /// With Increase Contrast secondary text is primary and tertiary rises to #C9D1E6.
     static let text = Color(hex: 0xF2F5FF)
     static let secondaryText = adaptive(NSColor(hex: 0xA9B4D0), contrast: NSColor(hex: 0xF2F5FF))
-    static let tertiaryText = adaptive(NSColor(hex: 0x8591B0), contrast: NSColor(hex: 0xA9B4D0))
+    static let tertiaryText = adaptive(NSColor(hex: 0xA0ABC8), contrast: NSColor(hex: 0xC9D1E6))
+    /// Chevrons, connectors, disclosure arrows: non-text only (3.4:1 or more), never words.
+    static let glyph = adaptive(NSColor(hex: 0x8591B0), contrast: NSColor(hex: 0xA9B4D0))
 
     /// The one interaction accent: a prominent button, the picked tab, row or field, under white
     /// text (5.5:1). Never decoration.
@@ -183,6 +288,10 @@ enum Theme {
     /// A block inside a tile.
     static let insetFill = adaptive(NSColor.white.withAlphaComponent(0.05), opaque: NSColor(hex: 0x182140))
     static let hairline = adaptive(NSColor.white.withAlphaComponent(0.10), contrast: NSColor.white.withAlphaComponent(0.20))
+    /// A neutral chip's fill.
+    static let chipNeutralFill = adaptive(NSColor.white.withAlphaComponent(0.07), contrast: NSColor.white.withAlphaComponent(0.14), opaque: NSColor(hex: 0x1E2846))
+    /// The round button's disc while it can't be pressed.
+    static let discFill = adaptive(NSColor.white.withAlphaComponent(0.10), opaque: NSColor(hex: 0x1A2442))
     static let shadow = Color.black.opacity(0.35)
     /// Behind a toast or a menu over the world.
     static let toastFill = adaptive(NSColor(hex: 0x12224A).withAlphaComponent(0.96), opaque: NSColor(hex: 0x12224A))

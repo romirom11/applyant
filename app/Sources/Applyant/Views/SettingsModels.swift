@@ -6,32 +6,31 @@ import ApplyantAPI
 import ApplyantKit
 import SwiftUI
 
-struct ModelsSection: View {
+struct ModelsCard: View {
     let store: AppStore
     @State private var codexModels: [String] = []
 
     var body: some View {
-        SwiftUI.Section {
-            Toggle("Read replies with a cloud model", isOn: Binding(
-                get: { RolesText.cloudEmail(store.roles) },
-                set: { on in Task { await store.setCloudEmail(on) } }
-            ))
-            .disabled(store.roles.isEmpty)
-            Text(RolesText.emailPrivacy).font(.caption).foregroundStyle(.secondary)
+        Card(title: "Models", accessory: {
+            if store.roles.contains(where: \.overridden) {
+                Button("Reset All to Defaults") { Task { await store.resetRoles() } }.controlSize(.small)
+            }
+        }) {
+            Text("Which model does each job. A change applies to the next run, no restart needed.")
+                .textRole(.meta)
+            LabeledRow("Replies", note: RolesText.emailPrivacy) {
+                Toggle("Read replies with a cloud model", isOn: Binding(
+                    get: { RolesText.cloudEmail(store.roles) },
+                    set: { on in Task { await store.setCloudEmail(on) } }
+                ))
+                .textRole(.body)
+                .disabled(store.roles.isEmpty)
+                .fixedSize()
+            }
             ForEach(store.roles, id: \.role) { role in
+                Divider().overlay(Theme.hairline)
                 RoleRow(store: store, role: role, codexModels: codexModels)
             }
-            if store.roles.contains(where: \.overridden) {
-                HStack {
-                    Spacer()
-                    Button("Reset all to defaults") { Task { await store.resetRoles() } }
-                }
-            }
-        } header: {
-            Text("Models")
-        } footer: {
-            Text("Which model does each job. A change applies to the next run, no restart needed.")
-                .font(.caption).foregroundStyle(.secondary)
         }
         .task {
             codexModels = CodexModels.available()
@@ -52,10 +51,11 @@ private struct RoleRow: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(RolesText.title(role.role))
-                Text(role.description_p).font(.caption).foregroundStyle(.secondary)
-                Text(RolesText.line(role)).font(.caption.monospaced()).foregroundStyle(.secondary)
+                Text(RolesText.title(role.role)).textRole(.itemTitle)
+                Text(role.description_p).textRole(.meta).fixedSize(horizontal: false, vertical: true)
+                Text(RolesText.line(role)).font(.system(size: 11).monospaced()).foregroundStyle(Theme.secondaryText)
             }
+            .frame(maxWidth: Theme.measure, alignment: .leading)
             Spacer()
             if provider == "jev" || provider == "apple" {
                 Menu(RolesText.routeName(role.route)) {
@@ -92,7 +92,7 @@ private struct RoleRow: View {
                         .disabled(route == role.route)
                     }
                     Divider()
-                    Button("Other model…") {
+                    Button("Other Model…") {
                         customModel = RolesText.model(role.route) == "Default" ? "" : RolesText.model(role.route)
                         enteringModel = true
                     }
@@ -116,20 +116,15 @@ private struct RoleRow: View {
     }
 }
 
-struct SitesSection: View {
+struct SitesCard: View {
     let store: AppStore
     @State private var signingIn = false
 
     var body: some View {
-        SwiftUI.Section {
-            HStack {
-                Text("Workday, Djinni or any site that needs an account: sign in once in Applyant's browser and the session is reused.")
-                    .font(.callout)
-                Spacer()
-                Button("Sign in to a site…") { signingIn = true }
+        Card(title: "Sites") {
+            LabeledRow("Sign-ins", note: "Workday, Djinni or any site that needs an account: sign in once in Applyant's browser and the session is reused.") {
+                Button("Sign In to a Site…") { signingIn = true }.fixedSize()
             }
-        } header: {
-            Text("Sites")
         }
         .sheet(isPresented: $signingIn) { SiteSignInSheet(store: store) { signingIn = false }.worldSheet() }
     }
@@ -146,9 +141,9 @@ struct SiteSignInSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Sign in to a site").font(.title2.bold())
+            Text("Sign in to a site").textRole(.title)
             if let opened {
-                Text("Sign in at \(opened) in the Chrome window that opened, then close that window. Deliveries wait until it is closed; the session stays in Applyant's browser.")
+                Prose("Sign in at \(opened) in the Chrome window that opened, then close that window. Deliveries wait until it is closed; the session stays in Applyant's browser.")
                 HStack {
                     Spacer()
                     Button("Done", action: close).keyboardShortcut(.defaultAction)
@@ -162,15 +157,15 @@ struct SiteSignInSheet: View {
                     SecureField("Password", text: $password).textFieldStyle(.roundedBorder)
                     if let target = SiteLogin.target(site) {
                         Text("Stored as \"\(SiteLogin.secretName(target))\"; it's never shown again.")
-                            .font(.caption).foregroundStyle(.secondary)
+                            .textRole(.meta)
                     }
                 }
                 Text("Applyant's browser opens as plain Chrome, with no automation, while you sign in.")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .textRole(.meta)
                 HStack {
                     Spacer()
                     Button("Cancel", action: close).keyboardShortcut(.cancelAction)
-                    Button("Open the sign-in window") {
+                    Button("Open Sign-In Window") {
                         let (s, u, p) = (site, saveLogin ? username : "", saveLogin ? password : "")
                         password = ""
                         Task { opened = await store.signIn(site: s, username: u, password: p) }
@@ -186,29 +181,24 @@ struct SiteSignInSheet: View {
     }
 }
 
-struct StoredKeysSection: View {
+struct StoredKeysCard: View {
     let store: AppStore
     @State private var deleting: String?
 
     var body: some View {
-        SwiftUI.Section {
+        Card(title: "Stored keys") {
+            Text("Names only: values stay in the Keychain and are never shown.").textRole(.meta)
             if store.secretNames.isEmpty {
-                Text("No keys stored.").font(.callout).foregroundStyle(.secondary)
+                Text("No keys stored.").textRole(.body, color: Theme.secondaryText)
             }
             ForEach(store.secretNames, id: \.self) { name in
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(SecretsText.purpose(name))
-                        Text(name).font(.caption.monospaced()).foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Button("Delete…", role: .destructive) { deleting = name }.controlSize(.small)
+                LabeledRow(SecretsText.purpose(name), note: name) {
+                    Button("Delete…") { deleting = name }
+                        .foregroundStyle(Theme.bad)
+                        .controlSize(.small)
+                        .fixedSize()
                 }
             }
-        } header: {
-            Text("Stored keys")
-        } footer: {
-            Text("Names only: values stay in the Keychain and are never shown.").font(.caption).foregroundStyle(.secondary)
         }
         .task { await store.openSecrets() }
         .confirmationDialog(

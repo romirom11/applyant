@@ -311,3 +311,149 @@ private func list(after heading: String, in blocks: [Block]) -> [String]? {
         #expect(OverviewText.section(forStep: "offer") == .offers)
     }
 }
+
+/// What's left before an application can go, the Job tab's strip and match, the lists' rows and
+/// the sent line: one source each, so the hero, the tab and the lists can't disagree.
+@Suite struct ReviewTodoTests {
+    private func sentence(_ index: Int32, _ text: String, flag: String = "none") -> Applyant_V1_AnswerSentence {
+        .with {
+            $0.index = index
+            $0.text = text
+            $0.flag = flag
+        }
+    }
+
+    private func requirement(_ text: String, _ verdict: String) -> RequirementMatch {
+        .with {
+            $0.text = text
+            $0.verdict = verdict
+            $0.must = true
+        }
+    }
+
+    @Test func theToDoCountsWhatOnlyTheCandidateCanDo() {
+        var app = application(9, posting: 1, stage: .needsCandidate, blockers: ["4 required field(s) need a value: #3 Notice period"])
+        app.fields = [
+            .with { $0.ref = "1:a"; $0.label = "Notice period"; $0.active = true; $0.missing = true; $0.role = "standard" },
+            .with { $0.ref = "1:b"; $0.label = "Degree"; $0.active = true; $0.missing = true; $0.role = "standard" },
+            .with { $0.ref = "1:c"; $0.label = "Salary"; $0.active = true; $0.missing = true; $0.role = "standard" },
+            // A question's own field is its answer's, not a value.
+            .with { $0.ref = "1:d"; $0.label = "Why us?"; $0.active = true; $0.missing = true; $0.role = "question" },
+            .with { $0.ref = "1:e"; $0.label = "Hidden"; $0.active = false; $0.missing = true; $0.role = "standard" },
+        ]
+        app.answers = [
+            .with { $0.number = 1; $0.active = true; $0.status = "needs_candidate"; $0.question = "Why us?" },
+            .with {
+                $0.number = 2
+                $0.active = true
+                $0.status = "answered"
+                $0.sentences = [sentence(0, "I led it."), sentence(1, "It saved 40%.", flag: "absent_number"), sentence(2, "Built X.", flag: "unconfirmed")]
+            },
+            // Overridden: the candidate set the field, the draft isn't used.
+            .with { $0.number = 3; $0.active = true; $0.overridden = true; $0.status = "needs_candidate" },
+        ]
+        app.unconfirmedFactIds = [12, 14, 12]
+        app.cv = .with { $0.stale = ["p1.2"] }
+        let todo = ReviewRules.todo(app)
+        #expect(todo.map(\.kind) == [.values, .answers, .sentences, .facts, .cv])
+        #expect(todo.map(\.title) == [
+            "3 values only you can give", "1 question only you can answer", "1 sentence to check", "2 facts to confirm", "1 CV line to fix",
+        ])
+        // Sent, there's nothing left to do.
+        app.stage = .applied
+        #expect(ReviewRules.todo(app).isEmpty)
+    }
+
+    @Test func machineNotesReadAsPlainWords() {
+        #expect(FieldText.plain("no notice_period in your profile") == "Notice period isn't in your profile")
+        #expect(FieldText.plain("full_name is not in your profile") == "Full name isn't in your profile")
+        #expect(FieldText.plain("4 required field(s) need a value: #3 Notice period; #7 Degree") == "4 required fields need a value: Notice period; Degree")
+        #expect(FieldText.plain("1 flagged sentence(s): q3.1 claims more") == "1 flagged sentence: claims more")
+        #expect(FieldText.plain("see base_cv_file") == "See base cv file")
+        #expect(FieldText.placeholder(.with { $0.label = "Notice period"; $0.kind = "text" }) == "e.g. 2 weeks")
+        #expect(FieldText.placeholder(.with { $0.label = "Highest degree"; $0.kind = "text" }) == "e.g. Master's")
+        #expect(FieldText.placeholder(.with { $0.label = "Anything else?"; $0.kind = "text" }) == "Your answer")
+    }
+
+    @Test func anAnswerKeepsItsParagraphs() {
+        let s = [sentence(0, "Dear team,"), sentence(1, "I build APIs."), sentence(2, "Here is how:"), sentence(3, "First, …"), sentence(4, "Best regards, Roman")]
+        #expect(ReviewRules.paragraphStarts(s) == [1, 3, 4])
+        #expect(ReviewRules.paragraphStarts([sentence(0, "One."), sentence(1, "Two.")]).isEmpty)
+    }
+
+    @Test func theJobTabsStripLeavesOutWhatTheHeroSays() {
+        var p = posting(874, score: 82, title: "AI Product Engineer", company: "Red Rocket Software")
+        p.salaryText = "$5k"
+        p.breakdown = [
+            .with { $0.key = "location"; $0.note = "Remote (europe, UA)"; $0.weight = 10; $0.value = 1 },
+            .with { $0.key = "employment"; $0.note = "Full-time"; $0.weight = 10; $0.value = 1 },
+            .with { $0.key = "role"; $0.note = "Senior"; $0.weight = 10; $0.value = 1 },
+            .with { $0.key = "language"; $0.note = "English (fluent) · you have B1"; $0.weight = 10; $0.value = 0.5 },
+        ]
+        let d = PostingDescription.parse(PostingSamples.djinni, title: p.title, company: p.company)
+        #expect(KeyFacts.stripRows(p, description: d).map(\.label) == ["Employment", "Seniority", "Language"])
+    }
+
+    @Test func gapsComeFirstAndWhatsMetFoldsIntoOneLine() {
+        var p = posting(1, score: 80, title: "Backend")
+        p.requirements = [
+            requirement("Have 8+ years of software engineering experience.", "strong"),
+            requirement("Lambda/EC2 in production", "missing"),
+            requirement("Ownership of projects end to end", "strong"),
+            requirement("Proactive stakeholder updates", "partial"),
+            requirement("Strong system design skills", "strong"),
+            requirement("Python", "strong"),
+            requirement("Work in CET hours", "unknown"),
+        ]
+        let group = MatchText.requirementGroups(p)[0]
+        #expect(group.requirements.map(\.verdict) == ["missing", "unknown", "partial", "strong", "strong", "strong", "strong"])
+        #expect(MatchText.metSummary(group) == "4 met · 8+ years, ownership, system design skills…")
+        #expect(MatchText.shortName("Python") == "Python")
+        #expect(MatchText.shortName("Experience with Kubernetes and Terraform") == "Kubernetes")
+        p.requirements = [requirement("Go", "missing")]
+        #expect(MatchText.metSummary(MatchText.requirementGroups(p)[0]) == nil)
+        p.dealbreakers = ["outstaffing"]
+        p.breakdown = [.with { $0.key = "location"; $0.note = "remote, region not stated"; $0.uncertain = true }]
+        #expect(MatchText.issueList(p) == [
+            .init(title: "Dealbreaker", detail: "outstaffing"), .init(title: "Location isn't clear", detail: "remote, region not stated"),
+        ])
+    }
+
+    @Test func rowsSayOnlyWhatSetsThemApart() {
+        var p = posting(1, score: 74, title: "Backend")
+        p.breakdown = [.with { $0.key = "language"; $0.weight = 10; $0.value = 0.5; $0.scale = 1; $0.note = "English (fluent) · you have B1 · counts ×0.8: core fit 63%" }]
+        let row = ListItem(posting: p, application: nil)
+        #expect(row.chips.first == Chip(text: "English: B1 < fluent", tone: .warning, help: p.breakdown[0].note))
+        #expect(Score.mainDeviation(p)!.count <= Score.chipLength)
+
+        // A skipped posting is Skipped, whatever its application reached.
+        var skipped = p
+        skipped.decision = "skipped"
+        #expect(ListItem(posting: skipped, application: application(9, posting: 1, stage: .readyForReview)).chips.first?.text == "Skipped")
+
+        // Sent: when it went, and no chip that repeats the list.
+        var sent = application(9, posting: 1, stage: .applied)
+        sent.appliedAt = .init(date: Date(timeIntervalSince1970: 1_791_000_000))
+        let item = ListItem(posting: posting(1, score: 74, title: "Backend"), application: sent)
+        #expect(item.subtitle == "Acme · Sent " + sent.appliedAt.date.formatted(.dateTime.month(.abbreviated).day()))
+        #expect(item.chips(in: .applied).map(\.text) == ["Ashby"])
+        #expect(item.chips(in: .toReview).map(\.text) == ["Applied", "Ashby"])
+        var rejected = sent
+        rejected.stage = .rejected
+        #expect(ListItem(application: rejected).chips(in: .applied).map(\.text) == ["Rejected"])
+    }
+
+    @Test func aSentApplicationSaysWhenAndWhetherAnyoneReplied() {
+        let day: TimeInterval = 86_400
+        let now = Date(timeIntervalSince1970: 1_791_000_000)
+        var app = application(9, posting: 1, stage: .applied)
+        #expect(SentText.line(app, now: now) == nil)
+        app.receipt = .with { $0.submittedAt = .init(date: now.addingTimeInterval(-14 * day)) }
+        let date = app.receipt.submittedAt.date.formatted(.dateTime.month(.abbreviated).day())
+        #expect(SentText.line(app, now: now) == "Sent \(date) · 14 days ago · no reply yet")
+        app.emails = [.with { $0.id = 1 }]
+        #expect(SentText.line(app, now: now)?.hasSuffix("· 1 reply") == true)
+        app.stage = .readyForReview
+        #expect(SentText.line(app, now: now) == nil)
+    }
+}

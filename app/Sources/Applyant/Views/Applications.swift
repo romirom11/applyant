@@ -13,23 +13,36 @@ struct MailboxStatus: View {
     @State private var connecting = false
 
     var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: MailText.isConnected(store.mailbox) ? "envelope" : "envelope.badge.shield.half.filled")
-                .foregroundStyle(MailText.isConnected(store.mailbox) ? Theme.secondaryText : Theme.warning)
-            Text(MailText.connection(store.mailbox).replacingOccurrences(of: "Mailbox: ", with: ""))
-                .font(.callout)
-                .foregroundStyle(Theme.secondaryText)
-                .lineLimit(1)
-                .truncationMode(.middle)
-            Spacer()
-            if MailText.isConnected(store.mailbox) {
-                Button("Sync now") { Task { await store.syncMailbox() } }
-                    .buttonStyle(.secondary)
-                    .controlSize(.small)
+        let problem = MailText.problem(store.mailbox)
+        let connected = MailText.isConnected(store.mailbox) && problem == nil
+        HStack(alignment: problem == nil ? .center : .top, spacing: 8) {
+            Image(systemName: connected ? "envelope" : "exclamationmark.triangle.fill")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(connected ? Theme.secondaryText : Theme.warning)
+            if let problem, let box = store.mailbox {
+                // Signed out though it says connected: the address, then what's wrong, whole.
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(box.address.isEmpty ? "Mailbox" : box.address).textRole(.meta).lineLimit(1)
+                    Text(problem).font(.system(size: 12)).foregroundStyle(Theme.text).lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             } else {
-                Button(store.mailbox == nil ? "Connect mailbox…" : "Reconnect…") { connecting = true }
+                Text(MailText.connection(store.mailbox).replacingOccurrences(of: "Mailbox: ", with: ""))
+                    .textRole(.meta)
+                    .lineLimit(1)
+                    .help(MailText.connection(store.mailbox))
+            }
+            Spacer(minLength: 4)
+            if connected {
+                Button("Sync Now") { Task { await store.syncMailbox() } }
                     .buttonStyle(.secondary)
                     .controlSize(.small)
+                    .fixedSize()
+            } else {
+                Button(store.mailbox == nil ? "Connect Mailbox…" : "Reconnect…") { connecting = true }
+                    .buttonStyle(problem != nil ? AnyButtonStyle(.primary) : AnyButtonStyle(.secondary))
+                    .controlSize(.small)
+                    .fixedSize()
             }
         }
         .sheet(isPresented: $connecting) {
@@ -48,13 +61,13 @@ struct WhichApplicationList: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ModuleHeader(section: .whichApplication, subtitle: store.mailQueue.isEmpty ? "Nothing to sort" : "\(store.mailQueue.count) repl\(store.mailQueue.count == 1 ? "y" : "ies") to place")
+            ModuleHeader(section: .whichApplication, subtitle: store.mailQueue.isEmpty ? "Nothing to place" : "\(store.mailQueue.count) repl\(store.mailQueue.count == 1 ? "y" : "ies") to place")
                 .columnHeader()
             MailboxStatus(store: store)
                 .padding(.horizontal, 6)
             if store.mailQueue.isEmpty {
                 EmptyState(
-                    title: "Nothing to sort",
+                    title: "No replies to place",
                     systemImage: ApplyantKit.Section.whichApplication.symbol,
                     detail: "Replies Applyant can't place on its own, or can't tell what they are, wait here.",
                     art: .allCaughtUp
@@ -68,12 +81,13 @@ struct WhichApplicationList: View {
                     ForEach(store.mailQueue, id: \.id) { e in
                         SelectableCard(id: e.id) {
                             VStack(alignment: .leading, spacing: 3) {
-                                Text(e.subject.isEmpty ? "(no subject)" : e.subject).font(.system(size: 13.5, weight: .bold)).foregroundStyle(Theme.text).lineLimit(2)
-                                Text(MailText.sender(e)).font(.system(size: 12)).foregroundStyle(Theme.secondaryText).lineLimit(1)
+                                Text(e.subject.isEmpty ? "(no subject)" : e.subject).textRole(.rowTitle).lineLimit(2)
+                                Text(MailText.sender(e)).textRole(.meta).lineLimit(1)
                                 HStack(spacing: 6) {
                                     ChipView(chip: MailText.labelChip(e))
                                     Text(e.receivedAt.date.formatted(.dateTime.day().month(.abbreviated).hour().minute()))
-                                        .font(.caption).foregroundStyle(Theme.tertiaryText)
+                                        .font(.system(size: 11, weight: .medium))
+                                        .foregroundStyle(Theme.secondaryText)
                                 }
                                 .padding(.top, 2)
                             }
@@ -82,7 +96,7 @@ struct WhichApplicationList: View {
                 }
             }
         }
-        .navigationTitle("Which application?")
+        .navigationTitle("Replies")
         .task {
             await store.openMail()
             // The first reply opens by itself: there's only ever something to decide here.
@@ -101,8 +115,7 @@ struct WhichApplicationDetail: View {
             EmptyState(
                 title: "Which application is this?",
                 systemImage: ApplyantKit.Section.whichApplication.symbol,
-                detail: "Pick a reply on the left and say which application it's about, or that it's about none.",
-                art: .whichApplication
+                detail: "Pick a reply on the left and say which application it's about, or that it's about none."
             )
         }
     }
@@ -122,82 +135,79 @@ struct WhichApplication: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Theme.blockSpacing) {
-                // The reply, read like a message.
                 PageHeader(
                     title: email.subject.isEmpty ? "(no subject)" : email.subject,
                     subtitle: MailText.sender(email) + " · " + email.receivedAt.date.formatted(date: .abbreviated, time: .shortened)
                 ) {
-                    ArtView(.whichApplication, size: 64)
+                    CompanyAvatar(name: MailText.sender(email), size: 56)
                 }
-                Text(email.snippet)
-                    .font(Theme.prose)
-                    .foregroundStyle(.white.opacity(0.88))
-                    .textSelection(.enabled)
-                    .lineSpacing(5)
+                // What Applyant made of it, and what's left for you: the decision comes first.
+                decision
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(Theme.cardPadding + 2)
-                    .readingSurface()
                     .entrance(1)
-                // What Applyant made of it, and what's left for you.
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack(spacing: 8) {
-                        Text("It is").foregroundStyle(Theme.secondaryText)
-                        Picker("It is", selection: $label) {
-                            ForEach(MailText.pickableLabels, id: \.self) {
-                                Text(MailText.labelTitle($0)).tag($0)
-                            }
-                        }
-                        .labelsHidden()
-                        .fixedSize()
-                        .help("A rejection, interview or offer moves the application on.")
-                        if email.hasConfidence, label == email.label {
-                            Text("Applyant is \(Int((email.confidence * 100).rounded()))% sure")
-                                .font(.caption).foregroundStyle(.secondary)
-                        }
-                    }
-                    if email.hasNote {
-                        Text(MailText.noteSentence(email.note)).font(.callout).foregroundStyle(.secondary)
-                    }
-                    Text("Which application is it about?").font(.system(size: 15, weight: .bold)).padding(.top, 4)
-                    ForEach(email.candidates, id: \.applicationID) { c in
-                        HStack {
-                            Text(MailText.candidateTitle(c))
-                            ChipView(chip: MailText.stageChip(c.stage) ?? Chip(text: "Applied", tone: .neutral))
-                            Spacer()
-                            Button("This one") { assign(c.applicationID) }.buttonStyle(.primary).controlSize(.small)
-                        }
-                        .padding(10)
-                        .insetSurface()
-                    }
-                    HStack(spacing: 10) {
-                        let others = otherApplications
-                        if !others.isEmpty {
-                            Menu(email.candidates.isEmpty ? "Pick an application…" : "Another application…") {
-                                ForEach(others, id: \.id) { app in
-                                    Button((app.hasCompany ? "\(app.company) · " : "") + (app.hasTitle ? app.title : "Application \(app.id)")) {
-                                        assign(app.id)
-                                    }
-                                }
-                            }
-                            .fixedSize()
-                        }
-                        Button(email.candidates.isEmpty && otherApplications.isEmpty ? "Not one of mine" : "None of these") { assign(nil) }
-                            .buttonStyle(.secondary)
-                            .help("It isn't about an application sent through Applyant; it's kept, and no status changes.")
-                    }
-                    if email.candidates.isEmpty && otherApplications.isEmpty {
-                        Text("No application sent through Applyant matches it, so there's nothing to move on.")
-                            .font(.caption).foregroundStyle(.secondary)
+                // The reply, read like a message: its links shortened, its paragraphs kept.
+                Prose(paragraphs: MailText.readable(email.snippet), collapsedLines: 6)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(Theme.cardPadding)
+                    .readingSurface()
+                    .entrance(2)
+            }
+            .pageColumn()
+        }
+    }
+
+    private var decision: some View {
+        VStack(alignment: .leading, spacing: Theme.rowSpacing + 4) {
+            HStack(spacing: 8) {
+                Text("Applyant reads this as").textRole(.body, color: Theme.secondaryText)
+                Picker("Applyant reads this as", selection: $label) {
+                    ForEach(MailText.pickableLabels, id: \.self) {
+                        Text(MailText.labelTitle($0)).tag($0)
                     }
                 }
-                .padding(Theme.cardPadding)
-                .cardSurface()
-                .entrance(2)
+                .labelsHidden()
+                .fixedSize()
+                .help("A rejection, interview or offer moves the application on.")
+                if email.hasConfidence, label == email.label {
+                    Text("· \(Int((email.confidence * 100).rounded()))% sure").textRole(.body, color: Theme.secondaryText)
+                }
             }
-            .padding(Theme.pagePadding)
-            .frame(maxWidth: 760, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            if email.hasNote {
+                Text(MailText.noteSentence(email.note)).textRole(.body, color: Theme.secondaryText).fixedSize(horizontal: false, vertical: true)
+            }
+            Text("Which application is it about?").textRole(.heading).padding(.top, 4)
+            ForEach(email.candidates, id: \.applicationID) { c in
+                HStack(spacing: 8) {
+                    Text(MailText.candidateTitle(c)).textRole(.body)
+                    ChipView(chip: MailText.stageChip(c.stage) ?? Chip(text: "Applied", tone: .neutral))
+                    Spacer()
+                    Button("This One") { assign(c.applicationID) }.buttonStyle(.primary).controlSize(.small)
+                }
+                .padding(10)
+                .insetSurface()
+            }
+            HStack(spacing: 10) {
+                let others = otherApplications
+                if !others.isEmpty {
+                    Menu(email.candidates.isEmpty ? "Pick an Application…" : "Another Application…") {
+                        ForEach(others, id: \.id) { app in
+                            Button((app.hasCompany ? "\(app.company) · " : "") + (app.hasTitle ? app.title : "Application \(app.id)")) {
+                                assign(app.id)
+                            }
+                        }
+                    }
+                    .fixedSize()
+                }
+                Button(email.candidates.isEmpty && otherApplications.isEmpty ? "Not One of Mine" : "None of These") { assign(nil) }
+                    .buttonStyle(.secondary)
+                    .help("It isn't about an application sent through Applyant; it's kept, and no status changes.")
+            }
+            if email.candidates.isEmpty && otherApplications.isEmpty {
+                MetaLine("No application sent through Applyant matches it, so there's nothing to move on.")
+            }
         }
+        .padding(Theme.cardPadding)
+        .glass()
     }
 
     /// Sent applications the email doesn't already offer.
@@ -226,22 +236,24 @@ struct ApplicationReplies: View {
         Card(title: "Replies", systemImage: "envelope") {
             VStack(alignment: .leading, spacing: 10) {
                 ForEach(app.emails, id: \.id) { e in
-                    VStack(alignment: .leading, spacing: 3) {
+                    VStack(alignment: .leading, spacing: 4) {
                         HStack(spacing: 6) {
                             ChipView(chip: MailText.labelChip(e))
-                            Text(e.subject.isEmpty ? "(no subject)" : e.subject).font(.headline).lineLimit(1)
+                            Text(e.subject.isEmpty ? "(no subject)" : e.subject).textRole(.itemTitle).lineLimit(1)
                         }
-                        Text(MailText.sender(e) + " · " + e.receivedAt.date.formatted(date: .abbreviated, time: .shortened))
-                            .font(.caption).foregroundStyle(.secondary)
+                        MetaLine(MailText.sender(e) + " · " + e.receivedAt.date.formatted(date: .abbreviated, time: .shortened))
                         if let line = MailText.calendar(e) {
                             HStack(spacing: 6) {
-                                Label(line, systemImage: "calendar").font(.callout)
+                                Label(line, systemImage: "calendar").textRole(.body)
                                 if e.hasCalendarLink, let url = URL(string: e.calendarLink) {
-                                    Button("Open in Calendar") { NSWorkspace.shared.open(url) }.buttonStyle(.link)
+                                    Button("Open in Calendar") { NSWorkspace.shared.open(url) }.buttonStyle(.link).foregroundStyle(Theme.accent)
                                 }
                             }
                         }
-                        Text(e.snippet).font(.callout).foregroundStyle(.secondary).lineLimit(3)
+                        Text(MailText.readable(e.snippet).joined(separator: " "))
+                            .textRole(.body, color: Theme.secondaryText)
+                            .lineLimit(3)
+                            .frame(maxWidth: Theme.measure, alignment: .leading)
                     }
                 }
             }

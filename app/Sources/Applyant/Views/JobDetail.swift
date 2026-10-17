@@ -40,7 +40,9 @@ struct JobDetail: View {
         let primary = JobAction.primary(posting: posting, application: app)
         let commands = commands(posting: posting, app: app, primary: primary, tab: tab)
         let sending = app.flatMap { store.deliveries[$0.id] } != nil
-        let roundSend = app != nil && (sending || { if case .approve = primary { return true }; return false }())
+        // The round Send is there only when it can send (or is sending): a blocked one would
+        // be a dead control over the page; the hero's Finish Application says what's left.
+        let roundSend = app != nil && (sending || { if case .approve(true, _) = primary { return true }; return false }())
         VStack(spacing: 0) {
             if posting != nil || app != nil {
                 DetailHeader(
@@ -68,8 +70,12 @@ struct JobDetail: View {
             }
         }
         .overlay(alignment: .bottom) {
+            // The page fades out under the button, so it never sits on a line of text.
+            if roundSend { EdgeScrim(edge: .bottom, height: 120).transition(.opacity) }
+        }
+        .overlay(alignment: .bottom) {
             if roundSend, let app {
-                SendButton(store: store, app: app, primary: primary, approve: commands.approve)
+                SendButton(store: store, app: app, approve: commands.approve)
                     .padding(.bottom, 14)
                     .transition(.scale(scale: 0.6).combined(with: .opacity))
             }
@@ -214,7 +220,7 @@ struct JobDetail: View {
 // MARK: - The header
 
 /// What the job is, where it stands, and its next step: one prominent action, Save and Skip…
-/// beside it, the rest in More; the tabs at its foot.
+/// beside it, the rest in More; what's left before it can be sent under them; the tabs at its foot.
 struct DetailHeader: View {
     let store: AppStore
     let posting: Posting?
@@ -227,29 +233,41 @@ struct DetailHeader: View {
     let note: String?
     let showTab: (DetailTab) -> Void
 
+    /// The avatar and the gap after it: the actions line up with the title.
+    private static let titleColumn: CGFloat = 64 + 18
+
     var body: some View {
         let world = Theme.world(store.navigation.section)
+        let todo = app.map(ReviewRules.todo) ?? []
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 16) {
                 HStack(alignment: .top, spacing: 18) {
                     CompanyAvatar(name: company ?? title, size: 64)
                     VStack(alignment: .leading, spacing: 6) {
                         Text(title)
-                            .font(Theme.heroTitle)
-                            .foregroundStyle(.white)
+                            .textRole(.display)
                             .lineLimit(3)
                             .textSelection(.enabled)
                         if !subtitle.isEmpty {
                             Text(subtitle)
                                 .font(.system(size: 15, weight: .medium))
-                                .foregroundStyle(.white.opacity(0.75))
+                                .foregroundStyle(Theme.secondaryText)
                                 .lineLimit(2)
                                 .textSelection(.enabled)
                         }
-                        HStack(spacing: 6) {
-                            ForEach(chips, id: \.text) { ChipView(chip: $0) }
+                        FlowRow(spacing: 6) {
+                            ForEach(chips, id: \.text) { ChipView(chip: $0, help: $0.help) }
+                            if let flags = redFlagsChip {
+                                Button { showTab(.company) } label: { ChipView(chip: flags) }
+                                    .buttonStyle(.plain)
+                                    .help((flags.help ?? "") + "\n\nThe Company tab has them with their sources.")
+                            }
                             if let dates {
-                                Text(dates).font(.system(size: 12, weight: .medium)).foregroundStyle(.white.opacity(0.6))
+                                Text(dates)
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundStyle(Theme.secondaryText)
+                                    .lineLimit(1)
+                                    .padding(.leading, 2)
                             }
                         }
                         .padding(.top, 2)
@@ -259,19 +277,24 @@ struct DetailHeader: View {
                 }
                 if let hint = app.flatMap(SignInHint.of) { SignInBanner(store: store, hint: hint) }
                 if let app, let delivery = store.deliveries[app.id] { DeliveryStrip(progress: delivery) }
-                actions
-                // Why Approve is off, the first reason; the Application tab lists them all.
-                if case let .approve(false, help) = primary {
-                    Button { showTab(.application) } label: {
-                        Label(help.components(separatedBy: "\n").first ?? help, systemImage: "exclamationmark.circle.fill")
-                            .lineLimit(2)
-                            .multilineTextAlignment(.leading)
+                VStack(alignment: .leading, spacing: 10) {
+                    actions
+                    // What's left before it can be sent, each a way into the Application tab.
+                    if !todo.isEmpty {
+                        FlowRow(spacing: 6) {
+                            ForEach(todo) { item in
+                                Button { showTab(.application) } label: {
+                                    ChipView(chip: Chip(text: item.title + " ›", tone: .warning))
+                                }
+                                .buttonStyle(.plain)
+                                .help("Open the Application tab: it's under Before You Can Send")
+                            }
+                        }
+                        .accessibilityElement(children: .contain)
+                        .accessibilityLabel("Before you can send")
                     }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(Theme.warning)
-                    .font(.system(size: 13, weight: .semibold))
-                    .help(help)
                 }
+                .padding(.leading, Self.titleColumn)
             }
             .padding(22)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -280,7 +303,7 @@ struct DetailHeader: View {
             .overlay { RoundedRectangle(cornerRadius: Theme.panelRadius, style: .continuous).strokeBorder(Theme.glassEdge, lineWidth: 1) }
             .shadow(color: world.main.opacity(0.25), radius: 24, y: 10)
             if tabs.count > 1 {
-                PillPicker(items: tabs, title: \.title, selection: Binding(get: { tab }, set: { showTab($0) }), numberShortcuts: true, tint: world.main, large: true)
+                PillPicker(items: tabs, title: \.title, selection: Binding(get: { tab }, set: { showTab($0) }), numberShortcuts: true, tint: world.main, large: true, accessibilityLabel: "Job sections")
                     .help("⌘1, ⌘2, ⌘3 switch tabs")
                     .padding(.top, 14)
                     .padding(.leading, 4)
@@ -310,6 +333,9 @@ struct DetailHeader: View {
         return KeyFacts.rows(posting, description: DescriptionCache.description(posting))
     }
 
+    /// Sent or on its way: Set Status and Open Posting are out on the row, not in More.
+    private var sent: Bool { app.map { $0.stage == .approved || StageRules.isSent($0.stage) } ?? false }
+
     /// "Acme · Remote (europe) · $5000–7000".
     private var subtitle: String {
         let wanted = ["Workplace", "Location", "Salary"]
@@ -330,8 +356,22 @@ struct DetailHeader: View {
         return chips
     }
 
-    /// "Found 3 days ago · posted 17 Sep 2026".
+    /// "2 red flags" when the company research found any: it opens the Company tab.
+    private var redFlagsChip: Chip? {
+        let research = posting.flatMap { $0.hasCompanyResearch ? $0.companyResearch : nil }
+            ?? app.flatMap { $0.hasCompanyResearch ? $0.companyResearch : nil }
+        guard let flags = research?.redFlags, !flags.isEmpty, tabs.contains(.company) else { return nil }
+        return Chip(
+            text: flags.count == 1 ? "1 red flag" : "\(flags.count) red flags",
+            tone: .warning,
+            help: flags.map(CompanyText.flagTitle).joined(separator: "\n")
+        )
+    }
+
+    /// "Sent Oct 3 · 14 days ago · no reply yet" once it's sent; before that "Found 3 days ago
+    /// · posted 17 Sep 2026".
     private var dates: String? {
+        if let app, let line = SentText.line(app) { return line }
         guard let posting else { return nil }
         var parts = ["Found " + posting.firstSeenAt.date.formatted(.relative(presentation: .named))]
         if let posted = facts.first(where: { $0.label == "Posted" }) { parts.append("posted " + posted.value) }
@@ -355,9 +395,23 @@ struct DetailHeader: View {
                     .keyboardShortcut("k", modifiers: .command)
                     .help("Not for you: it moves to Skipped (⌘⌫)")
             }
+            if sent, let app, !StageRules.targets(from: app.stage).isEmpty {
+                Menu {
+                    SetStatusItems(store: store, app: app)
+                } label: {
+                    Label("Set Status", systemImage: "flag")
+                }
+                .menuStyle(.button)
+                .fixedSize()
+                .help("Correct the status by hand: a reply Applyant missed, or one sent outside it")
+            }
+            if sent, let open = commands.openPosting {
+                Button(action: open) { Label("Open Posting", systemImage: "arrow.up.right.square") }
+                    .help("The posting on its site")
+            }
             more
             if let note {
-                Text(note).font(.callout).foregroundStyle(.secondary)
+                Text(note).textRole(.meta)
                     .transition(.opacity.combined(with: .move(edge: .leading)))
             }
         }
@@ -366,7 +420,8 @@ struct DetailHeader: View {
     }
 
     /// The one prominent action by where the job stands. Approve and Send… is the round Send
-    /// button at the foot of the page instead.
+    /// button at the foot of the page instead; while something blocks it, Finish Application
+    /// opens what's left.
     @ViewBuilder
     private var primaryButton: some View {
         switch primary {
@@ -379,8 +434,16 @@ struct DetailHeader: View {
             .disabled(commands.prepare == nil)
             .keyboardShortcut(.return, modifiers: .command)
             .help("Applyant drafts the answers and the CV for this job (⌘↩ or ⇧⌘P)")
-        case .approve:
+        case .approve(true, _):
             EmptyView()
+        case let .approve(false, why):
+            Button { showTab(.application) } label: {
+                Label("Finish Application", systemImage: "checklist")
+            }
+            .buttonStyle(.primary)
+            .controlSize(.large)
+            .keyboardShortcut(.return, modifiers: .command)
+            .help("Before it can be sent: " + why.components(separatedBy: "\n").map(FieldText.plain).joined(separator: "; ") + " (⌘↩)")
         case .review:
             if let review = commands.review {
                 Button(action: review) {
@@ -403,15 +466,16 @@ struct DetailHeader: View {
     /// Everything else the job can do, out of the way.
     @ViewBuilder
     private var more: some View {
-        let statuses = app.map { !StageRules.targets(from: $0.stage).isEmpty } ?? false
-        if commands.regenerate != nil || commands.rescore != nil || commands.openPosting != nil || statuses {
+        let statuses = !sent && (app.map { !StageRules.targets(from: $0.stage).isEmpty } ?? false)
+        let open = sent ? nil : commands.openPosting
+        if commands.regenerate != nil || commands.rescore != nil || open != nil || statuses {
             Menu {
                 if let regenerate = commands.regenerate { Button("Regenerate…", action: regenerate) }
                 if let rescore = commands.rescore { Button("Re-score", action: rescore) }
                 if let app, statuses {
                     Menu("Set Status") { SetStatusItems(store: store, app: app) }
                 }
-                if let open = commands.openPosting {
+                if let open {
                     Divider()
                     Button("Open Posting", action: open)
                 }
@@ -475,19 +539,17 @@ struct HeroBackground: View {
 }
 
 /// Approve and Send…, when it's THE thing to do: a big round glowing button at the foot of
-/// the job (ClearVPN's power button); JobDetail asks once before it sends. While the
-/// application goes out, a ring fills around it to how far the form is (or circles, until
-/// that's known).
+/// the job (ClearVPN's power button), there only while the application can go (or is going);
+/// JobDetail asks once before it sends. While the application goes out, a ring fills around it
+/// to how far the form is (or circles, until that's known).
 struct SendButton: View {
     let store: AppStore
     let app: Application
-    let primary: JobAction
-    /// The job's Approve and Send… (the Job menu's ⌘↩); nil while it's off.
+    /// The job's Approve and Send… (the Job menu's ⌘↩); nil while it's on its way.
     let approve: (() -> Void)?
 
     var body: some View {
         let delivery = store.deliveries[app.id]
-        let help: String = if case let .approve(_, why) = primary { why } else { "" }
         VStack(spacing: 6) {
             RoundActionButton(
                 title: delivery != nil ? "Sending" : "Send",
@@ -500,12 +562,12 @@ struct SendButton: View {
                 guard delivery == nil else { return }
                 approve?()
             }
-            .help(delivery?.line ?? (approve != nil ? "Approve and Send… (⌘↩)" : help))
+            .help(delivery?.line ?? "Approve and Send… (⌘↩)")
             .accessibilityLabel(delivery != nil ? "Sending" : "Approve and Send…")
             if let delivery {
                 Text(delivery.line)
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.85))
+                    .foregroundStyle(Theme.text)
                     .contentTransition(.numericText())
                     .padding(.horizontal, 10).padding(.vertical, 4)
                     .background(Theme.toastFill, in: Capsule())
@@ -547,28 +609,21 @@ struct DeliveryStrip: View {
 struct SignInBanner: View {
     let store: AppStore
     let hint: SignInHint
-    private let motion = EndlessMotion()
 
     var body: some View {
-        HStack(alignment: .center, spacing: 10) {
-            Image(systemName: "person.badge.key.fill")
-                .font(.title3)
-                .foregroundStyle(Theme.warning)
-                .symbolEffect(.wiggle, options: .repeat(.periodic(delay: 4)), isActive: motion.allowed)
-            Text("\(hint.host) wants you signed in before this application can go through.")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(Theme.warning)
-            Spacer()
+        Callout(
+            .warning,
+            title: "\(hint.host) wants you signed in first",
+            detail: "This application can't go through until you are.",
+            systemImage: "person.badge.key.fill"
+        ) {
             Button(hint.title) { Task { await store.signIn(hint.url) } }
                 .buttonStyle(.primary)
                 .help(
                     "Opens Applyant's browser at \(hint.url). Sign in there and close the window, then try again: "
-                        + "Regenerate… reads the form once more, Try delivery again… sends it."
+                        + "Regenerate… reads the form once more, Try Delivery Again… sends it."
                 )
         }
-        .padding(12)
-        .background(Color.black.opacity(0.2), in: RoundedRectangle(cornerRadius: Theme.innerRadius + 2, style: .continuous))
-        .insetSurface(radius: Theme.innerRadius + 2, tint: Theme.warning)
     }
 }
 
@@ -584,7 +639,7 @@ struct SkipPostingSheet: View {
                 Text("Skip this job").font(.system(size: 20, weight: .bold))
             }
             Text("Say why in a few words. Applyant uses it to score similar postings a little lower next time (for example, “salary too low” makes salary count more).")
-                .font(.callout).foregroundStyle(Theme.secondaryText)
+                .textRole(.body, color: Theme.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
             TextField("e.g. application link opens the homepage", text: $reason)
                 .textFieldStyle(.roundedBorder)
@@ -609,7 +664,7 @@ struct SkipPostingSheet: View {
 
 // MARK: - The Job tab
 
-/// The posting: its summary, key facts, how you match, and its text.
+/// The posting: its one-line take, the facts the hero doesn't say, how you match, and its text.
 struct JobTab: View {
     let store: AppStore
     let postingId: Int64
@@ -617,20 +672,19 @@ struct JobTab: View {
     var body: some View {
         if let p = store.postingDetails[postingId] {
             let description = DescriptionCache.description(p)
+            let facts = KeyFacts.stripRows(p, description: description)
             // Picked often: the page is simply there, no tiles coming in one after another.
             ScrollView {
                 VStack(alignment: .leading, spacing: Theme.blockSpacing) {
-                    if p.hasSummary { SummaryLine(text: p.summary) }
-                    KeyFactsGrid(facts: KeyFacts.rows(p, description: description))
+                    if p.hasSummary { Lead(p.summary) }
+                    if !facts.isEmpty {
+                        StatStrip(facts.map { StatStrip.Item(label: $0.label, value: $0.value, help: $0.full) })
+                    }
                     MatchCard(posting: p, projects: projectNames)
                     DescriptionCard(description: description, text: p.hasText ? p.text : "", url: p.canonicalURL)
                     PostingNotes(posting: p)
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 10)
-                .padding(.bottom, 20)
-                .frame(maxWidth: Theme.readableWidth, alignment: .leading)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .pageColumn()
             }
         } else {
             ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -643,56 +697,8 @@ struct JobTab: View {
     }
 }
 
-/// The scorer's one-line take, large, set off by the brand's glowing bar.
-struct SummaryLine: View {
-    let text: String
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 14) {
-            Capsule().fill(Theme.brand).frame(width: 4)
-                .shadow(color: Theme.magenta.opacity(0.7), radius: 5)
-            Text(text)
-                .font(.system(size: 17, weight: .medium))
-                .foregroundStyle(.white.opacity(0.94))
-                .lineSpacing(4)
-                .textSelection(.enabled)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .fixedSize(horizontal: false, vertical: true)
-        .padding(.vertical, 4)
-    }
-}
-
-/// The posting's facts at a glance, as small bento tiles: a label over a value of at most
-/// two lines (a long one is summed up; all of it is the tile's tooltip).
-struct KeyFactsGrid: View {
-    let facts: [KeyFact]
-
-    var body: some View {
-        if !facts.isEmpty {
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 175), spacing: 10, alignment: .top)], alignment: .leading, spacing: 10) {
-                ForEach(facts, id: \.label) { fact in
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(fact.label.uppercased()).font(Theme.eyebrow).tracking(1).foregroundStyle(Theme.secondaryText)
-                        Text(fact.value)
-                            .font(.system(size: 16, weight: .bold))
-                            .foregroundStyle(.white)
-                            .lineLimit(2)
-                            .textSelection(.enabled)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    .padding(14)
-                    .frame(maxWidth: .infinity, minHeight: 70, alignment: .topLeading)
-                    .glass(radius: 16)
-                    .help(fact.full)
-                }
-            }
-        }
-    }
-}
-
-/// How you match: the requirements by kind, each with its verdict, one line of why and the
-/// facts behind it folded away; the score's parts and what might be a problem.
+/// How you match: the requirements by kind, the gaps first, each a claim with its facts in the
+/// margin; what's met folds into one line. Then what might be a problem, and the score's parts.
 struct MatchCard: View {
     let posting: Posting
     /// The candidate's projects by slug.
@@ -701,31 +707,56 @@ struct MatchCard: View {
     var body: some View {
         let groups = MatchText.requirementGroups(posting)
         let parts = MatchText.breakdown(posting)
-        let issues = MatchText.issues(posting)
+        let issues = MatchText.issueList(posting)
         if !groups.isEmpty || !parts.isEmpty || !issues.isEmpty {
             Card(title: "How you match", systemImage: "checklist") {
-                ForEach(groups) { group in
-                    VStack(alignment: .leading, spacing: Theme.rowSpacing + 2) {
-                        HStack(alignment: .firstTextBaseline, spacing: 8) {
-                            Text(group.title).font(.system(size: 13.5, weight: .bold)).foregroundStyle(.white)
-                            if let note = group.note { Text(note).font(.system(size: 12)).foregroundStyle(Theme.secondaryText) }
-                        }
-                        VerdictBar(verdicts: group.requirements.map(\.verdict))
-                            .padding(.bottom, 2)
-                        ForEach(Array(group.requirements.enumerated()), id: \.offset) { _, r in
-                            RequirementRow(requirement: r, projects: projects)
-                        }
+                VStack(alignment: .leading, spacing: Theme.blockSpacing) {
+                    ForEach(groups) { group in
+                        RequirementGroupView(group: group, projects: projects)
                     }
-                    .padding(.bottom, 8)
+                    if !issues.isEmpty { IssuesList(issues: issues) }
+                    if !parts.isEmpty { ScoreBreakdown(posting: posting, parts: parts) }
                 }
-                if !issues.isEmpty { IssuesList(issues: issues) }
-                if !parts.isEmpty { ScoreBreakdown(posting: posting, parts: parts) }
             }
         }
     }
 }
 
-/// The group's verdicts as one segmented bar that glows: met, partly, missing, unknown.
+/// Must-haves or nice-to-haves: the bar of verdicts, what's missing or partly there in full,
+/// and the met ones behind "7 met · 8+ years, ownership, system design".
+private struct RequirementGroupView: View {
+    let group: MatchText.RequirementGroup
+    let projects: [String: String]
+    @State private var showMet = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        let gaps = group.requirements.filter { $0.verdict != "strong" }
+        let met = group.requirements.filter { $0.verdict == "strong" }
+        VStack(alignment: .leading, spacing: Theme.rowSpacing) {
+            Text(group.title).textRole(.itemTitle)
+            VerdictBar(verdicts: group.requirements.map(\.verdict))
+                .help(group.note ?? "")
+                .padding(.bottom, 2)
+            ForEach(Array(gaps.enumerated()), id: \.offset) { _, r in
+                RequirementRow(requirement: r, projects: projects)
+            }
+            if let summary = MatchText.metSummary(group) {
+                DisclosureLine(summary, isExpanded: $showMet.animation(Theme.Motion.pick(Theme.Motion.disclose, reduceMotion: reduceMotion)))
+                if showMet {
+                    VStack(alignment: .leading, spacing: Theme.rowSpacing) {
+                        ForEach(Array(met.enumerated()), id: \.offset) { _, r in
+                            RequirementRow(requirement: r, projects: projects)
+                        }
+                    }
+                    .transition(.opacity)
+                }
+            }
+        }
+    }
+}
+
+/// The group's verdicts as one segmented bar: met, partly, missing, unknown.
 private struct VerdictBar: View {
     let verdicts: [String]
     @State private var grown = false
@@ -745,9 +776,8 @@ private struct VerdictBar: View {
                 ForEach(shown, id: \.offset) { i, n in
                     let color = Theme.verdict(Self.order[i])
                     Capsule()
-                        .fill(LinearGradient(colors: [color.opacity(0.75), color], startPoint: .leading, endPoint: .trailing))
+                        .fill(color)
                         .opacity(Self.order[i] == "unknown" ? 0.45 : 1)
-                        .shadow(color: color.opacity(Self.order[i] == "unknown" ? 0 : 0.6), radius: 4)
                         .frame(width: max(0, (geo.size.width - gaps) * CGFloat(n) / CGFloat(total)))
                 }
             }
@@ -759,89 +789,60 @@ private struct VerdictBar: View {
     }
 }
 
-/// A requirement: its verdict, what it asks, one line of why, and the facts behind it behind
-/// a disclosure ("2 facts"), each under its project's name.
+/// A requirement as a claim: its verdict, what it asks, why (in full when it isn't met), and
+/// the facts behind it in the margin ("2 facts ›"), each under its project's name.
 struct RequirementRow: View {
     let requirement: RequirementMatch
     var projects: [String: String] = [:]
     @State private var open = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         let evidence = MatchText.evidence(requirement, projects: projects)
-        let reason = requirement.hasNote ? requirement.note : ""
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
-            VerdictMark(verdict: requirement.verdict)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(requirement.text)
-                    .font(.system(size: 13.5, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.94))
-                    .textSelection(.enabled)
-                    .fixedSize(horizontal: false, vertical: true)
-                if !reason.isEmpty || !evidence.isEmpty {
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        if !reason.isEmpty {
-                            Text(reason).foregroundStyle(Theme.secondaryText).lineLimit(1).help(reason)
-                        }
-                        if !evidence.isEmpty {
-                            Button {
-                                withAnimation(Theme.Motion.fade) { open.toggle() }
-                            } label: {
-                                HStack(spacing: 3) {
-                                    Text(MatchText.factsLabel(evidence.count))
-                                    Image(systemName: "chevron.right")
-                                        .font(.system(size: 8.5, weight: .bold))
-                                        .rotationEffect(.degrees(open ? 90 : 0))
-                                }
-                                .foregroundStyle(Theme.tertiaryText)
-                                .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                            .fixedSize()
-                            .accessibilityLabel(open ? "Hide \(MatchText.factsLabel(evidence.count))" : "Show \(MatchText.factsLabel(evidence.count))")
-                        }
-                    }
-                    .font(.system(size: 12))
-                }
-                if open {
+        let note = requirement.hasNote && !requirement.note.isEmpty ? requirement.note : nil
+        // A met one needs no why: it would only say the requirement again.
+        let reason = requirement.verdict == "strong" ? nil : note
+        Group {
+            if evidence.isEmpty {
+                EvidenceRow(requirement.text, reason: reason) { VerdictMark(verdict: requirement.verdict) }
+            } else {
+                EvidenceRow(
+                    requirement.text,
+                    reason: reason,
+                    margin: MatchText.factsLabel(evidence.count),
+                    isExpanded: $open.animation(Theme.Motion.pick(Theme.Motion.disclose, reduceMotion: reduceMotion))
+                ) {
+                    VerdictMark(verdict: requirement.verdict)
+                } detail: {
                     VStack(alignment: .leading, spacing: 4) {
                         ForEach(Array(evidence.enumerated()), id: \.offset) { _, line in
                             Text(line)
-                                .font(.system(size: 12))
-                                .foregroundStyle(Theme.secondaryText)
+                                .textRole(.meta)
                                 .textSelection(.enabled)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                     }
-                    .padding(.leading, 8)
-                    .overlay(alignment: .leading) { Capsule().fill(Theme.hairline).frame(width: 2) }
-                    .transition(.opacity)
                 }
             }
         }
+        .help(requirement.verdict == "strong" ? (note ?? "") : "")
     }
 }
 
+/// What might be a problem: a dealbreaker, or what the posting doesn't say clearly enough.
 struct IssuesList: View {
-    let issues: [String]
+    let issues: [MatchText.Issue]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Potential issues").font(.system(size: 13.5, weight: .bold)).foregroundStyle(.white)
-            ForEach(issues, id: \.self) { issue in
-                Label(issue, systemImage: "exclamationmark.triangle.fill")
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(Theme.warning)
-                    .font(.system(size: 13, weight: .medium))
+        VStack(alignment: .leading, spacing: Theme.rowSpacing) {
+            ForEach(Array(issues.enumerated()), id: \.offset) { _, issue in
+                Callout(.warning, title: issue.title, detail: issue.detail, systemImage: "exclamationmark.triangle.fill")
             }
         }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .insetSurface(tint: Theme.warning)
-        .padding(.bottom, 4)
     }
 }
 
-/// The score's parts in one compact table, each with its bar.
+/// The score's parts in one compact table, each with its bar, behind one line.
 struct ScoreBreakdown: View {
     let posting: Posting
     let parts: [Applyant_V1_ScoreComponent]
@@ -850,35 +851,26 @@ struct ScoreBreakdown: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Button {
-                withAnimation(Theme.Motion.pick(Theme.Motion.snappy, reduceMotion: reduceMotion)) { open.toggle() }
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(Theme.secondaryText)
-                        .rotationEffect(.degrees(open ? 90 : 0))
-                    Text("Score \(posting.hasScore ? "\(posting.score)" : "–") of 100").font(.system(size: 13.5, weight: .bold)).foregroundStyle(.white)
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
+            DisclosureLine(
+                posting.hasScore ? "How the score of \(posting.score) adds up" : "How the score adds up",
+                isExpanded: $open.animation(Theme.Motion.pick(Theme.Motion.disclose, reduceMotion: reduceMotion))
+            )
             if open {
                 Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 12, verticalSpacing: 8) {
                     ForEach(Array(parts.enumerated()), id: \.element.key) { index, c in
                         let points = Score.points(c)
                         GridRow {
-                            Text(Score.componentTitles[c.key] ?? c.key).font(.callout).foregroundStyle(.white.opacity(0.9))
+                            Text(Score.componentTitles[c.key] ?? c.key).textRole(.body)
                             Meter(value: c.value, color: c.uncertain ? Theme.secondaryText : Theme.score(Int32((c.value * 100).rounded())), height: 5, delay: Stagger.delay(index, step: 0.03))
                                 .frame(width: 100)
                                 .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 4 }
-                            Text(c.uncertain ? "?" : "\(points.earned)/\(points.of)").font(.callout).monospacedDigit().foregroundStyle(.white)
-                            Text(c.hasNote ? c.note : "").font(.callout).foregroundStyle(Theme.secondaryText).lineLimit(2)
+                            Text(c.uncertain ? "?" : "\(points.earned)/\(points.of)").textRole(.body).monospacedDigit()
+                            Text(c.hasNote ? c.note : "").textRole(.meta).lineLimit(2).help(c.hasNote ? c.note : "")
                         }
                     }
                 }
                 .padding(.leading, 16)
-                .transition(.opacity.combined(with: .move(edge: .top)))
+                .transition(.opacity)
             }
         }
     }
@@ -897,17 +889,20 @@ struct DescriptionCard: View {
             VStack(alignment: .leading, spacing: 0) {
                 if description.blocks.isEmpty {
                     Text(text.isEmpty ? "The posting's text wasn't captured. Open Posting (in More) shows it on its site." : "Nothing readable was left after taking the page's own parts out: “Show the captured text” has all of it.")
-                        .foregroundStyle(Theme.secondaryText)
+                        .textRole(.body, color: Theme.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
                 } else {
                     DescriptionBlocks(blocks: description.blocks)
                 }
                 if !text.isEmpty {
-                    Toggle("Show the captured text", isOn: $showCapture).toggleStyle(.checkbox).font(Theme.caption).padding(.top, 14)
-                        .foregroundStyle(Theme.secondaryText)
+                    Toggle("Show the captured text", isOn: $showCapture)
+                        .toggleStyle(.checkbox)
+                        .textRole(.meta)
+                        .padding(.top, 16)
                     if showCapture {
                         Text(text)
-                            .font(.system(.caption, design: .monospaced))
-                            .foregroundStyle(.white.opacity(0.8))
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundStyle(Theme.secondaryText)
                             .textSelection(.enabled)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(10)
@@ -915,7 +910,7 @@ struct DescriptionCard: View {
                     }
                 }
             }
-            .frame(maxWidth: Theme.proseWidth, alignment: .leading)
+            .frame(maxWidth: Theme.measure, alignment: .leading)
         }
     }
 }
@@ -924,36 +919,26 @@ struct DescriptionBlocks: View {
     let blocks: [PostingDescription.Block]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: Theme.paragraphSpacing) {
             ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
                 switch block {
                 case let .heading(text):
                     Text(PostingDescription.inline(text))
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundStyle(.white)
+                        .textRole(.heading)
                         .padding(.top, 8)
                 case let .paragraph(text):
-                    Text(PostingDescription.inline(text))
-                        .font(Theme.prose)
-                        .foregroundStyle(.white.opacity(0.88))
-                        .lineSpacing(5)
-                        .fixedSize(horizontal: false, vertical: true)
+                    Prose(PostingDescription.inline(text))
                 case let .list(items, start):
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: Theme.rowSpacing) {
                         ForEach(Array(items.enumerated()), id: \.offset) { i, item in
                             HStack(alignment: .firstTextBaseline, spacing: 10) {
                                 if let start {
-                                    Text("\(start + i).").font(Theme.prose.weight(.semibold)).foregroundStyle(Theme.accent).monospacedDigit()
+                                    Text("\(start + i).").font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.accent).monospacedDigit()
                                 } else {
-                                    Circle().fill(Theme.brand).frame(width: 6, height: 6)
-                                        .shadow(color: Theme.magenta.opacity(0.7), radius: 3)
+                                    Circle().fill(Theme.accent).frame(width: 5, height: 5)
                                         .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 4.5 }
                                 }
-                                Text(PostingDescription.inline(item))
-                                    .font(Theme.prose)
-                                    .foregroundStyle(.white.opacity(0.88))
-                                    .lineSpacing(5)
-                                    .fixedSize(horizontal: false, vertical: true)
+                                Prose(PostingDescription.inline(item))
                             }
                         }
                     }
@@ -971,14 +956,12 @@ struct PostingNotes: View {
     let posting: Posting
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            if posting.hasVerifyNote { Text("Verification: \(posting.verifyNote)") }
-            if let verified = PostingText.formVerified(posting) { Text(verified) }
-            if posting.hasFormNote { Text("Form: \(posting.formNote)") }
-            if posting.hasDecisionReason { Text("Your note: \(posting.decisionReason)") }
+        VStack(alignment: .leading, spacing: 2) {
+            if posting.hasVerifyNote { MetaLine("Verification: \(posting.verifyNote)") }
+            if let verified = PostingText.formVerified(posting) { MetaLine(verified) }
+            if posting.hasFormNote { MetaLine("Form: \(posting.formNote)") }
+            if posting.hasDecisionReason { MetaLine("Your note: \(posting.decisionReason)") }
         }
-        .font(Theme.caption)
-        .foregroundStyle(Theme.tertiaryText)
         .textSelection(.enabled)
         .padding(.horizontal, 4)
     }
@@ -1018,9 +1001,7 @@ struct CompanyTab: View {
                     }
                 }
             }
-            .padding(Theme.pagePadding)
-            .frame(maxWidth: Theme.readableWidth, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .pageColumn()
         }
         .task(id: research?.id) {
             if let research, research.id != 0, research.hasSummary { await store.openCompany(research.id) }

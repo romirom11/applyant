@@ -5,17 +5,51 @@ import ApplyantAPI
 import ApplyantKit
 import SwiftUI
 
+/// The candidate's notes and the company's contacts. While both are empty they're one quiet
+/// row, Add Note and Add Contact…; the cards open with what was asked for.
+struct NotesAndContacts: View {
+    let store: AppStore
+    let app: Application
+    @State private var opened: Opened?
+
+    private enum Opened { case note, contact }
+
+    var body: some View {
+        let empty = (app.hasNotes ? app.notes : "").isEmpty && app.contacts.isEmpty
+        if empty && opened == nil {
+            HStack(spacing: 10) {
+                MetaLine("No notes or contacts yet", systemImage: "note.text")
+                Spacer(minLength: 8)
+                Button("Add Note") { withAnimation(Theme.Motion.snappy) { opened = .note } }
+                    .fixedSize()
+                Button("Add Contact…") { withAnimation(Theme.Motion.snappy) { opened = .contact } }
+                    .fixedSize()
+            }
+            .buttonStyle(.secondary)
+            .controlSize(.small)
+            .padding(12)
+            .glass(radius: Theme.innerRadius + 4)
+        } else {
+            NotesCard(store: store, app: app, focused: opened == .note)
+            ContactsCard(store: store, app: app, startsAdding: opened == .contact)
+        }
+    }
+}
+
 struct NotesCard: View {
     let store: AppStore
     let app: Application
+    /// Asked for (Add Note): the editor takes the keyboard. Otherwise it leaves it to the list.
+    var focused = false
     @State private var text = ""
     @State private var saving = false
+    @FocusState private var editorFocused: Bool
 
     private var saved: String { app.hasNotes ? app.notes : "" }
 
     var body: some View {
         Card {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: Theme.rowSpacing) {
                 HStack {
                     CardTitle(title: "Notes", systemImage: "note.text")
                     Spacer()
@@ -32,17 +66,28 @@ struct NotesCard: View {
                     .disabled(saving || text == saved)
                 }
                 TextEditor(text: $text)
-                    .font(.body)
+                    .textRole(.body)
+                    .focused($editorFocused)
                     .frame(minHeight: 70, maxHeight: 160)
                     .scrollContentBackground(.hidden)
                     .padding(6)
+                    .overlay(alignment: .topLeading) {
+                        if text.isEmpty {
+                            Text("Only for you: what was said on a call, what to ask next")
+                                .textRole(.body, color: Theme.secondaryText)
+                                .padding(.horizontal, 11)
+                                .padding(.vertical, 6)
+                                .allowsHitTesting(false)
+                        }
+                    }
                     .insetSurface()
                     .overlay(RoundedRectangle(cornerRadius: Theme.innerRadius, style: .continuous).strokeBorder(Theme.hairline, lineWidth: 0.5))
-                Text("Only for you: what was said on a call, what to ask next.")
-                    .font(.caption).foregroundStyle(.secondary)
             }
         }
-        .onAppear { text = saved }
+        .onAppear {
+            text = saved
+            if focused { editorFocused = true }
+        }
         .onChange(of: saved) { _, new in text = new }
     }
 }
@@ -50,16 +95,22 @@ struct NotesCard: View {
 struct ContactsCard: View {
     let store: AppStore
     let app: Application
-    @State private var adding = false
+    @State private var adding: Bool
     @State private var form = ContactForm()
+
+    init(store: AppStore, app: Application, startsAdding: Bool = false) {
+        self.store = store
+        self.app = app
+        _adding = State(initialValue: startsAdding)
+    }
 
     var body: some View {
         Card {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: Theme.rowSpacing) {
                 HStack {
                     CardTitle(title: "Contacts", systemImage: "person.2")
                     Spacer()
-                    Button(adding ? "Cancel" : "Add contact…") {
+                    Button(adding ? "Cancel" : "Add Contact…") {
                         adding.toggle()
                         form = ContactForm()
                     }
@@ -67,7 +118,7 @@ struct ContactsCard: View {
                     .controlSize(.small)
                 }
                 if app.contacts.isEmpty && !adding {
-                    Text("No contacts yet: the recruiter, the hiring manager.").font(.callout).foregroundStyle(.secondary)
+                    MetaLine("No contacts yet: the recruiter, the hiring manager")
                 }
                 ForEach(app.contacts, id: \.id) { c in
                     ContactRow(contact: c) { Task { await store.deleteApplicationContact(c.id) } }
@@ -92,7 +143,7 @@ struct ContactsCard: View {
             TextField("Note", text: $form.note)
             HStack {
                 if let problem = form.problem, form != ContactForm() {
-                    Text(problem).font(.caption).foregroundStyle(.orange)
+                    MetaLine(problem, systemImage: "exclamationmark.triangle.fill", tone: .warning)
                 }
                 Spacer()
                 Button("Add") {
@@ -122,19 +173,21 @@ struct ContactRow: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(ContactText.title(contact)).font(.body.weight(.medium))
+                Text(ContactText.title(contact)).textRole(.itemTitle)
                 HStack(spacing: 10) {
                     if let mail = ContactText.mailto(contact) { Link(contact.email, destination: mail) }
                     if let url = ContactText.linkedin(contact) { Link("LinkedIn ↗", destination: url) }
                 }
-                .font(.callout)
+                .font(.system(size: 12))
+                .foregroundStyle(Theme.accent)
                 if contact.hasNote, !contact.note.isEmpty {
-                    Text(contact.note).font(.callout).foregroundStyle(.secondary)
+                    Text(contact.note).textRole(.body, color: Theme.secondaryText).fixedSize(horizontal: false, vertical: true)
                 }
             }
             Spacer()
             Button("Delete", role: .destructive) { confirming = true }
                 .buttonStyle(.link)
+                .foregroundStyle(Theme.bad)
         }
         .confirmationDialog("Delete \(ContactText.title(contact))?", isPresented: $confirming) {
             Button("Delete", role: .destructive, action: delete)
@@ -151,10 +204,10 @@ struct InterviewPrepCard: View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    CardTitle(title: "Interview prep" + (prep.company.map { " · \($0)" } ?? ""), systemImage: "person.wave.2")
+                    CardTitle(title: "Interview Prep" + (prep.company.map { " · \($0)" } ?? ""), systemImage: "person.wave.2")
                     Spacer()
                     if prep.note != nil {
-                        Button("Company research") {
+                        Button("Research Company") {
                             Task {
                                 await store.researchCompany(.posting(app.postingID))
                                 await store.openInterviewPrep(posting: app.postingID)
@@ -162,19 +215,22 @@ struct InterviewPrepCard: View {
                         }
                     }
                 }
-                if let note = prep.note { Text(note).font(.callout).foregroundStyle(.secondary) }
+                if let note = prep.note { Text(note).textRole(.body, color: Theme.secondaryText).fixedSize(horizontal: false, vertical: true) }
                 ForEach(prep.sections) { section in
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(section.title).font(.subheadline.weight(.semibold))
+                        Text(section.title).textRole(.itemTitle)
                         ForEach(section.items) { item in
                             VStack(alignment: .leading, spacing: 1) {
                                 Text(section.items.count > 1 || section.title != "Summary" ? "• " + item.text : item.text)
+                                    .textRole(.body)
+                                    .fixedSize(horizontal: false, vertical: true)
                                     .textSelection(.enabled)
                                 if !item.sources.isEmpty {
                                     HStack(spacing: 8) {
                                         ForEach(item.sources) { s in Link(s.label, destination: s.url) }
                                     }
-                                    .font(.caption)
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(Theme.accent)
                                     .padding(.leading, 10)
                                 }
                             }
@@ -183,11 +239,11 @@ struct InterviewPrepCard: View {
                 }
                 if !prep.answers.isEmpty {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("What you told them").font(.subheadline.weight(.semibold))
+                        Text("What you told them").textRole(.itemTitle)
                         ForEach(prep.answers) { a in
                             VStack(alignment: .leading, spacing: 1) {
-                                Text(a.question).font(.callout.weight(.medium))
-                                Text(a.answer).font(.callout).foregroundStyle(.secondary).textSelection(.enabled)
+                                Text(a.question).textRole(.body).fontWeight(.medium)
+                                Text(a.answer).textRole(.body, color: Theme.secondaryText).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
                             }
                         }
                     }

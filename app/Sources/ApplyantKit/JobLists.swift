@@ -12,7 +12,7 @@ public enum NewFilter: String, CaseIterable, Identifiable, Sendable {
 
     public var title: String {
         switch self {
-        case .good: "Good matches"
+        case .good: "Good Matches"
         case .all: "All"
         }
     }
@@ -69,7 +69,7 @@ public enum JobLists {
         }
     }
 
-    /// "12 lower matches hidden" under New's filter.
+    /// "12 lower matches (under 70) hidden": the filter's tooltip.
     public static func hiddenLine(_ hidden: Int, below score: Int32) -> String? {
         guard hidden > 0 else { return nil }
         return "\(hidden) lower match\(hidden == 1 ? "" : "es") (under \(score)) hidden"

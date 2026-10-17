@@ -11,16 +11,39 @@ public enum MailText {
     /// The daemon's note as a sentence: "a rejection that matches no application" →
     /// "A rejection that matches no application."
     public static func noteSentence(_ note: String) -> String {
-        let t = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        let t = articles(note.trimmingCharacters(in: .whitespacesAndNewlines))
         guard let first = t.first else { return "" }
         let s = first.uppercased() + t.dropFirst()
         return s.hasSuffix(".") || s.hasSuffix("?") ? s : s + "."
+    }
+
+    /// "a acknowledgement" → "an acknowledgement" (the daemon builds its notes from labels).
+    static func articles(_ text: String) -> String {
+        guard let regex = try? NSRegularExpression(pattern: #"\b([Aa]) (?!(?:use|usu|uni|one|eu)\w*)(?=[aeiouAEIOU])"#) else { return text }
+        return regex.stringByReplacingMatches(in: text, range: NSRange(text.startIndex..., in: text), withTemplate: "$1n ")
+    }
+
+    /// What's wrong with a mailbox that says it's connected but can't read (Google revoked the
+    /// token, a sync failed), as a plain sentence; nil when it reads. The daemon's own words
+    /// ("invalid_grant (Token has been expired or revoked.)") stay out of sight.
+    public static func problem(_ box: Mailbox?) -> String? {
+        guard let box, box.status == "connected", box.hasNote else { return nil }
+        let note = box.note.lowercased()
+        guard ["invalid_grant", "expired", "revoked", "sync failed"].contains(where: note.contains) else { return nil }
+        return box.kind == "gmail"
+            ? "Gmail signed Applyant out: replies aren't being read"
+            : "The mailbox stopped syncing: replies aren't being read"
     }
 
     /// "Mailbox: me@gmail.com · synced 14:05" · "Mailbox: waiting for Google consent" · "No mailbox connected".
     public static func connection(_ box: Mailbox?, now: Date = Date()) -> String {
         guard let box else { return "No mailbox connected" }
         let kind = box.kind == "gmail" ? "Gmail" : "IMAP"
+        if problem(box) != nil {
+            return box.kind == "gmail"
+                ? "Google signed Applyant out. Reconnect to keep reading replies."
+                : "The mailbox stopped syncing. Reconnect to keep reading replies."
+        }
         switch box.status {
         case "connecting":
             return "Mailbox: waiting for Google consent"
@@ -103,9 +126,81 @@ public enum MailText {
         return c.hasCompany ? "\(c.company) · \(title)" : title
     }
 
-    /// "Maria Lopez <maria@acme.example>" or the address.
+    /// Who wrote: "Maria Lopez", or the address when there's no name.
     public static func sender(_ e: Email) -> String {
-        e.hasFromName ? "\(e.fromName) <\(e.fromAddress)>" : e.fromAddress
+        let name = e.hasFromName ? e.fromName.trimmingCharacters(in: .whitespaces) : ""
+        return name.isEmpty ? e.fromAddress : name
+    }
+
+    /// "Maria Lopez <maria@acme.example>" → "Maria Lopez"; a bare address stays itself.
+    public static func sender(_ from: String) -> String {
+        let t = from.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let open = t.lastIndex(of: "<"), t.hasSuffix(">") else { return t }
+        let name = t[..<open].trimmingCharacters(in: CharacterSet.whitespaces.union(CharacterSet(charactersIn: "\"'")))
+        return name.isEmpty ? String(t[t.index(after: open)..<t.index(before: t.endIndex)]) : name
+    }
+
+    /// An email's text as paragraphs to read: no image links ("[https://…/logo.png]"), a long
+    /// tracking link as its host and ↗, the mail client's hard wraps joined, and a paragraph of
+    /// its own for a greeting ("Dear Roman,") and a sign-off ("Warm regards," with the name
+    /// under it).
+    public static func readable(_ body: String) -> [String] {
+        var text = body.replacingOccurrences(of: "\r\n", with: "\n")
+        text = text.replacingOccurrences(of: #"\[https?://[^\]]*\]"#, with: "", options: .regularExpression)
+        text = shortLinks(text)
+        var paragraphs: [String] = []
+        for block in text.components(separatedBy: "\n").split(whereSeparator: { $0.trimmingCharacters(in: .whitespaces).isEmpty }) {
+            var lines: [String] = []
+            var afterSignOff = false
+            func close() {
+                if !lines.isEmpty { paragraphs.append(lines.joined(separator: afterSignOff ? "\n" : " ")) }
+                lines = []
+                afterSignOff = false
+            }
+            for raw in block {
+                let line = raw.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+                if line.isEmpty { continue }
+                if isGreeting(line) {
+                    close()
+                    lines = [line]
+                    // "Dear Roman," on its own; "Hi Roman, thanks for…" keeps its sentence.
+                    if line.count <= 40 && (line.hasSuffix(",") || line.hasSuffix("!")) { close() }
+                } else if isSignOff(line) {
+                    close()
+                    lines = [line]
+                    afterSignOff = true
+                } else {
+                    lines.append(line)
+                }
+            }
+            close()
+        }
+        return paragraphs
+    }
+
+    /// Bare links longer than 40 characters → "host ↗".
+    static func shortLinks(_ text: String) -> String {
+        guard let regex = try? NSRegularExpression(pattern: #"https?://[^\s<>\])"]+"#) else { return text }
+        var result = text
+        for match in regex.matches(in: text, range: NSRange(text.startIndex..., in: text)).reversed() {
+            guard let range = Range(match.range, in: text) else { continue }
+            let link = String(text[range])
+            guard link.count > 40, let host = URL(string: link)?.host() else { continue }
+            let short = host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
+            result.replaceSubrange(Range(match.range, in: result)!, with: short + " ↗")
+        }
+        return result
+    }
+
+    static func isGreeting(_ line: String) -> Bool {
+        line.range(of: #"^(dear|hi|hello|hey|good (morning|afternoon|evening)|greetings)\b"#, options: [.regularExpression, .caseInsensitive]) != nil
+    }
+
+    static func isSignOff(_ line: String) -> Bool {
+        line.count <= 32 && line.range(
+            of: #"^((best|kind|warm|warmest|many)( regards| wishes| thanks)?|regards|thanks|thank you|cheers|sincerely|all the best|yours( sincerely| truly)?|with (best|kind) regards)[,.!]?$"#,
+            options: [.regularExpression, .caseInsensitive]
+        ) != nil
     }
 
     /// The calendar line for an interview email: "On your calendar", why not, or nil.
@@ -254,7 +349,8 @@ public extension MailText {
 
     /// The Mailbox section's chip.
     static func chip(_ box: Mailbox?) -> Chip {
-        switch box?.status {
+        if problem(box) != nil { return Chip(text: box?.kind == "gmail" ? "Signed out" : "Not syncing", tone: .warning) }
+        return switch box?.status {
         case "connected"?: Chip(text: "Connected", tone: .good)
         case "connecting"?: Chip(text: "Waiting for Google", tone: .accent)
         case "failed"?: Chip(text: "Failed", tone: .warning)

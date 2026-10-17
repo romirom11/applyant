@@ -1,7 +1,8 @@
 // The job detail's Application tab: reviewing an application, answers first. Routine fields
 // fold into one line, the CV has its card, each answer shows its flagged sentences, and the
 // evidence for the selected answer sits on the right. Approve and Send…, Skip… and Regenerate…
-// are the detail's (its header, the Job menu); this says what still blocks Approve.
+// are the detail's (its header, the Job menu); Before You Can Send has what still blocks them,
+// each with its control in its row.
 import AppKit
 import ApplyantAPI
 import ApplyantKit
@@ -18,46 +19,49 @@ struct ApplicationTab: View {
     @State private var selectedAnswer: Int32?
     @State private var editing: EditRequest?
     @State private var showAllFields = false
+    @State private var confirmingAll = false
 
     var body: some View {
         Group {
             if let app = store.applicationDetails[applicationId] {
                 GeometryReader { geo in
-                    // Evidence sits beside the answers when there's room, below them when not.
-                    let side = geo.size.width >= 860
+                    // Evidence is for answers still under review: beside them when the page
+                    // keeps its own width, below them when not.
+                    let sent = StageRules.isSent(app.stage)
+                    let evidence = !sent && !ReviewRules.activeAnswers(app).isEmpty
+                    let side = evidence && geo.size.width >= 872
+                    let evidenceWidth = min(310, max(260, geo.size.width - 612))
                     HStack(spacing: 0) {
-                        ScrollView {
-                            VStack(alignment: .leading, spacing: Theme.blockSpacing) {
-                                status(app)
-                                if app.hasHandOff { HandOffCard(store: store, app: app) }
-                                if app.hasReceipt { receipt(app.receipt) }
-                                if !app.emails.isEmpty { ApplicationReplies(app: app) }
-                                if app.hasNote && !app.hasHandOff && app.stage != .needsCandidate { note(app.note) }
-                                needsYou(app)
-                                if InterviewPrep.applies(app) { InterviewPrepCard(store: store, app: app) }
-                                // Sent: notes and contacts matter more than the answers; before
-                                // that, they follow the review.
-                                let sent = StageRules.isSent(app.stage)
-                                if sent { notesAndContacts(app) }
-                                standardFields(app)
-                                if app.hasCv { CvCard(store: store, app: app) }
-                                questions(app)
-                                if !sent { notesAndContacts(app) }
-                                if !side {
-                                    Divider()
-                                    EvidencePanel(store: store, app: app, answer: selected(app), scrolls: false)
+                        ScrollViewReader { proxy in
+                            ScrollView {
+                                VStack(alignment: .leading, spacing: Theme.blockSpacing) {
+                                    status(app)
+                                    if app.hasHandOff { HandOffCard(store: store, app: app) }
+                                    if app.hasReceipt { receipt(app.receipt) }
+                                    if !app.emails.isEmpty { ApplicationReplies(app: app) }
+                                    if app.hasNote && !app.hasHandOff && app.stage != .needsCandidate { note(app.note) }
+                                    beforeYouCanSend(app, proxy: proxy)
+                                    if InterviewPrep.applies(app) { InterviewPrepCard(store: store, app: app) }
+                                    // Sent: notes and contacts matter more than the answers; before
+                                    // that, they follow the review.
+                                    if sent { NotesAndContacts(store: store, app: app) }
+                                    standardFields(app)
+                                    if app.hasCv { CvCard(store: store, app: app).id("cv") }
+                                    questions(app)
+                                    if !sent { NotesAndContacts(store: store, app: app) }
+                                    if evidence && !side {
+                                        Divider()
+                                        EvidencePanel(store: store, app: app, answer: selected(app), scrolls: false)
+                                    }
                                 }
+                                .pageColumn()
                             }
-                            .padding(.horizontal, 20)
-                            .padding(.top, 10)
-                            .padding(.bottom, 20)
-                            .frame(maxWidth: Theme.readableWidth, alignment: .leading)
-                            .frame(maxWidth: .infinity, alignment: .leading)
                         }
                         if side {
                             EvidencePanel(store: store, app: app, answer: selected(app))
-                                .frame(width: 310)
-                                .listPanel()
+                                .frame(width: evidenceWidth)
+                                .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadius, style: .continuous))
+                                .glass()
                                 .padding(.trailing, 12)
                                 .padding(.vertical, 8)
                         }
@@ -83,34 +87,22 @@ struct ApplicationTab: View {
 
     // MARK: Where it stands
 
-    /// How it's sent, what still blocks Approve, and which form it goes through.
+    /// How it's sent and which form it goes through. What still blocks it is the card below.
     @ViewBuilder
     private func status(_ app: Application) -> some View {
-        VStack(alignment: .leading, spacing: Theme.rowSpacing + 4) {
-            Label((StageRules.isSent(app.stage) ? "Sent through " : "Goes through ") + ApproveText.channel(app), systemImage: "arrow.up.forward.app")
-                .foregroundStyle(.secondary)
-            if !app.blockers.isEmpty && app.stage != .approved && !StageRules.isSent(app.stage) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Approve waits for").font(.subheadline.weight(.semibold))
-                    ForEach(Array(app.blockers.enumerated()), id: \.offset) { _, blocker in
-                        Label(blocker, systemImage: "exclamationmark.circle.fill")
-                            .foregroundStyle(Theme.warning)
-                            .lineLimit(3)
-                    }
-                }
-                .font(.callout)
-                .padding(12)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .insetSurface(radius: Theme.innerRadius + 2, tint: Theme.warning)
-            }
+        VStack(alignment: .leading, spacing: Theme.rowSpacing) {
+            MetaLine((StageRules.isSent(app.stage) ? "Sent through " : "Goes through ") + ApproveText.channel(app), systemImage: "arrow.up.forward.app")
             if app.applyFormSwitchable {
                 // Found on LinkedIn/Xing and on the company's site: which form it goes through.
                 HStack(spacing: 8) {
-                    Text(ReviewRules.formText(app)).font(.callout).foregroundStyle(.secondary)
+                    MetaLine(ReviewRules.formText(app))
                     if ReviewRules.canSwitchForm(app) {
                         Button(app.applyForm == .platform ? "Use Company's Form" : "Use Platform's Form") {
                             Task { await store.setApplyForm(application: app.id, form: app.applyForm == .platform ? .company : .platform) }
                         }
+                        .buttonStyle(.secondary)
+                        .controlSize(.small)
+                        .fixedSize()
                         .help("The form is read again and the application prepared for it")
                     }
                 }
@@ -118,28 +110,24 @@ struct ApplicationTab: View {
         }
     }
 
-    @ViewBuilder
-    private func notesAndContacts(_ app: Application) -> some View {
-        NotesCard(store: store, app: app)
-        ContactsCard(store: store, app: app)
-    }
-
     private func note(_ text: String) -> some View {
-        Label(text, systemImage: "info.circle").foregroundStyle(.secondary)
+        MetaLine(FieldText.plain(text), systemImage: "info.circle")
     }
 
     private func receipt(_ r: Applyant_V1_Receipt) -> some View {
-        Card(title: "Submission receipt", systemImage: "checkmark.seal.fill", tint: Theme.good) {
+        Card(title: "Submission Receipt", systemImage: "checkmark.seal.fill", tint: Theme.good) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("Submitted " + r.submittedAt.date.formatted(date: .abbreviated, time: .shortened))
+                Text("Submitted " + r.submittedAt.date.formatted(date: .abbreviated, time: .shortened)).textRole(.body)
                 if r.hasConfirmationText {
                     Text(r.confirmationText.count > 300 ? "Confirmation page captured" : "“\(r.confirmationText)”")
-                        .foregroundStyle(.secondary)
+                        .textRole(.body, color: Theme.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                Text("\(r.fieldValues.count) values sent" + (r.hasSalaryValue ? " · salary \(r.salaryValue)" : ""))
+                MetaLine("\(r.fieldValues.count) values sent" + (r.hasSalaryValue ? " · salary \(r.salaryValue)" : ""))
                 if r.hasCvPath {
                     Button("Show Sent CV") { NSWorkspace.shared.open(URL(fileURLWithPath: r.cvPath)) }
                         .buttonStyle(.link)
+                        .foregroundStyle(Theme.accent)
                 }
             }
         }
@@ -147,21 +135,94 @@ struct ApplicationTab: View {
 
     // MARK: What only the candidate can give
 
+    /// Everything that stands between the review and Send, each with its control in its row:
+    /// the values only the candidate has, the questions only they can answer, the sentences to
+    /// check, the facts to confirm, the CV lines to fix. Built from ReviewRules.todo's sources,
+    /// so it says what the hero's chips count.
     @ViewBuilder
-    private func needsYou(_ app: Application) -> some View {
-        let fields = ReviewRules.problemFields(app)
-        if !fields.isEmpty {
-            Card(title: "Needs a value", systemImage: "person.fill.questionmark", tint: Theme.warning) {
-                VStack(alignment: .leading, spacing: 8) {
+    private func beforeYouCanSend(_ app: Application, proxy: ScrollViewProxy) -> some View {
+        let todo = ReviewRules.todo(app)
+        if !todo.isEmpty {
+            let fields = ReviewRules.problemFields(app)
+            let answers = ReviewRules.answersNeedingYou(app)
+            let sentences = ReviewRules.sentencesToCheck(app)
+            Card(title: "Before you can send", systemImage: "checklist") {
+                VStack(alignment: .leading, spacing: Theme.rowSpacing + 4) {
                     ForEach(fields, id: \.ref) { field in
                         MissingFieldRow(store: store, field: field) { value in
                             Task { await store.setField(application: app.id, field: field.ref, value: value) }
                         }
                     }
-                    Text("For this application only; your profile stays as it is.")
-                        .font(.caption).foregroundStyle(.secondary)
+                    ForEach(Array(answers.enumerated()), id: \.element.id) { index, answer in
+                        LabeledRow(answer.question, note: answer.hasMissing ? FieldText.plain(answer.missing) : "Nothing Applyant knows about you answers this", status: .warning) {
+                            HStack(spacing: 8) {
+                                if answer.hasInterviewQuestionID {
+                                    Button("Answer in Questions…") { store.navigation.showInterview(.question(answer.interviewQuestionID)) }
+                                        .buttonStyle(index == 0 && fields.isEmpty ? AnyButtonStyle(.primary) : AnyButtonStyle(.secondary))
+                                        .fixedSize()
+                                        .help("Your answer is saved as facts, then this application is prepared again")
+                                }
+                                Button("Write Answer…") { write(answer, app: app) }
+                                    .buttonStyle(.secondary)
+                                    .fixedSize()
+                            }
+                        }
+                    }
+                    ForEach(Array(sentences.enumerated()), id: \.offset) { _, item in
+                        Button {
+                            withAnimation(Theme.Motion.snappy) {
+                                selectedAnswer = item.answer.number
+                                proxy.scrollTo("answer-\(item.answer.number)", anchor: .top)
+                            }
+                        } label: {
+                            EvidenceRow("“\(item.sentence.text)”", reason: ReviewRules.flagReason(item.sentence), margin: "Check ›") {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(item.sentence.flag == "contradiction" ? Theme.bad : Theme.warning)
+                                    .frame(width: 18)
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .help("In “\(item.answer.question)”: shows the answer with this sentence highlighted")
+                    }
+                    if !app.unconfirmedFactIds.isEmpty {
+                        let n = Set(app.unconfirmedFactIds).count
+                        LabeledRow(n == 1 ? "1 fact to confirm" : "\(n) facts to confirm", note: "Confirming says it's true, for good: later applications use it too", status: .warning) {
+                            Button("Confirm All…") { confirmingAll = true }
+                                .buttonStyle(.secondary)
+                                .fixedSize()
+                                .help("The Evidence beside each answer has them one by one")
+                                .confirmationDialog("Mark \(n) fact\(n == 1 ? "" : "s") as true?", isPresented: $confirmingAll) {
+                                    Button("Confirm \(n) Fact\(n == 1 ? "" : "s")") {
+                                        Task { await store.confirmFacts(application: app.id, factIds: []) }
+                                    }
+                                } message: {
+                                    Text("Every fact this application relies on is marked true, for good: this and later applications may state them. Read them in Evidence first; edit or reject any that aren't right (Projects → Facts to confirm).")
+                                }
+                        }
+                    }
+                    if app.hasCv, !app.cv.stale.isEmpty {
+                        let n = app.cv.stale.count
+                        LabeledRow(n == 1 ? "1 CV line to fix" : "\(n) CV lines to fix", note: "Their facts are no longer confirmed", status: .warning) {
+                            Button("Show CV") { withAnimation(Theme.Motion.snappy) { proxy.scrollTo("cv", anchor: .top) } }
+                                .buttonStyle(.secondary)
+                                .fixedSize()
+                        }
+                    }
+                    if !fields.isEmpty { MetaLine("Values are saved for this application only; your profile stays as it is") }
                 }
             }
+        }
+    }
+
+    private func write(_ answer: Answer, app: Application) {
+        editing = EditRequest(
+            title: answer.question,
+            hint: answer.status == "needs_candidate" ? (answer.hasMissing ? FieldText.plain(answer.missing) : "Your answer") : "The whole answer in your words",
+            text: answer.sentences.map(\.text).joined(separator: " ")
+        ) { text in
+            await store.editAnswer(application: app.id, answer: answer.number, sentence: nil, text: text)
         }
     }
 
@@ -170,33 +231,31 @@ struct ApplicationTab: View {
     @ViewBuilder
     private func standardFields(_ app: Application) -> some View {
         let routine = ReviewRules.routineFields(app)
+        let sent = app.stage == .approved || StageRules.isSent(app.stage)
         // Nothing to fold while the form is still being prepared.
-        if !routine.isEmpty { VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Label {
-                    Text("\(routine.count) standard field\(routine.count == 1 ? "" : "s") ready: " + routine.prefix(6).map { $0.label.lowercased() }.joined(separator: ", "))
-                } icon: {
-                    Image(systemName: "checkmark.circle.fill").foregroundStyle(Theme.good)
-                }
-                .lineLimit(1)
-                Spacer()
-                Button(showAllFields ? "Hide" : "Show All") {
-                    withAnimation(Theme.Motion.snappy) { showAllFields.toggle() }
-                }
-                .buttonStyle(.secondary)
-                .controlSize(.small)
+        if !routine.isEmpty { VStack(alignment: .leading, spacing: Theme.rowSpacing) {
+            HStack(spacing: 8) {
+                Image(systemName: "checkmark.circle.fill").foregroundStyle(Theme.good)
+                Text("\(routine.count) standard field\(routine.count == 1 ? "" : "s") \(sent ? "sent" : "ready")")
+                    .textRole(.itemTitle)
+                Text(routine.prefix(6).map { $0.label.lowercased() }.joined(separator: ", "))
+                    .textRole(.meta)
+                    .lineLimit(1)
+                    .help(routine.map(\.label).joined(separator: ", "))
+                Spacer(minLength: 8)
+                DisclosureLine(showAllFields ? "Hide" : "Show All", isExpanded: $showAllFields.animation(Theme.Motion.snappy))
             }
             if showAllFields {
                 ForEach(routine, id: \.ref) { f in
-                    FieldRow(field: f, editable: app.stage != .approved && app.stage != .applied) { value in
+                    FieldRow(field: f, editable: !sent) { value in
                         Task { await store.setField(application: app.id, field: f.ref, value: value) }
                     }
                 }
-                .transition(.opacity.combined(with: .move(edge: .top)))
+                .transition(.opacity)
             }
         }
         .padding(12)
-        .cardSurface(radius: Theme.innerRadius + 3) }
+        .glass(radius: Theme.innerRadius + 4) }
     }
 
     // MARK: Questions
@@ -208,30 +267,22 @@ struct ApplicationTab: View {
             HStack(spacing: 8) {
                 CardTitle(title: "Questions", systemImage: "text.bubble")
                 Text("\(answers.count)")
-                    .font(.caption.weight(.semibold)).monospacedDigit()
-                    .foregroundStyle(.secondary)
+                    .font(Theme.number(11, weight: .semibold))
+                    .foregroundStyle(Theme.secondaryText)
                     .padding(.horizontal, 6).padding(.vertical, 1)
-                    .background(Color.white.opacity(0.1), in: Capsule())
+                    .background(Theme.chipNeutralFill, in: Capsule())
             }
             .padding(.top, 4)
             ForEach(answers, id: \.id) { answer in
                 AnswerCard(
                     answer: answer,
-                    editable: app.stage != .approved && app.stage != .applied,
+                    editable: app.stage != .approved && !StageRules.isSent(app.stage),
                     selected: selected(app)?.number == answer.number,
                     select: { withAnimation(Theme.Motion.snappy) { selectedAnswer = answer.number } },
                     interview: answer.hasInterviewQuestionID
                         ? { store.navigation.showInterview(.question(answer.interviewQuestionID)) }
                         : nil,
-                    write: {
-                        editing = EditRequest(
-                            title: answer.question,
-                            hint: answer.status == "needs_candidate" ? (answer.hasMissing ? answer.missing : "Your answer") : "The whole answer in your words",
-                            text: answer.sentences.map(\.text).joined(separator: " ")
-                        ) { text in
-                            await store.editAnswer(application: app.id, answer: answer.number, sentence: nil, text: text)
-                        }
-                    },
+                    write: { write(answer, app: app) },
                     editSentence: { s in
                         editing = EditRequest(title: "Sentence \(s.index + 1)", hint: ReviewRules.flagText(s) ?? "", text: s.text) { text in
                             await store.editAnswer(application: app.id, answer: answer.number, sentence: s.index, text: text)
@@ -250,9 +301,19 @@ struct ApplicationTab: View {
                         : nil,
                     projects: (store.candidateProfile?.projects ?? []).map { (slug: $0.slug, name: $0.name) }
                 )
+                .id("answer-\(answer.number)")
             }
         }
     }
+}
+
+/// `.primary` or `.secondary`, picked at run time.
+struct AnyButtonStyle: ButtonStyle {
+    private let make: (Configuration) -> AnyView
+
+    init<S: ButtonStyle>(_ style: S) { make = { AnyView(style.makeBody(configuration: $0)) } }
+
+    func makeBody(configuration: Configuration) -> some View { make(configuration) }
 }
 
 // MARK: - Pieces
@@ -273,14 +334,13 @@ struct EditSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(request.title).font(.headline)
-            if !request.hint.isEmpty { Text(request.hint).foregroundStyle(.secondary) }
+            Text(request.title).textRole(.heading)
+            if !request.hint.isEmpty { Text(request.hint).textRole(.body, color: Theme.secondaryText).fixedSize(horizontal: false, vertical: true) }
             TextEditor(text: $text)
                 .font(.body)
                 .frame(width: 520, height: 180)
                 .composerField()
-            Text("Saved as a confirmed fact, so later applications can use it too.")
-                .font(.caption).foregroundStyle(.secondary)
+            MetaLine("Saved as a confirmed fact, so later applications can use it too.")
             HStack {
                 Spacer()
                 Button("Cancel") { dismiss() }.buttonStyle(.secondary)
@@ -298,6 +358,8 @@ struct EditSheet: View {
     }
 }
 
+/// A value only the candidate can give, in its row: a choice is set as soon as it's picked, a
+/// file as soon as it's chosen, text on Return or Set.
 struct MissingFieldRow: View {
     let store: AppStore
     let field: FormFieldValue
@@ -306,41 +368,61 @@ struct MissingFieldRow: View {
     @State private var picking = false
 
     var body: some View {
-        HStack {
-            VStack(alignment: .leading) {
-                Text(field.label)
-                if field.hasNote { Text(field.note).font(.caption).foregroundStyle(.secondary) }
-            }
-            .frame(width: 220, alignment: .leading)
+        LabeledRow(field.label, note: field.hasNote ? FieldText.plain(field.note) : nil, status: .warning) {
             if field.hasOptions_p && !field.options.isEmpty {
-                Picker("", selection: $value) {
+                Picker(field.label, selection: $value) {
                     Text("Choose…").tag("")
                     ForEach(field.options, id: \.self) { Text($0).tag($0) }
                 }
                 .labelsHidden()
-                .frame(width: 260)
+                .frame(maxWidth: 320, alignment: .leading)
+                .onChange(of: value) { _, picked in
+                    if !picked.isEmpty { set(picked) }
+                }
             } else if field.kind == "file" {
-                Text(value.isEmpty ? "No file chosen" : (value as NSString).lastPathComponent)
-                    .foregroundStyle(value.isEmpty ? .secondary : .primary)
-                    .lineLimit(1).truncationMode(.middle)
-                    .frame(width: 170, alignment: .leading)
-                    .help(value)
-                Button("Choose…") { picking = true }
+                HStack(spacing: 8) {
+                    Text(value.isEmpty ? "No file chosen" : (value as NSString).lastPathComponent)
+                        .textRole(.body, color: value.isEmpty ? Theme.secondaryText : Theme.text)
+                        .lineLimit(1).truncationMode(.middle)
+                        .frame(maxWidth: 200, alignment: .leading)
+                        .help(value)
+                    Button("Choose…") { picking = true }
+                        .buttonStyle(.secondary)
+                        .fixedSize()
+                        .layoutPriority(1)
+                }
             } else {
-                TextField("value", text: $value)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 260)
+                HStack(spacing: 8) {
+                    TextField(field.label, text: $value, prompt: Text(FieldText.placeholder(field)))
+                        .labelsHidden()
+                        .textFieldStyle(.roundedBorder)
+                        .frame(maxWidth: 320)
+                        .onSubmit(commit)
+                    Button("Set", action: commit)
+                        .buttonStyle(.secondary)
+                        .disabled(value.trimmingCharacters(in: .whitespaces).isEmpty)
+                        .fixedSize()
+                        .layoutPriority(1)
+                }
             }
-            Button("Set") { set(value) }.disabled(value.isEmpty)
         }
         .fileImporter(isPresented: $picking, allowedContentTypes: [.pdf, UTType(filenameExtension: "docx") ?? .data, .plainText, .image]) { result in
             // Applyant keeps its own copy, so the background service can always read it.
             if case let .success(url) = result {
                 let scoped = url.startAccessingSecurityScopedResource()
-                if let path = store.keepCopy(url) { value = path }
+                if let path = store.keepCopy(url) {
+                    value = path
+                    set(path)
+                }
                 if scoped { url.stopAccessingSecurityScopedResource() }
             }
         }
+    }
+
+    private func commit() {
+        let trimmed = value.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return }
+        set(trimmed)
     }
 }
 
@@ -352,34 +434,41 @@ struct FieldRow: View {
     @State private var value = ""
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline) {
-            Text(field.label).frame(width: 220, alignment: .leading).foregroundStyle(.secondary)
+        LabeledRow(field.label, note: FieldText.source(field.source).isEmpty ? nil : FieldText.source(field.source)) {
             if editing {
-                TextField("", text: $value).textFieldStyle(.roundedBorder)
-                Button("Set") {
-                    set(value)
-                    editing = false
+                HStack(spacing: 8) {
+                    TextField(field.label, text: $value)
+                        .labelsHidden()
+                        .textFieldStyle(.roundedBorder)
+                        .frame(maxWidth: 320)
+                        .onSubmit(save)
+                    Button("Set", action: save).buttonStyle(.secondary).controlSize(.small).fixedSize()
+                    Button("Cancel") { editing = false }.buttonStyle(.secondary).controlSize(.small).fixedSize()
                 }
-                Button("Cancel") { editing = false }
             } else {
-                Text(field.hasValue ? field.value : "—").lineLimit(2).textSelection(.enabled)
-                Text(FieldText.source(field.source)).font(.caption).foregroundStyle(.tertiary)
-                Spacer()
-                if !editable {
-                    EmptyView()
-                } else if field.source == "override" {
-                    Button("Use Profile Value") { set(nil) }.buttonStyle(.link)
-                }
-                if editable {
-                    Button("Change") {
-                        value = field.hasValue ? field.value : ""
-                        editing = true
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    Text(field.hasValue ? field.value : "—").textRole(.body).lineLimit(2).textSelection(.enabled)
+                    Spacer(minLength: 8)
+                    if editable, field.source == "override" {
+                        Button("Use Profile Value") { set(nil) }.buttonStyle(.link).foregroundStyle(Theme.accent).fixedSize()
                     }
-                    .buttonStyle(.link)
+                    if editable {
+                        Button("Change") {
+                            value = field.hasValue ? field.value : ""
+                            editing = true
+                        }
+                        .buttonStyle(.link)
+                        .foregroundStyle(Theme.accent)
+                        .fixedSize()
+                    }
                 }
             }
         }
-        .font(.callout)
+    }
+
+    private func save() {
+        set(value)
+        editing = false
     }
 }
 
@@ -401,36 +490,40 @@ struct AnswerCard: View {
     var projects: [(slug: String, name: String)] = []
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(answer.question).font(.subheadline.weight(.semibold))
+        VStack(alignment: .leading, spacing: Theme.rowSpacing + 2) {
+            Text(answer.question).textRole(.itemTitle).fixedSize(horizontal: false, vertical: true)
             if answer.status == "needs_candidate" {
-                Label("Needs you: " + (answer.hasMissing ? answer.missing : "nothing Applyant knows about you answers this"), systemImage: "person.fill.questionmark")
-                    .foregroundStyle(.orange)
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Image(systemName: "person.fill.questionmark").foregroundStyle(Theme.warning)
+                    Text("Needs you: " + (answer.hasMissing ? FieldText.plain(answer.missing) : "nothing Applyant knows about you answers this"))
+                        .textRole(.body)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 HStack {
                     if let interview {
-                        Button("Answer in Questions for You", action: interview)
-                            .buttonStyle(.primary)
+                        Button("Answer in Questions…", action: interview)
+                            .buttonStyle(.secondary)
                             .help("Your answer is saved as facts, then this application is prepared again")
                     }
                     Button("Write Answer…", action: write).buttonStyle(.secondary)
                 }
             } else {
                 if answer.kind == "choice" && answer.hasChoice {
-                    Text("Answer: \(answer.choice)").font(.callout.weight(.medium))
+                    Text("Answer: \(answer.choice)").textRole(.itemTitle)
                 }
-                Text(highlighted).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+                Prose(highlighted)
                 if editable { flagged }
-                HStack {
-                    Text(basedOn).font(.caption).foregroundStyle(.secondary).lineLimit(2)
-                        .help(ReviewActions.adaptedQuestion(answer) ?? "")
-                    Spacer()
+                HStack(spacing: 10) {
+                    MetaLine(basedOn)
+                        .help(ReviewActions.adaptedQuestion(answer) ?? basedOn)
+                    Spacer(minLength: 8)
                     if let pending = ReviewActions.pending(answer) {
                         ProgressView().controlSize(.small)
-                        Text(pending).font(.caption).foregroundStyle(.secondary)
+                        MetaLine(pending)
                     }
-                    if editable { Button("Edit…", action: write).buttonStyle(.link) }
+                    if editable { Button("Edit…", action: write).buttonStyle(.link).foregroundStyle(Theme.accent) }
                     if editable, let redraft, answer.kind == "text", ReviewActions.pending(answer) == nil {
-                        Button("Shorter") { redraft(true, nil) }.buttonStyle(.link)
+                        Button("Shorter") { redraft(true, nil) }.buttonStyle(.link).foregroundStyle(Theme.accent)
                             .help("Draft this answer again, about half as long, from the same facts")
                         Menu("Use Another Project") {
                             ForEach(projects, id: \.slug) { p in
@@ -444,26 +537,35 @@ struct AnswerCard: View {
                 }
             }
         }
-        .padding(14)
-        .cardSurface(tint: selected ? Theme.accent : nil)
+        .padding(Theme.cardPadding)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            // The card is a control: Tab and Space (Full Keyboard Access, VoiceOver) pick it too.
+            Button(action: select) { Color.clear }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Show the evidence for “\(answer.question)”")
+        }
+        .glass(tint: selected ? Theme.accent : nil)
         .overlay {
             // The picked answer: its evidence is on the right.
             RoundedRectangle(cornerRadius: Theme.cornerRadius, style: .continuous)
-                .strokeBorder(Theme.accent.opacity(selected ? 0.55 : 0), lineWidth: 1.5)
+                .strokeBorder(Theme.accentFill.opacity(selected ? 0.7 : 0), lineWidth: 1.5)
         }
-        .scaleEffect(selected ? 1 : 0.995)
         .animation(Theme.Motion.snappy, value: selected)
         .contentShape(Rectangle())
         .onTapGesture(perform: select)
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
-    /// The answer as sent, with every flagged sentence highlighted.
+    /// The answer as sent, in its paragraphs, with every flagged sentence highlighted.
     private var highlighted: AttributedString {
+        let starts = ReviewRules.paragraphStarts(answer.sentences)
         var out = AttributedString()
-        for s in answer.sentences {
-            var part = AttributedString(s.text + " ")
+        for (i, s) in answer.sentences.enumerated() {
+            if i > 0 { out += AttributedString(starts.contains(s.index) ? "\n\n" : " ") }
+            var part = AttributedString(s.text.trimmingCharacters(in: .whitespacesAndNewlines))
             if ReviewRules.flagText(s) != nil {
-                // A warm glow behind what to check; red where it contradicts the facts.
+                // A warm wash behind what to check; red where it contradicts the facts.
                 part.backgroundColor = s.flag == "contradiction" ? Theme.bad.opacity(0.32) : Theme.warning.opacity(0.26)
                 part.foregroundColor = Color(.sRGB, red: 1, green: 0.95, blue: 0.86)
                 part.underlineStyle = .single
@@ -478,29 +580,30 @@ struct AnswerCard: View {
     private var flagged: some View {
         let sentences = answer.sentences.filter { ReviewRules.flagText($0) != nil }
         if !sentences.isEmpty {
-            Text(ReviewRules.flaggedIntro(sentences.count))
-                .font(.callout).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            MetaLine(sentences.count == 1 ? "1 highlighted sentence says more than your confirmed facts" : "\(sentences.count) highlighted sentences say more than your confirmed facts")
+                .help(ReviewRules.flaggedIntro(sentences.count))
         }
         ForEach(sentences, id: \.index) { s in
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundStyle(s.flag == "contradiction" ? .red : .orange)
+                    .foregroundStyle(s.flag == "contradiction" ? Theme.bad : Theme.warning)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("“\(s.text)”").font(.callout).lineLimit(3)
-                    Text(ReviewRules.flagReason(s)).font(.caption).foregroundStyle(.secondary)
+                    Text("“\(s.text)”").textRole(.body).lineLimit(3).help(s.text)
+                    Text(ReviewRules.flagReason(s)).textRole(.meta).lineLimit(2).fixedSize(horizontal: false, vertical: true)
                 }
-                Spacer()
+                Spacer(minLength: 8)
                 let unconfirmed = s.facts.filter { $0.status == .unconfirmed }.map(\.id)
                 if s.flag == "unconfirmed" && !unconfirmed.isEmpty {
-                    Button("Confirm Facts") { confirmFacts(unconfirmed) }
+                    Button("Confirm Facts") { confirmFacts(unconfirmed) }.fixedSize()
                 }
                 if ReviewRules.canConfirmAsWritten(s) {
                     Button("It's True") { confirmSentence(s) }
+                        .fixedSize()
                         .help("Keep it as written: it's saved as a fact you stand behind")
                 }
-                Button("Edit…") { editSentence(s) }
+                Button("Edit…") { editSentence(s) }.fixedSize()
             }
+            .buttonStyle(.secondary)
             .controlSize(.small)
         }
     }
@@ -513,22 +616,23 @@ struct AnswerCard: View {
         parts.append("\(facts) fact\(facts == 1 ? "" : "s")")
         if answer.edited { parts.append("your edit") }
         if let adapted = ReviewActions.adaptedFrom(answer) { parts.append(adapted) }
-        return "Based on: " + parts.joined(separator: " · ")
+        return "Based on " + parts.joined(separator: " · ")
     }
 }
 
+/// What the picked answer rests on: its facts, each with what can be done to it, and the
+/// company's research under them.
 struct EvidencePanel: View {
     let store: AppStore
     let app: Application
     let answer: Answer?
     var scrolls = true
     @State private var editing: EditRequest?
-    @State private var confirmingAll = false
 
     var body: some View {
         Group {
             if scrolls {
-                ScrollView { content.padding(14) }
+                ScrollView { content.padding(Theme.cardPadding) }
             } else {
                 content
             }
@@ -542,64 +646,58 @@ struct EvidencePanel: View {
     }
 
     private var content: some View {
-            VStack(alignment: .leading, spacing: 12) {
-                CardTitle(title: "Evidence", systemImage: "link")
-                if !app.unconfirmedFactIds.isEmpty {
-                    let n = app.unconfirmedFactIds.count
-                    Button("Confirm All \(n) Unconfirmed…") { confirmingAll = true }
-                        .confirmationDialog("Mark \(n) fact\(n == 1 ? "" : "s") as true?", isPresented: $confirmingAll) {
-                            Button("Confirm \(n) Fact\(n == 1 ? "" : "s")") {
-                                Task { await store.confirmFacts(application: app.id, factIds: []) }
-                            }
-                        } message: {
-                            Text("Every fact this application relies on is marked true, for good: this and later applications may state them. Read them below first; Edit or reject any that aren't right (Projects → Facts to confirm).")
-                        }
-                    Text("Confirming says the fact is true, for good: later applications use it too.")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-                if let answer {
-                    Text(answer.question).font(.caption).foregroundStyle(.secondary)
-                        .id(answer.number)
-                        .transition(.opacity)
-                    let facts = uniqueFacts(answer)
-                    if facts.isEmpty { Text("No facts cited.").foregroundStyle(.secondary) }
-                    ForEach(facts, id: \.id) { fact in
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text((fact.hasProjectSlug ? (store.candidateProfile?.projects.first { $0.slug == fact.projectSlug }?.name ?? fact.projectSlug) : "Profile") + " · fact \(fact.id)")
-                                .font(.caption).foregroundStyle(.secondary)
-                            Text(fact.text).font(.callout)
-                            HStack {
-                                Label(statusText(fact.status), systemImage: fact.status == .confirmed ? "checkmark.seal.fill" : "questionmark.circle")
-                                    .font(.caption)
-                                    .foregroundStyle(fact.status == .confirmed ? .green : .orange)
-                                Spacer()
+        VStack(alignment: .leading, spacing: Theme.rowSpacing + 4) {
+            CardTitle(title: "Evidence", systemImage: "link")
+            if let answer {
+                MetaLine(answer.question)
+                    .id(answer.number)
+                    .transition(.opacity)
+                let facts = uniqueFacts(answer)
+                if facts.isEmpty { Text("No facts cited.").textRole(.body, color: Theme.secondaryText) }
+                ForEach(facts, id: \.id) { fact in
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(fact.hasProjectSlug ? (store.candidateProfile?.projects.first { $0.slug == fact.projectSlug }?.name ?? fact.projectSlug) : "Profile")
+                            .textRole(.eyebrow)
+                            .textCase(.uppercase)
+                            .help("Fact \(fact.id)")
+                        Text(fact.text).textRole(.body).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
+                        // Confirmed is the usual state: only the others say theirs.
+                        if fact.status != .confirmed || app.stage != .approved && !StageRules.isSent(app.stage) {
+                            HStack(spacing: 8) {
+                                if fact.status != .confirmed {
+                                    MetaLine(statusText(fact.status), systemImage: "questionmark.circle", tone: .warning)
+                                }
+                                Spacer(minLength: 0)
                                 if fact.status == .unconfirmed {
                                     Button("Confirm") { Task { await store.confirmFacts(application: app.id, factIds: [fact.id]) } }
+                                        .buttonStyle(.secondary)
                                         .controlSize(.small)
+                                        .fixedSize()
                                 }
                                 if app.stage != .approved && !StageRules.isSent(app.stage) {
                                     // The fact in the candidate's words (confirmed); the answers
                                     // relying on it re-check as they do after Confirm.
                                     Button("Edit…") {
-                                        editing = EditRequest(title: "Fact #\(fact.id)", hint: "The fact in your words (saved as confirmed)", text: fact.text) { text in
+                                        editing = EditRequest(title: "The fact in your words", hint: "Saved as confirmed", text: fact.text) { text in
                                             _ = await store.editFact(fact.id, text: text, project: nil)
                                         }
                                     }
+                                    .buttonStyle(.secondary)
                                     .controlSize(.small)
+                                    .fixedSize()
                                 }
                             }
                         }
-                        .padding(10)
-                        .cardSurface(radius: Theme.innerRadius)
-                        .transition(.opacity.combined(with: .move(edge: .trailing)))
                     }
-                } else {
-                    Text("Select an answer to see what it rests on.").foregroundStyle(.secondary)
-                }
-                if app.hasCompanyResearch {
-                    CompanyCard(store: store, company: app.companyResearch, compact: true)
+                    .padding(10)
+                    .insetSurface()
+                    .transition(.opacity)
                 }
             }
+            if app.hasCompanyResearch {
+                CompanyCard(store: store, company: app.companyResearch, compact: true)
+            }
+        }
     }
 
     private func uniqueFacts(_ answer: Answer) -> [Applyant_V1_MatchedFact] {
@@ -612,7 +710,7 @@ struct EvidencePanel: View {
         case .confirmed: "Confirmed"
         case .unconfirmed: "Not confirmed yet"
         case .rejected: "Rejected"
-        default: "?"
+        default: "Unknown"
         }
     }
 }
@@ -634,7 +732,7 @@ struct CvCard: View {
     var body: some View {
         let cv = app.cv
         Card {
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: Theme.rowSpacing) {
                 HStack {
                     CardTitle(title: title(cv), systemImage: "doc.richtext")
                     Spacer()
@@ -643,22 +741,22 @@ struct CvCard: View {
                 .shimmer(cv.status == "pending" || cv.status == "planned")
                 if cv.mode == "tailored" && cv.status == "ready" {
                     if !cv.projects.isEmpty {
-                        Text("Projects in order: " + cv.projects.map(\.name).joined(separator: ", "))
+                        LabeledRow("Projects in order") { Text(cv.projects.map(\.name).joined(separator: ", ")).textRole(.body).fixedSize(horizontal: false, vertical: true) }
                     }
                     if !cv.skills.isEmpty {
-                        Text("Skills lead with: " + cv.skills.prefix(6).joined(separator: ", "))
+                        LabeledRow("Skills lead with") { Text(cv.skills.prefix(6).joined(separator: ", ")).textRole(.body).fixedSize(horizontal: false, vertical: true) }
                     }
-                    if let summary = cv.summary.first { Text("Summary: " + summary.text).lineLimit(3) }
+                    if let summary = cv.summary.first {
+                        LabeledRow("Summary") { Text(summary.text).textRole(.body).lineLimit(3).help(summary.text) }
+                    }
                     if !cv.dropped.isEmpty {
-                        Text("\(cv.dropped.count) line\(cv.dropped.count == 1 ? "" : "s") left out because your facts don't back \(cv.dropped.count == 1 ? "it" : "them") (Edit… shows which)")
-                            .font(.caption).foregroundStyle(.secondary)
+                        MetaLine("\(cv.dropped.count) line\(cv.dropped.count == 1 ? "" : "s") left out: your facts don't back \(cv.dropped.count == 1 ? "it" : "them") (Edit… shows which)")
                     }
                     if !cv.stale.isEmpty {
-                        Label("Lines whose facts are no longer confirmed: " + cv.stale.joined(separator: ", "), systemImage: "exclamationmark.triangle")
-                            .foregroundStyle(.orange)
+                        Callout(.warning, title: "Lines whose facts are no longer confirmed", detail: cv.stale.joined(separator: ", "), systemImage: "exclamationmark.triangle.fill")
                     }
                 }
-                if cv.hasNote { Text(cv.note).font(.caption).foregroundStyle(.secondary) }
+                if cv.hasNote { MetaLine(FieldText.plain(cv.note)) }
                 HStack {
                     if let path = CvText.previewPath(app) {
                         Button("Preview") { NSWorkspace.shared.open(URL(fileURLWithPath: path)) }
@@ -703,7 +801,7 @@ struct CvEditSheet: View {
                 Spacer()
                 if let app, app.cv.status == "pending" || app.cv.status == "planned" {
                     ProgressView().controlSize(.small)
-                    Text("Rendering…").font(.callout).foregroundStyle(.secondary)
+                    Text("Rendering…").textRole(.meta)
                 } else if let app, app.cv.hasPdfPath {
                     Button("Preview") { NSWorkspace.shared.open(URL(fileURLWithPath: app.cv.pdfPath)) }
                 }
@@ -714,7 +812,7 @@ struct CvEditSheet: View {
                 ForEach(lines) { line in
                     VStack(alignment: .leading, spacing: 4) {
                         HStack(alignment: .firstTextBaseline) {
-                            Text(line.section).font(.caption.weight(.semibold)).foregroundStyle(line.dropped ? .orange : .secondary)
+                            Text(line.section).textRole(.label, color: line.dropped ? Theme.warning : Theme.secondaryText)
                             Spacer()
                             if editingLine != line.handle, app.map(CvText.canEdit) == true {
                                 Button(line.dropped ? "Put Back" : "Edit") { text = line.text; editingLine = line.handle }
@@ -745,8 +843,7 @@ struct CvEditSheet: View {
                     .padding(.vertical, 3)
                 }
             }
-            Text("Your words are saved as a confirmed fact, and the CV is printed again.")
-                .font(.caption).foregroundStyle(.secondary)
+            MetaLine("Your words are saved as a confirmed fact, and the CV is printed again.")
                 .padding(16)
         }
         .frame(minWidth: 620, idealWidth: 700, minHeight: 480, idealHeight: 620)

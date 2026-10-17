@@ -40,6 +40,8 @@ struct MainView: View {
             TitleBar(store: store)
         }
         .ignoresSafeArea()
+        // .secondary and .tertiary everywhere are Theme's greys, not the system's.
+        .themeForeground()
         .environment(toasts)
         .tint(Theme.accent)
         // Always the dark world, like CleanMyMac: the window and everything in it.
@@ -197,8 +199,8 @@ struct ActivityPill: View {
             HStack(spacing: 8) {
                 Image(systemName: "pause.circle.fill").foregroundStyle(Theme.warning).font(.system(size: 11))
                 Text(ActivityText.pausedSince(since))
-                    .font(.system(size: 11.5, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.8))
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Theme.text)
                 Button("Resume") { Task { await store.setBackgroundPaused(false) } }
                     .buttonStyle(.secondary)
                     .controlSize(.mini)
@@ -221,8 +223,8 @@ struct ActivityPill: View {
                     LiveDot(color: Theme.magenta, size: 5)
                 }
                 Text(short)
-                    .font(.system(size: 11.5, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.8))
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Theme.text)
                     .id(short)
                     .transition(reduceMotion ? .opacity : .push(from: .bottom))
             }
@@ -426,22 +428,21 @@ private struct RailItem: View {
             .symbolVariant(picked ? .fill : .none)
             .font(.system(size: labelled ? 15 : 17, weight: .semibold))
             .foregroundStyle(picked ? AnyShapeStyle(.white) : AnyShapeStyle(Color.white.opacity(hovering ? 0.9 : 0.6)))
-            .shadow(color: picked ? .white.opacity(0.5) : .clear, radius: 4)
             .symbolEffect(.bounce, value: reduceMotion ? 0 : arrivals)
     }
 
-    /// The picked section's glowing pill (it slides to the next one), or the pointer's glass.
+    /// The picked section's pill (it slides to the next one), or the pointer's glass. The pill
+    /// is the app's one selection colour, as everywhere else (white on it reads at 5.5:1); the
+    /// section's world only glows around it.
     @ViewBuilder
     private func highlight(radius: CGFloat) -> some View {
         let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
         if picked {
             let world = Theme.world(section)
             shape
-                .fill(LinearGradient(colors: [world.main.opacity(0.55), world.second.opacity(0.3)], startPoint: .topLeading, endPoint: .bottomTrailing))
-                .overlay {
-                    shape.strokeBorder(LinearGradient(colors: [.white.opacity(0.7), .white.opacity(0.1)], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1)
-                }
-                .shadow(color: world.main.opacity(0.7), radius: 12)
+                .fill(Theme.accentFill)
+                .overlay { shape.strokeBorder(Color.white.opacity(0.22), lineWidth: 0.75) }
+                .shadow(color: world.main.opacity(0.45), radius: 10)
                 .matchedGeometryEffect(id: "pill", in: pill)
         } else if hovering {
             shape.fill(Color.white.opacity(0.08))
@@ -535,9 +536,13 @@ struct ErrorBanner: View {
     var body: some View {
         if let error = store.lastError {
             HStack(alignment: .firstTextBaseline) {
-                Label(error, systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(Theme.warning).font(.callout).textSelection(.enabled)
-                    .fixedSize(horizontal: false, vertical: true)
+                Label {
+                    Text(error).textRole(.body)
+                } icon: {
+                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(Theme.warning)
+                }
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
                 Spacer()
                 Button("Dismiss") { store.lastError = nil }.buttonStyle(.secondary).controlSize(.small)
             }
@@ -604,11 +609,19 @@ struct Detail: View {
                 .transition(.asymmetric(insertion: .opacity, removal: .identity))
         } else {
             let section = store.navigation.section
-            if store.items(section).isEmpty {
+            let items = store.items(section)
+            if items.isEmpty {
                 // The list says why it's empty; nothing to repeat here.
                 Color.clear
             } else {
-                EmptyState(title: "Pick one on the left", systemImage: section.symbol, detail: "\(store.count(section)) in \(section.title).", art: Art(section))
+                // A list with rows always has one open (split-views: the selection stays
+                // visible); this shows only for the moment before the first is picked.
+                EmptyState(title: "Pick one on the left", systemImage: section.symbol, detail: "\(items.count) in \(section.title).")
+                    .task(id: section) {
+                        if store.navigation.postingId == nil, let first = store.items(section).first {
+                            store.navigation.select(first)
+                        }
+                    }
             }
         }
     }
@@ -625,6 +638,7 @@ struct PostingList: View {
     /// What Re-score said, under the title for a few seconds.
     @State private var note: String?
     @State private var addingPosting = false
+    @State private var connectingMailbox = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -633,7 +647,8 @@ struct PostingList: View {
         let items = groups.flatMap(\.items)
         let world = Theme.world(section)
         VStack(alignment: .leading, spacing: 0) {
-            ModuleHeader(section: section, subtitle: note ?? subtitle(section, items: items.count)) {
+            // Alone and empty, the big art in the middle is the page's one picture.
+            ModuleHeader(section: section, subtitle: note ?? subtitle(section, items: items.count), showsArt: !(alone && items.isEmpty)) {
                 if section == .new { newActions }
             }
             .padding(.horizontal, 18)
@@ -658,7 +673,7 @@ struct PostingList: View {
                         let live = group.id == JobLists.ReviewGroup.preparing.rawValue
                         ForEach(group.items) { item in
                             SelectableCard(id: item.id) {
-                                PostingRow(item: item, live: live)
+                                PostingRow(item: item, chips: item.chips(in: section), live: live)
                             }
                             .sheen(live, radius: 15)
                             .contextMenu { rowMenu(item, section: section) }
@@ -685,6 +700,7 @@ struct PostingList: View {
         }
         .task { await store.loadPreferences() }
         .sheet(isPresented: $addingPosting) { AddPostingSheet(store: store) { addingPosting = false } }
+        .sheet(isPresented: $connectingMailbox) { MailboxConnectSheet(store: store) { connectingMailbox = false }.worldSheet() }
     }
 
     /// "19 need you · 80 ready" under the title.
@@ -733,12 +749,27 @@ struct PostingList: View {
             art: section == .toReview ? .allCaughtUp : Art(section),
             artSize: alone ? 220 : 150
         ) {
-            if section == .new {
+            // Every empty list names its next step, as a button.
+            switch section {
+            case .new:
                 if hidden > 0 { Button("Show All") { store.navigation.newFilter = .all }.buttonStyle(.primary) }
                 Button("Add Posting…") { addingPosting = true }.buttonStyle(.secondary)
                 if store.search.strategies.isEmpty {
                     Button("Open Search") { store.navigation.go(to: .search) }.buttonStyle(.secondary)
                 }
+            case .saved, .skipped:
+                Button("Open New") { store.navigation.go(to: .new) }.buttonStyle(.primary)
+            case .applied:
+                Button("Open To Review") { store.navigation.go(to: .toReview) }.buttonStyle(.primary)
+            case .interviews, .offers:
+                if MailText.problem(store.mailbox) != nil {
+                    Button("Reconnect Mailbox…") { connectingMailbox = true }.buttonStyle(.primary)
+                    Button("Open Applied") { store.navigation.go(to: .applied) }.buttonStyle(.secondary)
+                } else {
+                    Button("Open Applied") { store.navigation.go(to: .applied) }.buttonStyle(.primary)
+                }
+            default:
+                EmptyView()
             }
         }
     }
@@ -755,23 +786,25 @@ struct PostingList: View {
     }
 }
 
-/// New's filter: the good matches first, or everything scored, and what the filter hides.
+/// New's filter: the good matches first, or everything scored, each with its count; what the
+/// filter hides is its tooltip.
 struct NewFilterBar: View {
     @Bindable var store: AppStore
 
     var body: some View {
-        HStack(spacing: 10) {
-            PillPicker(items: NewFilter.allCases, title: \.title, selection: $store.navigation.newFilter, tint: Theme.world(.new).main)
-                .help("Good matches score \(store.goodMatchScore) or more. The ones at or above your threshold are prepared on their own and wait in To review.")
-            if let hidden = JobLists.hiddenLine(store.newHidden, below: store.goodMatchScore) {
-                Text(hidden)
-                    .font(.system(size: 11))
-                    .foregroundStyle(Theme.tertiaryText)
-                    .lineLimit(2)
-                    .contentTransition(.numericText())
-                    .animation(Theme.Motion.snappy, value: hidden)
-            }
-        }
+        let good = store.count(.new)
+        let all = store.navigation.newFilter == .good ? good + store.newHidden : store.items(.new).count
+        PillPicker(
+            items: NewFilter.allCases,
+            title: { "\($0.title) \($0 == .good ? good : all)" },
+            selection: $store.navigation.newFilter,
+            tint: Theme.world(.new).main,
+            accessibilityLabel: "Show"
+        )
+        .help(
+            "Good matches score \(store.goodMatchScore) or more. The ones at or above your threshold are prepared on their own and wait in To review."
+                + (JobLists.hiddenLine(store.newHidden, below: store.goodMatchScore).map { " " + $0 + "." } ?? "")
+        )
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
@@ -779,6 +812,8 @@ struct NewFilterBar: View {
 /// A job in a list: its score ring, what and where it is, and its chips. Preparing ones shimmer.
 struct PostingRow: View {
     let item: ListItem
+    /// Its chips in this list (ListItem.chips(in:)): none that only repeat the list.
+    var chips: [Chip]? = nil
     var live = false
 
     var body: some View {
@@ -787,18 +822,16 @@ struct PostingRow: View {
                 .padding(.top, 1)
             VStack(alignment: .leading, spacing: 3) {
                 Text(item.title)
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(Theme.text)
+                    .textRole(.rowTitle)
                     .lineLimit(2)
                 if !item.subtitle.isEmpty {
                     Text(item.subtitle)
-                        .font(.system(size: 12.5))
-                        .foregroundStyle(Theme.secondaryText)
+                        .textRole(.meta)
                         .lineLimit(1)
                 }
-                if !item.chips.isEmpty {
+                if let chips = chips ?? Optional(item.chips), !chips.isEmpty {
                     HStack(spacing: 4) {
-                        ForEach(item.chips, id: \.text) { ChipView(chip: $0) }
+                        ForEach(chips, id: \.text) { ChipView(chip: $0, help: $0.help) }
                     }
                     .padding(.top, 3)
                 }
@@ -832,7 +865,7 @@ struct AddPostingSheet: View {
                 Text("Add a Posting").font(.system(size: 20, weight: .bold))
             }
             Text("Paste a job posting's link. It's verified, read and scored like the ones search finds.")
-                .font(.callout).foregroundStyle(Theme.secondaryText)
+                .textRole(.body, color: Theme.secondaryText)
             TextField("URL", text: $url, prompt: Text("https://jobs.example.com/backend-engineer"))
                 .textFieldStyle(.roundedBorder)
                 .onSubmit(add)
@@ -841,7 +874,7 @@ struct AddPostingSheet: View {
                     Label(outcome.line, systemImage: outcome.ok ? "checkmark.circle" : "exclamationmark.triangle")
                         .foregroundStyle(outcome.ok ? Theme.text : Theme.warning)
                     if let detail = outcome.detail {
-                        Text(detail).font(.callout).foregroundStyle(Theme.secondaryText).padding(.leading, 22)
+                        Text(detail).textRole(.body, color: Theme.secondaryText).padding(.leading, 22)
                     }
                 }
                 .textSelection(.enabled)

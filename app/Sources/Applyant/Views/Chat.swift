@@ -12,18 +12,18 @@ struct ChatView: View {
     var body: some View {
         VStack(spacing: 0) {
             ModuleHeader(section: .chat, subtitle: "Answers from your profile, projects and confirmed facts") {
-                Button("New conversation") { confirmingClear = true }
+                Button("New Conversation") { confirmingClear = true }
                     .buttonStyle(.secondary)
                     .controlSize(.small)
                     .disabled(store.chatMessages.isEmpty || store.chatSending)
             }
-            .padding(.horizontal, 28)
-            .padding(.top, 10)
-            .padding(.bottom, 4)
-            .frame(maxWidth: 900)
+            .padding(.horizontal, Theme.pagePadding)
+            .padding(.top, Theme.Space.m)
+            .frame(maxWidth: Theme.pageWidth + 2 * Theme.pagePadding)
+            .frame(maxWidth: .infinity)
             ScrollViewReader { proxy in
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 16) {
+                    LazyVStack(alignment: .leading, spacing: Theme.blockSpacing) {
                         if store.chatMessages.isEmpty {
                             EmptyState(
                                 title: "Ask about your experience",
@@ -33,15 +33,19 @@ struct ChatView: View {
                             )
                             .frame(maxWidth: .infinity, minHeight: 300)
                         }
-                        ForEach(store.chatMessages, id: \.id) { message in
-                            ChatBubble(message: message, facts: store.chatFacts)
-                                .id(message.id)
-                                .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity).combined(with: .scale(scale: 0.96, anchor: message.role == "user" ? .bottomTrailing : .bottomLeading)))
+                        ForEach(Array(store.chatMessages.enumerated()), id: \.element.id) { index, message in
+                            ChatBubble(
+                                message: message,
+                                facts: store.chatFacts,
+                                retry: retry(before: index)
+                            )
+                            .id(message.id)
+                            .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity).combined(with: .scale(scale: 0.96, anchor: message.role == "user" ? .bottomTrailing : .bottomLeading)))
                         }
                         if store.chatSending {
                             HStack(spacing: 10) {
                                 TypingDots()
-                                Text("Thinking…").foregroundStyle(.secondary)
+                                Text("Thinking…").textRole(.body, color: Theme.secondaryText)
                             }
                             .bubble(mine: false)
                             .transition(.opacity.combined(with: .move(edge: .bottom)))
@@ -49,42 +53,42 @@ struct ChatView: View {
                     }
                     .animation(Theme.Motion.pick(Theme.Motion.bouncy, reduceMotion: reduceMotion), value: store.chatMessages.count)
                     .animation(Theme.Motion.smooth, value: store.chatSending)
-                    .padding(24)
-                    .frame(maxWidth: 850)
-                    .frame(maxWidth: .infinity)
+                    .pageColumn(centered: true)
                 }
+                // The top message slides under a soft edge, not a hard cut.
+                .overlay(alignment: .top) { EdgeScrim(edge: .top, height: 24) }
                 .onChange(of: store.chatMessages.count) { _, _ in
                     if let last = store.chatMessages.last { proxy.scrollTo(last.id, anchor: .bottom) }
                 }
             }
 
-            HStack(alignment: .bottom, spacing: 12) {
-                TextEditor(text: $draft)
-                    .font(.body)
-                    .frame(minHeight: 52, maxHeight: 115)
-                    .composerField()
-                    .accessibilityLabel("Message")
-                Button(action: send) { Label("Send", systemImage: "arrow.up") }
-                    .buttonStyle(.primary)
-                    .controlSize(.large)
-                    .keyboardShortcut(.return, modifiers: .command)
-                    .help("Send (⌘↩)")
-                    .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || store.chatSending)
-            }
-            .padding(14)
+            Composer(
+                text: $draft,
+                placeholder: "Ask about your experience…",
+                canSend: !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                sending: store.chatSending,
+                send: send
+            )
+            .padding(Theme.cardPadding)
             .glass(radius: Theme.panelRadius)
-            .padding(.horizontal, 16)
-            .padding(.bottom, 14)
-            .frame(maxWidth: 880)
-            .frame(maxWidth: .infinity)
+            .pageColumn(centered: true)
         }
         .navigationTitle("Chat")
         .confirmationDialog("Clear this conversation?", isPresented: $confirmingClear) {
-            Button("Clear conversation", role: .destructive) { Task { await store.clearChat() } }
+            Button("Clear Conversation", role: .destructive) { Task { await store.clearChat() } }
         } message: {
             Text("Its messages will be removed from Applyant. Your profile and facts stay available for the new conversation.")
         }
         .task { await store.openChat() }
+    }
+
+    /// An answer's Retry: asks the question before it again (nil for the candidate's own).
+    private func retry(before index: Int) -> (() -> Void)? {
+        let messages = store.chatMessages
+        guard messages[index].role != "user",
+              let question = messages[..<index].last(where: { $0.role == "user" })?.text
+        else { return nil }
+        return { Task { _ = await store.sendChat(question) } }
     }
 
     private func send() {
@@ -96,33 +100,69 @@ struct ChatView: View {
 private struct ChatBubble: View {
     let message: ChatMessage
     let facts: [Int64: Fact]
+    /// Asks the question again; nil for the candidate's own messages.
+    var retry: (() -> Void)?
+    @State private var showsFacts = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
+        let mine = message.role == "user"
         HStack {
-            if message.role == "user" { Spacer(minLength: 80) }
-            VStack(alignment: .leading, spacing: 8) {
-                Text(message.role == "user" ? "You" : "Applyant")
-                    .font(.caption.weight(.semibold))
-                    .opacity(0.7)
-                Text(message.text).font(Theme.prose).lineSpacing(3).textSelection(.enabled)
-                if !message.factIds.isEmpty {
-                    DisclosureGroup("Confirmed facts used (\(message.factIds.count))") {
-                        VStack(alignment: .leading, spacing: 6) {
-                            ForEach(message.factIds, id: \.self) { id in
-                                if let fact = facts[id] {
-                                    Text("#\(id) · \(fact.text)")
-                                        .font(.caption)
-                                        .textSelection(.enabled)
+            if mine { Spacer(minLength: 80) }
+            VStack(alignment: .leading, spacing: Theme.Space.xs) {
+                VStack(alignment: .leading, spacing: Theme.Space.s) {
+                    Text(mine ? "You" : "Applyant").textRole(.label, color: mine ? .white : nil)
+                    Text(message.text)
+                        .textRole(.prose, color: mine ? .white : nil)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if !message.factIds.isEmpty {
+                        DisclosureLine("\(message.factIds.count) confirmed fact\(message.factIds.count == 1 ? "" : "s") used", isExpanded: $showsFacts)
+                        if showsFacts {
+                            VStack(alignment: .leading, spacing: Theme.Space.xs) {
+                                ForEach(message.factIds, id: \.self) { id in
+                                    if let fact = facts[id] {
+                                        Text(fact.text)
+                                            .textRole(.body, color: Theme.secondaryText)
+                                            .textSelection(.enabled)
+                                            .help("Fact \(id)")
+                                    }
                                 }
                             }
+                            .transition(.reveal(reduceMotion: reduceMotion))
                         }
-                        .padding(.top, 4)
                     }
-                    .font(.caption)
+                }
+                .frame(maxWidth: Theme.measure, alignment: .leading)
+                .bubble(mine: mine)
+                .animation(Theme.Motion.pick(Theme.Motion.disclose, reduceMotion: reduceMotion), value: showsFacts)
+                if !mine {
+                    // What's generated can be taken away or asked for again.
+                    HStack(spacing: Theme.Space.s) {
+                        small("Copy", help: "Copy this answer") {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(message.text, forType: .string)
+                        }
+                        if let retry { small("Retry", help: "Ask the question again", action: retry) }
+                    }
+                    .padding(.leading, Theme.Space.xs)
                 }
             }
-            .bubble(mine: message.role == "user")
-            if message.role != "user" { Spacer(minLength: 80) }
+            if !mine { Spacer(minLength: 80) }
         }
+    }
+
+    /// A quiet action under an answer, padded to a 22-point target.
+    private func small(_ title: String, help: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Theme.secondaryText)
+                .padding(.vertical, 4)
+                .padding(.horizontal, 4)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(help)
     }
 }

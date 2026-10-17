@@ -31,25 +31,54 @@ extension View {
 
     /// The world is behind every page: nothing to paint (kept so pages say where they start).
     func pageBackground() -> some View { self }
+
+    /// Text in one of the type scale's roles: its font, colour, leading and tracking.
+    func textRole(_ role: Theme.TextRole, color: Color? = nil) -> some View {
+        font(role.font)
+            .foregroundStyle(color ?? role.color)
+            .lineSpacing(role.lineSpacing)
+            .tracking(role.tracking)
+    }
+
+    /// `.primary`, `.secondary` and `.tertiary` in Theme's greys (the system's are too dim on
+    /// the navy): set on the window's root, on every Card and on Applyant's bubble.
+    func themeForeground() -> some View {
+        foregroundStyle(Theme.text, Theme.secondaryText, Theme.tertiaryText)
+    }
+
+    /// A page's or a tab's column: the same insets and the same maximum width everywhere, so
+    /// switching tabs never moves the first card. Leading in a detail pane, centred on a page of
+    /// its own (Chat, Settings).
+    func pageColumn(centered: Bool = false) -> some View {
+        padding(.horizontal, Theme.pagePadding)
+            .padding(.top, Theme.Space.m)
+            .padding(.bottom, Theme.Space.xl)
+            .frame(maxWidth: Theme.pageWidth + 2 * Theme.pagePadding, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: centered ? .center : .leading)
+    }
 }
 
 private struct Glass: ViewModifier {
     let radius: CGFloat
     let tint: Color?
     let fill: Color
+    @Environment(\.colorSchemeContrast) private var contrast
 
     func body(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
+        // A status only washes the glass faintly (text on it keeps its contrast); with Increase
+        // Contrast there's no wash, and the edge says it instead.
+        let increased = contrast == .increased
         content
             .background {
                 shape.fill(fill)
-                    .overlay { if let tint { shape.fill(tint.opacity(0.13)) } }
+                    .overlay { if let tint, !increased { shape.fill(tint.opacity(0.06)) } }
                     .overlay {
                         // Light falling on the glass from above.
                         shape.fill(LinearGradient(colors: [.white.opacity(0.035), .clear], startPoint: .top, endPoint: .init(x: 0.5, y: 0.35)))
                     }
             }
-            .overlay { shape.strokeBorder(tint.map { AnyShapeStyle($0.opacity(0.45)) } ?? AnyShapeStyle(Theme.glassEdge), lineWidth: 1) }
+            .overlay { shape.strokeBorder(tint.map { AnyShapeStyle($0.opacity(increased ? 0.8 : 0.45)) } ?? AnyShapeStyle(Theme.glassEdge), lineWidth: 1) }
     }
 }
 
@@ -63,7 +92,7 @@ struct Card<Content: View, Accessory: View>: View {
     @ViewBuilder var content: Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.rowSpacing + 6) {
+        VStack(alignment: .leading, spacing: Theme.Space.m) {
             if title != nil || Accessory.self != EmptyView.self {
                 HStack(alignment: .firstTextBaseline) {
                     if let title { CardTitle(title: title, systemImage: systemImage, tint: tint) }
@@ -76,6 +105,7 @@ struct Card<Content: View, Accessory: View>: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(Theme.cardPadding)
         .glass(tint: tint)
+        .themeForeground()
     }
 }
 
@@ -99,7 +129,7 @@ struct CardTitle: View {
                     .foregroundStyle(tint ?? Theme.accent)
                     .frame(width: 18)
             }
-            Text(title).font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.text)
+            Text(title).textRole(.heading)
         }
     }
 }
@@ -122,22 +152,24 @@ struct FoldingCard<Content: View>: View {
                     CardTitle(title: title, systemImage: systemImage)
                     Spacer()
                     Image(systemName: "chevron.right")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(Theme.secondaryText)
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(Theme.glyph)
                         .rotationEffect(.degrees(expanded ? 90 : 0))
                 }
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .accessibilityValue(expanded ? "Expanded" : "Collapsed")
             if expanded {
                 content
-                    .padding(.top, Theme.rowSpacing + 8)
+                    .padding(.top, Theme.Space.m)
                     .transition(.opacity)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(Theme.cardPadding + 2)
+        .padding(Theme.cardPadding)
         .glass(fill: surface)
+        .themeForeground()
     }
 }
 
@@ -149,10 +181,10 @@ struct Eyebrow: View {
 
     var body: some View {
         HStack(spacing: 7) {
-            Text(text.uppercased()).tracking(1.1).foregroundStyle(tint)
+            Text(text.uppercased()).tracking(Theme.TextRole.eyebrow.tracking).foregroundStyle(tint)
             if let count {
                 Text("\(count)")
-                    .font(Theme.number(10.5))
+                    .font(Theme.number(11))
                     .contentTransition(.numericText(value: Double(count)))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 6).padding(.vertical, 1.5)
@@ -171,6 +203,8 @@ struct Eyebrow: View {
 /// words in a lighter shade of it that reads at 11 points (6.8:1 or more on any card).
 struct ChipView: View {
     let chip: Chip
+    /// What the chip stands for, under the pointer.
+    var help: String? = nil
 
     var body: some View {
         let tint = Theme.tint(chip.tone)
@@ -184,10 +218,11 @@ struct ChipView: View {
         .font(.system(size: 11, weight: .semibold))
         .padding(.horizontal, 8)
         .padding(.vertical, 3)
-        .background(neutral ? Color.white.opacity(0.07) : tint.opacity(0.16), in: Capsule())
+        .background(neutral ? Theme.chipNeutralFill : tint.opacity(0.16), in: Capsule())
         .overlay(Capsule().strokeBorder(neutral ? Theme.hairline : tint.opacity(0.32), lineWidth: 0.75))
         .foregroundStyle(Theme.chipText(chip.tone))
         .animation(Theme.Motion.snappy, value: chip.text)
+        .help(help ?? "")
     }
 }
 
@@ -272,7 +307,18 @@ struct VerdictMark: View {
             .symbolRenderingMode(verdict == "strong" || verdict == "missing" ? .palette : .monochrome)
             .foregroundStyle(verdict == "strong" || verdict == "missing" ? Color.white : color, color)
             .frame(width: 18)
-            .help(Score.verdictMark(verdict) == "?" ? "Not known" : verdict.capitalized)
+            .help(label)
+            .accessibilityLabel(label)
+    }
+
+    /// What VoiceOver and the pointer say.
+    private var label: String {
+        switch verdict {
+        case "strong": "Met"
+        case "partial": "Partly met"
+        case "missing": "Missing"
+        default: "Unknown"
+        }
     }
 }
 
@@ -346,24 +392,30 @@ struct ModuleHeader<Accessory: View>: View {
     let section: ApplyantKit.Section
     var title: String?
     var subtitle: String?
-    var artSize: CGFloat = 54
+    /// 42 puts the title at x 72 in the list column, where its rows' titles start.
+    var artSize: CGFloat = 42
+    /// Off where a page's own art already stands beside it.
+    var showsArt: Bool = true
     @ViewBuilder var accessory: Accessory
 
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
-            ArtView(Art(section), size: artSize, floats: true, tilts: true)
+            if showsArt {
+                ArtView(Art(section), size: artSize, floats: true, tilts: true)
+            }
             VStack(alignment: .leading, spacing: 2) {
                 Text(title ?? section.railTitle)
-                    .font(Theme.moduleTitle)
-                    .foregroundStyle(Theme.text)
+                    .textRole(.title)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
                 if let subtitle, !subtitle.isEmpty {
+                    // One line; the rest is under the pointer.
                     Text(subtitle)
-                        .font(.system(size: 12.5, weight: .medium))
+                        .font(.system(size: 13))
                         .foregroundStyle(Theme.secondaryText)
-                        .lineLimit(2)
+                        .lineLimit(1)
                         .contentTransition(.numericText())
+                        .help(subtitle)
                 }
             }
             Spacer(minLength: 0)
@@ -380,8 +432,8 @@ extension View {
 }
 
 extension ModuleHeader where Accessory == EmptyView {
-    init(section: ApplyantKit.Section, title: String? = nil, subtitle: String? = nil, artSize: CGFloat = 54) {
-        self.init(section: section, title: title, subtitle: subtitle, artSize: artSize, accessory: { EmptyView() })
+    init(section: ApplyantKit.Section, title: String? = nil, subtitle: String? = nil, artSize: CGFloat = 42, showsArt: Bool = true) {
+        self.init(section: section, title: title, subtitle: subtitle, artSize: artSize, showsArt: showsArt, accessory: { EmptyView() })
     }
 }
 
@@ -394,11 +446,12 @@ struct PageHeader<Leading: View, Trailing: View>: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 16) {
-            leading
+            // One slot for a tile, a monogram or art, so every page's title starts at one x.
+            leading.frame(width: 56, height: 56)
             VStack(alignment: .leading, spacing: 4) {
-                Text(title).font(Theme.pageTitle).foregroundStyle(Theme.text).textSelection(.enabled)
+                Text(title).textRole(.title).textSelection(.enabled)
                 if let subtitle, !subtitle.isEmpty {
-                    Text(subtitle).font(.system(size: 13.5)).foregroundStyle(Theme.secondaryText).textSelection(.enabled)
+                    Text(subtitle).textRole(.body, color: Theme.secondaryText).textSelection(.enabled)
                 }
             }
             Spacer(minLength: 0)
@@ -440,15 +493,12 @@ struct EmptyState<Actions: View>: View {
                 LiveSymbol(systemImage: systemImage)
             }
             Text(title)
-                .font(.system(size: 22, weight: .bold))
-                .foregroundStyle(Theme.text)
+                .textRole(.title)
                 .multilineTextAlignment(.center)
             if let detail, !detail.isEmpty {
                 Text(detail)
-                    .font(.system(size: 13.5))
-                    .foregroundStyle(Theme.secondaryText)
+                    .textRole(.body, color: Theme.secondaryText)
                     .multilineTextAlignment(.center)
-                    .lineSpacing(2)
                     .frame(maxWidth: 380)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -501,6 +551,8 @@ struct PillPicker<Value: Hashable>: View {
     var numberShortcuts = false
     var tint: Color = Theme.accentFill
     var large = false
+    /// What VoiceOver calls the group ("Job tabs", "Window").
+    var accessibilityLabel: String? = nil
     @Namespace private var pill
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var hovered: Value?
@@ -513,7 +565,7 @@ struct PillPicker<Value: Hashable>: View {
                     withAnimation(Theme.Motion.pick(Theme.Motion.snappy, reduceMotion: reduceMotion)) { selection = item }
                 } label: {
                     Text(title(item))
-                        .font(.system(size: large ? 13.5 : 12.5, weight: picked ? .bold : .medium))
+                        .font(.system(size: large ? 14 : 13, weight: picked ? .bold : .medium))
                         .foregroundStyle(picked ? Color.white : Theme.secondaryText)
                         .padding(.horizontal, large ? 18 : 14)
                         .padding(.vertical, large ? 7 : 5)
@@ -541,6 +593,8 @@ struct PillPicker<Value: Hashable>: View {
         .background(Theme.glassFill, in: Capsule())
         .overlay(Capsule().strokeBorder(Theme.glassEdge, lineWidth: 0.75))
         .fixedSize()
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(accessibilityLabel ?? "")
     }
 }
 
@@ -573,7 +627,7 @@ struct PrimaryButtonStyle: ButtonStyle {
             let small = controlSize == .small || controlSize == .mini
             let large = controlSize == .large
             configuration.label
-                .font(.system(size: small ? 12 : large ? 15 : 13.5, weight: .bold))
+                .font(.system(size: small ? 12 : large ? 15 : 13, weight: .bold))
                 .foregroundStyle(enabled ? Color.white : Theme.tertiaryText)
                 .padding(.horizontal, small ? 11 : large ? 22 : 16)
                 .padding(.vertical, small ? 4 : large ? 10 : 7)
@@ -634,6 +688,63 @@ extension ButtonStyle where Self == SecondaryButtonStyle {
     static var secondary: SecondaryButtonStyle { SecondaryButtonStyle() }
 }
 
+/// Any card that is pressed as a whole (Home's tiles, a funnel step, an answer card): glass that
+/// brightens under the pointer, the accent along its edge when selected, a little press, and the
+/// system's focus ring for the keyboard.
+struct TileButtonStyle: ButtonStyle {
+    var radius: CGFloat = Theme.cornerRadius
+    var selected = false
+    /// A status edge (a warning tile).
+    var tint: Color? = nil
+
+    func makeBody(configuration: Configuration) -> some View {
+        Styled(configuration: configuration, radius: radius, selected: selected, tint: tint)
+    }
+
+    private struct Styled: View {
+        let configuration: Configuration
+        let radius: CGFloat
+        let selected: Bool
+        let tint: Color?
+        @State private var hovering = false
+        @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+        var body: some View {
+            let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
+            configuration.label
+                .background {
+                    shape.fill(hovering || selected ? Theme.glassFillHover : Theme.glassFill)
+                        .overlay {
+                            // Light falling on the glass from above, as on every tile.
+                            shape.fill(LinearGradient(colors: [.white.opacity(0.035), .clear], startPoint: .top, endPoint: .init(x: 0.5, y: 0.35)))
+                        }
+                }
+                .overlay {
+                    if selected {
+                        shape.strokeBorder(Theme.accentFill.opacity(0.7), lineWidth: 1.5)
+                    } else if let tint {
+                        shape.strokeBorder(tint.opacity(0.55), lineWidth: 1)
+                    } else {
+                        shape.strokeBorder(Theme.glassEdge, lineWidth: 1)
+                    }
+                }
+                .contentShape(shape)
+                .scaleEffect(configuration.isPressed && !reduceMotion ? 0.98 : 1)
+                .animation(Theme.Motion.snappy, value: configuration.isPressed)
+                .animation(Theme.Motion.fade, value: hovering)
+                .onHover { hovering = $0 }
+        }
+    }
+}
+
+extension ButtonStyle where Self == TileButtonStyle {
+    static var tile: TileButtonStyle { TileButtonStyle() }
+
+    static func tile(selected: Bool = false, radius: CGFloat = Theme.cornerRadius, tint: Color? = nil) -> TileButtonStyle {
+        TileButtonStyle(radius: radius, selected: selected, tint: tint)
+    }
+}
+
 /// The big round button (CleanMyMac's Scan, ClearVPN's power button): a disc of the interaction
 /// accent with a light rim and a soft halo that breathes slowly; while work runs a bright arc
 /// circles it, or a ring fills to how far it is.
@@ -666,7 +777,7 @@ struct RoundActionButton: View {
                 Circle()
                     .fill(enabled
                         ? AnyShapeStyle(RadialGradient(colors: [colors.first ?? Theme.accentFill, colors.last ?? Theme.accentFill], center: .init(x: 0.35, y: 0.25), startRadius: 2, endRadius: size * 0.75))
-                        : AnyShapeStyle(Color.white.opacity(0.1)))
+                        : AnyShapeStyle(Theme.discFill))
                     .overlay {
                         Circle().fill(LinearGradient(colors: [.white.opacity(0.2), .clear], startPoint: .top, endPoint: .center))
                             .padding(size * 0.06)
@@ -703,6 +814,7 @@ struct RoundActionButton: View {
         .buttonStyle(RoundPress())
         .disabled(!enabled)
         .onHover { hovering = $0 }
+        .accessibilityLabel(title)
     }
 
     private struct RoundPress: ButtonStyle {
@@ -857,6 +969,7 @@ struct CardList<ID: Hashable, Content: View>: View {
             }
             .focusable(ProcessInfo.processInfo.environment["BISECT_NOFOCUS"] == nil)
             .focused($focused)
+            .defaultFocus($focused, true)
             .focusEffectDisabled()
             .onKeyPress(.downArrow) { move(1, proxy) }
             .onKeyPress(.upArrow) { move(-1, proxy) }
@@ -901,7 +1014,7 @@ struct SelectableCard<ID: Hashable, Label: View>: View {
 
     var body: some View {
         let picked = list.selected == AnyHashable(id)
-        let shape = RoundedRectangle(cornerRadius: 15, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: Theme.rowRadius, style: .continuous)
         label
             .padding(padding)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -969,7 +1082,7 @@ private struct Bubble: ViewModifier {
                 .overlay(shape.strokeBorder(.white.opacity(0.18), lineWidth: 0.75))
         } else {
             content
-                .foregroundStyle(Theme.text)
+                .themeForeground()
                 .padding(.horizontal, 15)
                 .padding(.vertical, 11)
                 .background(Theme.glassFill, in: shape)

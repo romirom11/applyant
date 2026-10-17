@@ -26,7 +26,7 @@ struct PreferenceControls: View {
         } header: {
             Text("What you're looking for")
         } footer: {
-            Text("Nothing picked means no preference.").font(.caption).foregroundStyle(.secondary)
+            Text("Nothing picked means no preference.").textRole(.meta)
         }
         SwiftUI.Section("Where") {
             BasedInRow(country: binding("based_in"), city: binding("based_city"), reason: reasons["based_in"] ?? reasons["based_city"])
@@ -56,7 +56,7 @@ struct PreferenceControls: View {
             Text("Dealbreakers")
         } footer: {
             Text("Nothing is a dealbreaker unless you switch it on: a posting that breaks one is never prepared.")
-                .font(.caption).foregroundStyle(.secondary)
+                .textRole(.meta)
         }
     }
 
@@ -68,8 +68,8 @@ struct PreferenceControls: View {
     private func field(_ label: String, key: String, prompt: String, note: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             TextField(label, text: binding(key), prompt: Text(prompt))
-            Text(note).font(.caption).foregroundStyle(.secondary)
-            if let reason = reasons[key] { Text(reason).font(.caption).foregroundStyle(.secondary).lineLimit(2) }
+            Text(note).textRole(.meta)
+            if let reason = reasons[key] { Text(reason).textRole(.meta).lineLimit(2) }
         }
     }
 
@@ -81,7 +81,7 @@ struct PreferenceControls: View {
             HStack {
                 Text(label)
                 Spacer()
-                Text(chosen.isEmpty ? empty : "\(chosen.count) picked").font(.caption).foregroundStyle(.secondary)
+                Text(chosen.isEmpty ? empty : "\(chosen.count) picked").textRole(.meta)
             }
             FlowLayout(spacing: 6) {
                 ForEach(choices, id: \.key) { c in
@@ -93,7 +93,7 @@ struct PreferenceControls: View {
                     .controlSize(.small)
                 }
             }
-            if let reason = reasons[key] { Text(reason).font(.caption).foregroundStyle(.secondary).lineLimit(2) }
+            if let reason = reasons[key] { Text(reason).textRole(.meta).lineLimit(2) }
         }
     }
 }
@@ -114,7 +114,7 @@ private struct RolesEditor: View {
             HStack {
                 Text("Roles")
                 Spacer()
-                Text(roles.isEmpty ? "Any role" : "\(roles.count) picked").font(.caption).foregroundStyle(.secondary)
+                Text(roles.isEmpty ? "Any role" : "\(roles.count) picked").textRole(.meta)
             }
             if !roles.isEmpty {
                 FlowLayout(spacing: 6) {
@@ -135,7 +135,7 @@ private struct RolesEditor: View {
             }
             if !offered.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("From your CV").font(.caption).foregroundStyle(.secondary)
+                    Text("From your CV").textRole(.meta)
                     FlowLayout(spacing: 6) {
                         ForEach(offered, id: \.self) { role in
                             Button { text = RoleTokens.adding(role, to: text) } label: {
@@ -149,7 +149,7 @@ private struct RolesEditor: View {
                 }
             }
             Text("Any job titles, in your own words. Postings are compared with these.")
-                .font(.caption).foregroundStyle(.secondary)
+                .textRole(.meta)
         }
     }
 
@@ -171,13 +171,13 @@ private struct RemovableChip: View {
                 Image(systemName: "xmark").font(.system(size: 8, weight: .bold))
             }
             .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Theme.secondaryText)
             .help("Remove \(title)")
             .accessibilityLabel("Remove \(title)")
         }
-        .font(.callout)
+        .font(Theme.TextRole.body.font)
         .padding(.leading, 9).padding(.trailing, 7).padding(.vertical, 3)
-        .background(Color.accentColor.opacity(0.16), in: Capsule())
+        .background(Theme.accentFill.opacity(0.22), in: Capsule())
     }
 }
 
@@ -203,7 +203,7 @@ private struct BasedInRow: View {
                 ) { country = $0.code }
                 if code != nil {
                     Button { country = "" } label: { Image(systemName: "xmark.circle.fill") }
-                        .buttonStyle(.plain).foregroundStyle(.secondary).help("Clear the country")
+                        .buttonStyle(.plain).foregroundStyle(Theme.secondaryText).help("Clear the country")
                 }
                 TextField("City", text: $city, prompt: Text("City"))
                     .labelsHidden()
@@ -211,8 +211,8 @@ private struct BasedInRow: View {
                     .frame(width: 170)
             }
             Text("Where you work from. The city matters for on-site and hybrid jobs.")
-                .font(.caption).foregroundStyle(.secondary)
-            if let reason { Text(reason).font(.caption).foregroundStyle(.secondary).lineLimit(2) }
+                .textRole(.meta)
+            if let reason { Text(reason).textRole(.meta).lineLimit(2) }
         }
     }
 }
@@ -246,7 +246,7 @@ private struct CountriesRow: View {
                 }
             }
             Text("Countries you'd commute or move to. Remote jobs don't need one.")
-                .font(.caption).foregroundStyle(.secondary)
+                .textRole(.meta)
         }
     }
 }
@@ -278,13 +278,13 @@ private struct LanguagesEditor: View {
                     Image(systemName: "minus.circle.fill")
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.secondaryText)
                 .help("Remove \(Places.languageName(row.code))")
             }
         }
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                if rows.isEmpty { Text("None added yet").foregroundStyle(.secondary) }
+                if rows.isEmpty { Text("None added yet").foregroundStyle(Theme.secondaryText) }
                 Spacer()
                 SearchablePicker(
                     title: "Add language…",
@@ -293,8 +293,8 @@ private struct LanguagesEditor: View {
                 ) { text = LanguageRows.adding($0.code, to: text) }
             }
             Text("A posting that asks for a language you don't have, or a higher level, scores lower.")
-                .font(.caption).foregroundStyle(.secondary)
-            if let reason { Text(reason).font(.caption).foregroundStyle(.secondary).lineLimit(2) }
+                .textRole(.meta)
+            if let reason { Text(reason).textRole(.meta).lineLimit(2) }
         }
         if !rows.isEmpty {
             let chosen = Set(WorkingLanguages.parse(working))
@@ -302,7 +302,7 @@ private struct LanguagesEditor: View {
                 HStack {
                     Text("Rather work in")
                     Spacer()
-                    Text(chosen.isEmpty ? "No preference" : "\(chosen.count) picked").font(.caption).foregroundStyle(.secondary)
+                    Text(chosen.isEmpty ? "No preference" : "\(chosen.count) picked").textRole(.meta)
                 }
                 FlowLayout(spacing: 6) {
                     ForEach(rows) { row in
@@ -315,7 +315,7 @@ private struct LanguagesEditor: View {
                     }
                 }
                 Text("Pick the languages you'd like your team to work in. A posting that works only in others (an English-only one, say) counts for half; nothing picked means any language is fine.")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .textRole(.meta)
             }
             .onChange(of: text) { working = WorkingLanguages.keeping(working, spoken: LanguageRows.parse(text).map(\.code)) }
         }
@@ -339,7 +339,7 @@ struct SearchablePicker: View {
         Button { open = true } label: {
             HStack(spacing: 4) {
                 Text(title).lineLimit(1)
-                Image(systemName: "chevron.up.chevron.down").font(.caption2).foregroundStyle(.secondary)
+                Image(systemName: "chevron.up.chevron.down").font(.system(size: 9, weight: .semibold)).foregroundStyle(Theme.glyph)
             }
         }
         .popover(isPresented: $open, arrowEdge: .bottom) {
@@ -373,7 +373,7 @@ struct SearchableList: View {
                 .padding(8)
             Divider()
             if found.isEmpty {
-                Text("Nothing matches “\(query)”").font(.callout).foregroundStyle(.secondary)
+                Text("Nothing matches “\(query)”").textRole(.body, color: Theme.secondaryText)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView {
@@ -386,13 +386,13 @@ struct SearchableList: View {
                                     Text(item.name)
                                     Spacer()
                                     if index == 0 && !query.isEmpty {
-                                        Text("↩").font(.caption).foregroundStyle(.secondary)
+                                        Text("↩").textRole(.meta)
                                     }
                                 }
                                 .padding(.horizontal, 10).padding(.vertical, 4)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .contentShape(Rectangle())
-                                .background(index == 0 && !query.isEmpty ? Color.accentColor.opacity(0.14) : .clear)
+                                .background(index == 0 && !query.isEmpty ? Theme.accentFill.opacity(0.22) : .clear)
                             }
                             .buttonStyle(.plain)
                         }

@@ -15,28 +15,38 @@ struct MailboxRows: View {
 
     var body: some View {
         let box = store.mailbox
+        let problem = MailText.problem(box)
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(box.map(MailText.account) ?? "No mailbox connected").font(.callout)
-                Text(MailText.connection(box)).font(.caption).foregroundStyle(.secondary).lineLimit(3)
+                Text(box.map(MailText.account) ?? "No mailbox connected").textRole(.body)
+                Text(MailText.connection(box)).textRole(.meta).lineLimit(2).help(MailText.connection(box))
             }
             Spacer()
             ChipView(chip: MailText.chip(box))
         }
+        if problem != nil {
+            // Said where it's fixed, with the fix as the one primary button.
+            Callout(.warning, title: box?.kind == "gmail" ? "Google signed Applyant out" : "The mailbox stopped syncing", detail: "Replies aren't being read.") {
+                Button("Reconnect…") { connecting = true }.buttonStyle(.primary)
+            }
+        }
         HStack {
-            Button(box == nil ? "Connect mailbox…" : box?.status == "connecting" ? "Show sign-in…" : "Reconnect…") {
-                connecting = true
+            if problem == nil {
+                Button(box == nil ? "Connect Mailbox…" : box?.status == "connecting" ? "Show Sign-In…" : "Reconnect…") {
+                    connecting = true
+                }
             }
             if box != nil {
-                Button("Disconnect…", role: .destructive) { confirmingDisconnect = true }
+                Button("Disconnect…") { confirmingDisconnect = true }
+                    .foregroundStyle(Theme.bad)
                     .confirmationDialog("Disconnect this mailbox?", isPresented: $confirmingDisconnect) {
                         Button("Disconnect", role: .destructive) { Task { await store.disconnectMailbox() } }
                     } message: {
                         Text("Replies stop moving applications on, security codes can't be read and email applications can't be sent until you connect again. Its sign-in is forgotten.")
                     }
             }
-            if MailText.isConnected(box) {
-                Button("Sync now") { Task { await store.syncMailbox() } }
+            if MailText.isConnected(box), problem == nil {
+                Button("Sync Now") { Task { await store.syncMailbox() } }
             }
         }
         .sheet(isPresented: $connecting) {
@@ -63,15 +73,11 @@ struct MailboxConnectSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Connect mailbox").font(.title2.bold())
+            Text("Connect mailbox").textRole(.title)
             Text("Applyant reads replies to move applications on, reads emailed security codes, and sends email applications you approved. One mailbox at a time: connecting replaces the current one.")
-                .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            Picker("", selection: $kind) {
-                ForEach(Kind.allCases) { Text($0.rawValue).tag($0) }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .disabled(waiting)
+                .textRole(.body, color: Theme.secondaryText).fixedSize(horizontal: false, vertical: true)
+            PillPicker(items: Kind.allCases, title: \.rawValue, selection: $kind, accessibilityLabel: "Mailbox kind")
+                .disabled(waiting)
 
             Form {
                 switch kind {
@@ -83,18 +89,17 @@ struct MailboxConnectSheet: View {
             .scrollContentBackground(.hidden)
 
             if let error {
-                Label(error, systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.orange).font(.callout).textSelection(.enabled)
+                Callout(.warning, title: "Couldn't connect", detail: error)
             }
             HStack {
                 if waiting {
                     ProgressView().controlSize(.small)
-                    Text("Waiting for Google consent… finish it in your browser.").font(.callout)
-                    Button("Open again") { store.reopenGoogleConsent() }
+                    Text("Waiting for Google consent… finish it in your browser.").textRole(.body)
+                    Button("Open Again") { store.reopenGoogleConsent() }
                 } else if started, let box = store.mailbox {
                     Image(systemName: MailText.isConnected(box) ? "checkmark.circle.fill" : "xmark.octagon.fill")
-                        .foregroundStyle(MailText.isConnected(box) ? .green : .orange)
-                    Text(MailText.connection(box)).font(.callout).lineLimit(2)
+                        .foregroundStyle(MailText.isConnected(box) ? Theme.good : Theme.warning)
+                    Text(MailText.connection(box)).textRole(.body).lineLimit(2)
                 }
                 Spacer()
                 Button(started && MailText.isConnected(store.mailbox) ? "Done" : "Cancel") { close() }
@@ -131,7 +136,7 @@ struct MailboxConnectSheet: View {
                 Text("One consent covers Gmail and Calendar (interview events). Google warns the client is unverified: choose Advanced → continue.")
                 Text(MailText.googleBlockedHint)
             }
-            .font(.caption).foregroundStyle(.secondary)
+            .textRole(.meta)
         }
     }
 
@@ -151,7 +156,7 @@ struct MailboxConnectSheet: View {
             TextField("Login", text: $imap.username, prompt: Text("when it isn't the address"))
             SecureField("App password", text: $imap.password)
         } footer: {
-            Text(MailText.imapHint).font(.caption).foregroundStyle(.secondary)
+            Text(MailText.imapHint).textRole(.meta)
         }
     }
 

@@ -115,15 +115,15 @@ public enum ActivityText {
                     + (activity.paused.map { "\n\n" + $0 } ?? "")
             )
         case .saved:
-            return Empty(title: "Nothing saved", detail: "Press Save on a job to keep it here. Saving also starts its application.")
+            return Empty(title: "Nothing saved", detail: "Open New and press Save on a job to keep it here. Saving also starts its application.")
         case .skipped:
-            return Empty(title: "Nothing skipped", detail: "Jobs you skip land here; Back to New undoes it.")
+            return Empty(title: "Nothing skipped", detail: "Jobs you skip land here, and Back to New undoes it.")
         case .applied:
-            return Empty(title: "No applications sent yet", detail: "An application is sent right after you approve it, and stays here with what was sent.")
+            return Empty(title: "No applications sent yet", detail: "Open To review and send one: it goes out right after, and stays here with what was sent.")
         case .interviews:
-            return Empty(title: "No interviews yet", detail: "Invitations read from your mailbox move applications here. You can also set the status by hand.")
+            return Empty(title: "No interviews yet", detail: "Invitations read from your mailbox move applications here from Applied. Set Status on one in Applied does it by hand.")
         case .offers:
-            return Empty(title: "No offers yet", detail: "Offers read from your mailbox, or set by hand, appear here.")
+            return Empty(title: "No offers yet", detail: "Offers read from your mailbox move applications here. Set Status on one in Applied does it by hand.")
         default:
             return Empty(title: "Nothing here yet", detail: "")
         }
@@ -163,7 +163,7 @@ public enum ApproveText {
 
     public static let retryTitle = "Try delivery again?"
     public static let retryMessage =
-        "Applyant opens the form again, fills it and submits it on its own. If you already pressed submit in the browser, choose “I submitted it” instead, or it may be sent twice."
+        "Applyant opens the form again, fills it and submits it on its own. If you already pressed submit in the browser, choose “I Submitted It” instead, or it may be sent twice."
 
     /// The hand-off says submit may already have gone through: "I submitted it" comes first.
     public static func mayHaveBeenSent(_ app: Application) -> Bool {
@@ -193,6 +193,55 @@ public enum FieldText {
         case "none", "": ""
         default: source.replacingOccurrences(of: "_", with: " ")
         }
+    }
+
+    /// A note from the background service in plain words: "no notice_period in your profile" →
+    /// "Notice period isn't in your profile". Ids ("#12", "q3.1"), "(s)" and snake_case go.
+    public static func plain(_ note: String) -> String {
+        var s = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        s = replacing(s, #"^no ([A-Za-z_]+) in your profile"#) { "\(words($0[1])) isn't in your profile" }
+        s = replacing(s, #"^([A-Za-z_]+) is not in your profile"#) { "\(words($0[1])) isn't in your profile" }
+        s = replacing(s, #"(?<![\w&])(?:#\d+|q\d+(?:\.\d+)?)\s?"#) { _ in "" }
+        // "1 field(s)" → "1 field", "4 field(s)" → "4 fields", a bare "(s)" → "s".
+        s = replacing(s, #"\b(\d+) ((?:[A-Za-z-]+ ){0,2})([A-Za-z]+)\(s\)"#) { "\($0[1]) \($0[2])\($0[3])" + ($0[1] == "1" ? "" : "s") }
+        s = s.replacingOccurrences(of: "(s)", with: "s")
+        s = replacing(s, #"\b[a-z]+(?:_[a-z0-9]+)+\b"#) { $0[0].replacingOccurrences(of: "_", with: " ") }
+        s = s.replacingOccurrences(of: #"\s{2,}"#, with: " ", options: .regularExpression)
+            .replacingOccurrences(of: " ;", with: ";").replacingOccurrences(of: " ,", with: ",")
+            .trimmingCharacters(in: .whitespaces)
+        return s.prefix(1).uppercased() + s.dropFirst()
+    }
+
+    /// "notice_period" → "Notice period".
+    private static func words(_ key: String) -> String {
+        let w = key.replacingOccurrences(of: "_", with: " ")
+        return w.prefix(1).uppercased() + w.dropFirst()
+    }
+
+    /// Every match of `pattern` replaced by what `with` makes of its groups.
+    private static func replacing(_ s: String, _ pattern: String, with: ([String]) -> String) -> String {
+        guard let re = try? NSRegularExpression(pattern: pattern) else { return s }
+        var out = s
+        for m in re.matches(in: s, range: NSRange(s.startIndex..., in: s)).reversed() {
+            let groups = (0 ..< m.numberOfRanges).map { i in Range(m.range(at: i), in: s).map { String(s[$0]) } ?? "" }
+            if let r = Range(m.range, in: out) { out.replaceSubrange(r, with: with(groups)) }
+        }
+        return out
+    }
+
+    /// A field's placeholder by what it asks: "e.g. 2 weeks" for a notice period.
+    public static func placeholder(_ field: Applyant_V1_ApplicationField) -> String {
+        let text = ((field.hasMeaning ? field.meaning : "") + " " + field.label + " " + (field.hasNote ? field.note : "")).lowercased()
+        let examples: [(String, String)] = [
+            ("notice", "e.g. 2 weeks"), ("salary", "e.g. 90,000 EUR a year"), ("compensation", "e.g. 90,000 EUR a year"),
+            ("degree", "e.g. Master's"), ("education", "e.g. Master's"), ("start", "e.g. in 1 month"),
+            ("available", "e.g. in 1 month"), ("linkedin", "e.g. linkedin.com/in/you"), ("github", "e.g. github.com/you"),
+            ("website", "e.g. you.dev"), ("portfolio", "e.g. you.dev"), ("phone", "e.g. +380 50 123 4567"),
+            ("city", "e.g. Kyiv"), ("location", "e.g. Kyiv, Ukraine"), ("country", "e.g. Ukraine"),
+            ("visa", "e.g. No sponsorship needed"), ("years", "e.g. 8"), ("pronoun", "e.g. he/him"),
+        ]
+        if let hit = examples.first(where: { text.contains($0.0) }) { return hit.1 }
+        return field.kind == "date" ? "e.g. 2026-11-01" : "Your answer"
     }
 
     /// A verifier flag's issue in plain words ("verifier:scope" → "claims more than the fact says").

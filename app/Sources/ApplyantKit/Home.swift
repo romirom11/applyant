@@ -153,25 +153,28 @@ public enum HomeText {
         return first.map { "\(part), \($0)" } ?? part
     }
 
-    /// The line under the greeting: a pause first, else what waits for the candidate.
+    /// The line under the greeting: what waits for the candidate first, then a pause or a
+    /// limit's wait (the toolbar's pill says since when, with its Resume).
     public static func state(_ input: HomeInput) -> String {
-        if let since = input.pausedAt {
-            return "Paused since \(time(since)). Nothing is searched or scored until you resume."
-        }
-        if let waiting = input.waiting { return waiting + "." }
+        let halted = input.pausedAt != nil ? "Searching is paused." : input.waiting.map { $0 + "." }
         let (needs, ready) = (input.needsYou, input.ready)
+        let queue: String
         switch (needs > 0, ready > 0) {
         case (true, true):
-            return "\(needs) application\(needs == 1 ? " needs" : "s need") you and \(ready) \(ready == 1 ? "is" : "are") ready to send."
+            queue = "\(needs) application\(needs == 1 ? " needs" : "s need") you and \(ready) \(ready == 1 ? "is" : "are") ready to send."
         case (true, false):
-            return "\(needs) application\(needs == 1 ? " needs" : "s need") you."
+            queue = "\(needs) application\(needs == 1 ? " needs" : "s need") you."
         case (false, true):
-            return "\(ready) application\(ready == 1 ? " is" : "s are") ready to send."
+            queue = "\(ready) application\(ready == 1 ? " is" : "s are") ready to send."
         case (false, false):
-            return input.newMatches > 0
-                ? "Nothing waits for you. \(input.newMatches) new good match\(input.newMatches == 1 ? "" : "es") to look at."
-                : "You're all caught up. Your searches run on their schedule."
+            if input.newMatches > 0 {
+                queue = "Nothing waits for you. \(input.newMatches) new good match\(input.newMatches == 1 ? "" : "es") to look at."
+            } else {
+                // "Your searches run on their schedule" isn't true while they're halted.
+                queue = halted == nil ? "You're all caught up. Your searches run on their schedule." : "You're all caught up."
+            }
         }
+        return [queue, halted].compactMap { $0 }.joined(separator: " ")
     }
 
     /// The tile that lights up: a delivery first (it goes through even while paused), then,
@@ -300,12 +303,6 @@ public enum HomeText {
         if input.ready + input.needsYou > 0 { return .review }
         if input.newMatches > 0 { return .browse }
         return .search
-    }
-
-    private static func time(_ date: Date) -> String {
-        Calendar.current.isDateInToday(date)
-            ? date.formatted(date: .omitted, time: .shortened)
-            : date.formatted(.dateTime.day().month(.abbreviated).hour().minute())
     }
 }
 

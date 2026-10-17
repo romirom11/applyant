@@ -63,8 +63,11 @@ func searchList() -> SearchList {
         let rows = SearchText.strategyRows(list)
         #expect(rows.map(\.title) == ["AI / ML · Remote EU", "Greece / Cyprus"])
         #expect(rows[0].subtitle == "38 found · 29 verified · 12 interested (41%)")
-        #expect(rows[0].chips.map(\.text) == ["Every 6 h"])
+        // Every 6 h is how they all run: no chip says it.
+        #expect(rows[0].chips.map(\.text) == [])
         #expect(rows[1].chips.map(\.text) == ["Paused"])
+        #expect(SearchText.stats(stats(5, 4, 0)) == "5 found · 4 verified")
+        #expect(SearchText.stats(stats(0, 0, 0)) == "Nothing found yet")
         #expect(!rows[1].on)
         // Kinds with no sources are left out; each source says whether its list is complete.
         let groups = SearchText.sourceGroups(list)
@@ -161,7 +164,13 @@ func searchList() -> SearchList {
         list.strategies[0].effectiveEveryMinutes = 720
         list.strategies[0].cadenceNote = "runs less often (every 12h instead of 6h): 1 of 8 postings you decided on were interesting (13%)"
         let rows = SearchText.strategyRows(list)
-        #expect(rows[0].chips.map(\.text) == ["Every 12 h", "Runs less often", "Agent-generated"])
+        #expect(rows[0].chips.map(\.text) == ["Every 12 h", "Runs less often", "Planned by Applyant"])
+        // Most planned by Applyant: said once over the list, and the candidate's own are marked.
+        #expect(SearchText.origin(list) == nil)
+        list.strategies[1].origin = "agent"
+        list.strategies.append(strategy(3, "Mine"))
+        #expect(SearchText.origin(list) == "Planned by Applyant")
+        #expect(SearchText.strategyRows(list).map { $0.chips.map(\.text) } == [["Every 12 h", "Runs less often"], ["Paused"], ["Yours"]])
         var page = source("page:https://acme.example/careers", "Acme", kind: "page", complete: false)
         page.origin = "agent"
         page.recipe = .with { $0.status = "ok"; $0.lastCount = 12 }
@@ -173,6 +182,37 @@ func searchList() -> SearchList {
         let plan = SearchPlan.with { $0.status = "done"; $0.note = "2 new strategies · 5 new boards watched" }
         #expect(SearchText.planSummary(plan) == "2 new strategies · 5 new boards watched")
         #expect(SearchText.planSummary(.with { $0.status = "queued"; $0.trigger = "schedule" }) == "Planning searches (weekly)…")
+        let done = SearchPlan.with { $0.status = "done"; $0.strategyIds = [1, 2, 3, 4]; $0.boardKeys = (1...14).map { "board:\($0)" } }
+        #expect(SearchText.planLine(done) == "Last plan · 4 new searches, 14 boards")
+        #expect(SearchText.planLine(.with { $0.status = "done" }) == "Last plan · nothing new")
+        #expect(SearchText.planLine(.with { $0.status = "failed" }) == "The last plan failed")
+    }
+
+    @Test func runsStartedTogetherShareOneHeader() {
+        let at = Date(timeIntervalSince1970: 1_792_000_800)
+        func run(_ id: Int64, _ seconds: Double, trigger: String = "schedule", status: String = "done", added: Int32 = 0) -> SearchRun {
+            .with { $0.id = id; $0.startedAt = .init(date: at.addingTimeInterval(seconds)); $0.trigger = trigger; $0.status = status; $0.added = added }
+        }
+        let batches = SearchText.runBatches([run(9, 21), run(8, 20), run(7, 2), run(6, -3600), run(5, -3600, trigger: "manual")])
+        #expect(batches.map { $0.runs.map(\.id) } == [[9, 8, 7], [6], [5]])
+        #expect(batches[0].title.hasSuffix(" · on schedule"))
+        #expect(batches[2].title.hasSuffix(" · run by hand"))
+        #expect(SearchText.runRowChips(run(1, 0, added: 3)).map(\.text) == ["3 new"])
+        #expect(SearchText.runRowChips(run(1, 0)).isEmpty)
+        #expect(SearchText.runRowChips(run(1, 0, status: "failed")).map(\.text) == ["Failed"])
+    }
+
+    @Test func withNothingPickedTheDetailSaysHowSearchingStands() {
+        let runs: [SearchRun] = [
+            .with { $0.status = "queued" },
+            .with { $0.status = "done"; $0.added = 3 },
+            .with { $0.status = "failed" },
+            .with { $0.status = "done"; $0.added = 1 },
+        ]
+        let summary = SearchText.summary(searchList(), runs: runs)
+        #expect(summary.map(\.label) == ["Searches", "Sources", "Recent runs", "Failed"])
+        #expect(summary.map(\.value) == ["1 of 2 on", "2 of 3 on", "3 · 4 new", "1"])
+        #expect(SearchText.summary(searchList(), runs: []).count == 2)
     }
 
     @Test func planSearchesAndOpenASourcesRecipeThroughTheDaemon() async throws {

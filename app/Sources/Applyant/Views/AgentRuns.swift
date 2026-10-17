@@ -49,17 +49,25 @@ struct RunsList: View {
                 order: store.searchRuns.map(\.id),
                 tint: Theme.world(.agentRuns).main
             ) {
-                ForEach(store.searchRuns, id: \.id) { run in
-                    SelectableCard(id: run.id, padding: 11) {
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(SearchText.runTitle(run)).font(.system(size: 13.5, weight: .bold)).foregroundStyle(Theme.text).lineLimit(1)
-                            Text(run.startedAt.date.formatted(date: .abbreviated, time: .shortened) + " · " + SearchText.trigger(run.trigger))
-                                .font(.system(size: 12)).foregroundStyle(Theme.secondaryText)
-                            HStack(spacing: 4) { ForEach(SearchText.runChips(run), id: \.text) { ChipView(chip: $0) } }.padding(.top, 2)
+                // One header per batch: the schedule starts every search in the same minute.
+                ForEach(SearchText.runBatches(store.searchRuns)) { batch in
+                    CardListHeader(title: batch.title, count: batch.runs.count)
+                    ForEach(batch.runs, id: \.id) { run in
+                        SelectableCard(id: run.id, padding: 11) {
+                            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                Text(run.strategyName).textRole(.rowTitle).lineLimit(1)
+                                Text("run \(run.id)").textRole(.meta).lineLimit(1)
+                                Spacer(minLength: 4)
+                                ForEach(SearchText.runRowChips(run), id: \.text) { ChipView(chip: $0) }
+                            }
                         }
+                        .sheen(run.status == "queued", radius: Theme.rowRadius)
                     }
-                    .sheen(run.status == "queued", radius: 15)
                 }
+            }
+            // The newest run is open from the start: the detail is never a blank.
+            .task(id: store.searchRuns.first?.id) {
+                if store.navigation.run == nil, let newest = store.searchRuns.first { store.navigation.run = newest.id }
             }
         }
     }
@@ -84,24 +92,27 @@ struct ModelRunsList: View {
                 ForEach(store.agentRuns, id: \.id) { run in
                     VStack(alignment: .leading, spacing: 3) {
                         HStack(alignment: .firstTextBaseline) {
-                            Text(AgentRunText.role(run)).font(.system(size: 13.5, weight: .bold)).foregroundStyle(Theme.text).lineLimit(1)
+                            Text(AgentRunText.role(run)).textRole(.rowTitle).lineLimit(1)
                             Spacer()
                             ChipView(chip: AgentRunText.outcome(run))
                         }
-                        Text(AgentRunText.line(run)).font(.system(size: 12).monospacedDigit()).foregroundStyle(Theme.secondaryText).lineLimit(2)
+                        Text(AgentRunText.line(run)).textRole(.meta).monospacedDigit().lineLimit(2)
                         if let entity = AgentRunText.entity(run) {
-                            Text(entity).font(.system(size: 12.5, weight: .medium)).foregroundStyle(.white.opacity(0.85)).lineLimit(1)
+                            Text(entity).textRole(.body).lineLimit(1)
                         }
                         if let problem = AgentRunText.problem(run) {
-                            Text(problem).font(.caption).foregroundStyle(Theme.warning).lineLimit(3).textSelection(.enabled)
+                            HStack(alignment: .firstTextBaseline, spacing: 5) {
+                                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(Theme.warning).font(.system(size: 11))
+                                Text(problem).textRole(.meta, color: Theme.text).lineLimit(3).textSelection(.enabled)
+                            }
                         }
                         Text(Ago.text(run.startedAt.date) + " · " + run.startedAt.date.formatted(date: .abbreviated, time: .shortened))
-                            .font(.caption).foregroundStyle(Theme.tertiaryText)
+                            .textRole(.meta)
                     }
                     .padding(11)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 15, style: .continuous).strokeBorder(Color.white.opacity(0.07), lineWidth: 1))
+                    .background(Theme.insetFill, in: RoundedRectangle(cornerRadius: Theme.rowRadius, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: Theme.rowRadius, style: .continuous).strokeBorder(Theme.hairline, lineWidth: 1))
                 }
             }
         }
@@ -126,7 +137,7 @@ struct RunDetail: View {
                         title: SearchText.runTitle(run),
                         subtitle: run.startedAt.date.formatted(date: .abbreviated, time: .shortened) + " · " + SearchText.trigger(run.trigger)
                     ) {
-                        ArtView(.agentRuns, size: 64)
+                        ArtView(.agentRuns, size: 56)
                     }
                     RunSummary(store: store, run: run).entrance(1)
                     CardTitle(title: "Events", systemImage: "list.bullet.rectangle").padding(.top, 4)
@@ -135,8 +146,8 @@ struct RunDetail: View {
                             ForEach(events, id: \.id) { e in
                                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                                     Text(e.at.date.formatted(date: .omitted, time: .standard))
-                                        .font(.caption.monospacedDigit()).foregroundStyle(Theme.tertiaryText)
-                                    Text(SearchText.eventLine(e)).font(.system(size: 12)).foregroundStyle(.white.opacity(0.85)).textSelection(.enabled)
+                                        .textRole(.meta).monospacedDigit()
+                                    Text(SearchText.eventLine(e)).textRole(.meta, color: Theme.text).textSelection(.enabled)
                                 }
                             }
                         }
@@ -148,13 +159,16 @@ struct RunDetail: View {
                         ProgressView()
                     }
                 }
-                .padding(Theme.pagePadding)
-                .frame(maxWidth: 900, alignment: .leading)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .pageColumn()
             }
             .task(id: id) { await store.openRun(id) }
         } else {
-            EmptyState(title: "Pick a run", systemImage: ApplyantKit.Section.agentRuns.symbol, art: .agentRuns)
+            EmptyState(
+                title: "Pick a run",
+                systemImage: ApplyantKit.Section.agentRuns.symbol,
+                detail: "Each run on the left says what its sources listed and what was new. Pick one to see its events.",
+                art: .agentRuns
+            )
         }
     }
 }

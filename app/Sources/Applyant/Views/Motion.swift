@@ -137,7 +137,7 @@ struct LiveDot: View {
 
 // MARK: - Numbers
 
-/// A number that counts up to its value when it appears, and rolls to a new one.
+/// A number that counts up to its value when it appears, and rolls to a new one ("1,229").
 struct CountingNumber: View {
     let value: Int
     @State private var shown: Double = 0
@@ -151,7 +151,7 @@ struct CountingNumber: View {
             .onChange(of: value) { _, new in
                 withAnimation(Theme.Motion.pick(Theme.Motion.gauge, reduceMotion: reduceMotion)) { shown = Double(new) }
             }
-            .accessibilityLabel("\(value)")
+            .accessibilityLabel(value.formatted())
     }
 
     private struct Counted: View, @preconcurrency Animatable {
@@ -161,7 +161,7 @@ struct CountingNumber: View {
             set { value = newValue }
         }
 
-        var body: some View { Text("\(Int(value.rounded()))") }
+        var body: some View { Text(Int(value.rounded()).formatted()) }
     }
 }
 
@@ -316,6 +316,12 @@ extension AnyTransition {
         reduceMotion ? .opacity : .asymmetric(insertion: AnyTransition(.blurReplace).combined(with: .offset(y: 12)), removal: .opacity)
     }
 
+    /// What a control opens, appearing under it (the metrics panel, an inline disclosure): down
+    /// 10 points as it fades in, and it only fades out. A fade with Reduce Motion.
+    static func reveal(reduceMotion: Bool) -> AnyTransition {
+        reduceMotion ? .opacity : .asymmetric(insertion: .opacity.combined(with: .offset(y: -10)), removal: .opacity)
+    }
+
     /// A row leaving its list (approved, skipped): it slides away to the side as it fades.
     static func rowOut(reduceMotion: Bool) -> AnyTransition {
         reduceMotion ? .opacity : .asymmetric(
@@ -323,4 +329,9 @@ extension AnyTransition {
             removal: .move(edge: .leading).combined(with: .opacity)
         )
     }
+}
+
+extension Theme.Motion {
+    /// Something opening or closing in place (a DisclosureLine, the metrics panel).
+    static let disclose = snappy
 }

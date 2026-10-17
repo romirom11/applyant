@@ -15,55 +15,66 @@ let knowledgeFileOrFolderTypes: [UTType] = knowledgeFileTypes + [.folder]
 
 // MARK: Profile
 
-/// The profile form: every value `candidate profile set` takes, and the base CV.
+/// The profile form: every value `candidate profile set` takes, and the base CV. An empty field
+/// says "Not set" (its example is under the pointer) beside an amber dot; Save and Revert sit in
+/// the header, in reach whatever is scrolled.
 struct ProfileEditor: View {
     let store: AppStore
+    /// The Profile column's own header (title, the fields' count, Save and Revert); a sheet has
+    /// its own title, and Save and Revert stand at the form's top.
+    var showsHeader = false
     @State private var form = ProfileForm()
     @State private var loadedFrom: [Applyant_V1_ProfileEntry]?
     @State private var pickingCv = false
     @State private var saved = false
 
     var body: some View {
-        Form {
-            SwiftUI.Section {
-                ForEach(ProfileForm.fields, id: \.key) { field in
-                    TextField(field.label, text: Binding(get: { form[field.key] }, set: { form[field.key] = $0; saved = false }),
-                              prompt: Text(field.hint))
-                }
-            } header: {
-                Text("What application forms ask for")
-            } footer: {
-                Text("Defaults for every application; each one can still be changed in its review. GitHub logins and commit emails decide which commits are yours (comma-separated).")
-                    .font(.caption).foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 0) {
+            if showsHeader {
+                ModuleHeader(section: .profile, subtitle: form.summary) { actions }
+                    .columnHeader()
             }
-            SwiftUI.Section("Base CV") {
-                HStack {
-                    Text(form[ProfileForm.baseCvKey].isEmpty ? "None chosen" : (form[ProfileForm.baseCvKey] as NSString).lastPathComponent)
-                        .lineLimit(1).truncationMode(.middle)
-                        .help(form[ProfileForm.baseCvKey])
-                        .foregroundStyle(form[ProfileForm.baseCvKey].isEmpty ? .secondary : .primary)
-                    Spacer()
-                    Button("Choose…") { pickingCv = true }
-                    if !form[ProfileForm.baseCvKey].isEmpty {
-                        Button("Clear") { form[ProfileForm.baseCvKey] = ""; saved = false }
+            ScrollView {
+                VStack(alignment: .leading, spacing: Theme.blockSpacing) {
+                    if !showsHeader { HStack { Spacer(); actions } }
+                    Card {
+                        ForEach(ProfileForm.fields, id: \.key) { field in
+                            let unset = form.isUnset(field.key)
+                            LabeledRow(field.label, status: unset ? .warning : nil) {
+                                TextField(field.label, text: Binding(get: { form[field.key] }, set: { form[field.key] = $0; saved = false }),
+                                          prompt: Text("Not set"))
+                                    .labelsHidden()
+                                    .textFieldStyle(.roundedBorder)
+                                    .frame(maxWidth: 320)
+                                    .help("e.g. \(field.hint)")
+                            }
+                        }
+                        Text("Defaults for every application; each one can still be changed in its review. GitHub logins and commit emails decide which commits are yours (comma-separated).")
+                            .textRole(.meta)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Card(title: "Base CV") {
+                        HStack {
+                            Text(form[ProfileForm.baseCvKey].isEmpty ? "None chosen" : (form[ProfileForm.baseCvKey] as NSString).lastPathComponent)
+                                .textRole(.body, color: form[ProfileForm.baseCvKey].isEmpty ? Theme.secondaryText : Theme.text)
+                                .lineLimit(1).truncationMode(.middle)
+                                .help(form[ProfileForm.baseCvKey])
+                            Spacer()
+                            Button("Choose…") { pickingCv = true }
+                            if !form[ProfileForm.baseCvKey].isEmpty {
+                                Button("Clear") { form[ProfileForm.baseCvKey] = ""; saved = false }
+                            }
+                        }
+                        .buttonStyle(.secondary)
+                        Text("The CV that's sent when no tailored one is, and the one tailored CVs start from. Applyant keeps its own copy of the file you choose.")
+                            .textRole(.meta)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
-                Text("The CV that's sent when no tailored one is, and the one tailored CVs start from. Applyant keeps its own copy of the file you choose.").font(.caption).foregroundStyle(.secondary)
-            }
-            HStack {
-                if saved { Label("Saved", systemImage: "checkmark.circle.fill").foregroundStyle(.green) }
-                Spacer()
-                Button("Revert") { load(force: true) }.disabled(!form.hasChanges)
-                Button("Save profile") {
-                    let f = form
-                    Task { saved = await store.saveProfile(f); if saved { load(force: true) } }
-                }
-                .keyboardShortcut("s")
-                .disabled(!form.hasChanges)
+                .padding(.horizontal, showsHeader ? 12 : Theme.pagePadding)
+                .padding(.bottom, Theme.Space.xl)
             }
         }
-        .formStyle(.grouped)
-        .scrollContentBackground(.hidden)
         .fileImporter(isPresented: $pickingCv, allowedContentTypes: [.pdf, UTType(filenameExtension: "docx") ?? .data]) { result in
             if case let .success(url) = result {
                 let scoped = url.startAccessingSecurityScopedResource()
@@ -73,6 +84,29 @@ struct ProfileEditor: View {
         }
         .task { await store.openProfile(); load(force: false) }
         .onChange(of: store.candidateProfile?.profile) { load(force: false) }
+    }
+
+    /// Saved (a check), Revert and Save (⌘S).
+    private var actions: some View {
+        HStack(spacing: 6) {
+            if saved {
+                Image(systemName: "checkmark.circle.fill").foregroundStyle(Theme.good)
+                    .help("Saved")
+                    .accessibilityLabel("Saved")
+            }
+            Button("Revert") { load(force: true) }
+                .buttonStyle(.secondary)
+                .disabled(!form.hasChanges)
+            Button("Save") {
+                let f = form
+                Task { saved = await store.saveProfile(f); if saved { load(force: true) } }
+            }
+            .buttonStyle(.primary)
+            .keyboardShortcut("s")
+            .disabled(!form.hasChanges)
+            .help("Save the profile (⌘S)")
+        }
+        .controlSize(.small)
     }
 
     /// Takes the daemon's values unless the candidate is in the middle of editing.
@@ -85,17 +119,13 @@ struct ProfileEditor: View {
     }
 }
 
-/// The Profile section's list column: its header over the profile form.
+/// The Profile section's list column: the profile form under its header.
 struct ProfileColumn: View {
     let store: AppStore
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ModuleHeader(section: .profile, subtitle: "What application forms ask for")
-                .columnHeader()
-            ProfileEditor(store: store)
-        }
-        .navigationTitle("Profile")
+        ProfileEditor(store: store, showsHeader: true)
+            .navigationTitle("Profile")
     }
 }
 
@@ -110,15 +140,14 @@ struct ProfileSourcesPane: View {
                     title: "Profile sources",
                     subtitle: "Your CV, LinkedIn PDF and other documents about you as a whole: their facts are sorted into projects."
                 ) {
-                    ArtView(.profile, size: 64)
+                    ArtView(.profile, size: 56)
                 }
                 KnowledgeSourcesSection(store: store, project: nil, sources: store.candidateProfile?.profileSources ?? [])
                     .padding(Theme.cardPadding).cardSurface().entrance(1)
                 FactsSection(store: store, project: nil)
                     .padding(Theme.cardPadding).cardSurface().entrance(2)
             }
-            .padding(Theme.pagePadding)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .pageColumn()
         }
     }
 }
@@ -160,7 +189,7 @@ struct ProjectsList: View {
 
     private var newProject: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("New project").font(.headline)
+            Text("New project").textRole(.heading)
             TextField("Name", text: $newName, prompt: Text("Solovei, Ordi, a position…"))
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 240)
@@ -192,7 +221,7 @@ struct ProjectsList: View {
             if pending { factsToConfirmCard }
             if store.knowledgeProjects.isEmpty {
                 Text("No projects yet. Add one, or import a CV: projects are drafted from it.")
-                    .font(.callout).foregroundStyle(Theme.secondaryText).padding(.horizontal, 6)
+                    .textRole(.body, color: Theme.secondaryText).padding(.horizontal, 6)
             }
             if !groups.jobs.isEmpty {
                 CardListHeader(title: "Work", count: groups.jobs.count, tint: tint)
@@ -209,8 +238,7 @@ struct ProjectsList: View {
         SelectableCard(id: Self.factsToConfirm, padding: 11) {
             HStack {
                 Label("Facts to confirm", systemImage: "checkmark.circle")
-                    .font(.system(size: 13.5, weight: .bold))
-                    .foregroundStyle(Theme.text)
+                    .textRole(.rowTitle)
                 Spacer()
                 Text("\(store.unconfirmedFacts.count)")
                     .font(Theme.number(11, weight: .heavy))
@@ -236,7 +264,7 @@ struct ProjectsList: View {
     private func row(_ p: KnowledgeProject) -> some View {
         SelectableCard(id: p.id, padding: 11) {
             HStack {
-                Text(p.name).font(.system(size: 13.5, weight: .semibold)).foregroundStyle(Theme.text).lineLimit(1)
+                Text(p.name).textRole(.rowTitle).lineLimit(1)
                 Spacer()
                 if p.unconfirmedCount > 0 {
                     Text("\(p.unconfirmedCount)")
@@ -261,7 +289,8 @@ struct ProjectDetail: View {
             EmptyState(
                 title: "Projects",
                 systemImage: ApplyantKit.Section.projects.symbol,
-                detail: "Your experience is told in projects. Pick one to add a GitHub repository, a file or a page to it."
+                detail: "Your experience is told in projects. Pick one to add a GitHub repository, a file or a page to it.",
+                art: .projects
             )
         }
     }
@@ -280,11 +309,12 @@ private struct ProjectPane: View {
             VStack(alignment: .leading, spacing: Theme.blockSpacing) {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(alignment: .center, spacing: 14) {
-                        IconTile(systemImage: project.kind == "position" ? "briefcase.fill" : "hammer.fill")
+                        ArtView(.projects, size: 56)
+                            .help(project.kind == "position" ? "A job (Experience)" : "Something you built (Projects)")
                         if renaming {
                             TextField("Name", text: $name)
                                 .textFieldStyle(.roundedBorder)
-                                .font(.title2)
+                                .font(Theme.TextRole.title.font)
                                 .focused($nameFocused)
                                 .onSubmit(rename)
                                 .onExitCommand { renaming = false }
@@ -292,7 +322,7 @@ private struct ProjectPane: View {
                                 .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
                             Button("Cancel") { renaming = false }
                         } else {
-                            Text(project.name).font(Theme.pageTitle)
+                            Text(project.name).textRole(.title)
                                 .onTapGesture(count: 2) { startRenaming() }
                                 .help("Double-click to rename")
                             Spacer()
@@ -318,7 +348,7 @@ private struct ProjectPane: View {
                             .help("Rename, sync or remove this project")
                         }
                     }
-                    if project.hasSummary { Text(project.summary).foregroundStyle(.secondary) }
+                    if project.hasSummary { Prose(project.summary, size: .compact) }
                     if !project.stack.isEmpty {
                         FlowLayout(spacing: 4) {
                             ForEach(project.stack, id: \.self) { ChipView(chip: Chip(text: $0, tone: .neutral)) }
@@ -331,8 +361,7 @@ private struct ProjectPane: View {
                 FactsSection(store: store, project: project.id)
                     .padding(Theme.cardPadding).cardSurface().entrance(2)
             }
-            .padding(Theme.pagePadding)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .pageColumn()
         }
         .task { await store.openProject(project.id) }
         .confirmationDialog("Remove \(project.name)?", isPresented: $confirmingDelete) {
@@ -373,7 +402,7 @@ struct FactsToConfirmPane: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 PageHeader(title: "Facts to confirm", subtitle: "\(total) in \(groups.count) place\(groups.count == 1 ? "" : "s")") {
-                    IconTile(systemImage: "checkmark.seal.fill")
+                    IconTile(systemImage: "checkmark.seal.fill", size: 56)
                 } trailing: {
                     Button("Confirm All \(total)…") { confirmingAll = true }.buttonStyle(.primary)
                     FactsMenu(showQuotes: $showQuotes)
@@ -381,8 +410,8 @@ struct FactsToConfirmPane: View {
                 .help("Drafted from your CV and other sources. Confirm what's true as written, edit what isn't quite right, reject what's wrong. An application is only sent once every fact it relies on is confirmed.")
                 ForEach(groups, id: \.name) { group in
                     HStack(alignment: .firstTextBaseline) {
-                        Text(group.name).font(.headline)
-                        Text("\(group.facts.count)").foregroundStyle(.secondary)
+                        Text(group.name).textRole(.heading)
+                        Text("\(group.facts.count)").textRole(.meta)
                         Spacer()
                         Button("Confirm These \(group.facts.count)") {
                             Task { await store.confirmFacts(group.facts.map(\.id), project: group.project) }
@@ -396,12 +425,11 @@ struct FactsToConfirmPane: View {
                     .padding(.top, 6)
                     ForEach(group.facts, id: \.id) { fact in
                         FactRow(store: store, fact: fact, project: group.project, showQuotes: showQuotes)
-                        Divider()
+                        Divider().overlay(Theme.hairline)
                     }
                 }
             }
-            .padding(Theme.pagePadding)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .pageColumn()
         }
         .task { await store.openUnconfirmedFacts() }
         .confirmationDialog("Mark all \(total) facts as true?", isPresented: $confirmingAll) {
@@ -426,7 +454,8 @@ struct KnowledgeSourcesSection: View {
     @State private var pickingRepo = false
     @State private var removing: KnowledgeSource?
     @State private var removedNote: String?
-    @State private var askingAssistant = false
+    /// Times "What Your AI Assistant Knows…" was picked: each one opens its card afresh.
+    @State private var askingAssistant = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -442,13 +471,15 @@ struct KnowledgeSourcesSection: View {
                     Button("Link…") { linking = true }
                     if project == nil {
                         Divider()
-                        Button("What Your AI Assistant Knows…") { askingAssistant = true }
+                        Button("What Your AI Assistant Knows…") { askingAssistant += 1 }
                     }
                 }
+                .menuStyle(.button)
+                .buttonStyle(.secondary)
                 .fixedSize()
                 .popover(isPresented: $linking, arrowEdge: .bottom) {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text(project == nil ? "A page about you" : "A page about this project").font(.headline)
+                        Text(project == nil ? "A page about you" : "A page about this project").textRole(.heading)
                         TextField("Link", text: $link, prompt: Text("https://…"))
                             .textFieldStyle(.roundedBorder)
                             .frame(width: 320)
@@ -456,7 +487,7 @@ struct KnowledgeSourcesSection: View {
                         Text(project == nil
                             ? "A portfolio page, an article: it's read into facts. For a GitHub repository, add it to its project."
                             : "A product page, documentation, an article: it's read into facts.")
-                            .font(.caption).foregroundStyle(.secondary)
+                            .textRole(.meta).fixedSize(horizontal: false, vertical: true).frame(width: 320, alignment: .leading)
                         HStack {
                             Spacer()
                             Button("Cancel") { linking = false }.keyboardShortcut(.cancelAction)
@@ -475,29 +506,27 @@ struct KnowledgeSourcesSection: View {
                 Text(project == nil
                     ? "Nothing yet. Add your CV or LinkedIn PDF."
                     : "Nothing yet. Add the repository, a file or a page: its facts make your answers specific.")
-                    .font(.callout).foregroundStyle(.secondary)
+                    .textRole(.body, color: Theme.secondaryText)
             }
             ForEach(sources, id: \.id) { s in
                 SourceRow(store: store, source: s) { removing = s }
-                Divider()
+                Divider().overlay(Theme.hairline)
             }
             if let removedNote {
-                Label(removedNote, systemImage: "checkmark.circle").font(.callout).foregroundStyle(.secondary)
+                MetaLine(removedNote, systemImage: "checkmark.circle", tone: .good)
             }
             if project == nil {
                 // What an AI assistant remembers about the candidate is a profile source too.
-                DisclosureGroup(AssistantNotesBox.title, isExpanded: $askingAssistant) {
+                FoldingCard(title: AssistantNotesBox.title, expanded: askingAssistant > 0, surface: Theme.insetFill) {
                     VStack(alignment: .leading, spacing: 8) {
                         AssistantNotesBox(store: store)
-                        Text(AssistantNotesBox.note).font(.caption).foregroundStyle(.secondary)
+                        Text(AssistantNotesBox.note).textRole(.meta).fixedSize(horizontal: false, vertical: true)
                     }
-                    .padding(.top, 6)
                 }
-                .padding(10)
-                .insetSurface()
+                .id(askingAssistant)
             }
             if project == nil, let note = store.baseCvNote {
-                Label(note, systemImage: "doc.badge.arrow.up").font(.callout).foregroundStyle(.secondary)
+                MetaLine(note, systemImage: "doc.badge.arrow.up")
             }
         }
         .task(id: project) {
@@ -529,7 +558,7 @@ struct KnowledgeSourcesSection: View {
             isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }),
             presenting: removing
         ) { s in
-            Button("Remove the source", role: .destructive) {
+            Button("Remove Source", role: .destructive) {
                 Task {
                     if let n = await store.deleteSource(s.id) { removedNote = KnowledgeText.removedLine(factsRemoved: n) }
                 }
@@ -558,10 +587,10 @@ private struct SourceRow: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Image(systemName: KnowledgeText.symbol(source)).foregroundStyle(.secondary).frame(width: 16)
+            Image(systemName: KnowledgeText.symbol(source)).foregroundStyle(Theme.secondaryText).frame(width: 16)
             VStack(alignment: .leading, spacing: 2) {
-                Text(KnowledgeText.title(source)).lineLimit(1).truncationMode(.middle)
-                Text(KnowledgeText.syncLine(source)).font(.caption).foregroundStyle(.secondary)
+                Text(KnowledgeText.title(source)).textRole(.itemTitle).lineLimit(1).truncationMode(.middle)
+                Text(KnowledgeText.syncHeadline(source)).textRole(.meta)
                     .lineLimit(1).truncationMode(.tail)
             }
             .help("\(KnowledgeText.kindName(source)) · \(source.locator)\n\(KnowledgeText.syncLine(source))")
@@ -594,16 +623,17 @@ private struct RepoSuggestionsCard: View {
         Group {
             if !sources.contains(where: { $0.kind == .github }), !shown.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("On your GitHub").font(.subheadline.weight(.semibold))
+                    Text("On your GitHub").textRole(.itemTitle)
                     ForEach(Array(shown)) { r in
                         HStack(alignment: .firstTextBaseline, spacing: 8) {
-                            Image(systemName: "chevron.left.forwardslash.chevron.right").foregroundStyle(.secondary).frame(width: 16)
-                            Text(RepoText.cardLine(r)).lineLimit(2)
+                            Image(systemName: "chevron.left.forwardslash.chevron.right").foregroundStyle(Theme.secondaryText).frame(width: 16)
+                            Text(RepoText.cardLine(r)).textRole(.body).lineLimit(2)
                             Spacer()
                             Button("Add") { Task { await store.addKnowledgeSource(to: project, r.url) } }
                                 .controlSize(.small)
                                 .buttonStyle(.primary)
                             Button("Not This One") { store.dismissedRepoSuggestions.insert(r.url) }
+                                .buttonStyle(.secondary)
                                 .controlSize(.small)
                         }
                     }
@@ -629,7 +659,7 @@ struct RepoPickerSheet: View {
         let found = store.repoSuggestions[project]
         VStack(spacing: 0) {
             HStack {
-                Text("Add a repository to \(projectName)").font(.headline)
+                Text("Add a repository to \(projectName)").textRole(.heading)
                 Spacer()
                 Button("Cancel", action: close).keyboardShortcut(.cancelAction)
             }
@@ -645,10 +675,10 @@ struct RepoPickerSheet: View {
                 if let problem = found.problem {
                     let p = RepoText.problem(problem)
                     VStack(alignment: .leading, spacing: 8) {
-                        Text(p.text).foregroundStyle(.secondary)
+                        Text(p.text).textRole(.body, color: Theme.secondaryText)
                         if let command = p.command {
                             HStack {
-                                Text("Run this in Terminal, then open this again:").font(.caption).foregroundStyle(.secondary)
+                                Text("Run this in Terminal, then open this again:").textRole(.meta)
                                 CopyCommand(command: command)
                             }
                         }
@@ -660,7 +690,7 @@ struct RepoPickerSheet: View {
                     let others = RepoText.search(query, in: found.others)
                     if matches.isEmpty && others.isEmpty {
                         Text(found.isEmpty ? "No repositories on \(found.accounts.joined(separator: ", ")) that aren't a source already." : "Nothing matches “\(query)”")
-                            .foregroundStyle(.secondary)
+                            .textRole(.body, color: Theme.secondaryText)
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                     } else {
                         List {
@@ -699,12 +729,12 @@ struct RepoPickerSheet: View {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 4) {
-                        Text(r.fullName).fontWeight(.medium)
-                        if r.isPrivate { Image(systemName: "lock.fill").font(.caption).foregroundStyle(.secondary) }
+                        Text(r.fullName).textRole(.itemTitle)
+                        if r.isPrivate { Image(systemName: "lock.fill").font(.system(size: 11)).foregroundStyle(Theme.secondaryText) }
                     }
                     let detail = RepoText.detailLine(r)
-                    if !detail.isEmpty { Text(detail).font(.caption).foregroundStyle(.secondary).lineLimit(2) }
-                    if !r.reason.isEmpty { Text(r.reason).font(.caption).foregroundStyle(Color.accentColor) }
+                    if !detail.isEmpty { Text(detail).textRole(.meta).lineLimit(2) }
+                    if !r.reason.isEmpty { Text(r.reason).textRole(.meta, color: Theme.accent) }
                 }
                 Spacer()
                 if adding == r.url { ProgressView().controlSize(.small) }
@@ -724,38 +754,37 @@ struct FactsSection: View {
     let store: AppStore
     /// nil: the profile's facts.
     let project: Int64?
-    @State private var filter = FactsText.Filter.toConfirm
+    /// Picked by the candidate; until then To confirm while anything is, else All.
+    @State private var picked: FactsText.Filter?
     @State private var showQuotes = false
 
     var body: some View {
         let all = store.facts[FactsText.ref(project)] ?? []
+        let filter = picked ?? (all.contains { $0.status == .unconfirmed } ? .toConfirm : .all)
         let shown = FactsText.shown(all, filter: filter)
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 CardTitle(title: "Facts", systemImage: "checkmark.seal")
                     .help("Extracted facts start unconfirmed; drafts may use them, but nothing unconfirmed is sent. An edit is saved in your words, confirmed.")
-                Text(FactsText.counts(all)).font(.callout).foregroundStyle(.secondary)
+                MetaLine(FactsText.counts(all))
                 Spacer()
-                Picker("Show", selection: $filter) {
-                    ForEach(FactsText.Filter.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .fixedSize()
+                PillPicker(items: FactsText.Filter.allCases, title: \.rawValue, selection: Binding(get: { filter }, set: { picked = $0 }), accessibilityLabel: "Show")
+                    .fixedSize()
                 let open = shown.filter { $0.status == .unconfirmed }.map(\.id)
                 if !open.isEmpty {
                     Button("Confirm All \(open.count)") { Task { await store.confirmFacts(open, project: project) } }
+                        .buttonStyle(.secondary)
                         .help("Every unconfirmed fact shown is true as written")
                 }
                 FactsMenu(showQuotes: $showQuotes)
             }
             if shown.isEmpty {
                 Text(filter == .toConfirm ? "Nothing to confirm." : "No facts yet: add a source, or answer the interview.")
-                    .font(.callout).foregroundStyle(.secondary)
+                    .textRole(.body, color: Theme.secondaryText)
             }
             ForEach(shown, id: \.id) { fact in
                 FactRow(store: store, fact: fact, project: project, showQuotes: showQuotes)
-                Divider()
+                Divider().overlay(Theme.hairline)
             }
         }
         .task(id: project) { await store.openFacts(project: project) }
@@ -789,6 +818,20 @@ struct FactRow: View {
     @State private var text = ""
     @State private var confirmingReject = false
 
+    /// The project a fact belongs to, when it isn't the one on screen.
+    private var otherProject: String? {
+        guard fact.hasProjectID, fact.projectID != project else { return nil }
+        return store.knowledgeProject(fact.projectID)?.name ?? (fact.hasProjectSlug ? fact.projectSlug : nil)
+    }
+
+    /// What kind of fact it is, where it came from and its first piece of evidence.
+    private var reason: String {
+        var parts = [FactsText.kind(fact)]
+        if let origin = FactsText.origin(fact) { parts.append(origin) }
+        if let e = fact.evidence.first { parts.append(FactsText.evidence(e) + (fact.evidence.count > 1 ? " (+\(fact.evidence.count - 1))" : "")) }
+        return parts.joined(separator: " · ")
+    }
+
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             VStack(alignment: .leading, spacing: 3) {
@@ -807,14 +850,18 @@ struct FactRow: View {
                         .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
                 } else {
-                    Text(fact.text).textSelection(.enabled)
-                        .foregroundStyle(fact.status == .rejected ? .secondary : .primary)
-                        .strikethrough(fact.status == .rejected)
-                    Text(FactsText.detailLine(fact)).font(.caption).foregroundStyle(.secondary)
-                        .lineLimit(1).truncationMode(.middle)
+                    // A claim with its evidence beside it; the status in the margin only when
+                    // it isn't simply confirmed.
+                    EvidenceRow(
+                        fact.text,
+                        eyebrow: otherProject,
+                        reason: reason,
+                        margin: fact.status == .unconfirmed ? "To confirm" : fact.status == .rejected ? "Rejected" : nil
+                    )
+                    .opacity(fact.status == .rejected ? 0.7 : 1)
                     if showQuotes {
                         ForEach(FactsText.quotes(fact), id: \.self) { q in
-                            Text("“\(q)”").font(.caption).italic().foregroundStyle(.secondary).lineLimit(3)
+                            Text("“\(q)”").textRole(.meta).italic().lineLimit(3)
                         }
                     }
                 }
@@ -822,10 +869,13 @@ struct FactRow: View {
             Spacer()
             if !editing {
                 if fact.status == .unconfirmed {
-                    Button("Confirm") { Task { await store.confirmFacts([fact.id], project: project) } }.controlSize(.small)
+                    Button("Confirm") { Task { await store.confirmFacts([fact.id], project: project) } }
+                        .buttonStyle(.secondary)
+                        .controlSize(.small)
                 }
                 if fact.status == .rejected {
                     Button("Restore") { Task { await store.confirmFacts([fact.id], project: project) } }
+                        .buttonStyle(.secondary)
                         .controlSize(.small)
                         .help("Takes the rejection back: the fact is confirmed and can be used again")
                 } else {
@@ -842,7 +892,7 @@ struct FactRow: View {
             }
         }
         .padding(.vertical, 3)
-        .help(FactsText.tooltip(fact))
+        .help(FactsText.tooltip(fact) + "\n\nFact \(fact.id)")
         .confirmationDialog("Reject this fact?", isPresented: $confirmingReject) {
             Button("Reject", role: .destructive) { Task { await store.rejectFacts([fact.id], project: project) } }
         } message: {
@@ -860,9 +910,9 @@ struct ProfileSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text("Profile").font(.title2.bold())
+                Text("Profile").textRole(.title)
                 Spacer()
-                Button("Done", action: close).keyboardShortcut(.cancelAction)
+                Button("Done", action: close).buttonStyle(.secondary).keyboardShortcut(.cancelAction)
             }
             .padding(16)
             ProfileEditor(store: store)
@@ -879,9 +929,9 @@ struct ProjectsSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text("Projects and sources").font(.title2.bold())
+                Text("Projects and sources").textRole(.title)
                 Spacer()
-                Button("Done", action: close).keyboardShortcut(.cancelAction)
+                Button("Done", action: close).buttonStyle(.secondary).keyboardShortcut(.cancelAction)
             }
             .padding(16)
             HSplitView {

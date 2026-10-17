@@ -13,8 +13,19 @@ public struct InterviewRow: Identifiable, Equatable, Sendable {
     public let target: InterviewTarget
     public let title: String
     public let subtitle: String
+    /// Only what sets the row apart from its group ("Reading your answer…"), never "Needs your answer".
     public let chips: [Chip]
+    /// The header a waiting row sits under: its application ("Canonical · Python Software
+    /// Engineer"), or "Project questions".
+    public var group: String? = nil
     public var id: InterviewTarget { target }
+}
+
+/// Waiting rows under one header: an application's questions, or the projects' ones.
+public struct InterviewGroup: Identifiable, Equatable, Sendable {
+    public let title: String
+    public let rows: [InterviewRow]
+    public var id: String { title }
 }
 
 public enum InterviewText {
@@ -30,22 +41,24 @@ public enum InterviewText {
         var waiting: [InterviewRow] = []
         var seenProjects = Set<Int64>()
         for q in questions {
-            let chip = q.status == "processing"
-                ? Chip(text: "Reading your answer…", tone: .neutral)
-                : Chip(text: "Needs your answer", tone: .warning)
+            // Everything here waits for an answer (the header says so): a chip only when not.
+            let chips = q.status == "processing" ? [Chip(text: "Reading your answer…", tone: .neutral)] : []
             if q.hasApplicationID {
+                let application = q.application.isEmpty ? "Application \(q.applicationID)" : q.application
                 waiting.append(InterviewRow(
                     target: .question(q.id),
                     title: q.text,
-                    subtitle: q.hasApplication ? "For \(q.application)" : "For application \(q.applicationID)",
-                    chips: [chip]
+                    subtitle: "For \(application)",
+                    chips: chips,
+                    group: application
                 ))
             } else if q.hasProjectID, seenProjects.insert(q.projectID).inserted {
                 waiting.append(InterviewRow(
                     target: .project(q.projectID),
                     title: q.hasProjectName ? q.projectName : "Project \(q.projectID)",
                     subtitle: q.text,
-                    chips: [chip]
+                    chips: chips,
+                    group: projectsGroup
                 ))
             }
         }
@@ -63,6 +76,22 @@ public enum InterviewText {
                 )
             }
         return (waiting, rest)
+    }
+
+    /// The group of questions about the candidate's projects.
+    public static let projectsGroup = "Project questions"
+
+    /// The waiting rows under one header per application (or the projects), in the order
+    /// their first question comes, so an application's questions stand together.
+    public static func groups(_ waiting: [InterviewRow]) -> [InterviewGroup] {
+        var order: [String] = []
+        var rows: [String: [InterviewRow]] = [:]
+        for row in waiting {
+            let key = row.group ?? projectsGroup
+            if rows[key] == nil { order.append(key) }
+            rows[key, default: []].append(row)
+        }
+        return order.map { InterviewGroup(title: $0, rows: rows[$0] ?? []) }
     }
 
     static func projectChips(_ p: ProjectInterview) -> [Chip] {

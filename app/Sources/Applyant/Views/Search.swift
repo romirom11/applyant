@@ -18,9 +18,9 @@ struct SearchList: View {
             ModuleHeader(section: .search, subtitle: "\(strategies.count) search\(strategies.count == 1 ? "" : "es") · \(on) of \(store.search.sources.count) sources on")
                 .columnHeader()
             HStack(spacing: 6) {
-                Button { creating = true } label: { Label("New search", systemImage: "plus") }
+                Button { creating = true } label: { Label("New Search", systemImage: "plus") }
                 Button { Task { await store.planSearch() } } label: {
-                    Label(store.planning ? "Planning…" : "Plan searches", systemImage: "sparkle.magnifyingglass")
+                    Label(store.planning ? "Planning…" : "Plan Searches", systemImage: "sparkle.magnifyingglass")
                 }
                 .disabled(store.planning)
                 .help(store.planning
@@ -38,14 +38,19 @@ struct SearchList: View {
                 tint: world.main
             ) {
                 if let plan = store.search.plans.first {
-                    Label(SearchText.planSummary(plan), systemImage: "sparkle.magnifyingglass")
-                        .font(.caption).foregroundStyle(Theme.secondaryText).lineLimit(3)
-                        .padding(.horizontal, 6).padding(.top, 6)
+                    PlanLine(plan: plan).padding(.horizontal, 6).padding(.top, 6)
                 }
-                CardListHeader(title: "Searches", count: strategies.count, tint: world.main)
+                HStack(alignment: .lastTextBaseline) {
+                    CardListHeader(title: "Searches", count: strategies.count, tint: world.main)
+                    Spacer(minLength: 8)
+                    // Who made them, said once instead of on every row.
+                    if let origin = SearchText.origin(store.search) {
+                        MetaLine(origin).padding(.trailing, 6)
+                    }
+                }
                 if strategies.isEmpty {
-                    Text("No searches yet. Press Plan searches to have them proposed from your profile, or New search to write one yourself.")
-                        .font(.callout).foregroundStyle(Theme.secondaryText).padding(.horizontal, 6)
+                    Text("No searches yet. Press Plan Searches to have them proposed from your profile, or New Search to write one yourself.")
+                        .textRole(.body, color: Theme.secondaryText).padding(.horizontal, 6)
                 }
                 ForEach(strategies) { row in
                     SelectableCard(id: row.selection) { SearchRowView(row: row) }
@@ -56,7 +61,7 @@ struct SearchList: View {
                     HStack {
                         CardListHeader(title: group.kind.label, count: group.rows.count)
                         Spacer()
-                        Toggle("", isOn: Binding(
+                        Toggle("All \(group.kind.label) sources", isOn: Binding(
                             get: { group.kind.enabled },
                             set: { on in Task { await store.setSource(group.kind.kind, enabled: on) } }
                         ))
@@ -73,7 +78,7 @@ struct SearchList: View {
                                 SearchRowView(row: row)
                                 Spacer()
                                 if case let .source(key) = row.selection, let source = store.source(key) {
-                                    Toggle(source.enabled ? "Turn \(source.label) off" : "Turn \(source.label) on", isOn: Binding(
+                                    Toggle(source.label, isOn: Binding(
                                         get: { source.enabled },
                                         set: { on in Task { await store.setSource(key, enabled: on) } }
                                     ))
@@ -93,6 +98,31 @@ struct SearchList: View {
         .task { await store.openSearch() }
         .sheet(isPresented: $creating) {
             StrategyEditorSheet(store: store, strategy: nil) { creating = false }.worldSheet()
+        }
+    }
+}
+
+/// The planner's last run in a line, what it said behind Details….
+private struct PlanLine: View {
+    let plan: SearchPlan
+    @State private var showsNote = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            MetaLine(SearchText.planLine(plan), systemImage: "sparkle.magnifyingglass", tone: plan.status == "failed" ? .warning : nil)
+            if plan.hasNote, !plan.note.isEmpty {
+                Button("Details…") { showsNote.toggle() }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Theme.accent)
+                    .padding(.vertical, 4)
+                    .contentShape(Rectangle())
+                    .popover(isPresented: $showsNote, arrowEdge: .bottom) {
+                        Prose(plan.note, size: .compact)
+                            .padding(Theme.cardPadding)
+                            .frame(width: 380, alignment: .leading)
+                    }
+            }
         }
     }
 }
@@ -125,9 +155,8 @@ struct SearchRowView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(row.title).font(.system(size: 13.5, weight: .bold)).lineLimit(2)
-                .foregroundStyle(row.on ? Theme.text : Theme.secondaryText)
-            Text(row.subtitle).font(.system(size: 12)).foregroundStyle(Theme.secondaryText).lineLimit(1)
+            Text(row.title).textRole(.rowTitle, color: row.on ? Theme.text : Theme.secondaryText).lineLimit(2)
+            Text(row.subtitle).textRole(.meta).lineLimit(1)
             if !row.chips.isEmpty {
                 HStack(spacing: 4) { ForEach(row.chips, id: \.text) { ChipView(chip: $0) } }
                     .padding(.top, 2)
@@ -154,12 +183,41 @@ struct SearchDetail: View {
                 EmptyState(title: "Source gone", systemImage: "magnifyingglass", art: .search)
             }
         case nil:
-            EmptyState(
-                title: "Search",
-                systemImage: ApplyantKit.Section.search.symbol,
-                detail: "A search looks for job titles in the sources below, on its schedule, and puts what it finds in New. Pick a search to see what it looks for and how it's doing, or a source to switch it off.",
-                art: .search
-            )
+            SearchOverview(store: store)
+        }
+    }
+}
+
+/// Nothing picked: how the searching stands, what a search does, and the two ways to add one.
+private struct SearchOverview: View {
+    let store: AppStore
+    @State private var creating = false
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: Theme.blockSpacing) {
+                PageHeader(title: "Search", subtitle: "Searches run on their schedule and put what they find in New.") {
+                    ArtView(.search, size: 56)
+                }
+                StatStrip(SearchText.summary(store.search, runs: store.searchRuns).map { StatStrip.Item(label: $0.label, value: $0.value) })
+                    .entrance(1)
+                Prose("A search looks for job titles in the sources it reads. Pick one on the left to see what it looks for and how it's doing, or a source to switch it off.")
+                    .entrance(2)
+                HStack(spacing: 8) {
+                    Button { creating = true } label: { Label("New Search", systemImage: "plus") }
+                        .buttonStyle(.secondary)
+                    Button { Task { await store.planSearch() } } label: {
+                        Label(store.planning ? "Planning…" : "Plan Searches", systemImage: "sparkle.magnifyingglass")
+                    }
+                    .buttonStyle(.secondary)
+                    .disabled(store.planning)
+                }
+                .entrance(3)
+            }
+            .pageColumn()
+        }
+        .sheet(isPresented: $creating) {
+            StrategyEditorSheet(store: store, strategy: nil) { creating = false }.worldSheet()
         }
     }
 }
@@ -175,9 +233,9 @@ struct StrategyDetail: View {
         ScrollView {
             VStack(alignment: .leading, spacing: Theme.blockSpacing) {
                 PageHeader(title: s.name, subtitle: SearchText.stats(s.stats)) {
-                    ArtView(s.running ? .searching : .search, size: 64)
+                    ArtView(s.running ? .searching : .search, size: 56)
                 } trailing: {
-                    if s.origin == "agent" { ChipView(chip: Chip(text: "Agent-generated", tone: .accent)) }
+                    if s.origin == "agent" { ChipView(chip: Chip(text: "Planned by Applyant", tone: .accent)) }
                 }
                 FlowRow(spacing: 8) {
                     Button {
@@ -185,7 +243,7 @@ struct StrategyDetail: View {
                     } label: {
                         Label(s.state == "paused" ? "Resume" : "Pause", systemImage: s.state == "paused" ? "play.fill" : "pause.fill")
                     }
-                    Button { Task { await store.runStrategy(s.id) } } label: { Label("Run now", systemImage: "bolt.fill") }
+                    Button { Task { await store.runStrategy(s.id) } } label: { Label("Run Now", systemImage: "bolt.fill") }
                         .disabled(s.running || s.sourceKeys.isEmpty)
                         .help(s.running ? "A run is waiting or running" : "Search now, outside the schedule")
                     Button { editing = true } label: { Label("Edit…", systemImage: "pencil") }
@@ -193,44 +251,29 @@ struct StrategyDetail: View {
                     if s.running {
                         HStack(spacing: 6) {
                             LiveDot(color: Theme.world(.search).main, size: 6)
-                            Text("Running…").foregroundStyle(Theme.secondaryText)
+                            Text("Running…").textRole(.body, color: Theme.secondaryText)
                         }
                         .shimmer()
                     }
                 }
                 .buttonStyle(.secondary)
                 .entrance(1)
-                Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 14, verticalSpacing: 8) {
+                Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: Theme.Space.l, verticalSpacing: Theme.Space.s) {
+                    fact("Looks for", s.queries.isEmpty ? "every listing" : s.queries.map { "“\($0)”" }.joined(separator: ", "))
+                    fact("Where", s.locations.isEmpty ? "anywhere" : s.locations.joined(separator: ", "))
+                    if s.hasNote { fact("Why", s.note) }
                     GridRow {
-                        Text("Looks for").foregroundStyle(Theme.secondaryText)
-                        Text(s.queries.isEmpty ? "every listing" : s.queries.map { "“\($0)”" }.joined(separator: ", "))
-                    }
-                    GridRow {
-                        Text("Where").foregroundStyle(.secondary)
-                        Text(s.locations.isEmpty ? "anywhere" : s.locations.joined(separator: ", "))
-                    }
-                    if s.hasNote {
-                        GridRow {
-                            Text("Why").foregroundStyle(.secondary)
-                            Text(s.note)
-                        }
-                    }
-                    GridRow {
-                        Text("Schedule").foregroundStyle(.secondary)
+                        Text("Schedule").textRole(.body, color: Theme.secondaryText)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(schedule(s))
+                            Text(schedule(s)).textRole(.body)
                             if s.hasCadenceNote {
-                                Text(s.cadenceNote.prefix(1).uppercased() + s.cadenceNote.dropFirst())
-                                    .font(.caption).foregroundStyle(.orange)
+                                MetaLine(s.cadenceNote.prefix(1).uppercased() + s.cadenceNote.dropFirst(), systemImage: "exclamationmark.triangle.fill", tone: .warning)
                             }
                         }
                     }
-                    GridRow {
-                        Text("Reads").foregroundStyle(.secondary)
-                        Text(s.sourceKeys.isEmpty
-                            ? "nothing: every source it selects (\(s.sources.joined(separator: ", "))) is off"
-                            : s.sourceKeys.compactMap { store.source($0)?.label }.joined(separator: ", "))
-                    }
+                    fact("Reads", s.sourceKeys.isEmpty
+                        ? "nothing: every source it selects (\(s.sources.joined(separator: ", "))) is off"
+                        : s.sourceKeys.compactMap { store.source($0)?.label }.joined(separator: ", "))
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(Theme.cardPadding)
@@ -244,17 +287,22 @@ struct StrategyDetail: View {
                     }
                 }
             }
-            .padding(Theme.pagePadding)
-            .frame(maxWidth: Theme.readableWidth, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .pageColumn()
         }
         .sheet(isPresented: $editing) {
             StrategyEditorSheet(store: store, strategy: s) { editing = false }.worldSheet()
         }
         .confirmationDialog("Delete \(s.name)?", isPresented: $confirmingDelete) {
-            Button("Delete the search", role: .destructive) { Task { await store.deleteStrategy(s.id) } }
+            Button("Delete Search", role: .destructive) { Task { await store.deleteStrategy(s.id) } }
         } message: {
             Text("It stops searching. The postings it found stay.")
+        }
+    }
+
+    private func fact(_ label: String, _ value: String) -> some View {
+        GridRow {
+            Text(label).textRole(.body, color: Theme.secondaryText)
+            Text(value).textRole(.body).fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -271,10 +319,10 @@ struct RunSummary: View {
     let run: SearchRun
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: Theme.Space.xs) {
             HStack(spacing: 6) {
-                Text(run.startedAt.date.formatted(date: .abbreviated, time: .shortened)).font(.callout.weight(.medium))
-                Text(SearchText.trigger(run.trigger)).font(.callout).foregroundStyle(.secondary)
+                Text(run.startedAt.date.formatted(date: .abbreviated, time: .shortened)).textRole(.itemTitle)
+                Text(SearchText.trigger(run.trigger)).textRole(.meta)
                 ForEach(SearchText.runChips(run), id: \.text) { ChipView(chip: $0) }
                 Spacer()
                 Button("Events") {
@@ -284,12 +332,15 @@ struct RunSummary: View {
                 .buttonStyle(.secondary)
                 .controlSize(.small)
             }
-            if run.hasNote { Text(run.note).font(.caption).foregroundStyle(.secondary) }
+            if run.hasNote { Text(run.note).textRole(.meta).lineLimit(2).help(run.note) }
             ForEach(run.sources, id: \.sourceKey) { src in
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text(src.label).font(.caption.weight(.medium)).frame(width: 170, alignment: .leading).lineLimit(1)
-                    Text(SearchText.runSource(src)).font(.caption)
-                        .foregroundStyle(src.hasError ? Color.orange : .secondary)
+                    Text(src.label).textRole(.meta, color: Theme.text).frame(width: 170, alignment: .leading).lineLimit(1)
+                    if src.hasError {
+                        MetaLine(SearchText.runSource(src), systemImage: "exclamationmark.triangle.fill", tone: .warning)
+                    } else {
+                        Text(SearchText.runSource(src)).textRole(.meta).lineLimit(1)
+                    }
                 }
             }
         }
@@ -306,47 +357,33 @@ struct SourceDetail: View {
         let s = source
         ScrollView {
             VStack(alignment: .leading, spacing: Theme.blockSpacing) {
-                PageHeader(title: s.label, subtitle: s.key) {
-                    IconTile(systemImage: "dot.radiowaves.left.and.right", size: 52, colors: s.enabled && s.kindEnabled ? [Theme.world(.new).main, Theme.world(.applied).main] : [.gray, Color(white: 0.35)])
+                PageHeader(title: s.label, subtitle: SearchText.kindTitles[s.kind] ?? s.kind) {
+                    IconTile(systemImage: "dot.radiowaves.left.and.right", size: 56, colors: s.enabled && s.kindEnabled ? [Theme.world(.new).main, Theme.world(.applied).main] : [Theme.glyph, Theme.raised])
+                        .help(s.key)
                 } trailing: {
                     if s.origin == "agent" { ChipView(chip: Chip(text: "Found by the agent", tone: .accent)) }
                 }
-                if s.hasNote { Text(s.note).font(.callout) }
+                if s.hasNote { Prose(s.note, size: .compact) }
                 Toggle(isOn: Binding(
                     get: { s.enabled },
                     set: { on in Task { await store.setSource(s.key, enabled: on) } }
                 )) {
-                    Text(s.enabled ? "On: searches that include it read it" : "Off: never read")
+                    Text(s.enabled ? "On: searches that include it read it" : "Off: never read").textRole(.body)
                 }
                 .toggleStyle(.switch)
                 .entrance(1)
                 if !s.kindEnabled {
-                    Label("All \(SearchText.kindTitles[s.kind] ?? s.kind) sources are off, so this one isn't read either.", systemImage: "exclamationmark.triangle")
-                        .foregroundStyle(.orange)
+                    Callout(.warning, title: "All \(SearchText.kindTitles[s.kind] ?? s.kind) sources are off", detail: "So this one isn't read either.")
                 }
-                Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 14, verticalSpacing: 8) {
-                    GridRow {
-                        Text("Results").foregroundStyle(.secondary)
-                        Text(SearchText.stats(s.stats))
-                    }
-                    GridRow {
-                        Text("Its list").foregroundStyle(.secondary)
-                        Text(s.completeList
-                            ? "complete: a posting it stops listing is closed"
-                            : "the latest jobs only: a posting it stops listing is checked again, never closed")
-                    }
-                    if s.hasResolved {
-                        GridRow {
-                            Text("Read as").foregroundStyle(.secondary)
-                            Text(s.resolved)
-                        }
-                    }
-                    GridRow {
-                        Text("Last read").foregroundStyle(.secondary)
-                        Text(s.hasLastRunAt
-                            ? s.lastRunAt.date.formatted(.relative(presentation: .named)) + (s.hasLastNote ? " · \(s.lastNote)" : "")
-                            : "not yet")
-                    }
+                Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: Theme.Space.l, verticalSpacing: Theme.Space.s) {
+                    fact("Results", SearchText.stats(s.stats))
+                    fact("Its list", s.completeList
+                        ? "complete: a posting it stops listing is closed"
+                        : "the latest jobs only: a posting it stops listing is checked again, never closed")
+                    if s.hasResolved { fact("Read as", s.resolved) }
+                    fact("Last read", s.hasLastRunAt
+                        ? s.lastRunAt.date.formatted(.relative(presentation: .named)) + (s.hasLastNote ? " · \(s.lastNote)" : "")
+                        : "not yet")
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(Theme.cardPadding)
@@ -356,11 +393,16 @@ struct SourceDetail: View {
                     RecipeView(store: store, source: detail).entrance(3)
                 }
             }
-            .padding(Theme.pagePadding)
-            .frame(maxWidth: Theme.readableWidth, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .pageColumn()
         }
         .task(id: source.key) { await store.openSource(source.key) }
+    }
+
+    private func fact(_ label: String, _ value: String) -> some View {
+        GridRow {
+            Text(label).textRole(.body, color: Theme.secondaryText)
+            Text(value).textRole(.body).fixedSize(horizontal: false, vertical: true)
+        }
     }
 }
 
@@ -374,7 +416,7 @@ struct RecipeView: View {
         let r = source.recipe
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                Text("How this page is read").font(.headline)
+                Text("How this page is read").textRole(.heading)
                 ChipView(chip: SearchText.recipeChip(r))
                 Spacer()
                 Button("Rebuild") { Task { await store.rebuildRecipe(source.key) } }
@@ -382,17 +424,16 @@ struct RecipeView: View {
                     .disabled(r.status == "building")
                     .help("This page has no feed, so Applyant worked out where its job list is. Rebuild makes it work that out again, for when the page changed")
             }
-            if r.hasNote { Text(r.note).font(.callout).foregroundStyle(.secondary) }
+            if r.hasNote { Prose(r.note, size: .compact) }
             if r.hasBuiltAt {
-                Text("Built \(r.builtAt.date.formatted(.relative(presentation: .named))) · \(r.builds) build(s)"
+                MetaLine("Built \(r.builtAt.date.formatted(.relative(presentation: .named))) · \(r.builds) build\(r.builds == 1 ? "" : "s")"
                     + (r.hasLastCount ? " · last read \(r.lastCount) jobs" : ""))
-                    .font(.caption).foregroundStyle(.secondary)
             }
             ForEach(r.description_p, id: \.self) { line in
-                Text(line).font(.caption.monospaced()).foregroundStyle(.secondary).textSelection(.enabled)
+                Text(line).font(.system(size: 11).monospaced()).foregroundStyle(Theme.secondaryText).textSelection(.enabled)
             }
             if !r.listings.isEmpty {
-                Text("Read when it was built (\(r.listings.count), first page)").font(.subheadline.weight(.medium))
+                Text("Read when it was built (\(r.listings.count), first page)").textRole(.itemTitle)
                 ForEach(r.listings, id: \.url) { l in
                     VStack(alignment: .leading, spacing: 1) {
                         if let url = URL(string: l.url) {
@@ -401,7 +442,7 @@ struct RecipeView: View {
                             Text(l.title)
                         }
                         let meta = [l.hasLocation ? l.location : nil, l.hasTeam ? l.team : nil].compactMap { $0 }
-                        if !meta.isEmpty { Text(meta.joined(separator: " · ")).font(.caption).foregroundStyle(.secondary) }
+                        if !meta.isEmpty { Text(meta.joined(separator: " · ")).textRole(.meta) }
                     }
                 }
             }

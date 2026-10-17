@@ -72,7 +72,7 @@ import Testing
         #expect(ApproveText.channel(app) == "email from your mailbox")
         app.channel = "telegram"
         #expect(ApproveText.channel(app).contains("Telegram"))
-        #expect(ApproveText.retryMessage.contains("I submitted it"))
+        #expect(ApproveText.retryMessage.contains("I Submitted It"))
 
         // Back to review: only an approved application whose delivery stopped.
         app.stage = .approved

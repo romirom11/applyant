@@ -36,9 +36,16 @@ import Testing
         input.ready = 0
         #expect(HomeText.state(input) == "1 application needs you.")
         input.waiting = "Waiting for claude limit · resumes 15:45"
-        #expect(HomeText.state(input) == "Waiting for claude limit · resumes 15:45.")
+        #expect(HomeText.state(input) == "1 application needs you. Waiting for claude limit · resumes 15:45.")
+        // Paused: the queue still leads; the date is the toolbar pill's.
+        input.waiting = nil
         input.pausedAt = Date()
-        #expect(HomeText.state(input).hasPrefix("Paused since "))
+        input.needsYou = 19
+        input.ready = 80
+        #expect(HomeText.state(input) == "19 applications need you and 80 are ready to send. Searching is paused.")
+        input = HomeInput()
+        input.pausedAt = Date()
+        #expect(HomeText.state(input) == "You're all caught up. Searching is paused.")
     }
 
     @Test func aDeliveryLightsUpAppliedEvenWhilePaused() {
