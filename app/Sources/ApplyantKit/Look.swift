@@ -101,7 +101,7 @@ public struct WorldTone: Equatable, Sendable {
         case .offers: WorldTone(hue: 0.13, secondHue: 0.10, saturation: 0.8)
         case .whichApplication: WorldTone(hue: 0.02, secondHue: 0.04, saturation: 0.7)
         case .overview, .profile, .projects, .interview, .chat: WorldTone(hue: 0.62, secondHue: 0.53, saturation: 0.72)
-        case .search, .agentRuns, .companies, .settings: WorldTone(hue: 0.63, secondHue: 0.58, saturation: 0.45)
+        case .search, .sources, .agentRuns, .companies, .settings: WorldTone(hue: 0.63, secondHue: 0.58, saturation: 0.45)
         }
     }
 }

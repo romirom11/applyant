@@ -37,6 +37,8 @@ import { scorePosting } from './domain/scoring/handlers.ts';
 import { getPreferences } from './domain/scoring/prefs.ts';
 import { rematchPostings } from './domain/scoring/rematch.ts';
 import { requestScoring, unscoredPostings } from './domain/scoring/store.ts';
+import { indexCrawl } from './domain/search/ats-index/crawl.ts';
+import { indexDiscover, knowOwnBoards } from './domain/search/ats-index/discover.ts';
 import { searchHandler } from './domain/search/handlers.ts';
 import { planSearch } from './domain/search/planner.ts';
 import { buildRecipe } from './domain/search/recipes/build.ts';
@@ -242,6 +244,8 @@ export async function runDaemon(config: Config = loadConfig()): Promise<() => Pr
     search: searchHandler,
     build_recipe: buildRecipe,
     plan_search: planSearch,
+    index_crawl: indexCrawl,
+    index_discover: indexDiscover,
     research_company: researchCompany,
     sync_mail: syncMail,
     interview_event: interviewEvent,
@@ -275,6 +279,14 @@ export async function runDaemon(config: Config = loadConfig()): Promise<() => Pr
   // Search (phase 10): the built-in boards are sources from the start; the scheduler starts
   // each strategy's runs when they're due.
   ensureBuiltinSources(db, new Date());
+  // The ATS index knows the watch list's boards and those behind postings from the start: the
+  // local part of discovery, no request, so a pause doesn't wait for it.
+  try {
+    const known = runInTx(db, bus, { now: new Date() }, (tx) => knowOwnBoards(tx));
+    if (known) log.info("ATS index: boards of Applyant's own data added", { known });
+  } catch (err) {
+    log.warn('ATS index: own boards not added', { err });
+  }
   const scheduler = new Scheduler({
     db,
     bus,

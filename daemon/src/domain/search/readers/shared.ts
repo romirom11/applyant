@@ -1,10 +1,13 @@
 // Reads more than one run wants: a company board that several strategies read within minutes,
 // the Workable account behind a company, a web search's results. A read is kept for its time
-// and shared (also while it's still running); a failed read isn't kept. The search handler keeps
-// one for the daemon's real network; an injected fetch (tests) gets a fresh one per run.
+// and shared (also while it's still running); a failed read isn't kept. A read that failed
+// because the run that started it was stopped (its signal aborted) isn't the others' failure:
+// each of them reads for itself then. The search handler keeps one for the daemon's real
+// network; an injected fetch (tests) gets a fresh one per run.
 //
 // A lane paces the reads that go through it: Workable's board API answers a burst of reads
-// (a few dozen a minute) with 429, so the daemon starts them a second apart.
+// (a few dozen a minute) with 429, so the daemon starts them a second apart; JOIN's and
+// Teamtailor's boards are read a page at a time (up to 61 and 20 requests), each page paced.
 
 /** A company board's list is shared this long (shorter than any strategy's schedule). */
 export const BOARD_READ_MS = 30 * 60_000;
@@ -13,6 +16,8 @@ interface Entry {
   at: number;
   keepMs: number;
   value: Promise<unknown>;
+  /** The signal of the run that started the read. */
+  signal: AbortSignal | undefined;
 }
 
 export interface SharedOptions {
@@ -38,17 +43,36 @@ export class SharedReads {
     return this.entries.size;
   }
 
-  /** The read kept under `key` if it's younger than `keepMs` at `now`, else a new one. */
-  memo<T>(key: string, keepMs: number, now: Date, read: () => Promise<T>): Promise<T> {
+  /**
+   * The read kept under `key` if it's younger than `keepMs` at `now`, else a new one. With the
+   * caller's `signal`: a kept read that fails because its own run was stopped is read again.
+   */
+  memo<T>(
+    key: string,
+    keepMs: number,
+    now: Date,
+    read: () => Promise<T>,
+    signal?: AbortSignal,
+  ): Promise<T> {
     const hit = this.entries.get(key);
-    if (hit && now.getTime() - hit.at < hit.keepMs) return hit.value as Promise<T>;
+    if (hit && now.getTime() - hit.at < hit.keepMs) {
+      const value = hit.value as Promise<T>;
+      if (!signal || hit.signal === signal) return value;
+      return value.catch((err: unknown) => {
+        // The failed read is gone by now (below): this run starts its own.
+        if (hit.signal?.aborted && !signal.aborted) {
+          return this.memo(key, keepMs, now, read, signal);
+        }
+        throw err;
+      });
+    }
     // Reads past their time go: a board's whole list is megabytes, and most aren't asked again.
     for (const [k, e] of this.entries) {
       if (now.getTime() - e.at >= e.keepMs) this.entries.delete(k);
     }
     const value = read();
     this.entries.delete(key);
-    this.entries.set(key, { at: now.getTime(), keepMs, value });
+    this.entries.set(key, { at: now.getTime(), keepMs, value, signal });
     value.catch(() => {
       if (this.entries.get(key)?.value === value) this.entries.delete(key);
     });
@@ -90,3 +114,12 @@ export function sleep(ms: number, signal: AbortSignal): Promise<void> {
     signal.addEventListener('abort', onAbort, { once: true });
   });
 }
+
+/**
+ * The daemon's own, over the real network: strategies read the same watched boards within
+ * minutes of each other and share those reads, and the ATS index's crawler takes its Workable
+ * reads through the same lane. An injected fetch (tests) gets fresh ones per run.
+ */
+export const DAEMON_READS = new SharedReads({
+  gapMs: { workable: 1_000, join: 1_000, teamtailor: 500 },
+});

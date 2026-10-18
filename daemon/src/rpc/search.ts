@@ -4,12 +4,23 @@ import { timestampFromDate } from '@bufbuild/protobuf/wkt';
 import { Code, ConnectError, type ServiceImpl } from '@connectrpc/connect';
 import type { Conn } from '../db/client.ts';
 import type {
+  AtsDiscoveryRow,
   ListingRecipeRow,
   ResolvedSource,
   SearchPlanRow,
   StrategyState,
 } from '../db/schema.ts';
+import { startDiscovery } from '../domain/search/ats-index/discover.ts';
+import { knowWatched } from '../domain/search/ats-index/store.ts';
+import {
+  type AtsView,
+  type CompanyView,
+  indexView,
+  listCompanies,
+  setCompanyEnabled,
+} from '../domain/search/ats-index/views.ts';
 import { latestPlans, startPlan } from '../domain/search/planner.ts';
+import { boardUrl } from '../domain/search/readers/ats-embed.ts';
 import { recipeRow, recipeSummaries, requestRecipe } from '../domain/search/recipes/store.ts';
 import { describeRecipe } from '../domain/search/recipes/types.ts';
 import {
@@ -38,6 +49,12 @@ import {
 } from '../domain/search/strategies.ts';
 import {
   type ApplyantService,
+  type AtsIndexAts,
+  AtsIndexAtsSchema,
+  type AtsIndexDiscovery,
+  AtsIndexDiscoverySchema,
+  type IndexCompany,
+  IndexCompanySchema,
   type ListingRecipe,
   ListingRecipeSchema,
   type SearchStats as PbStats,
@@ -174,6 +191,46 @@ export function sourceToPb(s: SourceView, recipe?: RecipeSummary | null): Search
   });
 }
 
+function atsToPb(a: AtsView): AtsIndexAts {
+  return create(AtsIndexAtsSchema, {
+    ...a,
+    lastReadAt: a.lastReadAt ? timestampFromDate(a.lastReadAt) : undefined,
+  });
+}
+
+function discoveryToPb(d: AtsDiscoveryRow): AtsIndexDiscovery {
+  return create(AtsIndexDiscoverySchema, {
+    id: BigInt(d.id),
+    trigger: d.trigger,
+    status: d.status,
+    startedAt: timestampFromDate(d.startedAt),
+    finishedAt: d.finishedAt ? timestampFromDate(d.finishedAt) : undefined,
+    found: d.found,
+    added: d.added,
+    note: d.note ?? undefined,
+  });
+}
+
+export function indexCompanyToPb(c: CompanyView): IndexCompany {
+  return create(IndexCompanySchema, {
+    id: BigInt(c.id),
+    ats: c.ats,
+    token: c.token,
+    name: c.name ?? undefined,
+    enabled: c.enabled,
+    status: c.status,
+    jobs: c.jobs,
+    matching: c.matching,
+    lastReadAt: c.lastReadAt ? timestampFromDate(c.lastReadAt) : undefined,
+    nextReadAt: timestampFromDate(c.nextReadAt),
+    foundVia: c.foundVia,
+    lastNote: c.lastNote ?? undefined,
+    boardUrl: boardUrl(c),
+    watched: c.sourceKey !== null,
+    sourceKey: c.sourceKey ?? undefined,
+  });
+}
+
 function kindToPb(k: KindView): SearchSourceKind {
   return create(SearchSourceKindSchema, { ...k });
 }
@@ -184,7 +241,7 @@ function guard<T>(fn: () => T): T {
   } catch (err) {
     if (err instanceof ConnectError) throw err;
     if (err instanceof SearchError) {
-      const code = /^no (search )?(strategy|source)/.test(err.message)
+      const code = /^no (search )?(strategy|source|company)/.test(err.message)
         ? Code.NotFound
         : /already exists/.test(err.message)
           ? Code.AlreadyExists
@@ -228,8 +285,50 @@ export function searchRpcs(
   | 'planSearch'
   | 'getSearchSource'
   | 'rebuildRecipe'
+  | 'getAtsIndex'
+  | 'listIndexCompanies'
+  | 'setIndexCompanyEnabled'
+  | 'discoverIndexCompanies'
 > {
   return {
+    getAtsIndex() {
+      const v = indexView(c.db, c.now());
+      return {
+        enabled: v.enabled,
+        ats: v.ats.map(atsToPb),
+        discoveries: v.discoveries.map(discoveryToPb),
+        companies: v.companies,
+        jobs: v.jobs,
+        matching: v.matching,
+      };
+    },
+
+    listIndexCompanies(req) {
+      return guard(() => {
+        const res = listCompanies(c.db, {
+          ats: req.ats ?? null,
+          query: req.query,
+          matchingOnly: req.matchingOnly,
+          limit: req.limit,
+          offset: req.offset,
+        });
+        return { companies: res.companies.map(indexCompanyToPb), total: res.total };
+      });
+    },
+
+    setIndexCompanyEnabled(req) {
+      return guard(() =>
+        runInTx(c.db, c.bus, { now: c.now() }, (tx) => ({
+          company: indexCompanyToPb(setCompanyEnabled(tx.db, Number(req.id), req.enabled)),
+        })),
+      );
+    },
+
+    discoverIndexCompanies() {
+      const id = runInTx(c.db, c.bus, { now: c.now() }, (tx) => startDiscovery(tx, 'manual'));
+      return { discoveryId: id === null ? undefined : BigInt(id) };
+    },
+
     listSearch() {
       const { sources, kinds } = listSources(c.db);
       const recipes = recipeSummaries(c.db);
@@ -347,7 +446,12 @@ export function searchRpcs(
           req.kind ? [req.kind, req.locator] : [req.locator],
           req.label ?? null,
         );
-        const { source, created } = addSource(c.db, input, c.now());
+        // A watched ATS board is a company of the index from the start.
+        const { source, created } = runInTx(c.db, c.bus, { now: c.now() }, (tx) => {
+          const res = addSource(tx.db, input, tx.now);
+          knowWatched(tx, [res.source]);
+          return res;
+        });
         const view = sourceView(c.db, source.key);
         return { source: view ? sourceToPb(view, recipeRow(c.db, source.id)) : undefined, created };
       });

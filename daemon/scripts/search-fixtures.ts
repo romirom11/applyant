@@ -221,5 +221,103 @@ await record(
   })),
 );
 
+// Personio's XML: the first positions, each description section clipped.
+const personioXml = (t: string) => {
+  const parts = t.split('<position>');
+  const kept = parts.slice(1, 1 + KEEP).map((p) => p.split('</position>')[0] ?? '');
+  const clipValues = (p: string) =>
+    p.replace(
+      /<!\[CDATA\[([\s\S]*?)\]\]>/g,
+      (_m, v: string) => `<![CDATA[${v.slice(0, TEXT / 3)}]]>`,
+    );
+  return `${parts[0] ?? ''}${kept.map((p) => `<position>${clipValues(p)}</position>`).join('\n')}\n</workzag-jobs>\n`;
+};
+// A German board (every position described in German), and Personio's own, whose position is
+// written in English only: described under ?language=en alone.
+await record('personio-ottonova', 'https://ottonova.jobs.personio.de/xml', personioXml, 'xml');
+await record('personio-personio', 'https://personio.jobs.personio.de/xml', personioXml, 'xml');
+await record(
+  'personio-personio-en',
+  'https://personio.jobs.personio.de/xml?language=en',
+  personioXml,
+  'xml',
+);
+const recruiteeOffer = (o: Json) => {
+  const { translations: _t, open_questions: _q, ...rest } = o;
+  return trimJob(rest, ['description', 'requirements']);
+};
+await record(
+  'recruitee-channable',
+  'https://channable.recruitee.com/api/offers/',
+  json((d) => {
+    const offers = d.offers as Json[];
+    // The first few and a remote one.
+    const remote = offers.find((o) => o.remote === true);
+    const kept = [...offers.slice(0, KEEP - 1), ...(remote ? [remote] : [])];
+    return { offers: kept.map(recruiteeOffer) };
+  }),
+);
+// Teamtailor's JSON Feed, three pages (the next_url chain), a job or two from each.
+const teamtailorPage = (n: number) =>
+  json((d) => ({
+    ...d,
+    items: (d.items as Json[]).slice(0, n).map((i) => {
+      const posting = i._jobposting as Json | undefined;
+      return {
+        ...trimJob(i, ['content_html']),
+        ...(posting ? { _jobposting: trimJob(posting, ['description']) } : {}),
+      };
+    }),
+  }));
+await record('teamtailor-eworgmbh', 'https://eworgmbh.teamtailor.com/jobs.json', teamtailorPage(2));
+await record(
+  'teamtailor-eworgmbh-2',
+  'https://eworgmbh.teamtailor.com/jobs.json?page=2&per_page=100',
+  teamtailorPage(1),
+);
+await record(
+  'teamtailor-eworgmbh-3',
+  'https://eworgmbh.teamtailor.com/jobs.json?page=3&per_page=100',
+  teamtailorPage(1),
+);
+// JOIN's company page, down to the Next.js data the reader takes the company's id from.
+await record(
+  'join-join',
+  'https://join.com/companies/join',
+  (t) => {
+    const data = JSON.parse(
+      t.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/)?.[1] ?? '{}',
+    ) as Json;
+    const state = ((data.props as Json).pageProps as Json).initialState as Json;
+    const co = state.company as Json;
+    const jobs = state.jobs as Json;
+    const kept = {
+      props: {
+        pageProps: {
+          initialState: {
+            company: { id: co.id, name: co.name, domain: co.domain, url: co.url },
+            jobs: { pagination: jobs.pagination, items: (jobs.items as Json[]).slice(0, 2) },
+          },
+        },
+      },
+      page: data.page,
+      query: data.query,
+    };
+    const title = t.match(/<title>[^<]*<\/title>/)?.[0] ?? '';
+    return `<!DOCTYPE html><html><head>${title}</head><body><script id="__NEXT_DATA__" type="application/json">${JSON.stringify(kept)}</script></body></html>\n`;
+  },
+  'html',
+);
+await record(
+  'join-join-jobs',
+  'https://join.com/api/public/companies/54/jobs?page=1&pageSize=5',
+  json((d) => d),
+);
+await record(
+  'breezy-breezy',
+  'https://breezy.breezy.hr/json?verbose=true',
+  json((d) => (d as unknown as Json[]).slice(0, KEEP).map((j) => trimJob(j, ['description']))),
+);
+
 writeFileSync(join(OUT, 'responses.json'), `${JSON.stringify(recorded, null, 2)}\n`);
 process.stdout.write(`recorded ${recorded.length} responses into ${OUT}\n`);

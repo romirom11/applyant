@@ -42,6 +42,10 @@ export type EventKind =
   // A search_planner run was queued, finished or failed (entity_id = plan id, stage = queued |
   // done | failed; message = what it added).
   | 'search.plan'
+  // The ATS index: a discovery run was queued, finished or failed (entity_id = discovery id,
+  // stage = queued | done | failed; message = what it found), or a crawl read its due boards
+  // (stage = crawled; message = what it read and closed).
+  | 'search.index'
   // Company research was queued, finished or failed (entity_id = company id, stage = queued |
   // done | failed; message = what it found).
   | 'company'

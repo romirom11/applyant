@@ -201,6 +201,21 @@ service ApplyantService {
   // RebuildRecipe asks reader_builder for a new listing recipe for a career page now.
   rpc RebuildRecipe(RebuildRecipeRequest) returns (RebuildRecipeResponse);
 
+  // The ATS index: every company board Applyant knows on the ATSs (found in Common Crawl's
+  // index, behind postings, by the planner and the cross-company job searches), each read on
+  // its own schedule into a local store of open jobs. Strategies search those jobs through the
+  // built-in source board:ats-index, so a search covers every known company, not a watch list.
+  // A kind's switch (SetSearchSourceEnabled "greenhouse") also takes that ATS out of the index.
+  // GetAtsIndex returns the index per ATS and its latest discovery runs.
+  rpc GetAtsIndex(GetAtsIndexRequest) returns (GetAtsIndexResponse);
+  // ListIndexCompanies pages through the index's companies, filtered.
+  rpc ListIndexCompanies(ListIndexCompaniesRequest) returns (ListIndexCompaniesResponse);
+  // SetIndexCompanyEnabled leaves one company out of the index (it's not read or searched) or
+  // takes it back. A watched company's search source switches with it (one switch per company).
+  rpc SetIndexCompanyEnabled(SetIndexCompanyEnabledRequest) returns (SetIndexCompanyEnabledResponse);
+  // DiscoverIndexCompanies looks for more company boards now (it also runs weekly by itself).
+  rpc DiscoverIndexCompanies(DiscoverIndexCompaniesRequest) returns (DiscoverIndexCompaniesResponse);
+
   // Model roles: which provider and model answer each role. Changes apply to the next run.
   rpc ListRoles(ListRolesRequest) returns (ListRolesResponse);
   // SetRole routes a role to "claude", "codex", "claude:sonnet", "jev" (decisions only), …
@@ -1988,6 +2003,121 @@ message PlanSearchRequest {}
 message PlanSearchResponse {
   // Unset when a planner run was already waiting or running.
   optional int64 plan_id = 1;
+}
+
+// ---- The ATS index ----------------------------------------------------------------------
+
+// One ATS in the index.
+message AtsIndexAts {
+  // greenhouse | ashby | lever | workable | smartrecruiters | personio | recruitee | …
+  string ats = 1;
+  string label = 2;
+  // Its kind's switch: off means its boards are neither read nor searched.
+  bool enabled = 3;
+  // Company boards known (not gone).
+  int32 companies = 4;
+  // Of those, the ones with open jobs at their last read.
+  int32 hiring = 5;
+  // Open jobs held.
+  int32 jobs = 6;
+  // Open jobs at least one active strategy matches.
+  int32 matching = 7;
+  optional google.protobuf.Timestamp last_read_at = 8;
+  // Boards waiting for their read now (new ones, and those due again).
+  int32 due = 9;
+  // Boards whose last read failed (not "gone").
+  int32 failing = 10;
+}
+
+// One discovery run: where it looked and what it found.
+message AtsIndexDiscovery {
+  int64 id = 1;
+  // manual | schedule | setup
+  string trigger = 2;
+  // queued (waiting or running) | done | failed
+  string status = 3;
+  google.protobuf.Timestamp started_at = 4;
+  optional google.protobuf.Timestamp finished_at = 5;
+  // Boards it came across, and how many of them were new to the index.
+  int32 found = 6;
+  int32 added = 7;
+  optional string note = 8;
+}
+
+message GetAtsIndexRequest {}
+
+message GetAtsIndexResponse {
+  // The built-in source board:ats-index is on (strategies search the index).
+  bool enabled = 1;
+  repeated AtsIndexAts ats = 2;
+  // Latest first.
+  repeated AtsIndexDiscovery discoveries = 3;
+  int32 companies = 4;
+  int32 jobs = 5;
+  int32 matching = 6;
+}
+
+// One company board in the index.
+message IndexCompany {
+  int64 id = 1;
+  string ats = 2;
+  // The board's name on its ATS (greenhouse token, ashby slug, lever site, personio subdomain…).
+  string token = 3;
+  // The company's name, once a read or a listing named it.
+  optional string name = 4;
+  // Switched off by the candidate: not read, not searched.
+  bool enabled = 5;
+  // new (not read yet) | hiring | empty (no open jobs) | failing | gone (the ATS says no such board)
+  string status = 6;
+  int32 jobs = 7;
+  int32 matching = 8;
+  optional google.protobuf.Timestamp last_read_at = 9;
+  optional google.protobuf.Timestamp next_read_at = 10;
+  // How it was found: common-crawl | posting | planner | workable-search | smartrecruiters-search | watch-list | candidate
+  string found_via = 11;
+  optional string last_note = 12;
+  // The board's own job list page.
+  string board_url = 13;
+  // It's also a source on the watch list (an ATS board the candidate or the planner added): the
+  // strategies that name it read it directly, and its switch is the source's too.
+  bool watched = 14;
+  // That source's key ("greenhouse:gitlab"), when watched.
+  optional string source_key = 15;
+}
+
+message ListIndexCompaniesRequest {
+  // One ATS; unset: all.
+  optional string ats = 1;
+  // Part of the company's name or token; empty: any.
+  string query = 2;
+  // Only companies with open jobs an active strategy matches.
+  bool matching_only = 3;
+  // Default 100, at most 500.
+  int32 limit = 4;
+  int32 offset = 5;
+}
+
+message ListIndexCompaniesResponse {
+  // Matching companies first, then hiring ones, then by name.
+  repeated IndexCompany companies = 1;
+  // All companies the filter selects (for paging).
+  int32 total = 2;
+}
+
+message SetIndexCompanyEnabledRequest {
+  int64 id = 1;
+  bool enabled = 2;
+}
+
+message SetIndexCompanyEnabledResponse {
+  IndexCompany company = 1;
+}
+
+message DiscoverIndexCompaniesRequest {}
+
+message DiscoverIndexCompaniesResponse {
+  // Unset when a discovery is already waiting or running.
+  optional int64 discovery_id = 1;
 }
 
 message GetSearchSourceRequest {

@@ -2,16 +2,18 @@
 // scripts/search-fixtures.ts: real public lists, trimmed to a few jobs) and a few synthetic
 // career pages. Nothing here touches the network.
 import { describe, expect, it } from 'vitest';
-import { readAtsBoard } from '../src/domain/search/readers/ats-api.ts';
+import { readAtsBoard, readAtsBoardShared } from '../src/domain/search/readers/ats-api.ts';
 import {
   atsJobKey,
   atsJobPage,
   boardFromUrl,
   detectAtsBoard,
+  jobPageBoard,
 } from '../src/domain/search/readers/ats-embed.ts';
 import { hnFirstLine, hnJobLink, readBoard } from '../src/domain/search/readers/boards.ts';
 import { feedLinks, parseFeed } from '../src/domain/search/readers/feed.ts';
 import { NeedsRecipeError, readPage } from '../src/domain/search/readers/page.ts';
+import { SharedReads } from '../src/domain/search/readers/shared.ts';
 import { plainText, type ReaderContext } from '../src/domain/search/readers/types.ts';
 import { fixtureJson, type RecordedFetch, recordedFetch } from './helpers/search.ts';
 
@@ -567,5 +569,328 @@ describe('career pages: a feed first, then a known ATS embed', () => {
     const read = readPage('https://acme.example/careers', ctx(fetch));
     await expect(read).rejects.toThrow(/it needs a listing recipe/);
     await expect(read).rejects.toBeInstanceOf(NeedsRecipeError);
+  });
+
+  it('a page that is a Teamtailor board itself is read as the board, not its feed', async () => {
+    const run = await readPage('https://eworgmbh.teamtailor.com/jobs.rss', ctx(recordedFetch()), {
+      via: 'feed',
+      url: 'https://eworgmbh.teamtailor.com/jobs.rss',
+      format: 'rss',
+    });
+    expect(run.resolved).toEqual({ via: 'ats', ats: 'teamtailor', token: 'eworgmbh' });
+    expect(run.complete).toBe(true);
+    expect(run.listings).toHaveLength(4);
+  });
+});
+
+describe('European ATS boards (recorded)', () => {
+  it('Personio: the XML list, its offices and sections, the entity without its number', async () => {
+    const run = await readAtsBoard('personio', 'ottonova', ctx(recordedFetch()));
+    expect(run.complete).toBe(true);
+    expect(run.listings).toHaveLength(4);
+    const first = run.listings[0];
+    expect(first).toMatchObject({
+      url: 'https://ottonova.jobs.personio.de/job/2573573',
+      externalId: '2573573',
+      company: 'ottonova Krankenversicherung AG',
+      location: 'München; Köln',
+      team: 'Risk Management & Actuary',
+      postedAt: '2026-03-23T15:24:29+00:00',
+    });
+    // Each description section's heading, then its text.
+    expect(first?.description).toMatch(/^DEIN TEAM\n/);
+    expect(first?.description).not.toMatch(/<|&amp;/);
+    expect(run.note).toMatch(/^ottonova .* on Personio: 4 jobs$/);
+  });
+
+  it('Personio: a position written only in English is described from ?language=en', async () => {
+    const fetch = recordedFetch();
+    const run = await readAtsBoard('personio', 'personio', ctx(fetch));
+    expect(fetch.calls).toEqual([
+      'https://personio.jobs.personio.de/xml',
+      'https://personio.jobs.personio.de/xml?language=en',
+    ]);
+    expect(run.company).toBe('Personio SE & Co. KG');
+    expect(run.listings[0]).toMatchObject({
+      title: 'Staff Software Engineer, Data Platform',
+      location: 'Munich; Berlin',
+    });
+    expect(run.listings[0]?.description).toMatch(/^The Role: How you'll make an impact/);
+  });
+
+  it('Personio: a position with no title in either language makes the list partial', async () => {
+    const xml = (...positions: string[]) =>
+      `<?xml version="1.0" encoding="UTF-8"?><workzag-jobs>${positions.join('')}</workzag-jobs>`;
+    const position = (id: number, name?: string) =>
+      `<position><id>${id}</id>${name ? `<name>${name}</name>` : ''}<office>Berlin</office></position>`;
+    const board = 'https://acme.jobs.personio.de/xml';
+    const fetch = recordedFetch({
+      [board]: { body: xml(position(1, 'AI Engineer'), position(2)), contentType: 'text/xml' },
+      [`${board}?language=en`]: { status: 503, body: 'down', contentType: 'text/plain' },
+    });
+    const run = await readAtsBoard('personio', 'acme', ctx(fetch));
+    // Job 2 isn't listed, and isn't gone either: absence mustn't close it.
+    expect(run.listings.map((l) => l.externalId)).toEqual(['1']);
+    expect(run.complete).toBe(false);
+    expect(run.note).toBe('acme on Personio: 1 jobs (partial: 1 without a title)');
+    // The English list names it: complete again.
+    fetch.replies.set(`${board}?language=en`, {
+      body: xml(position(1, 'AI Engineer'), position(2, 'Data Engineer')),
+      contentType: 'text/xml',
+    });
+    const both = await readAtsBoard('personio', 'acme', ctx(fetch));
+    expect([both.complete, both.listings.length]).toEqual([true, 2]);
+  });
+
+  it('Recruitee: the offers, on the career site with the Recruitee page beside', async () => {
+    const run = await readAtsBoard('recruitee', 'channable', ctx(recordedFetch()));
+    expect(run).toMatchObject({ complete: true, company: 'Channable' });
+    expect(run.listings).toHaveLength(4);
+    expect(run.listings[0]).toMatchObject({
+      url: 'https://jobs.channable.com/o/senior-customer-success-manager-benelux-9',
+      sourceUrl: 'https://channable.recruitee.com/o/senior-customer-success-manager-benelux-9',
+      applyUrl: 'https://jobs.channable.com/o/senior-customer-success-manager-benelux-9/c/new',
+      externalId: '2786321',
+      location: 'Utrecht, Netherlands',
+      remote: false,
+      team: 'Customer Success',
+      postedAt: '2026-10-16T11:35:00Z',
+    });
+    expect(run.listings[3]).toMatchObject({ location: 'Remote (United States)', remote: true });
+    // The Recruitee page names the job, whatever the career site's domain.
+    expect(atsJobKey(run.listings[0]?.sourceUrl)).toBe(
+      'recruitee:channable/senior-customer-success-manager-benelux-9',
+    );
+  });
+
+  it('Teamtailor: every page of the JSON Feed, places from each job’s JobPosting', async () => {
+    const fetch = recordedFetch();
+    const run = await readAtsBoard('teamtailor', 'eworgmbh', ctx(fetch));
+    expect(fetch.calls).toHaveLength(3);
+    expect(run).toMatchObject({ complete: true, company: 'EWOR GmbH' });
+    expect(run.listings).toHaveLength(4);
+    expect(run.listings[0]).toMatchObject({
+      url: 'https://eworgmbh.teamtailor.com/jobs/8558035-ai-co-founder-cco-100-remote-m-f-d',
+      externalId: '8558035',
+      company: 'EWOR GmbH',
+      location: 'Vaduz, Europe, LI',
+      postedAt: '2026-10-16T12:32:18+02:00',
+    });
+    expect(run.listings[0]?.description).toMatch(/^We are looking to hire ambitious entrepreneurs/);
+    // A next page on another host isn't followed, and the list is partial.
+    const last = fixtureJson('teamtailor-eworgmbh-3.json');
+    const off = recordedFetch({
+      'https://eworgmbh.teamtailor.com/jobs.json?page=3&per_page=100': {
+        ...last,
+        next_url: 'https://elsewhere.example/jobs.json?page=4',
+      },
+    });
+    const partial = await readAtsBoard('teamtailor', 'eworgmbh', ctx(off));
+    expect(partial.complete).toBe(false);
+    expect(off.calls).toHaveLength(3);
+  });
+
+  it('JOIN: the company id from its page, then the list five jobs a page', async () => {
+    const fetch = recordedFetch();
+    const run = await readAtsBoard('join', 'join', ctx(fetch));
+    expect(fetch.calls).toEqual([
+      'https://join.com/companies/join',
+      'https://join.com/api/public/companies/54/jobs?page=1&pageSize=5',
+    ]);
+    expect(run).toMatchObject({ complete: true, company: 'JOIN' });
+    expect(run.listings).toHaveLength(4);
+    expect(run.listings[0]).toMatchObject({
+      // The job's id, not the ad's current number (16833245), which changes on republishing.
+      url: 'https://join.com/companies/join/14771122-engineering-manager',
+      externalId: '14771122',
+      title: 'Engineering Manager',
+      company: 'JOIN',
+      location: 'Barcelona, Spain',
+      remote: false,
+      team: 'Management, Team Leader',
+    });
+
+    const api = (n: number) => `https://join.com/api/public/companies/54/jobs?page=${n}&pageSize=5`;
+    const job = (i: number) => ({
+      id: 100 + i,
+      idParam: `${900 + i}-engineer-${i}`,
+      title: `Engineer ${i}`,
+      workplaceType: i === 5 ? 'REMOTE' : 'ONSITE',
+      city: { cityName: 'Berlin', countryName: 'Germany' },
+    });
+    const paged = recordedFetch({
+      [api(1)]: {
+        items: [0, 1, 2, 3, 4].map(job),
+        pagination: { rowCount: 6, pageCount: 2, page: 1, pageSize: 5 },
+      },
+      [api(2)]: {
+        items: [job(5)],
+        pagination: { rowCount: 6, pageCount: 2, page: 2, pageSize: 5 },
+      },
+    });
+    const two = await readAtsBoard('join', 'join', ctx(paged));
+    expect(two.complete).toBe(true);
+    expect(two.listings).toHaveLength(6);
+    expect(two.listings[5]).toMatchObject({
+      url: 'https://join.com/companies/join/105-engineer-5',
+      location: 'Remote (Berlin, Germany)',
+      remote: true,
+    });
+  });
+
+  it("JOIN's and Teamtailor's requests each wait their turn in the ATS's lane", async () => {
+    class Lanes extends SharedReads {
+      turns: string[] = [];
+      override async turn(lane: string): Promise<void> {
+        this.turns.push(lane);
+      }
+    }
+    const shared = new Lanes();
+    await readAtsBoard('join', 'join', { ...ctx(recordedFetch()), shared });
+    await readAtsBoard('teamtailor', 'eworgmbh', { ...ctx(recordedFetch()), shared });
+    // JOIN: its company page, then one page of jobs; Teamtailor: each of its three pages.
+    expect(shared.turns).toEqual(['join', 'join', 'teamtailor', 'teamtailor', 'teamtailor']);
+  });
+
+  it('Breezy: the verbose JSON list', async () => {
+    const run = await readAtsBoard('breezy', 'breezy', ctx(recordedFetch()));
+    expect(run).toMatchObject({ complete: true, company: 'MS Breezy Trial' });
+    expect(run.listings).toHaveLength(3);
+    expect(run.listings[0]).toMatchObject({
+      url: 'https://breezy.breezy.hr/p/98323abf2296-employee-12',
+      externalId: '98323abf2296',
+      title: 'Employee #12',
+      location: 'Chaos, FL',
+      remote: null,
+      team: 'Does Not Matter',
+      description: 'Roses and Rainbows until 30 days in.',
+    });
+  });
+
+  it('a company none of them knows fails the read with a 404', async () => {
+    for (const ats of ['personio', 'recruitee', 'teamtailor', 'join', 'breezy'] as const) {
+      await expect(readAtsBoard(ats, 'no-such-company', ctx(recordedFetch()))).rejects.toThrow(
+        /HTTP 404/,
+      );
+    }
+  });
+
+  it('finds their boards on career pages, and their jobs’ ids', () => {
+    expect(detectAtsBoard('<a href="https://acme.jobs.personio.de/?language=en">Jobs</a>')).toEqual(
+      { ats: 'personio', token: 'acme' },
+    );
+    expect(
+      detectAtsBoard(
+        '<script src="https://acme.breezy.hr/embed/js?inline=true"></script><a href="https://www.teamtailor.com/?utm_source=career-site">Powered by Teamtailor</a>',
+      ),
+    ).toEqual({ ats: 'breezy', token: 'acme' });
+    expect(detectAtsBoard('<a href="https://join.com/companies/acme">Open roles</a>')).toEqual({
+      ats: 'join',
+      token: 'acme',
+    });
+    expect(detectAtsBoard('<a href="https://acme.teamtailor.com/jobs">Jobs</a>')).toEqual({
+      ats: 'teamtailor',
+      token: 'acme',
+    });
+    // A Recruitee career site on the company's own domain: its config names the subdomain;
+    // Recruitee's own hosts (analytics, the marketing site) are no company.
+    expect(
+      detectAtsBoard(
+        '<script src="https://careers-analytics.recruitee.com/a.js"></script><div data-props="{&quot;atsHost&quot;:&quot;recruitee.com&quot;,&quot;subdomain&quot;:&quot;channable&quot;}"></div>',
+      ),
+    ).toEqual({ ats: 'recruitee', token: 'channable' });
+    expect(detectAtsBoard('<a href="https://www.teamtailor.com/">Teamtailor</a>')).toBeNull();
+    expect(boardFromUrl('https://acme.jobs.personio.com/xml')).toEqual({
+      ats: 'personio',
+      token: 'acme',
+    });
+    expect(boardFromUrl('https://acme.recruitee.com/api/offers/')).toEqual({
+      ats: 'recruitee',
+      token: 'acme',
+    });
+    expect(boardFromUrl('https://join.com/companies/acme/16833245-engineering-manager')).toEqual({
+      ats: 'join',
+      token: 'acme',
+    });
+    expect(boardFromUrl('https://join.com/api/public/companies/54/jobs')).toBeNull();
+    expect(boardFromUrl('https://careers-analytics.recruitee.com/')).toBeNull();
+
+    expect(atsJobKey('https://acme.jobs.personio.de/job/2573573?language=de')).toBe(
+      'personio:2573573',
+    );
+    expect(atsJobKey('https://Acme.recruitee.com/o/Backend-Engineer-2/c/new')).toBe(
+      'recruitee:acme/backend-engineer-2',
+    );
+    expect(atsJobKey('https://acme.teamtailor.com/jobs/8558035-ai-engineer')).toBe(
+      'teamtailor:8558035',
+    );
+    expect(atsJobKey('https://acme.breezy.hr/p/98323abf2296-employee-12/apply')).toBe(
+      'breezy:98323abf2296',
+    );
+    // JOIN's job addresses take a new number at each republishing: no key.
+    expect(atsJobKey('https://join.com/companies/acme/16833245-engineering-manager')).toBeNull();
+    // A job page names its board all the same (a front page or another link doesn't).
+    expect(jobPageBoard('https://join.com/companies/acme/16833245-engineering-manager')).toEqual({
+      ats: 'join',
+      token: 'acme',
+    });
+    expect(jobPageBoard('https://join.com/companies/acme')).toBeNull();
+    expect(jobPageBoard('https://join.com/companies/acme/about')).toBeNull();
+    expect(jobPageBoard('https://acme.teamtailor.com/jobs/8558035-ai-engineer')).toEqual({
+      ats: 'teamtailor',
+      token: 'acme',
+    });
+    expect(jobPageBoard('https://acme.teamtailor.com/jobs')).toBeNull();
+    expect(atsJobKey('https://acme.teamtailor.com/jobs')).toBeNull();
+    expect(atsJobPage('https://acme.recruitee.com/o/backend-engineer-2/c/new')).toBe(
+      'https://acme.recruitee.com/o/backend-engineer-2',
+    );
+  });
+});
+
+describe('shared board reads', () => {
+  const ASHBY = 'https://api.ashbyhq.com/posting-api/job-board/acme?includeCompensation=true';
+  const board = { jobs: [] };
+
+  it('a read shared with an earlier run says when that run fetched it', async () => {
+    const fetch = recordedFetch({ [ASHBY]: board });
+    const shared = new SharedReads();
+    const first = await readAtsBoardShared('ashby', 'acme', { ...ctx(fetch), shared });
+    const later = new Date(now.getTime() + 60_000);
+    const second = await readAtsBoardShared('ashby', 'acme', {
+      ...ctx(fetch),
+      now: later,
+      shared,
+    });
+    expect(fetch.calls).toEqual([ASHBY]);
+    expect([first.readAt, second.readAt]).toEqual([now, now]);
+  });
+
+  it('another run stopped while reading a shared board: this run reads it for itself', async () => {
+    let calls = 0;
+    const stopped = new AbortController();
+    const fetch = (async (_url: string, init?: RequestInit) => {
+      calls++;
+      // The first read hangs until its run is stopped.
+      if (calls === 1) {
+        return new Promise<Response>((_, reject) =>
+          init?.signal?.addEventListener('abort', () => reject(init.signal?.reason)),
+        );
+      }
+      return new Response(JSON.stringify(board), {
+        headers: { 'content-type': 'application/json' },
+      });
+    }) as RecordedFetch;
+    const shared = new SharedReads();
+    const theirs = readAtsBoardShared('ashby', 'acme', {
+      ...ctx(fetch),
+      signal: stopped.signal,
+      shared,
+    });
+    const mine = readAtsBoardShared('ashby', 'acme', { ...ctx(fetch), shared });
+    stopped.abort(new Error('paused'));
+    await expect(theirs).rejects.toThrow();
+    await expect(mine).resolves.toMatchObject({ complete: true, listings: [] });
+    expect(calls).toBe(2);
   });
 });

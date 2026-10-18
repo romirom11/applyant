@@ -1,9 +1,10 @@
 // The search source registry: every place postings can be listed, each with an on/off switch
 // (and a switch per kind). A disabled source, or a source of a disabled kind, is never queried.
-import { count, eq, inArray, isNotNull, sql } from 'drizzle-orm';
+import { and, count, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 import { platformOf } from '../../browser/guardrails.ts';
 import type { Conn } from '../../db/client.ts';
 import {
+  atsCompanies,
   PLATFORM_KEYS,
   type PlatformKey,
   platforms,
@@ -17,7 +18,7 @@ import {
   searchSources,
 } from '../../db/schema.ts';
 import { ATS_KINDS, type Ats, boardFromUrl } from './readers/ats-embed.ts';
-import { BOARDS, BOARDS_OFF, type BoardId, isBoardId } from './readers/boards.ts';
+import { BOARDS, BOARDS_OFF, type BoardId, INDEX_SOURCE_KEY, isBoardId } from './readers/boards.ts';
 import { telegramChannelOf } from './readers/telegram.ts';
 
 export class SearchError extends Error {}
@@ -28,6 +29,11 @@ export const KIND_LABELS: Record<SearchSourceKind, string> = {
   lever: 'Lever',
   workable: 'Workable',
   smartrecruiters: 'SmartRecruiters',
+  personio: 'Personio',
+  recruitee: 'Recruitee',
+  teamtailor: 'Teamtailor',
+  join: 'JOIN',
+  breezy: 'Breezy HR',
   page: 'Career pages and feeds',
   board: 'Job boards',
   linkedin: 'LinkedIn',
@@ -244,8 +250,8 @@ export function kindsOff(conn: Conn): Set<SearchSourceKind> {
 }
 
 /**
- * Switches a source (by key or id) or a whole kind on or off. Returns what changed: the kind,
- * or the sources.
+ * Switches a source (by key or id) or a whole kind on or off; a watched ATS board's company in
+ * the index with it. Returns what changed: the kind, or the sources.
  */
 export function setSourceEnabled(
   conn: Conn,
@@ -270,6 +276,19 @@ export function setSourceEnabled(
     .where(eq(searchSources.id, row.id))
     .returning()
     .get();
+  // A watched ATS board is a company of the index too: one switch for both.
+  if (isAts(row.kind)) {
+    conn
+      .update(atsCompanies)
+      .set({ enabled })
+      .where(
+        and(
+          eq(atsCompanies.ats, row.kind),
+          sql`lower(${atsCompanies.token}) = ${row.locator.toLowerCase()}`,
+        ),
+      )
+      .run();
+  }
   return { kind: null, sources: updated ? [updated] : [] };
 }
 
@@ -289,9 +308,14 @@ export function findSource(conn: Conn, ref: string): SearchSourceRow | null {
   return byLocator.length === 1 ? (byLocator[0] ?? null) : null;
 }
 
-/** Whether a selector ("greenhouse", "board:hn", "all") picks this source. */
+/**
+ * Whether a selector ("greenhouse", "board:hn", "all") picks this source. An ATS kind picks the
+ * ATS index too: "Greenhouse boards" are every Greenhouse board Applyant knows, not only the
+ * watched ones (the index then gives only that ATS's jobs).
+ */
 export function selects(selector: string, source: Pick<SearchSourceRow, 'key' | 'kind'>): boolean {
-  return selector === 'all' || selector === source.kind || selector === source.key;
+  if (selector === 'all' || selector === source.kind || selector === source.key) return true;
+  return source.key === INDEX_SOURCE_KEY && isAts(selector);
 }
 
 /** Checks a strategy's selectors: each must be "all", a kind, or a known source key. */
@@ -311,6 +335,15 @@ export function validateSelectors(conn: Conn, selectors: string[]): string[] {
 }
 
 /**
+ * Whether a source's kind switch applies to it. The ATS index (board:ats-index) has only its own
+ * switch: it isn't a job board, and "Job boards off" leaves it alone (its ATSs' kinds still take
+ * their boards out of it).
+ */
+function kindOn(off: Set<SearchSourceKind>, s: Pick<SearchSourceRow, 'key' | 'kind'>): boolean {
+  return s.key === INDEX_SOURCE_KEY || !off.has(s.kind);
+}
+
+/**
  * The sources a strategy queries now: selected, switched on, and of a kind that's on. Company
  * boards and career pages come before job boards: their listings are the posting's own page,
  * and they get the run's new-posting slots first.
@@ -325,7 +358,16 @@ export function sourcesFor(conn: Conn, selectors: string[]): SearchSourceRow[] {
       .from(searchSources)
       .where(eq(searchSources.enabled, true))
       .all()
-      .filter((s) => !off.has(s.kind) && selectors.some((sel) => selects(sel, s)))
+      .filter((s) => kindOn(off, s) && selectors.some((sel) => selects(sel, s)))
+      // The index for "Greenhouse" boards only while that kind is on.
+      .filter(
+        (s) =>
+          s.key !== INDEX_SOURCE_KEY ||
+          selectors.some(
+            (sel) =>
+              sel === 'all' || sel === s.kind || sel === s.key || (isAts(sel) && !off.has(sel)),
+          ),
+      )
       // LinkedIn/Xing are off until Applyant's browser is signed in there.
       .filter((s) => !isPlatformKind(s.kind) || signedIn.has(s.kind))
       .sort((a, b) => order(a.kind) - order(b.kind) || a.id - b.id)
@@ -405,7 +447,7 @@ export function listSources(conn: Conn): { sources: SourceView[]; kinds: KindVie
           ...s,
           lastNote: needsSignIn && isPlatformKind(s.kind) ? signInNote(s.kind) : s.lastNote,
           needsSignIn,
-          kindEnabled: !off.has(s.kind),
+          kindEnabled: kindOn(off, s),
           completeList: completeList(s.kind, s.resolved ?? null),
           stats: stats.get(s.id) ?? NO_STATS,
         };

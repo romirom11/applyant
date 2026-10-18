@@ -266,12 +266,17 @@ describe('sources that are off', () => {
       'https://remotive.com/api/remote-jobs?limit=100&search=engineer',
     );
     const r = h.runRow(run);
-    // Company boards are read before job boards.
-    expect(r?.results.map((x) => x.sourceKey)).toEqual(['workable:huggingface', 'board:remotive']);
+    // Company boards are read before job boards; "workable" reads the ATS index's Workable
+    // boards too.
+    expect(r?.results.map((x) => x.sourceKey)).toEqual([
+      'workable:huggingface',
+      'board:remotive',
+      'board:ats-index',
+    ]);
     // Remotive: "Frontend Web Application Developer" doesn't say engineer; Workable's four do.
     expect(r?.added).toBeGreaterThan(0);
 
-    // The whole Workable kind off: its source isn't read either.
+    // The whole Workable kind off: its source isn't read either, nor the index for it.
     setSourceEnabled(t.db, 'workable', false);
     h.fetch.calls.length = 0;
     const second = await h.again(1);
@@ -329,9 +334,10 @@ describe('sources that are off', () => {
     addSource(t.db, { kind: 'ashby', locator: 'gone-by-agent', origin: 'agent' }, now);
     addSource(t.db, { kind: 'ashby', locator: 'gone-by-me' }, now);
     const run = await h.run({ name: 'Engineers', queries: ['engineer'], sources: ['ashby'] });
-    expect(h.runRow(run)?.results.map((x) => x.error)).toEqual([
-      expect.stringMatching(/^HTTP 404 from /),
-      expect.stringMatching(/^HTTP 404 from /),
+    expect(h.runRow(run)?.results.map((x) => [x.sourceKey, x.error])).toEqual([
+      ['ashby:gone-by-agent', expect.stringMatching(/^HTTP 404 from /)],
+      ['ashby:gone-by-me', expect.stringMatching(/^HTTP 404 from /)],
+      ['board:ats-index', null],
     ]);
     const { sources } = listSources(t.db);
     expect(sources.find((s) => s.key === 'ashby:gone-by-agent')).toMatchObject({

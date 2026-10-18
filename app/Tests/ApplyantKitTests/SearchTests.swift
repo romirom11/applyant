@@ -69,11 +69,8 @@ func searchList() -> SearchList {
         #expect(SearchText.stats(stats(5, 4, 0)) == "5 found · 4 verified")
         #expect(SearchText.stats(stats(0, 0, 0)) == "Nothing found yet")
         #expect(!rows[1].on)
-        // Kinds with no sources are left out; each source says whether its list is complete.
-        let groups = SearchText.sourceGroups(list)
-        #expect(groups.map(\.kind.kind) == ["greenhouse", "board"])
-        #expect(groups[1].rows.map { $0.chips.map(\.text) } == [["Latest jobs"], ["Off", "Latest jobs"]])
-        #expect(groups[0].rows[0].chips.map(\.text) == ["Complete list"])
+        // Each source says whether its list is complete.
+        #expect(list.sources.map { SearchText.sourceRow($0).chips.map(\.text) } == [["Complete list"], ["Latest jobs"], ["Off", "Latest jobs"]])
         #expect(SearchText.every(90) == "90 min")
         #expect(SearchText.every(1440) == "1 day")
         #expect(Section.search.isBuilt && Section.agentRuns.isBuilt)

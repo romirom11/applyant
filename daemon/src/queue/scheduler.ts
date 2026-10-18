@@ -2,10 +2,15 @@
 // when the Mac wakes (applyant-native's `wake` event). Node can't see sleep, so a strategy
 // whose slots passed while the Mac slept is simply due at the next tick, and runs once, not
 // once per missed slot: its next run counts from when it started. Once the candidate has run
-// the search planner, it also starts a new plan a week after the last one. While the candidate
-// has paused background work (queue/pause.ts) it starts nothing; on resume, whatever came due
-// in the meantime starts at once, once.
+// the search planner, it also starts a new plan a week after the last one. The ATS index gets a
+// crawl of its due boards every few minutes and a discovery run weekly (ats-index/), and the
+// postings it found on boards it no longer reads are left to their other sources. While the
+// candidate has paused background work (queue/pause.ts) it starts nothing; on resume, whatever
+// came due in the meantime starts at once, once.
 import type { Db } from '../db/client.ts';
+import { scheduleCrawl } from '../domain/search/ats-index/crawl.ts';
+import { scheduleDiscovery } from '../domain/search/ats-index/discover.ts';
+import { settleIndexLinks } from '../domain/search/ats-index/store.ts';
 import { schedulePlanner } from '../domain/search/planner.ts';
 import { scheduleDue } from '../domain/search/strategies.ts';
 import type { Logger } from '../util/log.ts';
@@ -51,13 +56,21 @@ export class Scheduler {
   tick(trigger: 'schedule' | 'wake'): number[] {
     try {
       const now = this.o.now?.() ?? new Date();
-      const { runs, plan } = runInTx(this.o.db, this.o.bus, { now }, (tx) =>
+      const { runs, plan, discovery, links } = runInTx(this.o.db, this.o.bus, { now }, (tx) =>
         pausedAt(tx.db)
-          ? { runs: [], plan: null }
-          : { runs: scheduleDue(tx, trigger), plan: schedulePlanner(tx) },
+          ? { runs: [], plan: null, discovery: null, links: null }
+          : {
+              runs: scheduleDue(tx, trigger),
+              plan: schedulePlanner(tx),
+              discovery: scheduleDiscovery(tx),
+              crawl: scheduleCrawl(tx),
+              links: settleIndexLinks(tx),
+            },
       );
       if (runs.length) this.o.log.info('search runs started', { trigger, runs });
       if (plan !== null) this.o.log.info('search planner started', { plan });
+      if (discovery !== null) this.o.log.info('ATS index discovery started', { discovery });
+      if (links?.reverify) this.o.log.info('ATS index links left', { reverify: links.reverify });
       return runs;
     } catch (err) {
       this.o.log.error('scheduler tick failed', { err });

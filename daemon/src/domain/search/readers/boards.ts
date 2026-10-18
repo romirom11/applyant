@@ -12,6 +12,9 @@
 // Three more search every company on the ATSs for the strategy's titles (ats-search.ts):
 // Workable's and SmartRecruiters' own job searches, and web search for Greenhouse, Ashby and
 // Lever job pages.
+//
+// And one is local: the ATS index (ats-index/), every company board Applyant knows on the ATSs
+// read on its own schedule, searched without a request.
 import { atsJobPage } from './ats-embed.ts';
 import { readAtsWebSearch, readSmartRecruitersSearch, readWorkableSearch } from './ats-search.ts';
 import { parseFeed } from './feed.ts';
@@ -53,12 +56,16 @@ export const BOARDS = {
   'workable-search': 'Workable job search · every company',
   'smartrecruiters-search': 'SmartRecruiters job search · every company',
   'ats-web-search': 'Web search · Greenhouse, Ashby and Lever jobs',
+  'ats-index': 'ATS index · every company board Applyant knows',
 } as const;
 export type BoardId = keyof typeof BOARDS;
 
 export function isBoardId(id: string): id is BoardId {
   return Object.hasOwn(BOARDS, id);
 }
+
+/** The ATS index's source: a strategy that reads Greenhouse boards reads the index's too. */
+export const INDEX_SOURCE_KEY = 'board:ats-index';
 
 type Node = Record<string, unknown>;
 
@@ -532,6 +539,18 @@ async function djinni(ctx: ReaderContext): Promise<ReaderRun> {
   return { listings: out, complete: false, note: `Djinni: ${out.length} jobs for this search` };
 }
 
+// ---- The ATS index: its open jobs, matched in the local store -----------------------------
+
+/**
+ * The index's open jobs the strategy wants, newest first. A search over a store the crawler
+ * keeps, so never complete: its jobs close through their boards' own complete reads.
+ */
+async function atsIndex(ctx: ReaderContext): Promise<ReaderRun> {
+  if (!ctx.index) throw new Error('the ATS index is read only inside a search run');
+  const { listings, note } = ctx.index(ctx.wants ?? (() => true));
+  return { listings, complete: false, note };
+}
+
 const READERS: Record<BoardId, (ctx: ReaderContext) => Promise<ReaderRun>> = {
   hn,
   remoteok,
@@ -544,6 +563,7 @@ const READERS: Record<BoardId, (ctx: ReaderContext) => Promise<ReaderRun>> = {
   'workable-search': readWorkableSearch,
   'smartrecruiters-search': readSmartRecruitersSearch,
   'ats-web-search': readAtsWebSearch,
+  'ats-index': atsIndex,
 };
 
 export function readBoard(board: BoardId, ctx: ReaderContext): Promise<ReaderRun> {

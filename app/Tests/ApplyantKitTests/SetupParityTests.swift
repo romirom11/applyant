@@ -258,7 +258,7 @@ import Testing
         #expect(store.lastError == "That isn't a web address.")
         let source = try #require(await store.addBoardOrPage("acme.com/careers"))
         #expect(daemon.calls.contains("addSearchSource  https://acme.com/careers"))
-        #expect(store.navigation.search == .source(source.key))
+        #expect(store.navigation.sources == .source(source.key))
 
         // Preferences after setup: only what changed, one key at a time; a refusal stops it.
         await store.openPreferences()

@@ -1,0 +1,46 @@
+{
+ "version": "https://jsonfeed.org/version/1.1",
+ "title": "EWOR GmbH",
+ "home_page_url": "https://eworgmbh.teamtailor.com/jobs",
+ "feed_url": "https://eworgmbh.teamtailor.com/jobs.json",
+ "next_url": "https://eworgmbh.teamtailor.com/jobs.json?page=3&per_page=100",
+ "items": [
+  {
+   "id": "f92afa5e-2577-494d-9a9c-86812f193c50",
+   "title": "Agentic AI Co-Founder / CPO (100 % remote) (m/f/d)",
+   "url": "https://eworgmbh.teamtailor.com/jobs/8557214-agentic-ai-co-founder-cpo-100-remote-m-f-d",
+   "date_published": "2026-10-16T11:15:26+02:00",
+   "content_html": "<p>We are looking to hire ambitious entrepreneurs to start and scale their own startups.</p> <p>We are serial entrepreneurs, for example <a href=\"https://www.linkedin.com/in/paul1/\">Paul Müller</a> (founder Adjust, €1.2B exit) and <a href=\"https://www.linkedin.com/in/pettermade/\">Petter Made</a> (founder SumUp, €8B) who are eager to support outlier personalities and serial entrepreneurs to build €1B+ companies.</p> <p>Our offer:</p> <ul> <li>A salary while you build your startup as you will directly be employed by us. Alternatively, you can opt for up to <strong>€500k</strong> in funding.</li> <li><strong>1:1 sparring with unicorn founders</strong> on a weekly basis</li> <li><strong>Community</strong>: Access to the top 0.1% of founders, peers and investors</li> <li><strong>Team building</strong>: Hiring top notch talent supported through our network (over 50,000 professionals)</li> <li><strong>Distribution</strong>: Support in reaching product-market-fit and building up a sales force / marketing machine</li> <li><strong>Funding support</strong> for securing a multi-million euro funding round within 12 months (on average, EWOR Fellows raise &gt; €2M after our Grand Pitch)</li> </ul> <p>One of our fellows set a record for Europe’s largest pre-seed round by a first-time founder, securing a €12M pre-seed investment.</p> <h2>Tasks</h2> <ul> <li>You will own, build, and run your startup in fields such as Agentic AI</li> <li>You will embark on an extensive personal development jour",
+   "_jobposting": {
+    "@context": "http://schema.org/",
+    "@type": "JobPosting",
+    "title": "Agentic AI Co-Founder / CPO (100 % remote) (m/f/d)",
+    "description": "<p>We are looking to hire ambitious entrepreneurs to start and scale their own startups.</p> <p>We are serial entrepreneurs, for example <a href=\"https://www.linkedin.com/in/paul1/\">Paul Müller</a> (founder Adjust, €1.2B exit) and <a href=\"https://www.linkedin.com/in/pettermade/\">Petter Made</a> (founder SumUp, €8B) who are eager to support outlier personalities and serial entrepreneurs to build €1B+ companies.</p> <p>Our offer:</p> <ul> <li>A salary while you build your startup as you will directly be employed by us. Alternatively, you can opt for up to <strong>€500k</strong> in funding.</li> <li><strong>1:1 sparring with unicorn founders</strong> on a weekly basis</li> <li><strong>Community</strong>: Access to the top 0.1% of founders, peers and investors</li> <li><strong>Team building</strong>: Hiring top notch talent supported through our network (over 50,000 professionals)</li> <li><strong>Distribution</strong>: Support in reaching product-market-fit and building up a sales force / marketing machine</li> <li><strong>Funding support</strong> for securing a multi-million euro funding round within 12 months (on average, EWOR Fellows raise &gt; €2M after our Grand Pitch)</li> </ul> <p>One of our fellows set a record for Europe’s largest pre-seed round by a first-time founder, securing a €12M pre-seed investment.</p> <h2>Tasks</h2> <ul> <li>You will own, build, and run your startup in fields such as Agentic AI</li> <li>You will embark on an extensive personal development jour",
+    "identifier": {
+     "@type": "PropertyValue",
+     "name": "EWOR GmbH",
+     "value": 8557214
+    },
+    "datePosted": "2026-10-16T11:15:26+02:00",
+    "hiringOrganization": {
+     "@type": "Organization",
+     "name": "EWOR GmbH",
+     "sameAs": "https://eworgmbh.teamtailor.com"
+    },
+    "jobLocation": [
+     {
+      "@type": "Place",
+      "address": {
+       "@type": "PostalAddress",
+       "streetAddress": null,
+       "addressLocality": "Monaco",
+       "postalCode": null,
+       "addressCountry": "MC",
+       "addressRegion": "Europe"
+      }
+     }
+    ]
+   }
+  }
+ ]
+}

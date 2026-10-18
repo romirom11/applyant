@@ -6447,6 +6447,442 @@ export declare type PlanSearchResponse = Message<"applyant.v1.PlanSearchResponse
 export declare const PlanSearchResponseSchema: GenMessage<PlanSearchResponse>;
 
 /**
+ * One ATS in the index.
+ *
+ * @generated from message applyant.v1.AtsIndexAts
+ */
+export declare type AtsIndexAts = Message<"applyant.v1.AtsIndexAts"> & {
+  /**
+   * greenhouse | ashby | lever | workable | smartrecruiters | personio | recruitee | …
+   *
+   * @generated from field: string ats = 1;
+   */
+  ats: string;
+
+  /**
+   * @generated from field: string label = 2;
+   */
+  label: string;
+
+  /**
+   * Its kind's switch: off means its boards are neither read nor searched.
+   *
+   * @generated from field: bool enabled = 3;
+   */
+  enabled: boolean;
+
+  /**
+   * Company boards known (not gone).
+   *
+   * @generated from field: int32 companies = 4;
+   */
+  companies: number;
+
+  /**
+   * Of those, the ones with open jobs at their last read.
+   *
+   * @generated from field: int32 hiring = 5;
+   */
+  hiring: number;
+
+  /**
+   * Open jobs held.
+   *
+   * @generated from field: int32 jobs = 6;
+   */
+  jobs: number;
+
+  /**
+   * Open jobs at least one active strategy matches.
+   *
+   * @generated from field: int32 matching = 7;
+   */
+  matching: number;
+
+  /**
+   * @generated from field: optional google.protobuf.Timestamp last_read_at = 8;
+   */
+  lastReadAt?: Timestamp | undefined;
+
+  /**
+   * Boards waiting for their read now (new ones, and those due again).
+   *
+   * @generated from field: int32 due = 9;
+   */
+  due: number;
+
+  /**
+   * Boards whose last read failed (not "gone").
+   *
+   * @generated from field: int32 failing = 10;
+   */
+  failing: number;
+};
+
+/**
+ * Describes the message applyant.v1.AtsIndexAts.
+ * Use `create(AtsIndexAtsSchema)` to create a new message.
+ */
+export declare const AtsIndexAtsSchema: GenMessage<AtsIndexAts>;
+
+/**
+ * One discovery run: where it looked and what it found.
+ *
+ * @generated from message applyant.v1.AtsIndexDiscovery
+ */
+export declare type AtsIndexDiscovery = Message<"applyant.v1.AtsIndexDiscovery"> & {
+  /**
+   * @generated from field: int64 id = 1;
+   */
+  id: bigint;
+
+  /**
+   * manual | schedule | setup
+   *
+   * @generated from field: string trigger = 2;
+   */
+  trigger: string;
+
+  /**
+   * queued (waiting or running) | done | failed
+   *
+   * @generated from field: string status = 3;
+   */
+  status: string;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp started_at = 4;
+   */
+  startedAt?: Timestamp | undefined;
+
+  /**
+   * @generated from field: optional google.protobuf.Timestamp finished_at = 5;
+   */
+  finishedAt?: Timestamp | undefined;
+
+  /**
+   * Boards it came across, and how many of them were new to the index.
+   *
+   * @generated from field: int32 found = 6;
+   */
+  found: number;
+
+  /**
+   * @generated from field: int32 added = 7;
+   */
+  added: number;
+
+  /**
+   * @generated from field: optional string note = 8;
+   */
+  note?: string | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.AtsIndexDiscovery.
+ * Use `create(AtsIndexDiscoverySchema)` to create a new message.
+ */
+export declare const AtsIndexDiscoverySchema: GenMessage<AtsIndexDiscovery>;
+
+/**
+ * @generated from message applyant.v1.GetAtsIndexRequest
+ */
+export declare type GetAtsIndexRequest = Message<"applyant.v1.GetAtsIndexRequest"> & {
+};
+
+/**
+ * Describes the message applyant.v1.GetAtsIndexRequest.
+ * Use `create(GetAtsIndexRequestSchema)` to create a new message.
+ */
+export declare const GetAtsIndexRequestSchema: GenMessage<GetAtsIndexRequest>;
+
+/**
+ * @generated from message applyant.v1.GetAtsIndexResponse
+ */
+export declare type GetAtsIndexResponse = Message<"applyant.v1.GetAtsIndexResponse"> & {
+  /**
+   * The built-in source board:ats-index is on (strategies search the index).
+   *
+   * @generated from field: bool enabled = 1;
+   */
+  enabled: boolean;
+
+  /**
+   * @generated from field: repeated applyant.v1.AtsIndexAts ats = 2;
+   */
+  ats: AtsIndexAts[];
+
+  /**
+   * Latest first.
+   *
+   * @generated from field: repeated applyant.v1.AtsIndexDiscovery discoveries = 3;
+   */
+  discoveries: AtsIndexDiscovery[];
+
+  /**
+   * @generated from field: int32 companies = 4;
+   */
+  companies: number;
+
+  /**
+   * @generated from field: int32 jobs = 5;
+   */
+  jobs: number;
+
+  /**
+   * @generated from field: int32 matching = 6;
+   */
+  matching: number;
+};
+
+/**
+ * Describes the message applyant.v1.GetAtsIndexResponse.
+ * Use `create(GetAtsIndexResponseSchema)` to create a new message.
+ */
+export declare const GetAtsIndexResponseSchema: GenMessage<GetAtsIndexResponse>;
+
+/**
+ * One company board in the index.
+ *
+ * @generated from message applyant.v1.IndexCompany
+ */
+export declare type IndexCompany = Message<"applyant.v1.IndexCompany"> & {
+  /**
+   * @generated from field: int64 id = 1;
+   */
+  id: bigint;
+
+  /**
+   * @generated from field: string ats = 2;
+   */
+  ats: string;
+
+  /**
+   * The board's name on its ATS (greenhouse token, ashby slug, lever site, personio subdomain…).
+   *
+   * @generated from field: string token = 3;
+   */
+  token: string;
+
+  /**
+   * The company's name, once a read or a listing named it.
+   *
+   * @generated from field: optional string name = 4;
+   */
+  name?: string | undefined;
+
+  /**
+   * Switched off by the candidate: not read, not searched.
+   *
+   * @generated from field: bool enabled = 5;
+   */
+  enabled: boolean;
+
+  /**
+   * new (not read yet) | hiring | empty (no open jobs) | failing | gone (the ATS says no such board)
+   *
+   * @generated from field: string status = 6;
+   */
+  status: string;
+
+  /**
+   * @generated from field: int32 jobs = 7;
+   */
+  jobs: number;
+
+  /**
+   * @generated from field: int32 matching = 8;
+   */
+  matching: number;
+
+  /**
+   * @generated from field: optional google.protobuf.Timestamp last_read_at = 9;
+   */
+  lastReadAt?: Timestamp | undefined;
+
+  /**
+   * @generated from field: optional google.protobuf.Timestamp next_read_at = 10;
+   */
+  nextReadAt?: Timestamp | undefined;
+
+  /**
+   * How it was found: common-crawl | posting | planner | workable-search | smartrecruiters-search | watch-list | candidate
+   *
+   * @generated from field: string found_via = 11;
+   */
+  foundVia: string;
+
+  /**
+   * @generated from field: optional string last_note = 12;
+   */
+  lastNote?: string | undefined;
+
+  /**
+   * The board's own job list page.
+   *
+   * @generated from field: string board_url = 13;
+   */
+  boardUrl: string;
+
+  /**
+   * It's also a source on the watch list (an ATS board the candidate or the planner added): the
+   * strategies that name it read it directly, and its switch is the source's too.
+   *
+   * @generated from field: bool watched = 14;
+   */
+  watched: boolean;
+
+  /**
+   * That source's key ("greenhouse:gitlab"), when watched.
+   *
+   * @generated from field: optional string source_key = 15;
+   */
+  sourceKey?: string | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.IndexCompany.
+ * Use `create(IndexCompanySchema)` to create a new message.
+ */
+export declare const IndexCompanySchema: GenMessage<IndexCompany>;
+
+/**
+ * @generated from message applyant.v1.ListIndexCompaniesRequest
+ */
+export declare type ListIndexCompaniesRequest = Message<"applyant.v1.ListIndexCompaniesRequest"> & {
+  /**
+   * One ATS; unset: all.
+   *
+   * @generated from field: optional string ats = 1;
+   */
+  ats?: string | undefined;
+
+  /**
+   * Part of the company's name or token; empty: any.
+   *
+   * @generated from field: string query = 2;
+   */
+  query: string;
+
+  /**
+   * Only companies with open jobs an active strategy matches.
+   *
+   * @generated from field: bool matching_only = 3;
+   */
+  matchingOnly: boolean;
+
+  /**
+   * Default 100, at most 500.
+   *
+   * @generated from field: int32 limit = 4;
+   */
+  limit: number;
+
+  /**
+   * @generated from field: int32 offset = 5;
+   */
+  offset: number;
+};
+
+/**
+ * Describes the message applyant.v1.ListIndexCompaniesRequest.
+ * Use `create(ListIndexCompaniesRequestSchema)` to create a new message.
+ */
+export declare const ListIndexCompaniesRequestSchema: GenMessage<ListIndexCompaniesRequest>;
+
+/**
+ * @generated from message applyant.v1.ListIndexCompaniesResponse
+ */
+export declare type ListIndexCompaniesResponse = Message<"applyant.v1.ListIndexCompaniesResponse"> & {
+  /**
+   * Matching companies first, then hiring ones, then by name.
+   *
+   * @generated from field: repeated applyant.v1.IndexCompany companies = 1;
+   */
+  companies: IndexCompany[];
+
+  /**
+   * All companies the filter selects (for paging).
+   *
+   * @generated from field: int32 total = 2;
+   */
+  total: number;
+};
+
+/**
+ * Describes the message applyant.v1.ListIndexCompaniesResponse.
+ * Use `create(ListIndexCompaniesResponseSchema)` to create a new message.
+ */
+export declare const ListIndexCompaniesResponseSchema: GenMessage<ListIndexCompaniesResponse>;
+
+/**
+ * @generated from message applyant.v1.SetIndexCompanyEnabledRequest
+ */
+export declare type SetIndexCompanyEnabledRequest = Message<"applyant.v1.SetIndexCompanyEnabledRequest"> & {
+  /**
+   * @generated from field: int64 id = 1;
+   */
+  id: bigint;
+
+  /**
+   * @generated from field: bool enabled = 2;
+   */
+  enabled: boolean;
+};
+
+/**
+ * Describes the message applyant.v1.SetIndexCompanyEnabledRequest.
+ * Use `create(SetIndexCompanyEnabledRequestSchema)` to create a new message.
+ */
+export declare const SetIndexCompanyEnabledRequestSchema: GenMessage<SetIndexCompanyEnabledRequest>;
+
+/**
+ * @generated from message applyant.v1.SetIndexCompanyEnabledResponse
+ */
+export declare type SetIndexCompanyEnabledResponse = Message<"applyant.v1.SetIndexCompanyEnabledResponse"> & {
+  /**
+   * @generated from field: applyant.v1.IndexCompany company = 1;
+   */
+  company?: IndexCompany | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.SetIndexCompanyEnabledResponse.
+ * Use `create(SetIndexCompanyEnabledResponseSchema)` to create a new message.
+ */
+export declare const SetIndexCompanyEnabledResponseSchema: GenMessage<SetIndexCompanyEnabledResponse>;
+
+/**
+ * @generated from message applyant.v1.DiscoverIndexCompaniesRequest
+ */
+export declare type DiscoverIndexCompaniesRequest = Message<"applyant.v1.DiscoverIndexCompaniesRequest"> & {
+};
+
+/**
+ * Describes the message applyant.v1.DiscoverIndexCompaniesRequest.
+ * Use `create(DiscoverIndexCompaniesRequestSchema)` to create a new message.
+ */
+export declare const DiscoverIndexCompaniesRequestSchema: GenMessage<DiscoverIndexCompaniesRequest>;
+
+/**
+ * @generated from message applyant.v1.DiscoverIndexCompaniesResponse
+ */
+export declare type DiscoverIndexCompaniesResponse = Message<"applyant.v1.DiscoverIndexCompaniesResponse"> & {
+  /**
+   * Unset when a discovery is already waiting or running.
+   *
+   * @generated from field: optional int64 discovery_id = 1;
+   */
+  discoveryId?: bigint | undefined;
+};
+
+/**
+ * Describes the message applyant.v1.DiscoverIndexCompaniesResponse.
+ * Use `create(DiscoverIndexCompaniesResponseSchema)` to create a new message.
+ */
+export declare const DiscoverIndexCompaniesResponseSchema: GenMessage<DiscoverIndexCompaniesResponse>;
+
+/**
  * @generated from message applyant.v1.GetSearchSourceRequest
  */
 export declare type GetSearchSourceRequest = Message<"applyant.v1.GetSearchSourceRequest"> & {
@@ -9390,6 +9826,52 @@ export declare const ApplyantService: GenService<{
     methodKind: "unary";
     input: typeof RebuildRecipeRequestSchema;
     output: typeof RebuildRecipeResponseSchema;
+  },
+  /**
+   * The ATS index: every company board Applyant knows on the ATSs (found in Common Crawl's
+   * index, behind postings, by the planner and the cross-company job searches), each read on
+   * its own schedule into a local store of open jobs. Strategies search those jobs through the
+   * built-in source board:ats-index, so a search covers every known company, not a watch list.
+   * A kind's switch (SetSearchSourceEnabled "greenhouse") also takes that ATS out of the index.
+   * GetAtsIndex returns the index per ATS and its latest discovery runs.
+   *
+   * @generated from rpc applyant.v1.ApplyantService.GetAtsIndex
+   */
+  getAtsIndex: {
+    methodKind: "unary";
+    input: typeof GetAtsIndexRequestSchema;
+    output: typeof GetAtsIndexResponseSchema;
+  },
+  /**
+   * ListIndexCompanies pages through the index's companies, filtered.
+   *
+   * @generated from rpc applyant.v1.ApplyantService.ListIndexCompanies
+   */
+  listIndexCompanies: {
+    methodKind: "unary";
+    input: typeof ListIndexCompaniesRequestSchema;
+    output: typeof ListIndexCompaniesResponseSchema;
+  },
+  /**
+   * SetIndexCompanyEnabled leaves one company out of the index (it's not read or searched) or
+   * takes it back. A watched company's search source switches with it (one switch per company).
+   *
+   * @generated from rpc applyant.v1.ApplyantService.SetIndexCompanyEnabled
+   */
+  setIndexCompanyEnabled: {
+    methodKind: "unary";
+    input: typeof SetIndexCompanyEnabledRequestSchema;
+    output: typeof SetIndexCompanyEnabledResponseSchema;
+  },
+  /**
+   * DiscoverIndexCompanies looks for more company boards now (it also runs weekly by itself).
+   *
+   * @generated from rpc applyant.v1.ApplyantService.DiscoverIndexCompanies
+   */
+  discoverIndexCompanies: {
+    methodKind: "unary";
+    input: typeof DiscoverIndexCompaniesRequestSchema;
+    output: typeof DiscoverIndexCompaniesResponseSchema;
   },
   /**
    * Model roles: which provider and model answer each role. Changes apply to the next run.

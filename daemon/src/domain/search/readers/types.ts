@@ -31,7 +31,7 @@ export interface Listing {
   matchText?: string | null;
   /**
    * The company board it's on, when the reader knows it and the URL doesn't say (a Workable
-   * job's apply.workable.com/j/… page): a matched listing's board joins the watch list.
+   * job's apply.workable.com/j/… page): a matched listing's board joins the ATS index.
    */
   board?: AtsBoard | null;
 }
@@ -48,6 +48,9 @@ export interface ReaderRun {
 }
 
 export type Fetch = (url: string, init?: RequestInit) => Promise<Response>;
+
+/** The ATS index's open jobs a strategy wants (board:ats-index), from the local store. */
+export type IndexLookup = (wants: (l: Listing) => boolean) => { listings: Listing[]; note: string };
 
 export interface ReaderContext {
   fetch: Fetch;
@@ -72,6 +75,8 @@ export interface ReaderContext {
   shared?: SharedReads | null;
   /** The web search engines' pace and daily budget, shared by every run. */
   web?: WebSearchGate | null;
+  /** The ATS index's store (board:ats-index): built by the search run over its read handle. */
+  index?: IndexLookup | null;
   /**
    * Runs the strategy had before this one: readers that take a slice of its queries per run
    * take the next slice each time.

@@ -152,6 +152,15 @@ export function matchesStrategy(
   return true;
 }
 
+/**
+ * Whether the queries name a title: one with a word that must be there. Without one (no
+ * queries, or only "-intern") every title passes, which a search over every company's jobs
+ * (the ATS index) can't use.
+ */
+export function hasTitleQuery(queries: string[]): boolean {
+  return queries.some((q) => tokens(q).some((w) => !w.startsWith('-') && w.replace(/-+$/, '')));
+}
+
 // ---- Strategies ---------------------------------------------------------------------------
 
 export function requireStrategy(conn: Conn, ref: string | number): SearchStrategyRow {

@@ -1,10 +1,12 @@
 // The search planner (a scripted codex): its strategies are added marked agent-generated and
-// start running; the boards its web searches found join the watch list with its reasons; what
-// isn't a company's board, or duplicates what's there, is skipped. It runs again weekly once the
+// start running; the ATS boards its web searches found join the ATS index, and those a strategy
+// names, career pages and channels the watch list, with its reasons; what isn't a company's
+// board, or duplicates what's there, is skipped. It runs again weekly once the
 // candidate has run it. Weak strategies run less often, and say so.
 import { asc, eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
+  atsCompanies,
   postings,
   searchPlans,
   searchStrategies,
@@ -167,15 +169,26 @@ describe('search planner', () => {
     expect(req?.prompt).toContain('board:hn (Hacker News · Who is hiring)');
 
     const watched = listSources(t.db).sources.filter((s) => s.origin === 'agent');
-    // Listed by kind: company boards, then career pages.
+    // Listed by kind: company boards (the one a strategy names), then career pages.
     expect(watched.map((s) => [s.key, s.label, s.note])).toEqual([
-      ['greenhouse:tallyhall', 'Tallyhall', 'Hires founding engineers.'],
       [
         'ashby:lumen',
         'Lumen Health',
         'Builds LLM tooling for clinics; remote in Europe. · found with: site:jobs.ashbyhq.com "AI Engineer" Europe',
       ],
       ['page:https://kestrel.example/careers', 'Kestrel', 'Python shop in Athens.'],
+    ]);
+    // The other ATS board joins the index, read at its next crawl; the watched one is a company
+    // of the index too.
+    expect(
+      t.db
+        .select()
+        .from(atsCompanies)
+        .all()
+        .map((c) => [c.ats, c.token, c.name, c.status, c.foundVia, c.foundNote]),
+    ).toEqual([
+      ['greenhouse', 'tallyhall', 'Tallyhall', 'new', 'planner', 'Hires founding engineers.'],
+      ['ashby', 'lumen', 'Lumen Health', 'new', 'watch-list', 'ashby:lumen'],
     ]);
 
     const strategies = listStrategies(t.db).filter((s) => s.origin === 'agent');
@@ -198,11 +211,11 @@ describe('search planner', () => {
       status: 'done',
       trigger: 'manual',
       strategies: strategies.map((s) => s.id),
-      boards: ['ashby:lumen', 'greenhouse:tallyhall', 'page:https://kestrel.example/careers'],
+      boards: ['ashby:lumen', 'page:https://kestrel.example/careers'],
       searches: PLAN.searches,
     });
     expect(row?.note).toMatch(
-      /^2 new strategies · 3 new boards watched · 1 already watched · 2 web searches · skipped: /,
+      /^2 new strategies · 2 new boards watched · 1 new board in the ATS index · 1 already watched · 2 web searches · skipped: /,
     );
     expect(row?.note).toContain(
       "board https://www.linkedin.com/jobs/view/123: linkedin.com isn't a company's own board",

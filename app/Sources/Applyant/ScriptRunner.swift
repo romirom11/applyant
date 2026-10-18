@@ -64,9 +64,11 @@ struct ScriptStep: Decodable {
     var company: Int64?
     /// Which application?: a reply in the queue.
     var email: Int64?
-    /// The Search section: a strategy or a source; the Agent runs section: a run.
+    /// The Search section: a strategy; the Sources section: a source by key, or the ATS index
+    /// ("index", or one ATS: "greenhouse"); the Agent runs section: a run.
     var searchStrategy: Int64?
     var searchSource: String?
+    var sourcesIndex: String?
     var agentRun: Int64?
     /// The Interview section: open a project's thread or a question's.
     var interviewProject: Int64?
@@ -239,8 +241,12 @@ final class ScriptRunner {
             store.navigation.search = .strategy(id)
         }
         if let key = s.searchSource {
-            store.navigation.section = .search
-            store.navigation.search = .source(key)
+            store.navigation.section = .sources
+            store.navigation.sources = .source(key)
+        }
+        if let ats = s.sourcesIndex {
+            store.navigation.section = .sources
+            store.navigation.sources = ats == "index" ? .index : .ats(ats)
         }
         if let run = s.agentRun {
             store.navigation.section = .agentRuns
@@ -616,6 +622,10 @@ final class ScriptRunner {
         }
         if nav.section == .search {
             parts.append("strategies=\(store.search.strategies.map { "\($0.id):\($0.state):\($0.origin):\($0.stats.found)" }) sources on=\(store.search.sources.filter { $0.enabled && $0.kindEnabled }.count)/\(store.search.sources.count) agent sources=\(store.search.sources.filter { $0.origin == "agent" }.count) plan=\(store.search.plans.first.map { "\($0.id):\($0.status)" } ?? "none")")
+        }
+        if nav.section == .sources {
+            let index = store.atsIndex.map { "\($0.companies) companies, \($0.ats.count) ATSs, on=\($0.enabled)" } ?? (store.atsIndexProblem ?? "not loaded")
+            parts.append("sources on=\(SourcesText.onLine(store.search)) groups=\(SourcesText.groups(store.search).map { "\($0.id.rawValue):\($0.rows.count)" }) index=\(index) companies=\(store.indexCompanies?.line ?? "-")")
         }
         if nav.section == .agentRuns, let run = nav.run {
             parts.append("run=\(run) events=\(store.runEvents[run]?.count ?? 0)")

@@ -146,7 +146,9 @@ describe('running recipes on career pages', () => {
       team: 'Engineering',
     });
     // The title's own link, even when it leads to the ATS.
-    expect(res.listings[4]?.url).toBe('https://lumen.recruitee.com/o/founding-product-manager');
+    expect(res.listings[4]?.url).toBe(
+      'https://lumen.pinpointhq.com/postings/founding-product-manager',
+    );
     expect(
       checkInvariants({
         listings: res.listings,

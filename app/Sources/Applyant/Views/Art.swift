@@ -31,6 +31,7 @@ enum Art: String, CaseIterable, Sendable {
         case .interview: .questions
         case .chat: .chat
         case .search: .search
+        case .sources: .searching
         case .agentRuns: .agentRuns
         case .companies: .companies
         case .settings: .settings
