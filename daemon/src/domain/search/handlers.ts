@@ -6,7 +6,8 @@
 //               career pages read by their listing recipe (phase 11) get a sample of their
 //               listings checked every few days (listing_check: "a job title with its link?")
 //               board:ats-index searches the ATS index's store (ats-index/), no request
-//   commit      new postings at `found` (+ verify_posting), every listing as a posting source,
+//   commit      new postings at `found` (+ verify_posting; the index's jobs get the slots the
+//               other sources leave, MAX_NEW_PER_RUN a run), every listing as a posting source,
 //               the strategy's claim on them · watched ATS boards' reads into the ATS index,
 //               and the boards behind matched listings into it (watchlist.ts) · the absence
 //               rule per source (absence.ts; the index's jobs close through their boards'
@@ -71,7 +72,7 @@ import {
 } from './recipes/store.ts';
 import type { RecipeListing } from './recipes/types.ts';
 import { isAts, isPlatformKind, sourcesFor } from './sources.ts';
-import { matchesStrategy } from './strategies.ts';
+import { hasTitleQuery, matchesStrategy } from './strategies.ts';
 import { watchSeen } from './watchlist.ts';
 
 /** New postings one run may add; the rest wait for the next run (they're still new then). */
@@ -92,6 +93,8 @@ export interface SourceRead {
   resolved: ResolvedSource | null;
   /** The company the source belongs to, when the API names it. */
   company: string | null;
+  /** An ATS board's shared read: when it was fetched (AtsRun.readAt). */
+  readAt: Date | null;
   /** A career page that needs a (new) listing recipe, and why. */
   needsRecipe: RecipeRequest | null;
   /** Read by its listing recipe: the recipe, how many it read, whether a sample was checked. */
@@ -115,6 +118,7 @@ export async function readSource(
     error: null,
     resolved: null,
     company: null,
+    readAt: null,
     needsRecipe: null,
     recipe: null,
   };
@@ -124,6 +128,7 @@ export async function readSource(
       const run = await readAtsBoardShared(source.kind, source.locator, ctx, { apiHost });
       read.run = run;
       read.company = run.company;
+      read.readAt = run.readAt ?? null;
       if (run.apiHost) read.resolved = { via: 'lever', apiHost: run.apiHost };
     } else if (source.kind === 'board') {
       if (!isBoardId(source.locator)) throw new Error(`unknown board "${source.locator}"`);
@@ -345,13 +350,19 @@ export const searchHandler: Handler<'search'> = async (task, ctx) => {
     shared: live ? DAEMON_READS : new SharedReads(),
     web: live ? WEB_SEARCH : new WebSearchGate({ paceMs: 0 }),
     turn: runsBefore(ctx.read, strategy.id, task.runId),
+    // Without a title to look for, every job of every company would be the strategy's.
     index: (wants) =>
-      indexListings(ctx.read, {
-        wants,
-        ats: indexAtsFor(strategy.sources),
-        skip: boardsRead,
-        matchingOnly,
-      }),
+      hasTitleQuery(strategy.queries)
+        ? indexListings(ctx.read, {
+            wants,
+            ats: indexAtsFor(strategy.sources),
+            skip: boardsRead,
+            matchingOnly,
+          })
+        : {
+            listings: [],
+            note: 'the ATS index is searched by title: this strategy has no title query',
+          },
   };
   const reads = await mapLimit(sources, PARALLEL_SOURCES, async (s) => {
     const recipe = recipes.get(s.id) ?? null;
@@ -498,9 +509,18 @@ export function commitSearch(tx: Tx, input: CommitInput): void {
     }
   }
 
+  // The index's own jobs take the new-posting slots the other sources leave: its backlog can
+  // be thousands of jobs, while a job board's, LinkedIn's or Telegram's new ones are a few a
+  // run and don't wait (a cluster another source lists too is theirs).
+  const fromIndexOnly = (cluster: Cluster) =>
+    cluster.candidates.every((c) => bySource.get(c.sourceId)?.source.key === INDEX_SOURCE_KEY);
+  const clusters = [
+    ...input.clusters.filter((c) => !fromIndexOnly(c)),
+    ...input.clusters.filter(fromIndexOnly),
+  ];
   let added = 0;
   let left = 0;
-  for (const cluster of input.clusters) {
+  for (const cluster of clusters) {
     const [first] = cluster.candidates;
     if (!first) continue;
     for (const c of cluster.candidates) {
@@ -611,7 +631,12 @@ export function commitSearch(tx: Tx, input: CommitInput): void {
         board,
         via: r.source.origin === 'candidate' ? 'candidate' : 'watch-list',
         name: r.company ?? (r.source.label !== r.source.locator ? r.source.label : null),
-        run: { ...r.run, company: r.company, ...(apiHost ? { apiHost } : {}) },
+        run: {
+          ...r.run,
+          company: r.company,
+          ...(apiHost ? { apiHost } : {}),
+          ...(r.readAt ? { readAt: r.readAt } : {}),
+        },
       },
       matcher,
     );

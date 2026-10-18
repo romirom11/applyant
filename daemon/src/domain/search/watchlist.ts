@@ -18,7 +18,7 @@ import {
 } from '../../db/schema.ts';
 import type { Tx } from '../../queue/types.ts';
 import { boardKey, findCompany, knowBoards, type NewBoard } from './ats-index/store.ts';
-import { type AtsBoard, atsJobKey, boardFromUrl } from './readers/ats-embed.ts';
+import { type AtsBoard, jobPageBoard } from './readers/ats-embed.ts';
 import { isBoardId } from './readers/boards.ts';
 import type { Listing } from './readers/types.ts';
 import { addSource, parseSourceInput, SearchError, sourceKey } from './sources.ts';
@@ -147,12 +147,7 @@ export function watchBoards(tx: Tx, boards: FoundBoard[], o: { max?: number } = 
  * link) is on. Only a job page counts: a link to an ATS host's blog isn't a board.
  */
 export function boardOf(l: Pick<Listing, 'url' | 'applyUrl' | 'board'>): AtsBoard | null {
-  if (l.board) return l.board;
-  for (const url of [l.url, l.applyUrl]) {
-    const board = url && atsJobKey(url) ? boardFromUrl(url) : null;
-    if (board) return board;
-  }
-  return null;
+  return l.board ?? jobPageBoard(l.url) ?? jobPageBoard(l.applyUrl);
 }
 
 export interface SeenJob {

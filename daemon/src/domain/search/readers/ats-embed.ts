@@ -328,6 +328,21 @@ export function atsJobKey(raw: string | null | undefined): string | null {
 }
 
 /**
+ * The board of a job's own page (or its apply link), or null: only a job page counts, not a link
+ * to an ATS host's blog or a board's front page. JOIN's job pages
+ * (join.com/companies/<slug>/<n>-<title>) count too, though they have no atsJobKey.
+ */
+export function jobPageBoard(raw: string | null | undefined): AtsBoard | null {
+  if (!raw) return null;
+  const board = boardFromUrl(raw);
+  if (!board) return null;
+  if (atsJobKey(raw)) return board;
+  if (board.ats !== 'join') return null;
+  const job = new URL(raw).pathname.split('/').filter(Boolean)[2];
+  return job && /^\d+(-|$)/.test(job) ? board : null;
+}
+
+/**
  * A job page on an ATS (not its apply step), or null. Boards that link to the ATS get the job
  * page as the posting's URL: the same URL the ATS's own list gives, and a real form to verify.
  */

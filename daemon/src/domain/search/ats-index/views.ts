@@ -27,7 +27,7 @@ export interface AtsView {
 }
 
 export interface IndexView {
-  /** board:ats-index is on (and the job boards' kind): strategies search the index. */
+  /** board:ats-index is on (its own switch; not the job boards' kind): strategies search it. */
   enabled: boolean;
   ats: AtsView[];
   discoveries: AtsDiscoveryRow[];
@@ -75,7 +75,7 @@ export function indexView(conn: Conn, now: Date): IndexView {
     };
   });
   return {
-    enabled: !!source?.enabled && !off.has('board'),
+    enabled: !!source?.enabled,
     ats,
     discoveries: latestDiscoveries(conn, 10),
     companies: ats.reduce((n, a) => n + a.companies, 0),

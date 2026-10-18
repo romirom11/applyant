@@ -12,28 +12,51 @@ import {
   atsJobs,
   postingSources,
   postings,
+  searchSources,
+  searchStrategies,
   tasks,
 } from '../src/db/schema.ts';
-import { dueBoards, indexCrawl, scheduleCrawl } from '../src/domain/search/ats-index/crawl.ts';
+import {
+  COOLDOWN_MS,
+  CRAWL_EVERY_MS,
+  dueBoards,
+  indexCrawl,
+  scheduleCrawl,
+} from '../src/domain/search/ats-index/crawl.ts';
 import {
   CDX_COLLECTIONS,
   type CdxOptions,
   commonCrawlBoards,
+  commonCrawlStep,
   crawledBoard,
   DISCOVER_EVERY_MS,
+  DISCOVER_RETRY_MS,
   indexDiscover,
+  LOST_NOTE,
+  latestDiscoveries,
+  newProgress,
+  ownBoards,
+  progressNote,
   scheduleDiscovery,
   startDiscovery,
 } from '../src/domain/search/ats-index/discover.ts';
 import {
+  activeMatcher,
+  type BoardRead,
+  indexWanted,
   knowBoards,
   matchingCurrent,
   READ_AGAIN_MS,
+  recordBoardRead,
+  settleIndexLinks,
 } from '../src/domain/search/ats-index/store.ts';
-import { setCompanyEnabled } from '../src/domain/search/ats-index/views.ts';
+import { indexView, setCompanyEnabled } from '../src/domain/search/ats-index/views.ts';
+import type { Cluster } from '../src/domain/search/dedupe.ts';
+import { commitSearch, MAX_NEW_PER_RUN, type SourceRead } from '../src/domain/search/handlers.ts';
 import type { Ats } from '../src/domain/search/readers/ats-embed.ts';
-import type { Fetch } from '../src/domain/search/readers/types.ts';
+import type { Fetch, Listing } from '../src/domain/search/readers/types.ts';
 import { addSource, setSourceEnabled } from '../src/domain/search/sources.ts';
+import { watchSeen } from '../src/domain/search/watchlist.ts';
 import {
   DiscoverIndexCompaniesRequestSchema,
   type DiscoverIndexCompaniesResponse,
@@ -188,8 +211,12 @@ describe('the ATS index', () => {
   it('per ATS at most its budget per crawl, oldest due first; a kind switched off is not read', () => {
     know(...Array.from({ length: 65 }, (_, i): [Ats, string] => ['greenhouse', `gh${i}`]));
     know(...Array.from({ length: 12 }, (_, i): [Ats, string] => ['workable', `wk${i}`]));
+    know(...Array.from({ length: 12 }, (_, i): [Ats, string] => ['join', `jn${i}`]));
+    know(...Array.from({ length: 12 }, (_, i): [Ats, string] => ['teamtailor', `tt${i}`]));
     const count = (ats: Ats) => dueBoards(t.db, clock).filter((c) => c.ats === ats).length;
     expect([count('greenhouse'), count('workable')]).toEqual([60, 10]);
+    // A JOIN board is a request per five jobs, a Teamtailor one per hundred: few of them.
+    expect([count('join'), count('teamtailor')]).toEqual([5, 10]);
     expect(dueBoards(t.db, clock)[0]?.token).toBe('gh0');
     setSourceEnabled(t.db, 'greenhouse', false);
     expect([count('greenhouse'), count('workable')]).toEqual([0, 10]);
@@ -212,6 +239,15 @@ describe('the ATS index', () => {
     expect(company('w1').lastNote).toMatch(/^asked to slow down/);
     expect([company('w2').lastReadAt, company('w3').lastReadAt]).toEqual([null, null]);
     expect(h.fetch.calls.filter((u) => u.includes('workable'))).toEqual([WORKABLE('w1')]);
+    // And it cools down: the next crawls leave its boards alone for a while.
+    const workableDue = () =>
+      dueBoards(t.db, clock)
+        .filter((c) => c.ats === 'workable')
+        .map((c) => c.token);
+    later(CRAWL_EVERY_MS);
+    expect(workableDue()).toEqual([]);
+    later(COOLDOWN_MS);
+    expect(workableDue()).toEqual(['w2', 'w3']);
 
     later(DAY);
     await crawl();
@@ -441,6 +477,242 @@ describe('the ATS index', () => {
         .sort(),
     ).toEqual(['index_crawl', 'index_discover']);
   });
+  it('only strategies that search the index flag its jobs, each on its ATSs; one without a title query searches nothing', async () => {
+    know(['greenhouse', 'acme'], ['ashby', 'beta']);
+    reply(GH('acme'), ghBoard(ghJob(1, 'Senior AI Engineer'), ghJob(2, 'Office Manager')));
+    reply(ASHBY('beta'), {
+      jobs: [ashbyJob(1, 'AI Engineer'), ashbyJob(2, 'Data Analyst', { location: 'Berlin' })],
+    });
+    // Every job would be this one's: the index doesn't search for it, nor read for it.
+    const anything = await h.run({
+      name: 'Anything remote',
+      queries: [],
+      locations: ['remote'],
+      sources: ['board:ats-index'],
+    });
+    expect(h.runRow(anything)?.results[0]).toMatchObject({
+      sourceKey: 'board:ats-index',
+      listed: 0,
+      note: 'the ATS index is searched by title: this strategy has no title query',
+    });
+    // One reading other sources doesn't count either.
+    await h.run({ name: 'Elsewhere', queries: ['office manager'], sources: ['board:hn'] });
+    expect(indexWanted(t.db)).toBe(false);
+    await crawl();
+    expect([...jobsOf('acme'), ...jobsOf('beta')].map((j) => [j.matching, j.description])).toEqual([
+      [false, null],
+      [false, null],
+      [false, null],
+      [false, null],
+    ]);
+    expect(company('acme')).toMatchObject({ matching: 0, nextReadAt: fromNow(DAY) });
+
+    // "Greenhouse": the index's Greenhouse boards only.
+    await h.run({ name: 'AI on Greenhouse', queries: ['ai engineer'], sources: ['greenhouse'] });
+    expect(indexWanted(t.db)).toBe(true);
+    later(CRAWL_EVERY_MS);
+    await crawl();
+    expect(jobsOf('acme').map((j) => j.matching)).toEqual([true, false]);
+    expect(jobsOf('beta').map((j) => j.matching)).toEqual([false, false]);
+    // Greenhouse off: that strategy doesn't search the index any more.
+    setSourceEnabled(t.db, 'greenhouse', false);
+    expect(indexWanted(t.db)).toBe(false);
+  });
+
+  it('the index has its own switch: job boards off leave it on', async () => {
+    await strategy(['ai engineer']);
+    know(['greenhouse', 'acme']);
+    reply(GH('acme'), ghBoard(ghJob(1, 'Senior AI Engineer')));
+    await crawl();
+    setSourceEnabled(t.db, 'board', false);
+    expect(indexWanted(t.db)).toBe(true);
+    expect(indexView(t.db, clock).enabled).toBe(true);
+    const run = await h.run({ name: 'All', queries: ['ai engineer'], sources: ['all'] });
+    // The job boards (the searches across companies too) are off; the index isn't.
+    expect(
+      h
+        .runRow(run)
+        ?.results.filter((r) => r.sourceKey.startsWith('board:'))
+        .map((r) => [r.sourceKey, r.listed]),
+    ).toEqual([['board:ats-index', 1]]);
+    setSourceEnabled(t.db, 'board:ats-index', false);
+    expect(indexWanted(t.db)).toBe(false);
+    expect(indexView(t.db, clock).enabled).toBe(false);
+  });
+
+  it("an empty list a search run shares with the crawler's read isn't a second read", async () => {
+    await strategy(['ai engineer']);
+    know(['ashby', 'beta']);
+    reply(ASHBY('beta'), { jobs: [ashbyJob(1, 'AI Engineer'), ashbyJob(2, 'Data Analyst')] });
+    await crawl();
+    const empty = (readAt: Date): BoardRead => ({
+      run: { listings: [], complete: true, note: null, company: null, readAt },
+      error: null,
+      status: null,
+    });
+    const record = (read: BoardRead) =>
+      runInTx(t.db, h.bus, { now: clock }, (tx) =>
+        recordBoardRead(tx, company('beta'), read, activeMatcher(tx.db)),
+      );
+    later(READ_AGAIN_MS.matching);
+    const fetched = clock;
+    record(empty(fetched));
+    expect(company('beta')).toMatchObject({ status: 'empty', jobs: 2 });
+    // A run's read minutes later, from the same fetch: still the one empty list.
+    later(5 * 60_000);
+    record(empty(fetched));
+    expect(company('beta')).toMatchObject({ status: 'empty', jobs: 2 });
+    expect(company('beta').lastNote).toContain('an empty list: its 2 jobs stay');
+    // A fetch of its own since: believed.
+    later(READ_AGAIN_MS.matching);
+    record(empty(clock));
+    expect(company('beta')).toMatchObject({ status: 'empty', jobs: 0 });
+  });
+
+  it("the index's jobs take the new-posting slots the other sources leave", async () => {
+    await strategy(['engineer']);
+    const strategyRow = t.db.select().from(searchStrategies).get();
+    const source = (key: string) => {
+      const row = t.db.select().from(searchSources).where(eq(searchSources.key, key)).get();
+      if (!row) throw new Error(`no source ${key}`);
+      return row;
+    };
+    const index = source('board:ats-index');
+    const hn = source('board:hn');
+    const read = (s: typeof index): SourceRead => ({
+      source: s,
+      run: { listings: [], complete: false, note: null },
+      error: null,
+      resolved: null,
+      company: null,
+      readAt: null,
+      needsRecipe: null,
+      recipe: null,
+    });
+    const listing = (url: string): Listing => ({
+      url,
+      sourceUrl: url,
+      externalId: null,
+      title: 'Engineer',
+      company: 'Acme',
+      location: null,
+      remote: null,
+      team: null,
+      description: null,
+      applyUrl: null,
+      postedAt: null,
+    });
+    const cluster = (sourceId: number, url: string): Cluster => ({
+      postingId: null,
+      canonicalUrl: url,
+      atsKey: null,
+      minhash: null,
+      matchedBy: 'url',
+      candidates: [{ listing: listing(url), sourceId }],
+      locations: [],
+      roleTitle: null,
+    });
+    // The index's backlog comes first in the plan; Hacker News's five new jobs after it.
+    const clusters = [
+      ...Array.from({ length: 60 }, (_, i) =>
+        cluster(index.id, `https://job-boards.greenhouse.io/acme/jobs/${i + 1}`),
+      ),
+      ...Array.from({ length: 5 }, (_, i) =>
+        cluster(hn.id, `https://news.ycombinator.com/item?id=${i + 1}`),
+      ),
+    ];
+    if (!strategyRow) throw new Error('no strategy');
+    runInTx(t.db, h.bus, { now: clock }, (tx) =>
+      commitSearch(tx, {
+        strategy: strategyRow,
+        runId: null,
+        reads: [read(index), read(hn)],
+        clusters,
+      }),
+    );
+    const urls = t.db
+      .select()
+      .from(postings)
+      .all()
+      .map((p) => p.canonicalUrl);
+    expect(urls).toHaveLength(MAX_NEW_PER_RUN);
+    expect(urls.filter((u) => u.includes('ycombinator'))).toHaveLength(5);
+    expect(urls.filter((u) => u.includes('greenhouse'))).toHaveLength(MAX_NEW_PER_RUN - 5);
+  });
+
+  it('postings found on boards the index stops reading are left to their other sources, and re-verified once', async () => {
+    await strategy(['ai engineer']);
+    know(['greenhouse', 'acme']);
+    reply(GH('acme'), ghBoard(ghJob(1, 'Senior AI Engineer')));
+    await crawl();
+    await h.again(1);
+    const posting = t.db.select().from(postings).get();
+    if (!posting) throw new Error('no posting');
+    t.db
+      .update(postings)
+      .set({ stage: 'verified', verifiedAt: new Date(clock.getTime() - 4 * DAY) })
+      .where(eq(postings.id, posting.id))
+      .run();
+    const link = () => h.links(posting.id).find((l) => l.kind === 'ats-index');
+    const verifies = () => h.tasksOf('verify_posting').length;
+    const settle = () => runInTx(t.db, h.bus, { now: clock }, (tx) => settleIndexLinks(tx));
+    // Its board is read: nothing to do.
+    expect(settle().reverify).toBe(0);
+    expect(link()?.closedAt).toBeNull();
+
+    const asked = verifies();
+    setCompanyEnabled(t.db, company('acme').id, false);
+    expect(settle().reverify).toBe(1);
+    expect(link()?.closedAt).toEqual(clock);
+    // Not closed for it: verification decides.
+    expect(h.posting(posting.id)?.stage).toBe('verified');
+    expect(verifies()).toBe(asked + 1);
+    // Once: its link is closed now.
+    expect(settle().reverify).toBe(0);
+
+    // Back in the index, the next run lists it again.
+    setCompanyEnabled(t.db, company('acme').id, true);
+    await h.again(1);
+    expect(link()?.closedAt).toBeNull();
+    // The index off: the link closes; verified a moment ago, it isn't asked again yet.
+    t.db.update(postings).set({ verifiedAt: clock }).where(eq(postings.id, posting.id)).run();
+    setSourceEnabled(t.db, 'board:ats-index', false);
+    expect(settle().reverify).toBe(0);
+    expect(link()?.closedAt).toEqual(clock);
+  });
+
+  it('JOIN boards behind matched jobs and postings join the index, though their jobs have no ATS key', () => {
+    const job = 'https://join.com/companies/acme/16833245-ai-engineer';
+    const added = runInTx(t.db, h.bus, { now: clock }, (tx) =>
+      watchSeen(tx, [
+        {
+          listing: { url: job, applyUrl: null, board: null, title: 'AI Engineer', company: 'Acme' },
+          where: '"AI" matched it on Hacker News',
+        },
+        {
+          // The company's page isn't a job.
+          listing: {
+            url: 'https://join.com/companies/other',
+            applyUrl: null,
+            board: null,
+            title: 'Other',
+            company: null,
+          },
+          where: 'nowhere',
+        },
+      ]),
+    );
+    expect(added.map((c) => [c.ats, c.token, c.name])).toEqual([['join', 'acme', 'Acme']]);
+    t.db
+      .insert(postings)
+      .values({
+        stage: 'found',
+        canonicalUrl: 'https://example.com/job',
+        applyUrl: job.replace('acme', 'beta'),
+      })
+      .run();
+    expect(ownBoards(t.db).map((b) => `${b.board.ats}:${b.board.token}`)).toContain('join:beta');
+  });
 });
 
 // ---- Discovery -------------------------------------------------------------------------------
@@ -470,7 +742,15 @@ function cdxFetch(routes: Record<string, { body: string; fail?: number[] }>): Fe
   return fetch;
 }
 
-const FAST: CdxOptions = { paceMs: 0, backoffMs: [0, 0], crawls: 3, maxPages: 5 };
+const FAST: CdxOptions = {
+  paceMs: 0,
+  backoffMs: [0, 0],
+  crawls: 3,
+  maxPages: 5,
+  stepRequests: 20,
+  stepMs: 60_000,
+  retryAfterMs: [],
+};
 
 const COLLECTIONS = JSON.stringify(
   ['CC-MAIN-2026-30', 'CC-MAIN-2026-39', 'CC-MAIN-2026-26', 'CC-MAIN-2026-35'].map((id) => ({
@@ -549,6 +829,84 @@ describe('discovery', () => {
     expect(fetch.calls.some((u) => u.includes('CC-MAIN-2026-26'))).toBe(false);
   });
 
+  it('read a slice at a time, each going on from where the last left off, it finds the same', async () => {
+    const gh = 'job-boards.greenhouse.io/*';
+    const routes = () =>
+      cdxFetch({
+        [CDX_COLLECTIONS]: { body: COLLECTIONS },
+        [cdx('CC-MAIN-2026-39', gh)]: { body: '{"pages":2}' },
+        [cdx('CC-MAIN-2026-39', gh, 0)]: {
+          body: lines('https://job-boards.greenhouse.io/acme/jobs/1'),
+        },
+        [cdx('CC-MAIN-2026-39', gh, 1)]: {
+          body: lines('https://job-boards.greenhouse.io/beta/jobs/2'),
+          fail: [502],
+        },
+        [cdx('CC-MAIN-2026-35', gh)]: { body: '{"pages":1}' },
+        [cdx('CC-MAIN-2026-35', gh, 0)]: {
+          body: lines(
+            'https://job-boards.greenhouse.io/acme/jobs/3',
+            'https://job-boards.greenhouse.io/gamma',
+          ),
+        },
+      });
+    const whole = await commonCrawlBoards(routes(), new AbortController().signal, FAST);
+    const fetch = routes();
+    // Three requests a slice, the progress stored (as JSON) between slices.
+    let p = newProgress();
+    const boards: string[] = [];
+    let slices = 0;
+    for (let done = false; !done; slices++) {
+      const step = await commonCrawlStep(
+        fetch,
+        new AbortController().signal,
+        { ...FAST, stepRequests: 3 },
+        p,
+        new Date(),
+      );
+      boards.push(...step.boards.map((b) => `${b.ats}:${b.token}`));
+      done = step.done;
+      p = JSON.parse(JSON.stringify(p));
+    }
+    expect(boards).toEqual(whole.boards.map((b) => `${b.ats}:${b.token}`));
+    expect(boards).toEqual(['greenhouse:acme', 'greenhouse:beta', 'greenhouse:gamma']);
+    expect([p.requests, p.failed, p.truncated]).toEqual([
+      whole.requests,
+      whole.failed,
+      whole.truncated,
+    ]);
+    expect(slices).toBe(Math.ceil(whole.requests / 3));
+  });
+
+  it('a pattern whose page count keeps failing is counted again later, then its pages read', async () => {
+    const gh = 'job-boards.greenhouse.io/*';
+    const fetch = cdxFetch({
+      [CDX_COLLECTIONS]: {
+        body: JSON.stringify([{ id: 'CC-MAIN-2026-39', 'cdx-api': API('CC-MAIN-2026-39') }]),
+      },
+      // Three tries (the backoff's two retries) fail; the next slice's succeeds.
+      [cdx('CC-MAIN-2026-39', gh)]: { body: '{"pages":1}', fail: [504, 504, 504] },
+      [cdx('CC-MAIN-2026-39', gh, 0)]: {
+        body: lines('https://job-boards.greenhouse.io/acme/jobs/1'),
+      },
+    });
+    const o = { ...FAST, crawls: 1, stepRequests: 100, retryAfterMs: [HOUR] };
+    const signal = new AbortController().signal;
+    const at = new Date('2026-10-18T10:00:00Z');
+    const p = newProgress();
+    const first = await commonCrawlStep(fetch, signal, o, p, at);
+    expect(first).toMatchObject({ done: false, nextAt: new Date(at.getTime() + HOUR) });
+    expect(p.retry).toMatchObject([{ part: 0, page: null, tries: 1 }]);
+    expect(progressNote(p)).toBe('14 of 15 parts read · 0 boards so far · 1 to retry');
+    // Not due yet: nothing is asked.
+    const asked = fetch.calls.length;
+    expect(await commonCrawlStep(fetch, signal, o, p, at)).toMatchObject({ done: false });
+    expect(fetch.calls.length).toBe(asked);
+    const later = await commonCrawlStep(fetch, signal, o, p, new Date(at.getTime() + HOUR));
+    expect(later.boards.map((b) => b.token)).toEqual(['acme']);
+    expect([later.done, p.retry, p.failed]).toEqual([true, [], []]);
+  });
+
   it('the list of crawls failing leaves an empty result that says why', async () => {
     const fetch = cdxFetch({ [CDX_COLLECTIONS]: { body: '[]', fail: [503, 503, 503] } });
     const res = await commonCrawlBoards(fetch, new AbortController().signal, FAST);
@@ -603,7 +961,15 @@ describe('discovery', () => {
         .from(atsDiscoveries)
         .where(eq(atsDiscoveries.id, id ?? 0))
         .get();
-      expect(row).toMatchObject({ status: 'done', found: 3, added: 3, finishedAt: clock });
+      expect(row).toMatchObject({
+        status: 'done',
+        found: 3,
+        added: 3,
+        finishedAt: clock,
+        progress: null,
+      });
+      // 47 requests (the crawls, each pattern's page count, one page), 20 a slice: three tasks.
+      expect(h.tasksOf('index_discover').map((x) => x.status)).toEqual(['done', 'done', 'done']);
       expect(row?.note).toMatch(
         /^3 new boards of 3 boards found · Applyant's own data: 2 boards · /,
       );
@@ -632,11 +998,20 @@ describe('discovery', () => {
     });
 
     it('runs once by itself when the index is in use, then weekly', async () => {
-      // Its task finishes without looking anywhere: the run stays waiting.
+      // Its task waits until the test lets it finish (without looking anywhere).
+      let finish = () => {};
+      const finished = new Promise<void>((resolve) => {
+        finish = resolve;
+      });
       h = searchHarness(t, {
         fetch: recordedFetch(),
         now: () => clock,
-        handlers: { index_discover: async () => ({ kind: 'done', commit: () => {} }) },
+        handlers: {
+          index_discover: async () => {
+            await finished;
+            return { kind: 'done', commit: () => {} };
+          },
+        },
       });
       const tick = () => runInTx(t.db, h.bus, { now: clock }, (tx) => scheduleDiscovery(tx));
       expect(tick()).toBeNull();
@@ -644,13 +1019,28 @@ describe('discovery', () => {
       const first = tick();
       expect(first).not.toBeNull();
       expect(t.db.select().from(atsDiscoveries).get()?.trigger).toBe('setup');
-      await h.worker.idle();
-      // Still waiting: no second one.
+      // Waiting or running: no second one.
       expect(tick()).toBeNull();
+      finish();
+      await h.worker.idle();
+      // Its task is done but the run never finished: it isn't waiting any more. It reads as
+      // failed at once, the scheduler marks it so, and the next starts a day later.
+      expect(latestDiscoveries(t.db, 1)[0]).toMatchObject({ status: 'failed', note: LOST_NOTE });
+      expect(tick()).toBeNull();
+      expect(t.db.select().from(atsDiscoveries).get()).toMatchObject({
+        status: 'failed',
+        note: LOST_NOTE,
+        finishedAt: clock,
+      });
+      clock = new Date(clock.getTime() + DISCOVER_RETRY_MS);
+      const retry = tick();
+      expect(retry).not.toBeNull();
+      finish();
+      await h.worker.idle();
       t.db
         .update(atsDiscoveries)
         .set({ status: 'done' })
-        .where(eq(atsDiscoveries.id, first ?? 0))
+        .where(eq(atsDiscoveries.id, retry ?? 0))
         .run();
       clock = new Date(clock.getTime() + DISCOVER_EVERY_MS - 1);
       expect(tick()).toBeNull();
@@ -662,7 +1052,79 @@ describe('discovery', () => {
           .from(atsDiscoveries)
           .where(and(eq(atsDiscoveries.trigger, 'schedule')))
           .all(),
-      ).toHaveLength(1);
+      ).toHaveLength(2);
+    });
+
+    it('a part the service keeps failing is tried again an hour later; the row says how far the run got', async () => {
+      const fetch = recordedFetch();
+      const gh = 'job-boards.greenhouse.io/*';
+      const page0 = cdx('CC-MAIN-2026-39', gh, 0);
+      fetch.replies.set(CDX_COLLECTIONS, { body: COLLECTIONS });
+      fetch.replies.set(cdx('CC-MAIN-2026-39', gh), { body: '{"pages":1}' });
+      fetch.replies.set(page0, { status: 502, body: 'busy', contentType: 'text/plain' });
+      h = searchHarness(t, {
+        fetch,
+        now: () => clock,
+        handlers: { index_discover: indexDiscover },
+      });
+      const progress: string[] = [];
+      h.bus.subscribe((e) => {
+        if (e.kind === 'task.progress' && e.message) progress.push(e.message);
+      });
+      const id = runInTx(t.db, h.bus, { now: clock }, (tx) => startDiscovery(tx, 'manual'));
+      await h.worker.idle();
+      const row = () =>
+        t.db
+          .select()
+          .from(atsDiscoveries)
+          .where(eq(atsDiscoveries.id, id ?? 0))
+          .get();
+      // Every other part is read; the failing page waits, and so does the run.
+      expect(row()).toMatchObject({
+        status: 'queued',
+        note: '44 of 45 parts read · 0 boards so far · 1 to retry',
+      });
+      expect(latestDiscoveries(t.db, 1)[0]?.status).toBe('queued');
+      const waiting = h.tasksOf('index_discover').at(-1);
+      expect(waiting).toMatchObject({
+        status: 'queued',
+        runAfter: new Date(clock.getTime() + HOUR),
+      });
+      expect(progress).toContain(
+        'Common Crawl CC-MAIN-2026-39 job-boards.greenhouse.io/* page 1: failed (HTTP 502 (4 tries)); tried again in 60 min',
+      );
+      const asked = fetch.calls.length;
+
+      // An hour later the service answers: only that page is read again.
+      fetch.replies.set(page0, {
+        body: lines('https://job-boards.greenhouse.io/acme/jobs/1'),
+        contentType: 'text/plain',
+      });
+      clock = new Date(clock.getTime() + HOUR);
+      await h.worker.idle();
+      expect(fetch.calls.slice(asked)).toEqual([page0]);
+      expect(row()).toMatchObject({ status: 'done', found: 1, added: 1 });
+      expect(row()?.note).not.toMatch(/failed/);
+    });
+
+    it('a run whose task failed for good is marked failed, and Find More Companies starts another', async () => {
+      h = searchHarness(t, { fetch: recordedFetch(), now: () => clock });
+      const first = runInTx(t.db, h.bus, { now: clock }, (tx) => startDiscovery(tx, 'manual'));
+      // The worker gave up on it (its handler threw every time, or its lease kept expiring).
+      t.db.update(tasks).set({ status: 'failed' }).where(eq(tasks.kind, 'index_discover')).run();
+      const second = runInTx(t.db, h.bus, { now: clock }, (tx) => startDiscovery(tx, 'manual'));
+      expect(second).not.toBeNull();
+      expect(
+        t.db
+          .select()
+          .from(atsDiscoveries)
+          .orderBy(atsDiscoveries.id)
+          .all()
+          .map((d) => [d.id, d.status]),
+      ).toEqual([
+        [first, 'failed'],
+        [second, 'queued'],
+      ]);
     });
   });
 });

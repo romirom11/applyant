@@ -31,6 +31,11 @@ export interface AtsRun extends ReaderRun {
   company: string | null;
   /** Lever: which API host answered (the EU one for EU boards). */
   apiHost?: string;
+  /**
+   * A shared read: when the run that fetched it started. Another run's answer from the same
+   * fetch is the same answer, not a second read of the board.
+   */
+  readAt?: Date;
 }
 
 const LEVER_HOSTS = ['api.lever.co', 'api.eu.lever.co'];
@@ -393,6 +398,9 @@ async function personio(company: string, ctx: ReaderContext): Promise<AtsRun> {
   for (const p of positions)
     if (p.subcompany) counts.set(p.subcompany, (counts.get(p.subcompany) ?? 0) + 1);
   const boardCompany = [...counts].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+  // A position with no title in either language can't be listed: the list is partial then, or
+  // its posting would close now and open again once the title is back.
+  const untitled = positions.filter((p) => !p.name).length;
   const listings = positions.flatMap((p) => {
     if (!p.name) return [];
     // Personio has no remote flag: a remote job is listed at an office named so.
@@ -413,9 +421,9 @@ async function personio(company: string, ctx: ReaderContext): Promise<AtsRun> {
   });
   return {
     listings,
-    complete: true,
+    complete: untitled === 0,
     company: boardCompany,
-    note: `${boardCompany ?? company} on Personio: ${listings.length} jobs`,
+    note: `${boardCompany ?? company} on Personio: ${listings.length} jobs${untitled ? ` (partial: ${untitled} without a title)` : ''}`,
   };
 }
 
@@ -490,6 +498,7 @@ async function teamtailor(company: string, ctx: ReaderContext): Promise<AtsRun> 
   let next: string | null = `https://${host}/jobs.json`;
   let cut = false;
   for (let page = 0; next && page < TT_MAX_PAGES; page++) {
+    await ctx.shared?.turn('teamtailor', ctx.signal);
     const { data }: { data: Node | null } = await getJson<Node>(ctx.fetch, next, ctx.signal);
     if (!data || !Array.isArray(data.items))
       throw new Error(`Teamtailor company ${company}: no job list`);
@@ -543,7 +552,9 @@ const JOIN_MAX_PAGES = 60;
 async function join(slug: string, ctx: ReaderContext): Promise<AtsRun> {
   const s = encodeURIComponent(slug);
   // The company page (404 for an unknown slug) carries the company's numeric id in its
-  // Next.js data; the list API takes only that id.
+  // Next.js data; the list API takes only that id. Every request waits its turn in JOIN's lane:
+  // one board is up to 61 of them.
+  await ctx.shared?.turn('join', ctx.signal);
   const page = await get(ctx.fetch, `https://join.com/companies/${s}`, ctx.signal, {
     accept: 'text/html',
   });
@@ -561,6 +572,7 @@ async function join(slug: string, ctx: ReaderContext): Promise<AtsRun> {
   let total = 0;
   let pages = 1;
   for (let n = 1; n <= pages && n <= JOIN_MAX_PAGES; n++) {
+    await ctx.shared?.turn('join', ctx.signal);
     const { data } = await getJson<Node>(
       ctx.fetch,
       `https://join.com/api/public/companies/${id}/jobs?page=${n}&pageSize=${JOIN_PAGE}`,
@@ -648,7 +660,8 @@ async function breezy(company: string, ctx: ReaderContext): Promise<AtsRun> {
 /**
  * A board's list, shared with the other runs that read it within BOARD_READ_MS (`ctx.shared`):
  * several strategies read the same watched boards, and job searches look up boards too.
- * Workable's are read in its lane, paced (see shared.ts).
+ * Workable's are read in its lane, paced, and JOIN's and Teamtailor's requests in theirs (see
+ * shared.ts). A shared read says when it was fetched (`readAt`).
  */
 export function readAtsBoardShared(
   ats: Ats,
@@ -656,12 +669,12 @@ export function readAtsBoardShared(
   ctx: ReaderContext,
   o: { apiHost?: string | undefined } = {},
 ): Promise<AtsRun> {
-  const read = async () => {
+  const read = async (): Promise<AtsRun> => {
     if (ats === 'workable') await ctx.shared?.turn('workable', ctx.signal);
-    return readAtsBoard(ats, token, ctx, o);
+    return { ...(await readAtsBoard(ats, token, ctx, o)), readAt: ctx.now };
   };
   return ctx.shared
-    ? ctx.shared.memo(`ats:${ats}:${token.toLowerCase()}`, BOARD_READ_MS, ctx.now, read)
+    ? ctx.shared.memo(`ats:${ats}:${token.toLowerCase()}`, BOARD_READ_MS, ctx.now, read, ctx.signal)
     : read();
 }
 

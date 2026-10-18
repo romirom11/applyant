@@ -18,9 +18,16 @@ index, and cost money.
 2. **Discovery** (`index_discover`, weekly and on demand): finds boards in Common Crawl's URL
    index (CDX API: free, robots-respecting, a month of the web per crawl), behind postings and
    their apply links, in the planner's results and in the Workable/SmartRecruiters job searches.
+   A run (up to ~1.8k paced requests) is read a slice at a time, each slice its own short task
+   that adds what it found and leaves its progress on the run's row, so a worker isn't held for
+   an hour and a restart goes on where it stopped. A request the overloaded service still fails
+   after its backoff is tried again by a later slice an hour or two on, a few times. A run whose
+   task is gone is marked failed, and the next one starts a day later.
 3. **The crawler** (`index_crawl`, every few minutes): reads the boards that are due, a budget
-   per ATS per tick, politely paced; the list endpoints are the light ones (Greenhouse without
-   `content=true`). How soon a board is read again depends on what it holds:
+   per ATS per tick (small for JOIN and Teamtailor, whose boards are read a page at a time),
+   politely paced; the list endpoints are the light ones (Greenhouse without `content=true`). An
+   ATS that answers 429 cools down for half an hour. How soon a board is read again depends on
+   what it holds:
 
    | board                                   | read again |
    |-----------------------------------------|------------|
@@ -32,11 +39,15 @@ index, and cost money.
 
 4. **Search over the index**: the built-in source `board:ats-index`. A strategy run asks the
    local store for the open jobs its queries and locations match (no network), each listing
-   carrying its board and company. Partial (it's a search), so absence doesn't close through
+   carrying its board and company. Only strategies with a title query search it (and only they
+   decide which jobs are "matching"). Partial (it's a search), so absence doesn't close through
    it; the crawler's complete board reads do: a job gone from its board closes (or re-verifies)
-   the postings linked through the index, by the same rules as absence.ts.
+   the postings linked through the index, by the same rules as absence.ts. When the index stops
+   reading a board, the postings it found there lose their index link and get absence's partial
+   rule. The index's new jobs take the slots a run's other sources leave.
 5. **The kind switches apply to the index**: "Greenhouse off" means its boards are neither read
-   nor searched. The candidate can also leave single companies out.
+   nor searched. The index itself has its own switch (it isn't a job board: "Job boards off"
+   leaves it on). The candidate can also leave single companies out.
 6. **More ATSs** for DACH and the rest of Europe: Personio (`<co>.jobs.personio.de/xml`),
    Recruitee (`<co>.recruitee.com/api/offers/`), Teamtailor (`<co>.teamtailor.com/jobs.json`),
    JOIN, Breezy, as source kinds, in career-page detection and in the index.

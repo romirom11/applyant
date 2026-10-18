@@ -71,7 +71,7 @@ struct SourcesList: View {
                 Text("All companies").textRole(.rowTitle, color: on ? Theme.text : Theme.secondaryText)
                 Text(index.map(SourcesText.indexLine) ?? (store.atsIndexProblem == nil ? "Loading…" : "Not available yet"))
                     .textRole(.meta).lineLimit(1)
-                if let d = index?.discoveries.first, d.status == "queued" {
+                if SourcesText.discovering(index) {
                     ChipView(chip: Chip(text: "Finding companies…", tone: .accent, live: true)).padding(.top, 2)
                 }
             }
@@ -146,7 +146,7 @@ private struct SourceGroupView: View {
     private func kindSwitch(_ kind: Applyant_V1_SearchSourceKind) -> some View {
         let title = SourcesText.kindTitle(kind.kind, label: kind.label)
         let off = kind.kind == "board"
-            ? "Switch every job board off (the searches across companies and the index are boards too)"
+            ? "Switch every job board off (the searches across companies are boards too; the index has its own switch)"
             : SourcesText.isAts(kind.kind)
                 ? "Switch every \(title) source off, its companies in the index too"
                 : "Switch every \(title) source off"

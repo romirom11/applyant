@@ -321,6 +321,15 @@ export function validateSelectors(conn: Conn, selectors: string[]): string[] {
 }
 
 /**
+ * Whether a source's kind switch applies to it. The ATS index (board:ats-index) has only its own
+ * switch: it isn't a job board, and "Job boards off" leaves it alone (its ATSs' kinds still take
+ * their boards out of it).
+ */
+function kindOn(off: Set<SearchSourceKind>, s: Pick<SearchSourceRow, 'key' | 'kind'>): boolean {
+  return s.key === INDEX_SOURCE_KEY || !off.has(s.kind);
+}
+
+/**
  * The sources a strategy queries now: selected, switched on, and of a kind that's on. Company
  * boards and career pages come before job boards: their listings are the posting's own page,
  * and they get the run's new-posting slots first.
@@ -335,7 +344,7 @@ export function sourcesFor(conn: Conn, selectors: string[]): SearchSourceRow[] {
       .from(searchSources)
       .where(eq(searchSources.enabled, true))
       .all()
-      .filter((s) => !off.has(s.kind) && selectors.some((sel) => selects(sel, s)))
+      .filter((s) => kindOn(off, s) && selectors.some((sel) => selects(sel, s)))
       // The index for "Greenhouse" boards only while that kind is on.
       .filter(
         (s) =>
@@ -424,7 +433,7 @@ export function listSources(conn: Conn): { sources: SourceView[]; kinds: KindVie
           ...s,
           lastNote: needsSignIn && isPlatformKind(s.kind) ? signInNote(s.kind) : s.lastNote,
           needsSignIn,
-          kindEnabled: !off.has(s.kind),
+          kindEnabled: kindOn(off, s),
           completeList: completeList(s.kind, s.resolved ?? null),
           stats: stats.get(s.id) ?? NO_STATS,
         };

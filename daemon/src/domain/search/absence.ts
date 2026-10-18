@@ -9,6 +9,9 @@
 //                 strategy found through this source, at most once per REVERIFY_AFTER_MS, and
 //                 not while a complete list read in that time (the company's board) still
 //                 lists them: that list says when they close.
+//   the ATS index: its links close by its boards' complete reads, and when it stops reading a
+//                 board (ats-index/store.ts); a posting no complete list still has then gets
+//                 the partial rule.
 import { and, eq, gt, inArray, isNotNull, isNull, ne } from 'drizzle-orm';
 import {
   type PostingSourceRow,
@@ -81,6 +84,24 @@ function verifyBusy(tx: Tx, postingId: number): boolean {
       ),
     )
     .get();
+}
+
+/**
+ * The partial rule for one posting a source no longer vouches for: verify_posting, so
+ * posting_liveness decides. Only a posting already checked, at most once per REVERIFY_AFTER_MS,
+ * and not while a complete list read in that time (another source than `exceptSourceId`) still
+ * lists it. True when it was asked for.
+ */
+export function reverifyMissing(tx: Tx, postingId: number, exceptSourceId: number | null): boolean {
+  const posting = tx.db.select().from(postings).where(eq(postings.id, postingId)).get();
+  if (!posting || !CHECKED_STAGES.includes(posting.stage)) return false;
+  const due = new Date(tx.now.getTime() - REVERIFY_AFTER_MS);
+  if (posting.verifiedAt && posting.verifiedAt > due) return false;
+  if (verifyBusy(tx, posting.id) || onCompleteList(tx, posting.id, exceptSourceId ?? -1, due)) {
+    return false;
+  }
+  tx.enqueue('verify_posting', posting.id);
+  return true;
 }
 
 /** Opens a posting closed by absence again: it is found, and verified from scratch. */
@@ -188,9 +209,8 @@ export function applyAbsence(tx: Tx, input: AbsenceInput): AbsenceResult {
 
   // Partial or failed: re-verify what this strategy found here and the source didn't list.
   const links = tx.db
-    .select({ link: postingSources, posting: postings })
+    .select({ link: postingSources })
     .from(postingSources)
-    .innerJoin(postings, eq(postings.id, postingSources.postingId))
     .innerJoin(
       strategyPostings,
       and(
@@ -200,9 +220,8 @@ export function applyAbsence(tx: Tx, input: AbsenceInput): AbsenceResult {
     )
     .where(eq(postingSources.searchSourceId, input.sourceId))
     .all();
-  const due = tx.now.getTime() - REVERIFY_AFTER_MS;
   const asked = new Set<number>();
-  for (const { link, posting } of links) {
+  for (const { link } of links) {
     if (listed(link)) {
       tx.db
         .update(postingSources)
@@ -211,13 +230,9 @@ export function applyAbsence(tx: Tx, input: AbsenceInput): AbsenceResult {
         .run();
       continue;
     }
-    if (asked.has(posting.id) || !CHECKED_STAGES.includes(posting.stage)) continue;
-    if (posting.verifiedAt && posting.verifiedAt.getTime() > due) continue;
-    if (verifyBusy(tx, posting.id) || onCompleteList(tx, posting.id, input.sourceId, new Date(due)))
-      continue;
-    tx.enqueue('verify_posting', posting.id);
-    asked.add(posting.id);
-    result.reverify++;
+    if (asked.has(link.postingId)) continue;
+    asked.add(link.postingId);
+    if (reverifyMissing(tx, link.postingId, input.sourceId)) result.reverify++;
   }
   return result;
 }

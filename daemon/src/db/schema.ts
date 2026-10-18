@@ -4,6 +4,7 @@ import { sql } from 'drizzle-orm';
 import { index, integer, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 import type { FieldSpec, FormRead } from '../browser/form-types.ts';
 import type { Component, RoleFit, StoredExtraction, StoredMatch } from '../domain/scoring/types.ts';
+import type { DiscoveryProgress } from '../domain/search/ats-index/discover.ts';
 import type { Ats } from '../domain/search/readers/ats-embed.ts';
 import {
   type ListingRecipe,
@@ -474,6 +475,8 @@ export const atsJobs = sqliteTable(
   (t) => [
     uniqueIndex('ats_jobs_company_key').on(t.companyId, t.key),
     index('ats_jobs_open').on(t.matching, t.companyId).where(sql`closed_at is null`),
+    // A posting's link through the index is its job page: which board's job it is.
+    index('ats_jobs_url').on(t.url),
   ],
 );
 
@@ -493,6 +496,8 @@ export const atsDiscoveries = sqliteTable('ats_discoveries', {
   found: integer('found').notNull().default(0),
   added: integer('added').notNull().default(0),
   note: text('note'),
+  /** How far it got: a run is read a slice at a time, each its own task, and resumes here. */
+  progress: text('progress', { mode: 'json' }).$type<DiscoveryProgress>(),
 });
 
 /**

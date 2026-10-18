@@ -9,12 +9,14 @@
 //                   empty list for a board that had jobs only when a second read says so too),
 //                   and with them, by the absence rules, the postings found through the index
 //                   · counts, status and the next read by what the board holds
-//   matching        a job any active strategy's queries and locations match keeps a capped
-//                   description; a strategy run scans only those while the flags are current
-//                   for the strategies (`matchingCurrent`), and a crawl flags them again after
-//                   a strategy changed
+//   matching        a job an active strategy that searches the index (on that ATS, with a
+//                   title query) matches keeps a capped description; a strategy run scans only
+//                   those while the flags are current for the strategies (`matchingCurrent`),
+//                   and a crawl flags them again after a strategy changed
 //   search          board:ats-index: the open jobs of enabled boards of kinds that are on,
 //                   newest first, without the boards the run reads itself
+//   links           postings found on boards the index no longer reads lose their index link,
+//                   and are re-verified by absence's partial rule (`settleIndexLinks`)
 import { and, desc, eq, inArray, isNull, lt, sql } from 'drizzle-orm';
 import type { Conn } from '../../../db/client.ts';
 import {
@@ -28,13 +30,13 @@ import {
   searchStrategies,
 } from '../../../db/schema.ts';
 import type { Tx } from '../../../queue/types.ts';
-import { type AbsenceResult, listedAgain, unlisted } from '../absence.ts';
+import { type AbsenceResult, listedAgain, reverifyMissing, unlisted } from '../absence.ts';
 import type { AtsRun } from '../readers/ats-api.ts';
 import { ATS_KINDS, type Ats, type AtsBoard } from '../readers/ats-embed.ts';
 import { INDEX_SOURCE_KEY } from '../readers/boards.ts';
 import type { Listing } from '../readers/types.ts';
 import { isAts, kindsOff, selects } from '../sources.ts';
-import { matchesStrategy } from '../strategies.ts';
+import { hasTitleQuery, matchesStrategy } from '../strategies.ts';
 
 /** posting_sources.kind of a listing the index gave: its board's complete reads close it. */
 export const INDEX_LINK_KIND = 'ats-index';
@@ -148,52 +150,81 @@ export function findCompany(conn: Conn, board: AtsBoard): AtsCompanyRow | null {
   );
 }
 
-/**
- * The index is in use: its source is on (and the job boards' kind), and an active strategy
- * reads it. Otherwise nothing is crawled or discovered by itself.
- */
-export function indexWanted(conn: Conn): boolean {
-  const source = conn
-    .select()
-    .from(searchSources)
-    .where(eq(searchSources.key, INDEX_SOURCE_KEY))
-    .get();
-  if (!source?.enabled || kindsOff(conn).has(source.kind)) return false;
-  return conn
-    .select({ sources: searchStrategies.sources })
-    .from(searchStrategies)
-    .where(eq(searchStrategies.state, 'active'))
-    .all()
-    .some((s) => s.sources.some((sel) => selects(sel, source)));
-}
-
 /** The ATSs whose kind is on. */
 export function atsOn(conn: Conn): Ats[] {
   const off = kindsOff(conn);
   return ATS_KINDS.filter((k) => !off.has(k));
 }
 
+/** An active strategy that searches the index: what it matches, and on which ATSs. */
+export interface IndexReader {
+  queries: string[];
+  locations: string[];
+  ats: Ats[];
+}
+
+/**
+ * The active strategies that search the index, each with the ATSs it searches there (of those
+ * that are on). The index has its own switch (it isn't a job board: the job boards' kind leaves
+ * it alone), and a strategy without a title query doesn't search it (it would match every job).
+ */
+export function indexReaders(conn: Conn): IndexReader[] {
+  const source = conn
+    .select()
+    .from(searchSources)
+    .where(eq(searchSources.key, INDEX_SOURCE_KEY))
+    .get();
+  if (!source?.enabled) return [];
+  const on = atsOn(conn);
+  return conn
+    .select({
+      sources: searchStrategies.sources,
+      queries: searchStrategies.queries,
+      locations: searchStrategies.locations,
+    })
+    .from(searchStrategies)
+    .where(eq(searchStrategies.state, 'active'))
+    .all()
+    .flatMap((s) => {
+      if (!hasTitleQuery(s.queries) || !s.sources.some((sel) => selects(sel, source))) return [];
+      const asked = indexAtsFor(s.sources);
+      const ats = asked ? on.filter((k) => asked.includes(k)) : on;
+      return ats.length ? [{ queries: s.queries, locations: s.locations, ats }] : [];
+    });
+}
+
+/**
+ * The index is in use: an active strategy searches it on an ATS that's on. Otherwise nothing
+ * is crawled or discovered by itself.
+ */
+export function indexWanted(conn: Conn): boolean {
+  return indexReaders(conn).length > 0;
+}
+
 // ---- Matching ----------------------------------------------------------------------------
 
 export interface Matcher {
-  /** The active strategies' queries and locations: the flags are current for this key. */
+  /** The index's readers (indexReaders): the flags are current for this key. */
   key: string;
-  matches(l: Listing): boolean;
+  matches(l: Listing, ats: Ats): boolean;
 }
 
 const MATCHING_KEY = 'ats_index_matching';
 
-/** Whether any active strategy wants a job. */
+/** Whether a strategy that searches the index wants a job of that ATS. */
 export function activeMatcher(conn: Conn): Matcher {
-  const strategies = conn
-    .select({ queries: searchStrategies.queries, locations: searchStrategies.locations })
-    .from(searchStrategies)
-    .where(eq(searchStrategies.state, 'active'))
-    .all();
+  const readers = indexReaders(conn);
   const key = JSON.stringify(
-    strategies.map((s) => JSON.stringify([[...s.queries].sort(), [...s.locations].sort()])).sort(),
+    readers
+      .map((r) =>
+        JSON.stringify([[...r.ats].sort(), [...r.queries].sort(), [...r.locations].sort()]),
+      )
+      .sort(),
   );
-  return { key, matches: (l) => strategies.some((s) => matchesStrategy(l, s)) };
+  return {
+    key,
+    matches: (l, ats) => readers.some((r) => r.ats.includes(ats) && matchesStrategy(l, r)),
+  };
 }
 
 /** The strategies the jobs' `matching` flags were last set for. */
@@ -243,21 +274,26 @@ export function rematchJobs(conn: Conn, matcher: Matcher): Rematch {
       location: atsJobs.location,
       remote: atsJobs.remote,
       matching: atsJobs.matching,
+      ats: atsCompanies.ats,
     })
     .from(atsJobs)
+    .innerJoin(atsCompanies, eq(atsCompanies.id, atsJobs.companyId))
     .where(isNull(atsJobs.closedAt))
     .all();
-  for (const r of rows) {
-    const m = matcher.matches({
-      url: '',
-      sourceUrl: '',
-      externalId: null,
-      company: null,
-      description: null,
-      applyUrl: null,
-      postedAt: null,
-      ...r,
-    });
+  for (const { ats, ...r } of rows) {
+    const m = matcher.matches(
+      {
+        url: '',
+        sourceUrl: '',
+        externalId: null,
+        company: null,
+        description: null,
+        applyUrl: null,
+        postedAt: null,
+        ...r,
+      },
+      ats,
+    );
     if (m !== r.matching) (m ? out.on : out.off).push(r.id);
   }
   return out;
@@ -470,7 +506,7 @@ export function recordBoardRead(
     if (seen.has(key)) continue;
     seen.add(key);
     seenUrls.push(l.url);
-    const matching = matcher.matches(l);
+    const matching = matcher.matches(l, company.ats);
     const values = {
       url: l.url,
       title: l.title,
@@ -513,8 +549,14 @@ export function recordBoardRead(
   if (run.complete) {
     const missing = [...known.values()].filter((j) => !j.closedAt && !seen.has(j.key));
     // An empty "complete" list from a board that had jobs is more likely a broken board than
-    // every job closing at once: a second empty read in a row is believed.
-    if (run.listings.length === 0 && missing.length > 0 && company.status !== 'empty') {
+    // every job closing at once: a second empty read in a row is believed, if it is a second
+    // fetch. A search run's read shared with the crawler's (shared.ts) is the same answer.
+    const fetchedSince = !run.readAt || !company.lastReadAt || run.readAt > company.lastReadAt;
+    if (
+      run.listings.length === 0 &&
+      missing.length > 0 &&
+      (company.status !== 'empty' || !fetchedSince)
+    ) {
       trusted = false;
       note =
         `${note ?? ''} (an empty list: its ${missing.length} jobs stay until the next read says so too)`.trim();
@@ -571,6 +613,66 @@ export function recordWatchedRead(
   const company = findCompany(tx.db, input.board);
   if (!company?.enabled) return;
   recordBoardRead(tx, company, { run: input.run, error: null, status: null }, matcher);
+}
+
+// ---- Links of boards the index no longer reads -------------------------------------------
+
+/** The ATSs the index reads for some strategy now (indexReaders). */
+function indexedAts(conn: Conn): Ats[] {
+  return [...new Set(indexReaders(conn).flatMap((r) => r.ats))];
+}
+
+/**
+ * Postings the index found on boards it no longer reads (the company or its ATS switched off,
+ * the index off, no active strategy searching it there): the index can't say any more whether
+ * they're open. Their index links close (the boards' complete reads would close them; nothing
+ * reads those now), so the other sources that list them decide, as absence.ts has them do. A
+ * posting left without a complete list that still has it is re-verified by absence's partial
+ * rule: at most once per REVERIFY_AFTER_MS. Never closed for it; a board read again lists its
+ * jobs again (listedAgain).
+ */
+export function settleIndexLinks(tx: Tx): AbsenceResult {
+  const res: AbsenceResult = { closed: 0, reopened: 0, reverify: 0 };
+  const open = tx.db
+    .select()
+    .from(postingSources)
+    .where(and(eq(postingSources.kind, INDEX_LINK_KIND), isNull(postingSources.closedAt)))
+    .all();
+  if (open.length === 0) return res;
+  const ats = indexedAts(tx.db);
+  const urls = [...new Set(open.map((l) => l.url))];
+  const read = new Set(
+    ats.length === 0
+      ? []
+      : chunks(urls).flatMap((part) =>
+          tx.db
+            .select({ url: atsJobs.url })
+            .from(atsJobs)
+            .innerJoin(atsCompanies, eq(atsCompanies.id, atsJobs.companyId))
+            .where(
+              and(
+                inArray(atsJobs.url, part),
+                eq(atsCompanies.enabled, true),
+                inArray(atsCompanies.ats, ats),
+              ),
+            )
+            .all()
+            .map((r) => r.url),
+        ),
+  );
+  const asked = new Set<number>();
+  for (const link of open) {
+    if (read.has(link.url)) continue;
+    tx.db
+      .update(postingSources)
+      .set({ closedAt: tx.now })
+      .where(eq(postingSources.id, link.id))
+      .run();
+    if (asked.has(link.postingId)) continue;
+    asked.add(link.postingId);
+    if (reverifyMissing(tx, link.postingId, link.searchSourceId)) res.reverify++;
+  }
+  return res;
 }
 
 // ---- Search ------------------------------------------------------------------------------

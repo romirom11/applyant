@@ -2,16 +2,18 @@
 // scripts/search-fixtures.ts: real public lists, trimmed to a few jobs) and a few synthetic
 // career pages. Nothing here touches the network.
 import { describe, expect, it } from 'vitest';
-import { readAtsBoard } from '../src/domain/search/readers/ats-api.ts';
+import { readAtsBoard, readAtsBoardShared } from '../src/domain/search/readers/ats-api.ts';
 import {
   atsJobKey,
   atsJobPage,
   boardFromUrl,
   detectAtsBoard,
+  jobPageBoard,
 } from '../src/domain/search/readers/ats-embed.ts';
 import { hnFirstLine, hnJobLink, readBoard } from '../src/domain/search/readers/boards.ts';
 import { feedLinks, parseFeed } from '../src/domain/search/readers/feed.ts';
 import { NeedsRecipeError, readPage } from '../src/domain/search/readers/page.ts';
+import { SharedReads } from '../src/domain/search/readers/shared.ts';
 import { plainText, type ReaderContext } from '../src/domain/search/readers/types.ts';
 import { fixtureJson, type RecordedFetch, recordedFetch } from './helpers/search.ts';
 
@@ -616,6 +618,30 @@ describe('European ATS boards (recorded)', () => {
     expect(run.listings[0]?.description).toMatch(/^The Role: How you'll make an impact/);
   });
 
+  it('Personio: a position with no title in either language makes the list partial', async () => {
+    const xml = (...positions: string[]) =>
+      `<?xml version="1.0" encoding="UTF-8"?><workzag-jobs>${positions.join('')}</workzag-jobs>`;
+    const position = (id: number, name?: string) =>
+      `<position><id>${id}</id>${name ? `<name>${name}</name>` : ''}<office>Berlin</office></position>`;
+    const board = 'https://acme.jobs.personio.de/xml';
+    const fetch = recordedFetch({
+      [board]: { body: xml(position(1, 'AI Engineer'), position(2)), contentType: 'text/xml' },
+      [`${board}?language=en`]: { status: 503, body: 'down', contentType: 'text/plain' },
+    });
+    const run = await readAtsBoard('personio', 'acme', ctx(fetch));
+    // Job 2 isn't listed, and isn't gone either: absence mustn't close it.
+    expect(run.listings.map((l) => l.externalId)).toEqual(['1']);
+    expect(run.complete).toBe(false);
+    expect(run.note).toBe('acme on Personio: 1 jobs (partial: 1 without a title)');
+    // The English list names it: complete again.
+    fetch.replies.set(`${board}?language=en`, {
+      body: xml(position(1, 'AI Engineer'), position(2, 'Data Engineer')),
+      contentType: 'text/xml',
+    });
+    const both = await readAtsBoard('personio', 'acme', ctx(fetch));
+    expect([both.complete, both.listings.length]).toEqual([true, 2]);
+  });
+
   it('Recruitee: the offers, on the career site with the Recruitee page beside', async () => {
     const run = await readAtsBoard('recruitee', 'channable', ctx(recordedFetch()));
     expect(run).toMatchObject({ complete: true, company: 'Channable' });
@@ -712,6 +738,20 @@ describe('European ATS boards (recorded)', () => {
     });
   });
 
+  it("JOIN's and Teamtailor's requests each wait their turn in the ATS's lane", async () => {
+    class Lanes extends SharedReads {
+      turns: string[] = [];
+      override async turn(lane: string): Promise<void> {
+        this.turns.push(lane);
+      }
+    }
+    const shared = new Lanes();
+    await readAtsBoard('join', 'join', { ...ctx(recordedFetch()), shared });
+    await readAtsBoard('teamtailor', 'eworgmbh', { ...ctx(recordedFetch()), shared });
+    // JOIN: its company page, then one page of jobs; Teamtailor: each of its three pages.
+    expect(shared.turns).toEqual(['join', 'join', 'teamtailor', 'teamtailor', 'teamtailor']);
+  });
+
   it('Breezy: the verbose JSON list', async () => {
     const run = await readAtsBoard('breezy', 'breezy', ctx(recordedFetch()));
     expect(run).toMatchObject({ complete: true, company: 'MS Breezy Trial' });
@@ -789,9 +829,68 @@ describe('European ATS boards (recorded)', () => {
     );
     // JOIN's job addresses take a new number at each republishing: no key.
     expect(atsJobKey('https://join.com/companies/acme/16833245-engineering-manager')).toBeNull();
+    // A job page names its board all the same (a front page or another link doesn't).
+    expect(jobPageBoard('https://join.com/companies/acme/16833245-engineering-manager')).toEqual({
+      ats: 'join',
+      token: 'acme',
+    });
+    expect(jobPageBoard('https://join.com/companies/acme')).toBeNull();
+    expect(jobPageBoard('https://join.com/companies/acme/about')).toBeNull();
+    expect(jobPageBoard('https://acme.teamtailor.com/jobs/8558035-ai-engineer')).toEqual({
+      ats: 'teamtailor',
+      token: 'acme',
+    });
+    expect(jobPageBoard('https://acme.teamtailor.com/jobs')).toBeNull();
     expect(atsJobKey('https://acme.teamtailor.com/jobs')).toBeNull();
     expect(atsJobPage('https://acme.recruitee.com/o/backend-engineer-2/c/new')).toBe(
       'https://acme.recruitee.com/o/backend-engineer-2',
     );
+  });
+});
+
+describe('shared board reads', () => {
+  const ASHBY = 'https://api.ashbyhq.com/posting-api/job-board/acme?includeCompensation=true';
+  const board = { jobs: [] };
+
+  it('a read shared with an earlier run says when that run fetched it', async () => {
+    const fetch = recordedFetch({ [ASHBY]: board });
+    const shared = new SharedReads();
+    const first = await readAtsBoardShared('ashby', 'acme', { ...ctx(fetch), shared });
+    const later = new Date(now.getTime() + 60_000);
+    const second = await readAtsBoardShared('ashby', 'acme', {
+      ...ctx(fetch),
+      now: later,
+      shared,
+    });
+    expect(fetch.calls).toEqual([ASHBY]);
+    expect([first.readAt, second.readAt]).toEqual([now, now]);
+  });
+
+  it('another run stopped while reading a shared board: this run reads it for itself', async () => {
+    let calls = 0;
+    const stopped = new AbortController();
+    const fetch = (async (_url: string, init?: RequestInit) => {
+      calls++;
+      // The first read hangs until its run is stopped.
+      if (calls === 1) {
+        return new Promise<Response>((_, reject) =>
+          init?.signal?.addEventListener('abort', () => reject(init.signal?.reason)),
+        );
+      }
+      return new Response(JSON.stringify(board), {
+        headers: { 'content-type': 'application/json' },
+      });
+    }) as RecordedFetch;
+    const shared = new SharedReads();
+    const theirs = readAtsBoardShared('ashby', 'acme', {
+      ...ctx(fetch),
+      signal: stopped.signal,
+      shared,
+    });
+    const mine = readAtsBoardShared('ashby', 'acme', { ...ctx(fetch), shared });
+    stopped.abort(new Error('paused'));
+    await expect(theirs).rejects.toThrow();
+    await expect(mine).resolves.toMatchObject({ complete: true, listings: [] });
+    expect(calls).toBe(2);
   });
 });

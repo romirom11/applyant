@@ -134,6 +134,10 @@ func indexCompany(_ id: Int64, _ token: String, ats: String = "greenhouse", stat
         #expect(SourcesText.indexOn(i, list: SearchList()))
         #expect(SourcesText.indexOn(nil, list: everySource()))
         #expect(!SourcesText.indexOn(nil, list: SearchList()))
+        // Only its own switch: "Job boards" off leaves the index on.
+        var boardsOff = everySource()
+        for i in boardsOff.sources.indices where boardsOff.sources[i].kind == "board" { boardsOff.sources[i].kindEnabled = false }
+        #expect(SourcesText.indexOn(nil, list: boardsOff))
     }
 
     @Test func discoveryRunsReadInOneLine() {
@@ -147,6 +151,12 @@ func indexCompany(_ id: Int64, _ token: String, ats: String = "greenhouse", stat
         d.status = "failed"
         #expect(SourcesText.discoveryLine(d) == "The last discovery failed")
         #expect(!SourcesText.discovering(index()) && !SourcesText.discovering(nil))
+        // A run the daemon reads as failed (its task gone) doesn't hold Find More Companies.
+        var i = index()
+        i.discoveries = [.with { $0.status = "queued" }]
+        #expect(SourcesText.discovering(i))
+        i.discoveries = [.with { $0.status = "failed"; $0.note = "stopped: its task failed or was lost (the next discovery starts again)" }]
+        #expect(!SourcesText.discovering(i))
         #expect(SourcesText.indexUnavailable("this needs a newer Applyant (its background service is older than the app)").hasPrefix("Applyant's background service is older than the app"))
         #expect(SourcesText.indexUnavailable("disk full") == "Applyant's background service couldn't give it: disk full. The sources on the left read as before.")
         // A built-in board off by default says why under its name.

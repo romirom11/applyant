@@ -3,16 +3,19 @@
 //   scheduler  a crawl every CRAWL_EVERY_MS while the index is in use (an active strategy reads
 //              board:ats-index), something is due and background work isn't paused
 //   slow       per ATS whose kind is on, at most its budget of due boards, read through the
-//              light list APIs (Greenhouse without descriptions), a few at a time per ATS and
-//              Workable's one at a time in its paced lane; an ATS that answers 429 isn't asked
-//              again this run · after a strategy changed, every open job's `matching` again
-//   commit     each read into the store (store.ts: jobs, closing, status, next read)
+//              light list APIs (Greenhouse without descriptions), a few at a time per ATS;
+//              Workable's, JOIN's and Teamtailor's one at a time in their paced lanes
+//              (shared.ts) · an ATS that answers 429 isn't asked again this run · after a
+//              strategy changed, every open job's `matching` again
+//   commit     each read into the store (store.ts: jobs, closing, status, next read) · an ATS
+//              that answered 429 cools down: none of its boards is read for COOLDOWN_MS
 //
-// The budgets keep a crawl polite: about 190 requests every five minutes across five hosts,
-// enough to read 20k boards on their schedules.
+// The budgets keep a crawl polite: about 300 requests every five minutes across ten hosts
+// (a JOIN board is one request per five jobs, a Teamtailor board one per hundred), enough to
+// read 20k boards on their schedules.
 import { and, eq, inArray, lte, max } from 'drizzle-orm';
 import type { Conn } from '../../../db/client.ts';
-import { type AtsCompanyRow, atsCompanies, tasks } from '../../../db/schema.ts';
+import { type AtsCompanyRow, appState, atsCompanies, tasks } from '../../../db/schema.ts';
 import type { Handler, Tx } from '../../../queue/types.ts';
 import { readAtsBoard, readAtsBoardShared } from '../readers/ats-api.ts';
 import type { Ats } from '../readers/ats-embed.ts';
@@ -36,29 +39,63 @@ import {
 /** A crawl starts at most this often. */
 export const CRAWL_EVERY_MS = 5 * 60_000;
 
-/** Boards per ATS one crawl reads; an ATS not listed gets DEFAULT_BUDGET. */
-export const CRAWL_BUDGET: Partial<Record<Ats, number>> = {
+/** Boards per ATS one crawl reads. */
+export const CRAWL_BUDGET: Record<Ats, number> = {
   greenhouse: 60,
   ashby: 60,
   lever: 40,
+  // Pages of 100 jobs: one or two requests a board.
   smartrecruiters: 20,
   // Workable answers bursts with 429: few, a second apart (its lane in DAEMON_READS).
   workable: 10,
+  personio: 20,
+  recruitee: 20,
+  // Up to 20 pages a board, paced in its lane.
+  teamtailor: 10,
+  // One request per five jobs (61 for a board of 300), a second apart in its lane.
+  join: 5,
+  breezy: 20,
 };
-const DEFAULT_BUDGET = 20;
 
 /** Reads at a time per ATS. */
-const PARALLEL: Partial<Record<Ats, number>> = { greenhouse: 3, ashby: 3, workable: 1 };
+const PARALLEL: Partial<Record<Ats, number>> = {
+  greenhouse: 3,
+  ashby: 3,
+  workable: 1,
+  teamtailor: 1,
+  join: 1,
+};
 const DEFAULT_PARALLEL = 2;
+
+/** After a 429 none of the ATS's boards is read for this long: the ATS asked to slow down. */
+export const COOLDOWN_MS = 30 * 60_000;
+const COOLDOWN_KEY = 'ats_index_cooldown';
+
+/** Until when each ATS that answered 429 cools down (epoch ms). */
+function cooldowns(conn: Conn): Partial<Record<Ats, number>> {
+  const row = conn.select().from(appState).where(eq(appState.key, COOLDOWN_KEY)).get();
+  return row?.value && typeof row.value === 'object'
+    ? (row.value as Partial<Record<Ats, number>>)
+    : {};
+}
+
+/** The ATSs the crawler reads now: on, and not cooling down after a 429. */
+export function crawlAts(conn: Conn, now: Date): Ats[] {
+  const until = cooldowns(conn);
+  return atsOn(conn).filter((ats) => (until[ats] ?? 0) <= now.getTime());
+}
 
 function message(err: unknown): string {
   const text = err instanceof Error ? err.message : String(err);
   return text.split('\n')[0] ?? text;
 }
 
-/** The boards due now, per ATS that's on, oldest due first, each ATS within its budget. */
+/**
+ * The boards due now, per ATS that's on (and not cooling down), oldest due first, each ATS
+ * within its budget.
+ */
 export function dueBoards(conn: Conn, now: Date): AtsCompanyRow[] {
-  return atsOn(conn).flatMap((ats) =>
+  return crawlAts(conn, now).flatMap((ats) =>
     conn
       .select()
       .from(atsCompanies)
@@ -70,7 +107,7 @@ export function dueBoards(conn: Conn, now: Date): AtsCompanyRow[] {
         ),
       )
       .orderBy(atsCompanies.nextReadAt, atsCompanies.id)
-      .limit(CRAWL_BUDGET[ats] ?? DEFAULT_BUDGET)
+      .limit(CRAWL_BUDGET[ats])
       .all(),
   );
 }
@@ -92,7 +129,7 @@ export function scheduleCrawl(tx: Tx): number | null {
     .where(eq(tasks.kind, 'index_crawl'))
     .get()?.at;
   if (last && tx.now.getTime() - last.getTime() < CRAWL_EVERY_MS) return null;
-  const due = atsOn(tx.db).some(
+  const due = crawlAts(tx.db, tx.now).some(
     (ats) =>
       !!tx.db
         .select({ id: atsCompanies.id })
@@ -112,6 +149,7 @@ export function scheduleCrawl(tx: Tx): number | null {
 
 interface CrawlRead {
   companyId: number;
+  ats: Ats;
   read: BoardRead;
 }
 
@@ -140,7 +178,7 @@ async function readLane(ats: Ats, boards: AtsCompanyRow[], ctx: ReaderContext) {
       const c = boards[i] as AtsCompanyRow;
       const read = await readCompany(c, ctx);
       if (read.status === 429) limited = true;
-      out.push({ companyId: c.id, read });
+      out.push({ companyId: c.id, ats: c.ats, read });
     }
   };
   const n = Math.min(PARALLEL[ats] ?? DEFAULT_PARALLEL, boards.length);
@@ -195,6 +233,19 @@ export function commitCrawl(
     postingsClosed: 0,
     rematched,
   };
+  // An ATS that answered 429 is left alone for a while: its other boards wait too.
+  const limited = [...new Set(input.reads.filter((r) => r.read.status === 429).map((r) => r.ats))];
+  if (limited.length) {
+    const until = Object.fromEntries(
+      Object.entries(cooldowns(tx.db)).filter(([, at]) => (at ?? 0) > tx.now.getTime()),
+    );
+    for (const ats of limited) until[ats] = tx.now.getTime() + COOLDOWN_MS;
+    tx.db
+      .insert(appState)
+      .values({ key: COOLDOWN_KEY, value: until })
+      .onConflictDoUpdate({ target: appState.key, set: { value: until } })
+      .run();
+  }
   for (const r of input.reads) {
     const company = tx.db.select().from(atsCompanies).where(eq(atsCompanies.id, r.companyId)).get();
     // Switched off (or gone) while it was being read.

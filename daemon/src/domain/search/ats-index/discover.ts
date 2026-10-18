@@ -10,6 +10,16 @@
 //                        (502/504): a request is retried with a backoff, and whatever still
 //                        fails is noted and skipped; what the rest found is added all the same
 //
+//   slices   a run is up to ~1.8k requests, an hour and more: it's read a slice at a time
+//            (stepRequests, at most stepMs), each slice its own task that holds a worker only
+//            that long. A slice adds what it found to the index and leaves where it got to on
+//            the run's row (`progress`, and how far in its note); the next slice goes on from
+//            there, after a restart too. A request that still fails after its backoff is tried
+//            again by a later slice an hour or two on, a few times (retryAfterMs), the rest of
+//            the run going on meanwhile; only then is it noted as failed
+//   lost     a run whose task is gone (failed for good) isn't waiting any more: it is marked
+//            failed, and the next one can start (a day later by itself)
+//
 // Weekly by itself (and once when none has run yet), or when the candidate asks. New boards are
 // `new` and due at once: the crawler's first read tells real boards from stale URLs (404: gone).
 import { and, desc, eq, inArray } from 'drizzle-orm';
@@ -23,7 +33,7 @@ import {
   tasks,
 } from '../../../db/schema.ts';
 import type { Handler, Tx } from '../../../queue/types.ts';
-import { type Ats, type AtsBoard, atsJobKey, boardFromUrl } from '../readers/ats-embed.ts';
+import { type Ats, type AtsBoard, boardFromUrl, jobPageBoard } from '../readers/ats-embed.ts';
 import { USER_AGENT } from '../readers/http.ts';
 import { sleep } from '../readers/shared.ts';
 import type { Fetch } from '../readers/types.ts';
@@ -32,6 +42,8 @@ import { boardKey, indexWanted, knowBoards, type NewBoard } from './store.ts';
 
 /** Once a discovery has run, the next starts this long after it. */
 export const DISCOVER_EVERY_MS = 7 * 24 * 3_600_000;
+/** After one that failed, the next starts this long after. */
+export const DISCOVER_RETRY_MS = 24 * 3_600_000;
 
 /**
  * The URL patterns that hold each ATS's boards in Common Crawl's index. A new ATS joins
@@ -118,6 +130,15 @@ export interface CdxOptions {
   crawls: number;
   /** Pages read per pattern and crawl at most. */
   maxPages: number;
+  /** A slice's requests (retries count), and how long it starts new ones. */
+  stepRequests: number;
+  stepMs: number;
+  /**
+   * A part (a pattern's page count, or one of its pages) that still fails after its backoff is
+   * tried again by a later slice, after each of these waits; then it's noted as failed. The
+   * service's bad spells pass within hours, not within a minute.
+   */
+  retryAfterMs: number[];
 }
 
 export const LIVE_CDX: CdxOptions = {
@@ -125,6 +146,9 @@ export const LIVE_CDX: CdxOptions = {
   backoffMs: [5_000, 20_000, 60_000],
   crawls: 3,
   maxPages: 40,
+  stepRequests: 20,
+  stepMs: 90_000,
+  retryAfterMs: [3_600_000, 2 * 3_600_000, 2 * 3_600_000],
 };
 
 const CDX_TIMEOUT_MS = 90_000;
@@ -142,26 +166,35 @@ export interface CdxResult {
   truncated: string[];
 }
 
+/** When the next request may start: one pace across a run's slices (they follow each other). */
+export interface CdxPace {
+  nextAt: number;
+}
+
+/** The daemon's own pace over the real service. */
+const LIVE_PACE: CdxPace = { nextAt: 0 };
+
 /** Paced, retried GETs on the CDX server. */
 class Cdx {
-  private nextAt = 0;
   private readonly fetch: Fetch;
   private readonly signal: AbortSignal;
   private readonly o: CdxOptions;
+  private readonly pace: CdxPace;
   requests = 0;
 
-  constructor(fetch: Fetch, signal: AbortSignal, o: CdxOptions) {
+  constructor(fetch: Fetch, signal: AbortSignal, o: CdxOptions, pace: CdxPace) {
     this.fetch = fetch;
     this.signal = signal;
     this.o = o;
+    this.pace = pace;
   }
 
   /** The response of a GET that succeeded (or answered 404: nothing there), or throws. */
   async get(url: string): Promise<Response | null> {
     for (let attempt = 0; ; attempt++) {
-      const wait = this.nextAt - Date.now();
+      const wait = this.pace.nextAt - Date.now();
       if (wait > 0) await sleep(wait, this.signal);
-      this.nextAt = Date.now() + this.o.paceMs;
+      this.pace.nextAt = Date.now() + this.o.paceMs;
       this.requests++;
       let reason: string;
       try {
@@ -217,85 +250,278 @@ class Cdx {
 
 const reason = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
-/** The boards Common Crawl's latest crawls saw on the ATS hosts. */
+/** Each ATS's patterns in a row: a crawl's parts, in CDX_PATTERNS' order. */
+const PATTERNS = (Object.entries(CDX_PATTERNS) as [Ats, string[]][]).flatMap(([ats, patterns]) =>
+  patterns.map((pattern) => ({ ats, pattern })),
+);
+
+/** A request that failed and is tried again later: a part's page count (page null) or a page. */
+export interface CdxRetry {
+  part: number;
+  page: number | null;
+  /** Times it failed (each after its backoff). */
+  tries: number;
+  /** When it's tried again (epoch ms). */
+  at: number;
+  why: string;
+}
+
+/** Where a discovery got to (`ats_discoveries.progress`). */
+export interface DiscoveryProgress {
+  /** The crawls looked at, newest first, with their CDX endpoints; null until they're listed. */
+  crawls: Array<{ id: string; api: string }> | null;
+  /** The next part (crawl × pattern), its next page, and its page count once that was read. */
+  part: number;
+  page: number;
+  pages: number | null;
+  /** What failed and is tried again later (CdxOptions.retryAfterMs). */
+  retry: CdxRetry[];
+  requests: number;
+  /** What failed for good. */
+  failed: string[];
+  truncated: string[];
+  /** The boards Common Crawl gave so far ("ats:token"), each once. */
+  boards: string[];
+  /** The boards of Applyant's own data (the first slice reads them). */
+  own: string[];
+  /** Boards new to the index so far. */
+  added: number;
+}
+
+export function newProgress(): DiscoveryProgress {
+  return {
+    crawls: null,
+    part: 0,
+    page: 0,
+    pages: null,
+    retry: [],
+    requests: 0,
+    failed: [],
+    truncated: [],
+    boards: [],
+    own: [],
+    added: 0,
+  };
+}
+
+/** The parts a run reads (once its crawls are listed). */
+function partsOf(p: DiscoveryProgress): number {
+  return (p.crawls?.length ?? 0) * PATTERNS.length;
+}
+
+/** "12 of 45 parts read · 1,204 boards so far · 3 to retry": a run on its way. */
+export function progressNote(p: DiscoveryProgress): string {
+  const parts = partsOf(p);
+  const waiting = new Set(p.retry.map((r) => r.part)).size;
+  return [
+    p.crawls === null
+      ? 'listing the crawls'
+      : `${Math.max(0, p.part - waiting)} of ${plural(parts, 'part')} read`,
+    `${plural(p.boards.length, 'board')} so far`,
+    ...(p.retry.length ? [`${p.retry.length} to retry`] : []),
+    ...(p.failed.length ? [`${p.failed.length} failed`] : []),
+  ].join(' · ');
+}
+
+export interface CdxStep {
+  /** Boards this slice found that the run hadn't. */
+  boards: AtsBoard[];
+  /** Every part is read (or failed for good). */
+  done: boolean;
+  /** Not done: when the next slice has something to do (now, or the first retry's time). */
+  nextAt: Date | null;
+}
+
+/**
+ * One slice of a run's Common Crawl part: from where `p` says, until every part is read or the
+ * slice has spent its requests (or its time). Then the requests that failed, once they're due
+ * again. Moves `p` on; `now` is when the slice started (retries are timed from it).
+ */
+export async function commonCrawlStep(
+  fetch: Fetch,
+  signal: AbortSignal,
+  o: CdxOptions,
+  p: DiscoveryProgress,
+  now: Date,
+  progress: (message: string) => void = () => {},
+  pace: CdxPace = { nextAt: 0 },
+): Promise<CdxStep> {
+  const cdx = new Cdx(fetch, signal, o, pace);
+  const began = Date.now();
+  const spent = () =>
+    cdx.requests > 0 && (cdx.requests >= o.stepRequests || Date.now() - began >= o.stepMs);
+  const seen = new Set(p.boards);
+  const boards: AtsBoard[] = [];
+  if (p.crawls === null) {
+    try {
+      const collections =
+        await cdx.json<Array<{ id?: unknown; 'cdx-api'?: unknown }>>(CDX_COLLECTIONS);
+      p.crawls = (Array.isArray(collections) ? collections : [])
+        .flatMap((c) =>
+          typeof c.id === 'string' && typeof c['cdx-api'] === 'string'
+            ? [{ id: c.id, api: c['cdx-api'] }]
+            : [],
+        )
+        .sort((a, b) => (a.id < b.id ? 1 : a.id > b.id ? -1 : 0))
+        .slice(0, o.crawls);
+    } catch (err) {
+      signal.throwIfAborted();
+      p.failed.push(`the list of crawls: ${reason(err)}`);
+      p.crawls = [];
+    }
+  }
+  const crawls = p.crawls;
+  const parts = partsOf(p);
+  const target = (part: number) => {
+    const crawl = crawls[Math.floor(part / PATTERNS.length)];
+    const pat = PATTERNS[part % PATTERNS.length];
+    if (!crawl || !pat) throw new Error(`no part ${part}`);
+    return {
+      ats: pat.ats,
+      base: `${crawl.api}?url=${pat.pattern}&output=json&fl=url`,
+      where: `${crawl.id} ${pat.pattern}`,
+    };
+  };
+  const label = (part: number, page: number | null) =>
+    `${target(part).where}${page === null ? '' : ` page ${page + 1}`}`;
+  /** A part's page count; throws when the service doesn't give it. */
+  const count = async (part: number): Promise<number> => {
+    const t = target(part);
+    const info = await cdx.json<{ pages?: unknown } | number>(`${t.base}&showNumPages=true`);
+    const pages = Number(typeof info === 'number' ? info : (info?.pages ?? 0)) || 0;
+    if (pages > o.maxPages) p.truncated.push(`${t.where} (${o.maxPages} of ${pages} pages)`);
+    return Math.min(pages, o.maxPages);
+  };
+  /** One page's boards, those new to the run; throws when the page couldn't be read. */
+  const page = async (part: number, n: number): Promise<number> => {
+    const t = target(part);
+    const before = boards.length;
+    await cdx.lines(`${t.base}&page=${n}`, (line) => {
+      let url: unknown;
+      try {
+        url = (JSON.parse(line) as { url?: unknown }).url;
+      } catch {
+        return;
+      }
+      const board = typeof url === 'string' ? crawledBoard(url, t.ats) : null;
+      if (!board) return;
+      const key = boardKey(board.ats, board.token);
+      if (seen.has(key)) return;
+      seen.add(key);
+      p.boards.push(key);
+      boards.push(board);
+    });
+    return boards.length - before;
+  };
+  /** A request failed after its backoff: tried again later, or failed for good. */
+  const failed = (part: number, n: number | null, err: unknown, prior?: CdxRetry) => {
+    signal.throwIfAborted();
+    const why = reason(err);
+    const tries = (prior?.tries ?? 0) + 1;
+    const wait = o.retryAfterMs[tries - 1];
+    if (prior) p.retry.splice(p.retry.indexOf(prior), 1);
+    if (wait === undefined) {
+      p.failed.push(
+        `${label(part, n)}: ${why}${tries > 1 ? `, tried ${tries} times over hours` : ''}`,
+      );
+      progress(`Common Crawl ${label(part, n)}: failed (${why})`);
+      return;
+    }
+    p.retry.push({ part, page: n, tries, at: now.getTime() + wait, why });
+    progress(
+      `Common Crawl ${label(part, n)}: failed (${why}); tried again in ${Math.round(wait / 60_000)} min`,
+    );
+  };
+  const read = (part: number, n: number, found: number, of?: number) =>
+    progress(
+      `Common Crawl ${label(part, n)}${of ? ` of ${of}` : ''}: ${plural(found, 'new board')} · ${plural(p.boards.length, 'board')} so far`,
+    );
+
+  // The parts in order.
+  while (p.part < parts && !spent()) {
+    if (p.pages === null) {
+      try {
+        p.pages = await count(p.part);
+      } catch (err) {
+        // Its pages come once the count does (a retry).
+        failed(p.part, null, err);
+        p.pages = 0;
+      }
+    } else {
+      try {
+        read(p.part, p.page, await page(p.part, p.page), p.pages);
+      } catch (err) {
+        failed(p.part, p.page, err);
+      }
+      p.page++;
+    }
+    // The part is read: the next one.
+    if (p.page >= p.pages) {
+      p.part++;
+      p.page = 0;
+      p.pages = null;
+    }
+  }
+  // Then what failed, once it's due again.
+  for (;;) {
+    if (p.part < parts || spent()) break;
+    const due = p.retry
+      .filter((r) => r.at <= now.getTime())
+      .sort((a, b) => a.at - b.at || a.part - b.part)[0];
+    if (!due) break;
+    try {
+      if (due.page === null) {
+        const pages = await count(due.part);
+        p.retry.splice(p.retry.indexOf(due), 1);
+        // Its pages, due now.
+        for (let n = 0; n < pages; n++) {
+          p.retry.push({ part: due.part, page: n, tries: 0, at: 0, why: 'not read yet' });
+        }
+      } else {
+        const found = await page(due.part, due.page);
+        p.retry.splice(p.retry.indexOf(due), 1);
+        read(due.part, due.page, found);
+      }
+    } catch (err) {
+      failed(due.part, due.page, err, due);
+    }
+  }
+  p.requests += cdx.requests;
+  const done = p.part >= parts && p.retry.length === 0;
+  const waiting = p.part >= parts && !p.retry.some((r) => r.at <= now.getTime());
+  const first = Math.min(...p.retry.map((r) => r.at));
+  return { boards, done, nextAt: done ? null : waiting ? new Date(first) : now };
+}
+
+/**
+ * The boards Common Crawl's latest crawls saw on the ATS hosts: every slice, one after another,
+ * in one go (what fails is noted, not tried again hours later).
+ */
 export async function commonCrawlBoards(
   fetch: Fetch,
   signal: AbortSignal,
   o: CdxOptions,
   progress: (message: string) => void = () => {},
 ): Promise<CdxResult> {
-  const cdx = new Cdx(fetch, signal, o);
-  const out: CdxResult = { boards: [], crawls: [], requests: 0, failed: [], truncated: [] };
-  const seen = new Set<string>();
-  let collections: Array<{ id?: unknown; 'cdx-api'?: unknown }> | null;
-  try {
-    collections = await cdx.json(CDX_COLLECTIONS);
-  } catch (err) {
-    signal.throwIfAborted();
-    out.failed.push(`the list of crawls: ${reason(err)}`);
-    out.requests = cdx.requests;
-    return out;
+  const p = newProgress();
+  const pace: CdxPace = { nextAt: 0 };
+  const boards: AtsBoard[] = [];
+  const once = { ...o, retryAfterMs: [] };
+  for (;;) {
+    const step = await commonCrawlStep(fetch, signal, once, p, new Date(), progress, pace);
+    boards.push(...step.boards);
+    if (step.done) break;
   }
-  const crawls = (Array.isArray(collections) ? collections : [])
-    .flatMap((c) =>
-      typeof c.id === 'string' && typeof c['cdx-api'] === 'string'
-        ? [{ id: c.id, api: c['cdx-api'] }]
-        : [],
-    )
-    .sort((a, b) => (a.id < b.id ? 1 : a.id > b.id ? -1 : 0))
-    .slice(0, o.crawls);
-  out.crawls = crawls.map((c) => c.id);
-  for (const crawl of crawls) {
-    for (const [ats, patterns] of Object.entries(CDX_PATTERNS) as [Ats, string[]][]) {
-      for (const pattern of patterns) {
-        const base = `${crawl.api}?url=${pattern}&output=json&fl=url`;
-        const where = `${crawl.id} ${pattern}`;
-        let pages = 0;
-        try {
-          const info = await cdx.json<{ pages?: unknown } | number>(`${base}&showNumPages=true`);
-          pages = Number(typeof info === 'number' ? info : (info?.pages ?? 0)) || 0;
-        } catch (err) {
-          signal.throwIfAborted();
-          out.failed.push(`${where}: ${reason(err)}`);
-          continue;
-        }
-        if (pages > o.maxPages) out.truncated.push(`${where} (${o.maxPages} of ${pages} pages)`);
-        const before = out.boards.length;
-        for (let page = 0; page < Math.min(pages, o.maxPages); page++) {
-          try {
-            await cdx.lines(`${base}&page=${page}`, (line) => {
-              let url: unknown;
-              try {
-                url = (JSON.parse(line) as { url?: unknown }).url;
-              } catch {
-                return;
-              }
-              const board = typeof url === 'string' ? crawledBoard(url, ats) : null;
-              if (!board) return;
-              const key = boardKey(board.ats, board.token);
-              if (seen.has(key)) return;
-              seen.add(key);
-              out.boards.push(board);
-            });
-          } catch (err) {
-            signal.throwIfAborted();
-            out.failed.push(`${where} page ${page + 1}: ${reason(err)}`);
-          }
-        }
-        progress(`Common Crawl ${where}: ${out.boards.length - before} new boards`);
-      }
-    }
-  }
-  out.requests = cdx.requests;
-  return out;
+  return {
+    boards,
+    crawls: (p.crawls ?? []).map((c) => c.id),
+    requests: p.requests,
+    failed: p.failed,
+    truncated: p.truncated,
+  };
 }
 
 // ---- Applyant's own data -----------------------------------------------------------------
-
-/** A job page's (or apply link's) board: only a job page counts, not an ATS's blog. */
-function jobBoard(url: string | null): AtsBoard | null {
-  return url && atsJobKey(url) ? boardFromUrl(url) : null;
-}
 
 /** Boards Applyant has come across: the watch list's, and those behind postings. */
 export function ownBoards(conn: Conn): NewBoard[] {
@@ -324,7 +550,7 @@ export function ownBoards(conn: Conn): NewBoard[] {
     .all();
   for (const p of rows) {
     for (const url of [p.url, p.applyUrl]) {
-      const board = jobBoard(url);
+      const board = jobPageBoard(url);
       if (board) out.push({ board, via: 'posting', name: p.company, note: `posting ${p.id}` });
     }
   }
@@ -332,7 +558,7 @@ export function ownBoards(conn: Conn): NewBoard[] {
     .select({ postingId: postingSources.postingId, url: postingSources.url })
     .from(postingSources)
     .all()) {
-    const board = jobBoard(l.url);
+    const board = jobPageBoard(l.url);
     if (board) out.push({ board, via: 'posting', note: `posting ${l.postingId}` });
   }
   return out;
@@ -348,8 +574,43 @@ function discoveryBusy(conn: Conn): boolean {
     .get();
 }
 
+/** What a run whose task is gone says. */
+export const LOST_NOTE = 'stopped: its task failed or was lost (the next discovery starts again)';
+
+/** The queued runs among `rows` that no task carries on (failed for good, or never ran). */
+function lost(conn: Conn, rows: AtsDiscoveryRow[]): Set<number> {
+  const queued = rows.filter((r) => r.status === 'queued').map((r) => r.id);
+  if (queued.length === 0) return new Set();
+  const live = new Set(
+    conn
+      .select({ id: tasks.entityId })
+      .from(tasks)
+      .where(
+        and(
+          eq(tasks.kind, 'index_discover'),
+          inArray(tasks.entityId, queued),
+          inArray(tasks.status, ['queued', 'running']),
+        ),
+      )
+      .all()
+      .map((t) => t.id),
+  );
+  return new Set(queued.filter((id) => !live.has(id)));
+}
+
+/** Runs no task carries on any more are marked failed: they aren't waiting, the next can start. */
+export function settleDiscoveries(tx: Tx): void {
+  const queued = tx.db
+    .select()
+    .from(atsDiscoveries)
+    .where(eq(atsDiscoveries.status, 'queued'))
+    .all();
+  for (const id of lost(tx.db, queued)) failDiscovery(tx, id, LOST_NOTE);
+}
+
 /** Starts a discovery run; null when one is already waiting or running. */
 export function startDiscovery(tx: Tx, trigger: AtsDiscoveryRow['trigger']): number | null {
+  settleDiscoveries(tx);
   if (discoveryBusy(tx.db)) return null;
   const row = tx.db
     .insert(atsDiscoveries)
@@ -372,68 +633,119 @@ export function startDiscovery(tx: Tx, trigger: AtsDiscoveryRow['trigger']): num
   return row.id;
 }
 
+/**
+ * The latest runs, newest first. One whose task is gone reads as failed even before the
+ * scheduler marks it so.
+ */
 export function latestDiscoveries(conn: Conn, limit = 5): AtsDiscoveryRow[] {
-  return conn.select().from(atsDiscoveries).orderBy(desc(atsDiscoveries.id)).limit(limit).all();
+  const rows = conn
+    .select()
+    .from(atsDiscoveries)
+    .orderBy(desc(atsDiscoveries.id))
+    .limit(limit)
+    .all();
+  const gone = lost(conn, rows);
+  return rows.map((r) => (gone.has(r.id) ? { ...r, status: 'failed', note: LOST_NOTE } : r));
 }
 
-/** The scheduler's part: the first discovery once the index is in use, then weekly. */
+/**
+ * The scheduler's part: the first discovery once the index is in use, then weekly (a day after
+ * one that failed).
+ */
 export function scheduleDiscovery(tx: Tx): number | null {
   if (!indexWanted(tx.db)) return null;
+  settleDiscoveries(tx);
   const last = latestDiscoveries(tx.db, 1)[0];
   if (!last) return startDiscovery(tx, 'setup');
   if (last.status === 'queued') return null;
-  if (tx.now.getTime() - last.startedAt.getTime() < DISCOVER_EVERY_MS) return null;
+  const since = tx.now.getTime() - (last.finishedAt ?? last.startedAt).getTime();
+  if (last.status === 'failed' ? since < DISCOVER_RETRY_MS : since < DISCOVER_EVERY_MS) {
+    return null;
+  }
   return startDiscovery(tx, 'schedule');
-}
-
-interface Found {
-  own: NewBoard[];
-  cc: CdxResult;
 }
 
 function plural(n: number, one: string, many = `${one}s`): string {
   return `${n.toLocaleString('en-US')} ${n === 1 ? one : many}`;
 }
 
-export function finishDiscovery(tx: Tx, id: number, found: Found): AtsDiscoveryRow | null {
-  const boards: NewBoard[] = [
-    ...found.own,
-    ...found.cc.boards.map((board) => ({ board, via: 'common-crawl' as const })),
-  ];
-  const added = knowBoards(tx, boards);
-  const distinct = new Set(boards.map((b) => boardKey(b.board.ats, b.board.token))).size;
-  const ownDistinct = new Set(found.own.map((b) => boardKey(b.board.ats, b.board.token))).size;
-  const { cc } = found;
+/** The run's last slice is in: what it found, in a line. */
+function finishDiscovery(tx: Tx, id: number, p: DiscoveryProgress): void {
+  const found = new Set([...p.own, ...p.boards]).size;
+  const crawls = (p.crawls ?? []).map((c) => c.id);
   const note = [
-    `${plural(added.length, 'new board')} of ${plural(distinct, 'board')} found`,
-    `Applyant's own data: ${plural(ownDistinct, 'board')}`,
-    cc.crawls.length
-      ? `Common Crawl (${cc.crawls.join(', ')}): ${plural(cc.boards.length, 'board')} in ${plural(cc.requests, 'request')}`
+    `${plural(p.added, 'new board')} of ${plural(found, 'board')} found`,
+    `Applyant's own data: ${plural(p.own.length, 'board')}`,
+    crawls.length
+      ? `Common Crawl (${crawls.join(', ')}): ${plural(p.boards.length, 'board')} in ${plural(p.requests, 'request')}`
       : 'Common Crawl: no crawls to look at',
-    ...(cc.truncated.length ? [`not every page read: ${cc.truncated.join('; ')}`] : []),
-    ...(cc.failed.length
+    ...(p.truncated.length ? [`not every page read: ${p.truncated.join('; ')}`] : []),
+    ...(p.failed.length
       ? [
-          `${plural(cc.failed.length, 'part')} failed: ${cc.failed.slice(0, 5).join('; ')}${cc.failed.length > 5 ? '; …' : ''}`,
+          `${plural(p.failed.length, 'part')} failed: ${p.failed.slice(0, 5).join('; ')}${p.failed.length > 5 ? '; …' : ''}`,
         ]
       : []),
   ].join(' · ');
-  const row = tx.db
+  tx.db
     .update(atsDiscoveries)
-    .set({ status: 'done', finishedAt: tx.now, found: distinct, added: added.length, note })
+    .set({
+      status: 'done',
+      finishedAt: tx.now,
+      found,
+      added: p.added,
+      note,
+      progress: null,
+    })
     .where(eq(atsDiscoveries.id, id))
-    .returning()
-    .get();
+    .run();
   tx.emit({ kind: 'search.index', entityId: id, runId: null, stage: 'done', message: note });
-  return row ?? null;
 }
 
 function failDiscovery(tx: Tx, id: number, why: string): void {
   tx.db
     .update(atsDiscoveries)
-    .set({ status: 'failed', finishedAt: tx.now, note: why })
+    .set({ status: 'failed', finishedAt: tx.now, note: why, progress: null })
     .where(eq(atsDiscoveries.id, id))
     .run();
   tx.emit({ kind: 'search.index', entityId: id, runId: null, stage: 'failed', message: why });
+}
+
+/**
+ * A slice is in: its boards join the index, and the run goes on with the next slice (its own
+ * task, at the back of the queue) or is done.
+ */
+function commitSlice(
+  tx: Tx,
+  id: number,
+  input: { own: NewBoard[]; p: DiscoveryProgress; step: CdxStep },
+): void {
+  const row = tx.db.select().from(atsDiscoveries).where(eq(atsDiscoveries.id, id)).get();
+  // Marked failed (lost) in the meantime: it stays so.
+  if (row?.status !== 'queued') return;
+  const { p, step } = input;
+  p.added += knowBoards(tx, [
+    ...input.own,
+    ...step.boards.map((board) => ({ board, via: 'common-crawl' as const })),
+  ]).length;
+  if (step.done) {
+    finishDiscovery(tx, id, p);
+    return;
+  }
+  // On its way: the row says how far, and what it has found so far is in the index already.
+  tx.db
+    .update(atsDiscoveries)
+    .set({
+      progress: p,
+      found: new Set([...p.own, ...p.boards]).size,
+      added: p.added,
+      note: progressNote(p),
+    })
+    .where(eq(atsDiscoveries.id, id))
+    .run();
+  tx.enqueue('index_discover', id, {
+    runId: null,
+    ...(step.nextAt && step.nextAt > tx.now ? { runAfter: step.nextAt } : {}),
+  });
 }
 
 export const indexDiscover: Handler<'index_discover'> = async (task, ctx) => {
@@ -443,22 +755,31 @@ export const indexDiscover: Handler<'index_discover'> = async (task, ctx) => {
     .where(eq(atsDiscoveries.id, task.entityId))
     .get();
   if (row?.status !== 'queued') return { kind: 'done', commit: () => {} };
-  ctx.progress({ message: "the ATS index: looking in Applyant's own data" });
-  const own = ownBoards(ctx.read);
+  const p = row.progress ?? newProgress();
+  // The first slice also looks in Applyant's own data (no request).
+  let own: NewBoard[] = [];
+  if (!row.progress) {
+    ctx.progress({ message: "the ATS index: looking in Applyant's own data" });
+    own = ownBoards(ctx.read);
+    p.own = [...new Set(own.map((b) => boardKey(b.board.ats, b.board.token)))];
+  }
   // The real service gets its pace and backoff; an injected fetch (tests) none.
   const live = !ctx.deps.fetch;
-  let cc: CdxResult;
+  let step: CdxStep;
   try {
-    cc = await commonCrawlBoards(
+    step = await commonCrawlStep(
       ctx.deps.fetch ?? globalThis.fetch,
       ctx.signal,
       live ? LIVE_CDX : { ...LIVE_CDX, paceMs: 0, backoffMs: LIVE_CDX.backoffMs.map(() => 0) },
+      p,
+      ctx.now(),
       (message) => ctx.progress({ message }),
+      live ? LIVE_PACE : { nextAt: 0 },
     );
   } catch (err) {
     ctx.signal.throwIfAborted();
     const why = `discovery failed: ${reason(err)}`;
     return { kind: 'done', commit: (tx) => failDiscovery(tx, row.id, why) };
   }
-  return { kind: 'done', commit: (tx) => void finishDiscovery(tx, row.id, { own, cc }) };
+  return { kind: 'done', commit: (tx) => commitSlice(tx, row.id, { own, p, step }) };
 };

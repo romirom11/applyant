@@ -211,10 +211,11 @@ public enum SourcesText {
 
     // MARK: The index
 
-    /// The index's master switch: what GetAtsIndex says, else its source's own switch.
+    /// The index's master switch: what GetAtsIndex says, else its source's own switch (only its
+    /// own: the index isn't a job board, and "Job boards" off leaves it on).
     public static func indexOn(_ index: AtsIndex?, list: SearchList) -> Bool {
         if let index { return index.enabled }
-        return list.sources.first { $0.key == indexKey }.map { $0.enabled && $0.kindEnabled } ?? false
+        return list.sources.first { $0.key == indexKey }?.enabled ?? false
     }
 
     /// "4,210 companies · 12,300 open jobs · 85 matching".
@@ -299,7 +300,8 @@ public enum SourcesText {
             : "Applyant's background service couldn't give it: \(problem). The sources on the left read as before."
     }
 
-    /// A discovery is waiting or running (Find More Companies waits for it).
+    /// A discovery is waiting or running (Find More Companies waits for it). The daemon reads one
+    /// whose task is gone as failed, so a lost run doesn't hold the button.
     public static func discovering(_ index: AtsIndex?) -> Bool { index?.discoveries.first?.status == "queued" }
 
     // MARK: The index's companies
