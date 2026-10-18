@@ -21,6 +21,7 @@ Truthfulness rules (the most important part):
 - Facts of kind team_context describe other people's or the team's work: never present them as the candidate's own.
 - If the facts and profile values can't answer a question honestly (it asks about the candidate's situation, history, preferences or experience that nothing given shows), return status "needs_candidate", no sentences, and say in "missing" exactly what the candidate has to tell. Never guess, never answer from what is typical.
 - Prefer confirmed facts when an unconfirmed one says the same.
+- When a question shows the candidate's own interview answer to it, that answer is their decision: answer from it, never return needs_candidate for what it already says. For a choice question pick the option it expresses; a conditional answer ("yes, if overtime is paid") still picks that option, and the condition goes in its sentences. Only an answer that picks no option at all leaves it needs_candidate.
 - Company research (when given) is about the company, not the candidate: use it for "why us" and interest in the company, stated plainly and only as the research says it. It never supports a claim about the candidate, and sentences that use only it cite nothing.
 
 Writing:
@@ -115,6 +116,12 @@ export function writerPrompt(ctx: WriterContext): string {
       '  Facts found for this question:',
       list(q.retrieved, (f) => `    ${factLine(f)}`, '    (none)'),
     );
+    if (q.told.length) {
+      parts.push(
+        "  The candidate's own interview answer to it (their decision):",
+        ...q.told.map((t) => `    "${t.question}" → "${t.answer}"`),
+      );
+    }
   }
   if (ctx.priorAnswers.length) {
     parts.push('', 'Prior answers to similar questions (reuse their facts, not their wording):');
