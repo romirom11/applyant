@@ -15,7 +15,7 @@ import type { WriterOutput } from '../../models/schemas/application.ts';
 import type { CompanyFinding } from '../../models/schemas/company.ts';
 import { companyForPosting } from '../companies/store.ts';
 import { factRefs } from '../knowledge/facts.ts';
-import { interviewFactIds } from '../knowledge/interview.ts';
+import { interviewFactIds, interviewReplies } from '../knowledge/interview.ts';
 import { listProjects } from '../knowledge/projects.ts';
 import { type FactRef, retrieveFacts } from '../knowledge/retrieve.ts';
 import { type PriorAnswer, priorAnswers } from './reuse.ts';
@@ -47,6 +47,8 @@ export interface WriterQuestion {
   /** A review quick action: draft it again shorter, and/or from this project's facts. */
   redraft?: Redraft | null;
   retrieved: FactRef[];
+  /** The candidate's own words to this question in the interview (any application's). */
+  told: Array<{ question: string; answer: string }>;
 }
 
 export interface MatchedRequirement {
@@ -120,7 +122,7 @@ export async function buildWriterContext(
   input: {
     applicationId: number;
     posting: PostingRow;
-    questions: Array<Omit<WriterQuestion, 'retrieved' | 'pointsBack'>>;
+    questions: Array<Omit<WriterQuestion, 'retrieved' | 'pointsBack' | 'told'>>;
     profile: Record<string, string>;
     signal: AbortSignal;
     onEmbedError?(err: Error): void;
@@ -173,7 +175,7 @@ export async function buildWriterContext(
     );
     // What the candidate told the interview for this very question comes first.
     const told = [
-      ...factRefs(read, interviewFactIds(read, input.applicationId, q.fieldRef)).values(),
+      ...factRefs(read, interviewFactIds(read, input.applicationId, q.fieldRef, q.label)).values(),
     ];
     // "Use another project…": that project's facts lead, whatever the search found.
     const steered = q.redraft?.project ? projectFacts(read, q.redraft.project.id) : [];
@@ -181,7 +183,12 @@ export async function buildWriterContext(
     for (const { score: _score, ...f } of hits) {
       if (!retrieved.some((t) => t.id === f.id)) retrieved.push(f);
     }
-    questions.push({ ...q, pointsBack: POINTS_BACK.test(q.label), retrieved });
+    questions.push({
+      ...q,
+      pointsBack: POINTS_BACK.test(q.label),
+      retrieved,
+      told: interviewReplies(read, input.applicationId, q.fieldRef, q.label),
+    });
   }
 
   const prior = new Map<string, PriorAnswer>();

@@ -9,7 +9,7 @@
 // The transcript is Applyant's own (interview_turns), and every turn is a fresh agent run
 // seeded with it. A question is never asked twice: the interviewer's next question is dropped
 // when the transcript already has it, and an application question answered once isn't asked
-// again for that form question.
+// again for that form question, nor for the same question another application already asked.
 import { and, asc, desc, eq, inArray, isNull, ne, or, sql } from 'drizzle-orm';
 import type { Conn } from '../../db/client.ts';
 import {
@@ -377,10 +377,13 @@ export function askQuestion(
   return row;
 }
 
+/** Case, spacing and punctuation don't make a different question. */
+const questionKey = (text: string): string => factKey(text).replace(/[?]+$/, '');
+
 /** Whether the thread already asked this (case, spacing and punctuation don't matter). */
 export function alreadyAsked(thread: Array<{ text: string }>, text: string): boolean {
-  const key = factKey(text).replace(/[?]+$/, '');
-  return thread.some((q) => factKey(q.text).replace(/[?]+$/, '') === key);
+  const key = questionKey(text);
+  return thread.some((q) => questionKey(q.text) === key);
 }
 
 /** The candidate's answer: stored in the transcript, then read by the interviewer. */
@@ -414,7 +417,39 @@ export function answerQuestion(tx: Tx, id: number, answer: string): InterviewQue
     .get();
   tx.enqueue('interview_turn', q.id, { runId: null });
   emitQuestion(tx, row, `question ${q.id} answered; reading it`);
+  if (q.origin === 'application') answerSameQuestions(tx, q, text);
   return row;
+}
+
+/**
+ * Other applications waiting on the same question (one company's postings share their form)
+ * take this answer too: the candidate answers it once. Their writers read it word for word.
+ */
+function answerSameQuestions(tx: Tx, q: InterviewQuestionRow, text: string): void {
+  const same = sameQuestions(tx.db, q.text).filter(
+    (x) => x.id !== q.id && x.status === 'open' && x.applicationId !== null,
+  );
+  for (const x of same) {
+    tx.db
+      .insert(interviewTurns)
+      .values({
+        questionId: x.id,
+        projectId: x.projectId,
+        applicationId: x.applicationId,
+        role: 'candidate',
+        text,
+        createdAt: tx.now,
+      })
+      .run();
+    const row = tx.db
+      .update(interviewQuestions)
+      .set({ status: 'answered', note: `answered with question ${q.id}`, answeredAt: tx.now })
+      .where(eq(interviewQuestions.id, x.id))
+      .returning()
+      .get();
+    emitQuestion(tx, row, `question ${x.id} answered with question ${q.id}`);
+    if (x.applicationId !== null) resumePreparation(tx, x.applicationId);
+  }
 }
 
 /**
@@ -573,19 +608,77 @@ export function pendingApplicationQuestions(conn: Conn, applicationId: number): 
     .all().length;
 }
 
-/** Facts the candidate gave for this form question of this application (writer context). */
-export function interviewFactIds(conn: Conn, applicationId: number, fieldRef: string): number[] {
-  const qids = conn
+/** Application questions with this text, whatever application asked them. */
+function sameQuestions(conn: Conn, text: string): InterviewQuestionRow[] {
+  const key = questionKey(text);
+  return conn
+    .select()
+    .from(interviewQuestions)
+    .where(eq(interviewQuestions.origin, 'application'))
+    .orderBy(asc(interviewQuestions.id))
+    .all()
+    .filter((q) => questionKey(q.text) === key);
+}
+
+/**
+ * The same question already answered in the interview for another application: the writer had
+ * that answer, so if it still can't answer, asking again won't help.
+ */
+export function answeredElsewhere(
+  conn: Conn,
+  applicationId: number,
+  label: string,
+): InterviewQuestionRow | null {
+  return (
+    sameQuestions(conn, label)
+      .filter((q) => q.applicationId !== applicationId && q.status === 'answered')
+      .at(-1) ?? null
+  );
+}
+
+/**
+ * The interview questions that asked this form question: this application's (and their
+ * follow-ups), and the same question asked for other applications (and theirs).
+ */
+function questionIdsFor(
+  conn: Conn,
+  applicationId: number,
+  fieldRef: string,
+  label: string,
+): number[] {
+  const asked = [
+    { applicationId, fieldRef },
+    ...sameQuestions(conn, label).flatMap((q) =>
+      q.applicationId !== null && q.fieldRef !== null
+        ? [{ applicationId: q.applicationId, fieldRef: q.fieldRef }]
+        : [],
+    ),
+  ];
+  return conn
     .select({ id: interviewQuestions.id })
     .from(interviewQuestions)
     .where(
-      and(
-        eq(interviewQuestions.applicationId, applicationId),
-        eq(interviewQuestions.fieldRef, fieldRef),
+      or(
+        ...asked.map((a) =>
+          and(
+            eq(interviewQuestions.applicationId, a.applicationId),
+            eq(interviewQuestions.fieldRef, a.fieldRef),
+          ),
+        ),
       ),
     )
     .all()
-    .map((q) => interviewLocator(q.id));
+    .map((q) => q.id);
+}
+
+/** Facts the candidate gave for this form question in the interview (writer context). */
+export function interviewFactIds(
+  conn: Conn,
+  applicationId: number,
+  fieldRef: string,
+  label: string,
+): number[] {
+  const qids = questionIdsFor(conn, applicationId, fieldRef, label).map(interviewLocator);
   if (!qids.length) return [];
   return conn
     .select({ id: evidence.factId })
@@ -594,4 +687,32 @@ export function interviewFactIds(conn: Conn, applicationId: number, fieldRef: st
     .where(and(inArray(evidence.locator, qids), ne(facts.status, 'rejected')))
     .all()
     .map((r) => r.id);
+}
+
+/**
+ * What the candidate said to this form question in the interview, word for word (here or for
+ * another application): their decision, which a paraphrased fact can lose ("yes, if paid").
+ */
+export function interviewReplies(
+  conn: Conn,
+  applicationId: number,
+  fieldRef: string,
+  label: string,
+): Array<{ question: string; answer: string }> {
+  const qids = questionIdsFor(conn, applicationId, fieldRef, label);
+  if (!qids.length) return [];
+  const seen = new Set<string>();
+  return conn
+    .select({ question: interviewQuestions.text, answer: interviewTurns.text })
+    .from(interviewTurns)
+    .innerJoin(interviewQuestions, eq(interviewTurns.questionId, interviewQuestions.id))
+    .where(and(inArray(interviewTurns.questionId, qids), eq(interviewTurns.role, 'candidate')))
+    .orderBy(asc(interviewTurns.id))
+    .all()
+    .filter((r) => {
+      const key = `${questionKey(r.question)}\n${factKey(r.answer)}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
 }

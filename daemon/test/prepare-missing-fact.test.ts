@@ -1,6 +1,6 @@
 // A fact preparation finds missing becomes an interview question: the application waits on it,
 // the answer becomes facts, and preparation resumes, now citing them, to ready_for_review. The
-// same form question isn't asked twice.
+// same form question isn't asked twice, not even by another application of the same company.
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { applicationView, ensureApplication } from '../src/domain/applications/store.ts';
 import {
@@ -29,6 +29,9 @@ const now = new Date('2026-09-28T10:00:00Z');
 const LEADERSHIP = 'Describe a time you led a team through a hard deadline.';
 const KUBERNETES = 'Have you run Kubernetes in production?';
 const TOLD = 'Led 4 engineers to ship the scoring service in six weeks';
+const OVERTIME =
+  'We often work more than 40 hours a week. Are you interested in such an environment?';
+const IF_PAID = 'Yes, if the overtime is paid';
 
 const needsYou = (q: WriterQuestionSeen, missing: string): Draft => ({
   question: q.id,
@@ -236,5 +239,70 @@ describe('a missing fact goes to the interview', () => {
     await settle();
     expect(applicationView(t.db, id).app.stage).toBe('needs_candidate');
     expect(listQuestions(t.db, { all: true })).toEqual([]);
+  });
+
+  it('asks a question once across applications, and their writers take the answer as said', async () => {
+    await start({
+      // Picks Yes only from the candidate's own words (the fact alone is conditional).
+      drafts: (qs, req) =>
+        qs.map((q) =>
+          req.prompt.includes(`→ "${IF_PAID}"`)
+            ? {
+                question: q.id,
+                status: 'answered' as const,
+                choice: 'Yes',
+                sentences: [],
+                missing: null,
+                adaptedFrom: null,
+              }
+            : needsYou(q, 'Whether you would select Yes when overtime pay is unknown'),
+        ),
+      interview: () => ({
+        facts: [
+          {
+            text: 'Open to more than 40 hours a week if overtime is paid',
+            kind: 'other',
+            project: null,
+          },
+        ],
+        question: null,
+        about: null,
+      }),
+    });
+    const choose = () => {
+      const pid = seedPosting(
+        t.db,
+        form([
+          spec(OVERTIME, 'combobox', {
+            meaning: 'question',
+            required: true,
+            options: ['Yes', 'No'],
+          }),
+        ]),
+        { now },
+      );
+      return tx((x) => ensureApplication(x, pid, 'test').app.id);
+    };
+    const first = choose();
+    const second = choose();
+    await settle();
+    const open = listQuestions(t.db);
+    expect(open.map((q) => q.applicationId)).toEqual([first, second]);
+
+    // One answer settles both.
+    tx((x) => answerQuestion(x, open[0]?.id ?? 0, IF_PAID));
+    await settle();
+    expect(listQuestions(t.db)).toEqual([]);
+    for (const id of [first, second]) {
+      const v = applicationView(t.db, id);
+      expect(v.app.stage).toBe('ready_for_review');
+      expect(v.answers[0]).toMatchObject({ status: 'answered', choice: 'Yes' });
+    }
+
+    // A later posting with the same question is answered without asking.
+    const third = choose();
+    await settle();
+    expect(listQuestions(t.db, { all: true })).toHaveLength(2);
+    expect(applicationView(t.db, third).answers[0]).toMatchObject({ choice: 'Yes' });
   });
 });

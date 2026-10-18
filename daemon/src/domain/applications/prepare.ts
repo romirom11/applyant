@@ -55,7 +55,7 @@ import {
   researchPaused,
 } from '../companies/store.ts';
 import { factRefs } from '../knowledge/facts.ts';
-import { applicationQuestion, askQuestion } from '../knowledge/interview.ts';
+import { answeredElsewhere, applicationQuestion, askQuestion } from '../knowledge/interview.ts';
 import { getStandardProfile, type StandardProfile } from '../knowledge/profile.ts';
 import { checkSentences, type SentenceToCheck } from './checks/verify.ts';
 import { renderCoverLetter } from './cover-letter.ts';
@@ -621,7 +621,7 @@ function writerQuestions(
   toWrite: FormField[],
   fields: FormField[],
   stored: Map<string, StoredAnswer>,
-): Array<Omit<WriterQuestion, 'retrieved' | 'pointsBack'>> {
+): Array<Omit<WriterQuestion, 'retrieved' | 'pointsBack' | 'told'>> {
   const ids = new Map(toWrite.map((f, i) => [f.ref, `q${i + 1}`]));
   const byControl = new Map(fields.map((f) => [`${f.step}:${refKey(f.spec.ref)}`, f]));
   return toWrite.map((f) => {
@@ -669,7 +669,8 @@ function contextProfile(
 /**
  * A question the writer couldn't answer from the facts goes to the interview, once per form
  * question: the answer becomes facts, and preparation resumes. Not asked again once answered
- * or dismissed (the candidate writes it then), and never for instructions the posting holds.
+ * or dismissed (the candidate writes it then), nor when another application's interview already
+ * had the candidate's answer to it, and never for instructions the posting holds.
  */
 function askInterview(
   tx: Tx,
@@ -679,6 +680,7 @@ function askInterview(
   for (const { q, draft } of written) {
     if (draft?.status !== 'needs_candidate' || q.pointsBack) continue;
     if (applicationQuestion(tx.db, applicationId, q.fieldRef)) continue;
+    if (answeredElsewhere(tx.db, applicationId, q.label)) continue;
     askQuestion(tx, {
       projectId: null,
       applicationId,
@@ -825,7 +827,10 @@ function saveFields(
         };
       }
       if (d.value === null) {
-        const asked = interviewNote(applicationQuestion(tx.db, applicationId, f.ref));
+        const asked = interviewNote(
+          applicationQuestion(tx.db, applicationId, f.ref) ??
+            answeredElsewhere(tx.db, applicationId, f.spec.label),
+        );
         if (asked) d = { ...d, note: [d.note, asked].filter(Boolean).join(' · ') };
       }
     } else {
