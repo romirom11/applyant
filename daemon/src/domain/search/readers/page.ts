@@ -12,7 +12,7 @@ import { checkInvariants, runRecipe, toReaderRun } from '../recipes/run.ts';
 import type { RecipeForRun } from '../recipes/store.ts';
 import type { RecipeListing } from '../recipes/types.ts';
 import { type AtsRun, readAtsBoard } from './ats-api.ts';
-import { type AtsBoard, detectAtsBoard } from './ats-embed.ts';
+import { type AtsBoard, boardFromUrl, detectAtsBoard } from './ats-embed.ts';
 import { feedLinks, parseFeed, readFeed } from './feed.ts';
 import { get } from './http.ts';
 import type { ReaderContext, ReaderRun } from './types.ts';
@@ -36,7 +36,7 @@ export class NeedsRecipeError extends Error {
 }
 
 const NO_WAY =
-  'no feed, JobPosting data or known ATS board (Greenhouse, Ashby, Lever, Workable, SmartRecruiters) on this page';
+  'no feed, JobPosting data or known ATS board (Greenhouse, Ashby, Lever, Workable, SmartRecruiters, Personio, Recruitee, Teamtailor, JOIN, Breezy) on this page';
 
 /** Reads the page with its recipe; the invariants decide whether the result can be trusted. */
 async function viaRecipe(url: string, ctx: ReaderContext, recipe: RecipeForRun): Promise<PageRun> {
@@ -122,6 +122,10 @@ export async function readPage(
     throw new NeedsRecipeError('none', 'its listing recipe is being built');
   }
   if (cached?.via === 'recipe' && recipe?.status === 'ok') return viaRecipe(url, ctx, recipe);
+  // A page that is a board itself (a Teamtailor jobs.rss watched as a feed) is read as that
+  // board: its whole list, not the feed's first page.
+  const own = boardFromUrl(url);
+  if (own && !/\/embed\b/.test(url)) return viaAts(own, ctx, `${own.ats} board ${own.token}`);
   if (cached && cached.via !== 'recipe') {
     const hit = await viaCache(cached, ctx);
     if (hit) return hit;

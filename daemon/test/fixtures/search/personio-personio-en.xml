@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<workzag-jobs>
+
+<position>
+    <id>1834171</id>
+    <subcompany>Personio SE &amp; Co. KG</subcompany>
+    <office>Munich</office>
+    <additionalOffices>
+        <office>Berlin</office>
+    </additionalOffices>
+    <department>Product and Tech</department>
+    <recruitingCategory>Engineering</recruitingCategory>
+    <name>Staff Software Engineer, Data Platform</name>
+    <jobDescriptions>
+        <jobDescription>
+            <name>The Role: How you&#039;ll make an impact at Personio</name>
+            <value>
+                <![CDATA[<strong>This position is hybrid based in either Dublin or Munich locations</strong><br><br>At Personio, your work transforms the way millions of people experience work every day. Join our Product &amp; Technology team, where we drive our customers’ outcomes by designing, developing and delivering innovative and high quality products. Be empowered to take ownership of your areas and make an impact on your team, our product, and our customers. <br><br>The Data <em>Platform</em> team is on a missio]]>
+            </value>
+        </jobDescription>
+        <jobDescription>
+            <name>Role Responsibilities: What you&#039;ll do</name>
+            <value>
+                <![CDATA[<ul><li>You will conceptualize and own technical solutions end-to-end. Organizing effective groups of engineers to brainstorm, design and deliver impactful work.</li><li>You will invest in experimenting and building <em>platform</em> solutions that improve the developer experience for all product teams.</li><li>Your scope will include everything from how software components are built, tested, deployed, released and monitored across all environments, from the local machine straight through to our]]>
+            </value>
+        </jobDescription>
+        <jobDescription>
+            <name>Role Requirements: What you need to succeed</name>
+            <value>
+                <![CDATA[<ul><li>10+ years of software engineering experience building and designing scalable applications, <em>tools</em> or distributed systems. You understand the needs of software engineers working in product teams, you’ve been in their shoes, and can empathize with them. You want to help your fellow engineers to achieve maximum efficiency.</li><li>You have experience designing, building, documenting and distributing robust and delightful <em>platform</em> solutions end to end. Systems you build are ]]>
+            </value>
+        </jobDescription>
+        <jobDescription>
+            <name>Why Personio</name>
+            <value>
+                <![CDATA[Personio is an equal opportunities employer, committed to building an integrative culture where everyone feels welcomed and supported. We embrace uniqueness and understand that our diverse, values-driven culture makes us stronger. We are proud to have an inclusive workplace environment that will foster your development no matter your gender, civil status, family status, sexual orientation, religion, age, disability, education level, or race.<br><br>Aside from our people, culture, and mission, ch]]>
+            </value>
+        </jobDescription>
+    </jobDescriptions>
+    <employmentType>permanent</employmentType>
+    <seniority>experienced</seniority>
+    <schedule>full-time</schedule>
+    <yearsOfExperience>7-10</yearsOfExperience>
+    <occupation>software_and_web_development</occupation>
+    <occupationCategory>it_software</occupationCategory>
+    <createdAt>2024-11-13T14:10:41+00:00</createdAt>
+</position>
+</workzag-jobs>

@@ -122,9 +122,10 @@ export const postingSources = sqliteTable(
 // ---- Search (phase 10) ------------------------------------------------------------------
 
 /**
- * greenhouse · ashby · lever · workable · smartrecruiters: a company's board, read through that ATS's public
- * list API (complete lists). page: a career page or feed URL, read by the generic reader (a
- * feed or JSON-LD first, then a known ATS embed). board: a job board (HN, RemoteOK, …).
+ * greenhouse · ashby · lever · workable · smartrecruiters · personio · recruitee · teamtailor ·
+ * join · breezy: a company's board, read through that ATS's public list (complete lists). page:
+ * a career page or feed URL, read by the generic reader (a feed or JSON-LD first, then a known
+ * ATS embed). board: a job board (HN, RemoteOK, …).
  * linkedin · xing: the platform's job search, read under the candidate's session in Applyant's
  * browser with the platform guardrails (phase 14); never a complete list.
  * telegram: a job channel (phase 15), its public t.me/s preview or, for a private channel, the
@@ -136,6 +137,11 @@ export const SEARCH_SOURCE_KINDS = [
   'lever',
   'workable',
   'smartrecruiters',
+  'personio',
+  'recruitee',
+  'teamtailor',
+  'join',
+  'breezy',
   'page',
   'board',
   'linkedin',
@@ -149,7 +155,17 @@ export type ResolvedSource =
   | { via: 'feed'; url: string; format: string }
   | {
       via: 'ats';
-      ats: 'greenhouse' | 'ashby' | 'lever' | 'workable' | 'smartrecruiters';
+      ats:
+        | 'greenhouse'
+        | 'ashby'
+        | 'lever'
+        | 'workable'
+        | 'smartrecruiters'
+        | 'personio'
+        | 'recruitee'
+        | 'teamtailor'
+        | 'join'
+        | 'breezy';
       token: string;
     }
   | { via: 'lever'; apiHost: string }

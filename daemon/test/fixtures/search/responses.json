@@ -82,5 +82,65 @@
     "status": 200,
     "contentType": "application/json",
     "file": "jobicy-engineer.json"
+  },
+  {
+    "url": "https://ottonova.jobs.personio.de/xml",
+    "status": 200,
+    "contentType": "text/xml",
+    "file": "personio-ottonova.xml"
+  },
+  {
+    "url": "https://personio.jobs.personio.de/xml",
+    "status": 200,
+    "contentType": "text/xml",
+    "file": "personio-personio.xml"
+  },
+  {
+    "url": "https://personio.jobs.personio.de/xml?language=en",
+    "status": 200,
+    "contentType": "text/xml",
+    "file": "personio-personio-en.xml"
+  },
+  {
+    "url": "https://channable.recruitee.com/api/offers/",
+    "status": 200,
+    "contentType": "application/json",
+    "file": "recruitee-channable.json"
+  },
+  {
+    "url": "https://eworgmbh.teamtailor.com/jobs.json",
+    "status": 200,
+    "contentType": "application/feed+json",
+    "file": "teamtailor-eworgmbh.json"
+  },
+  {
+    "url": "https://eworgmbh.teamtailor.com/jobs.json?page=2&per_page=100",
+    "status": 200,
+    "contentType": "application/feed+json",
+    "file": "teamtailor-eworgmbh-2.json"
+  },
+  {
+    "url": "https://eworgmbh.teamtailor.com/jobs.json?page=3&per_page=100",
+    "status": 200,
+    "contentType": "application/feed+json",
+    "file": "teamtailor-eworgmbh-3.json"
+  },
+  {
+    "url": "https://join.com/companies/join",
+    "status": 200,
+    "contentType": "text/html",
+    "file": "join-join.html"
+  },
+  {
+    "url": "https://join.com/api/public/companies/54/jobs?page=1&pageSize=5",
+    "status": 200,
+    "contentType": "application/json",
+    "file": "join-join-jobs.json"
+  },
+  {
+    "url": "https://breezy.breezy.hr/json?verbose=true",
+    "status": 200,
+    "contentType": "application/json",
+    "file": "breezy-breezy.json"
   }
 ]
