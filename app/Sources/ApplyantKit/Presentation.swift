@@ -442,6 +442,7 @@ public enum Source {
             ("greenhouse.io", "Greenhouse"), ("ashbyhq.com", "Ashby"), ("lever.co", "Lever"),
             ("workable.com", "Workable"), ("myworkdayjobs.com", "Workday"), ("smartrecruiters.com", "SmartRecruiters"),
             ("recruitee.com", "Recruitee"), ("personio.", "Personio"), ("teamtailor.com", "Teamtailor"),
+            ("breezy.hr", "Breezy HR"),
         ]
         return known.first { host.contains($0.0) }?.1
     }

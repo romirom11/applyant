@@ -568,4 +568,230 @@ describe('career pages: a feed first, then a known ATS embed', () => {
     await expect(read).rejects.toThrow(/it needs a listing recipe/);
     await expect(read).rejects.toBeInstanceOf(NeedsRecipeError);
   });
+
+  it('a page that is a Teamtailor board itself is read as the board, not its feed', async () => {
+    const run = await readPage('https://eworgmbh.teamtailor.com/jobs.rss', ctx(recordedFetch()), {
+      via: 'feed',
+      url: 'https://eworgmbh.teamtailor.com/jobs.rss',
+      format: 'rss',
+    });
+    expect(run.resolved).toEqual({ via: 'ats', ats: 'teamtailor', token: 'eworgmbh' });
+    expect(run.complete).toBe(true);
+    expect(run.listings).toHaveLength(4);
+  });
+});
+
+describe('European ATS boards (recorded)', () => {
+  it('Personio: the XML list, its offices and sections, the entity without its number', async () => {
+    const run = await readAtsBoard('personio', 'ottonova', ctx(recordedFetch()));
+    expect(run.complete).toBe(true);
+    expect(run.listings).toHaveLength(4);
+    const first = run.listings[0];
+    expect(first).toMatchObject({
+      url: 'https://ottonova.jobs.personio.de/job/2573573',
+      externalId: '2573573',
+      company: 'ottonova Krankenversicherung AG',
+      location: 'München; Köln',
+      team: 'Risk Management & Actuary',
+      postedAt: '2026-03-23T15:24:29+00:00',
+    });
+    // Each description section's heading, then its text.
+    expect(first?.description).toMatch(/^DEIN TEAM\n/);
+    expect(first?.description).not.toMatch(/<|&amp;/);
+    expect(run.note).toMatch(/^ottonova .* on Personio: 4 jobs$/);
+  });
+
+  it('Personio: a position written only in English is described from ?language=en', async () => {
+    const fetch = recordedFetch();
+    const run = await readAtsBoard('personio', 'personio', ctx(fetch));
+    expect(fetch.calls).toEqual([
+      'https://personio.jobs.personio.de/xml',
+      'https://personio.jobs.personio.de/xml?language=en',
+    ]);
+    expect(run.company).toBe('Personio SE & Co. KG');
+    expect(run.listings[0]).toMatchObject({
+      title: 'Staff Software Engineer, Data Platform',
+      location: 'Munich; Berlin',
+    });
+    expect(run.listings[0]?.description).toMatch(/^The Role: How you'll make an impact/);
+  });
+
+  it('Recruitee: the offers, on the career site with the Recruitee page beside', async () => {
+    const run = await readAtsBoard('recruitee', 'channable', ctx(recordedFetch()));
+    expect(run).toMatchObject({ complete: true, company: 'Channable' });
+    expect(run.listings).toHaveLength(4);
+    expect(run.listings[0]).toMatchObject({
+      url: 'https://jobs.channable.com/o/senior-customer-success-manager-benelux-9',
+      sourceUrl: 'https://channable.recruitee.com/o/senior-customer-success-manager-benelux-9',
+      applyUrl: 'https://jobs.channable.com/o/senior-customer-success-manager-benelux-9/c/new',
+      externalId: '2786321',
+      location: 'Utrecht, Netherlands',
+      remote: false,
+      team: 'Customer Success',
+      postedAt: '2026-10-16T11:35:00Z',
+    });
+    expect(run.listings[3]).toMatchObject({ location: 'Remote (United States)', remote: true });
+    // The Recruitee page names the job, whatever the career site's domain.
+    expect(atsJobKey(run.listings[0]?.sourceUrl)).toBe(
+      'recruitee:channable/senior-customer-success-manager-benelux-9',
+    );
+  });
+
+  it('Teamtailor: every page of the JSON Feed, places from each job’s JobPosting', async () => {
+    const fetch = recordedFetch();
+    const run = await readAtsBoard('teamtailor', 'eworgmbh', ctx(fetch));
+    expect(fetch.calls).toHaveLength(3);
+    expect(run).toMatchObject({ complete: true, company: 'EWOR GmbH' });
+    expect(run.listings).toHaveLength(4);
+    expect(run.listings[0]).toMatchObject({
+      url: 'https://eworgmbh.teamtailor.com/jobs/8558035-ai-co-founder-cco-100-remote-m-f-d',
+      externalId: '8558035',
+      company: 'EWOR GmbH',
+      location: 'Vaduz, Europe, LI',
+      postedAt: '2026-10-16T12:32:18+02:00',
+    });
+    expect(run.listings[0]?.description).toMatch(/^We are looking to hire ambitious entrepreneurs/);
+    // A next page on another host isn't followed, and the list is partial.
+    const last = fixtureJson('teamtailor-eworgmbh-3.json');
+    const off = recordedFetch({
+      'https://eworgmbh.teamtailor.com/jobs.json?page=3&per_page=100': {
+        ...last,
+        next_url: 'https://elsewhere.example/jobs.json?page=4',
+      },
+    });
+    const partial = await readAtsBoard('teamtailor', 'eworgmbh', ctx(off));
+    expect(partial.complete).toBe(false);
+    expect(off.calls).toHaveLength(3);
+  });
+
+  it('JOIN: the company id from its page, then the list five jobs a page', async () => {
+    const fetch = recordedFetch();
+    const run = await readAtsBoard('join', 'join', ctx(fetch));
+    expect(fetch.calls).toEqual([
+      'https://join.com/companies/join',
+      'https://join.com/api/public/companies/54/jobs?page=1&pageSize=5',
+    ]);
+    expect(run).toMatchObject({ complete: true, company: 'JOIN' });
+    expect(run.listings).toHaveLength(4);
+    expect(run.listings[0]).toMatchObject({
+      // The job's id, not the ad's current number (16833245), which changes on republishing.
+      url: 'https://join.com/companies/join/14771122-engineering-manager',
+      externalId: '14771122',
+      title: 'Engineering Manager',
+      company: 'JOIN',
+      location: 'Barcelona, Spain',
+      remote: false,
+      team: 'Management, Team Leader',
+    });
+
+    const api = (n: number) => `https://join.com/api/public/companies/54/jobs?page=${n}&pageSize=5`;
+    const job = (i: number) => ({
+      id: 100 + i,
+      idParam: `${900 + i}-engineer-${i}`,
+      title: `Engineer ${i}`,
+      workplaceType: i === 5 ? 'REMOTE' : 'ONSITE',
+      city: { cityName: 'Berlin', countryName: 'Germany' },
+    });
+    const paged = recordedFetch({
+      [api(1)]: {
+        items: [0, 1, 2, 3, 4].map(job),
+        pagination: { rowCount: 6, pageCount: 2, page: 1, pageSize: 5 },
+      },
+      [api(2)]: {
+        items: [job(5)],
+        pagination: { rowCount: 6, pageCount: 2, page: 2, pageSize: 5 },
+      },
+    });
+    const two = await readAtsBoard('join', 'join', ctx(paged));
+    expect(two.complete).toBe(true);
+    expect(two.listings).toHaveLength(6);
+    expect(two.listings[5]).toMatchObject({
+      url: 'https://join.com/companies/join/105-engineer-5',
+      location: 'Remote (Berlin, Germany)',
+      remote: true,
+    });
+  });
+
+  it('Breezy: the verbose JSON list', async () => {
+    const run = await readAtsBoard('breezy', 'breezy', ctx(recordedFetch()));
+    expect(run).toMatchObject({ complete: true, company: 'MS Breezy Trial' });
+    expect(run.listings).toHaveLength(3);
+    expect(run.listings[0]).toMatchObject({
+      url: 'https://breezy.breezy.hr/p/98323abf2296-employee-12',
+      externalId: '98323abf2296',
+      title: 'Employee #12',
+      location: 'Chaos, FL',
+      remote: null,
+      team: 'Does Not Matter',
+      description: 'Roses and Rainbows until 30 days in.',
+    });
+  });
+
+  it('a company none of them knows fails the read with a 404', async () => {
+    for (const ats of ['personio', 'recruitee', 'teamtailor', 'join', 'breezy'] as const) {
+      await expect(readAtsBoard(ats, 'no-such-company', ctx(recordedFetch()))).rejects.toThrow(
+        /HTTP 404/,
+      );
+    }
+  });
+
+  it('finds their boards on career pages, and their jobs’ ids', () => {
+    expect(detectAtsBoard('<a href="https://acme.jobs.personio.de/?language=en">Jobs</a>')).toEqual(
+      { ats: 'personio', token: 'acme' },
+    );
+    expect(
+      detectAtsBoard(
+        '<script src="https://acme.breezy.hr/embed/js?inline=true"></script><a href="https://www.teamtailor.com/?utm_source=career-site">Powered by Teamtailor</a>',
+      ),
+    ).toEqual({ ats: 'breezy', token: 'acme' });
+    expect(detectAtsBoard('<a href="https://join.com/companies/acme">Open roles</a>')).toEqual({
+      ats: 'join',
+      token: 'acme',
+    });
+    expect(detectAtsBoard('<a href="https://acme.teamtailor.com/jobs">Jobs</a>')).toEqual({
+      ats: 'teamtailor',
+      token: 'acme',
+    });
+    // A Recruitee career site on the company's own domain: its config names the subdomain;
+    // Recruitee's own hosts (analytics, the marketing site) are no company.
+    expect(
+      detectAtsBoard(
+        '<script src="https://careers-analytics.recruitee.com/a.js"></script><div data-props="{&quot;atsHost&quot;:&quot;recruitee.com&quot;,&quot;subdomain&quot;:&quot;channable&quot;}"></div>',
+      ),
+    ).toEqual({ ats: 'recruitee', token: 'channable' });
+    expect(detectAtsBoard('<a href="https://www.teamtailor.com/">Teamtailor</a>')).toBeNull();
+    expect(boardFromUrl('https://acme.jobs.personio.com/xml')).toEqual({
+      ats: 'personio',
+      token: 'acme',
+    });
+    expect(boardFromUrl('https://acme.recruitee.com/api/offers/')).toEqual({
+      ats: 'recruitee',
+      token: 'acme',
+    });
+    expect(boardFromUrl('https://join.com/companies/acme/16833245-engineering-manager')).toEqual({
+      ats: 'join',
+      token: 'acme',
+    });
+    expect(boardFromUrl('https://join.com/api/public/companies/54/jobs')).toBeNull();
+    expect(boardFromUrl('https://careers-analytics.recruitee.com/')).toBeNull();
+
+    expect(atsJobKey('https://acme.jobs.personio.de/job/2573573?language=de')).toBe(
+      'personio:2573573',
+    );
+    expect(atsJobKey('https://Acme.recruitee.com/o/Backend-Engineer-2/c/new')).toBe(
+      'recruitee:acme/backend-engineer-2',
+    );
+    expect(atsJobKey('https://acme.teamtailor.com/jobs/8558035-ai-engineer')).toBe(
+      'teamtailor:8558035',
+    );
+    expect(atsJobKey('https://acme.breezy.hr/p/98323abf2296-employee-12/apply')).toBe(
+      'breezy:98323abf2296',
+    );
+    // JOIN's job addresses take a new number at each republishing: no key.
+    expect(atsJobKey('https://join.com/companies/acme/16833245-engineering-manager')).toBeNull();
+    expect(atsJobKey('https://acme.teamtailor.com/jobs')).toBeNull();
+    expect(atsJobPage('https://acme.recruitee.com/o/backend-engineer-2/c/new')).toBe(
+      'https://acme.recruitee.com/o/backend-engineer-2',
+    );
+  });
 });
