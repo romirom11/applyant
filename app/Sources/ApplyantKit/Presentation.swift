@@ -448,7 +448,9 @@ public enum Source {
             ("recruitee.com", "Recruitee"), ("personio.", "Personio"), ("teamtailor.com", "Teamtailor"),
             ("breezy.hr", "Breezy HR"),
         ]
-        return known.first { host.contains($0.0) }?.1
+        if let hit = known.first(where: { host.contains($0.0) }) { return hit.1 }
+        // JOIN by its exact host: "join.com" is inside too many other hosts.
+        return host == "join.com" || host.hasSuffix(".join.com") ? "JOIN" : nil
     }
 
     /// Where a posting was found, for the detail's chip: a board or an ATS by name, else the
