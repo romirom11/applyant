@@ -36,6 +36,9 @@ describe('absence from a source', () => {
     events = [];
     h.bus.subscribe((e) => events.push(e));
     addSource(t.db, { kind: 'greenhouse', locator: 'acmeai' }, clock);
+    // A strategy reading Greenhouse boards searches the ATS index too (ats-index.test.ts); here
+    // only the boards' own lists count.
+    setSourceEnabled(t.db, 'board:ats-index', false);
   });
   afterEach(async () => {
     await h.stop();

@@ -2,6 +2,8 @@
 import { timestampDate } from '@bufbuild/protobuf/wkt';
 import type { Command } from 'commander';
 import type {
+  AtsIndexDiscovery,
+  IndexCompany,
   ListingRecipe,
   SearchPlan,
   SearchRun,
@@ -176,6 +178,42 @@ export function planLines(p: SearchPlan): string[] {
   if (p.boardKeys.length) lines.push(`  boards watched: ${p.boardKeys.join(', ')}`);
   if (p.searches.length) lines.push(`  web searches: ${p.searches.join(' · ')}`);
   return lines;
+}
+
+function discoveryJson(d: AtsIndexDiscovery) {
+  return {
+    id: Number(d.id),
+    trigger: d.trigger,
+    status: d.status,
+    startedAt: iso(d.startedAt),
+    finishedAt: iso(d.finishedAt),
+    found: d.found,
+    added: d.added,
+    note: d.note ?? null,
+  };
+}
+
+function discoveryLine(d: AtsIndexDiscovery): string {
+  const by = d.trigger === 'schedule' ? 'weekly' : d.trigger === 'setup' ? 'first' : 'by you';
+  return `Discovery ${d.id} · ${by} · ${d.status} · ${when(d.startedAt)}${d.status === 'queued' ? '' : ` · ${d.added} new of ${d.found} found`}${d.note ? `\n  ${d.note}` : ''}`;
+}
+
+function indexCompanyJson(c: IndexCompany) {
+  return {
+    id: Number(c.id),
+    ats: c.ats,
+    token: c.token,
+    name: c.name ?? null,
+    enabled: c.enabled,
+    status: c.status,
+    jobs: c.jobs,
+    matching: c.matching,
+    lastReadAt: iso(c.lastReadAt),
+    nextReadAt: iso(c.nextReadAt),
+    foundVia: c.foundVia,
+    lastNote: c.lastNote ?? null,
+    boardUrl: c.boardUrl,
+  };
 }
 
 function recipeLines(r: ListingRecipe): string[] {
@@ -603,6 +641,162 @@ export function registerSearch(program: Command, client: () => ApplyantClient): 
       });
   }
 
+  // ---- the ATS index ----
+  const index = search
+    .command('index')
+    .description(
+      'every company board Applyant knows on the ATSs, read on its own schedule and searched by board:ats-index',
+    );
+
+  index
+    .command('status', { isDefault: true })
+    .description('the index per ATS, and its latest discovery runs')
+    .option('--json', 'print JSON')
+    .action(async (opts: { json?: boolean }) => {
+      const res = await client().getAtsIndex({});
+      if (opts.json) {
+        return json({
+          enabled: res.enabled,
+          companies: res.companies,
+          jobs: res.jobs,
+          matching: res.matching,
+          ats: res.ats.map((a) => ({
+            ats: a.ats,
+            label: a.label,
+            enabled: a.enabled,
+            companies: a.companies,
+            hiring: a.hiring,
+            jobs: a.jobs,
+            matching: a.matching,
+            due: a.due,
+            failing: a.failing,
+            lastReadAt: iso(a.lastReadAt),
+          })),
+          discoveries: res.discoveries.map(discoveryJson),
+        });
+      }
+      out(
+        `ATS index · ${res.enabled ? 'on' : 'OFF (board:ats-index is switched off)'} · ${res.companies} companies · ${res.jobs} open jobs · ${res.matching} matching`,
+      );
+      out('');
+      out(
+        table(
+          ['ATS', 'ON', 'COMPANIES', 'HIRING', 'JOBS', 'MATCHING', 'DUE', 'FAILING', 'LAST READ'],
+          res.ats.map((a) => [
+            a.label,
+            a.enabled ? 'on' : 'off',
+            String(a.companies),
+            String(a.hiring),
+            String(a.jobs),
+            String(a.matching),
+            String(a.due),
+            String(a.failing),
+            when(a.lastReadAt),
+          ]),
+        ),
+      );
+      if (res.discoveries.length) {
+        out('');
+        for (const d of res.discoveries) out(discoveryLine(d));
+      } else {
+        out('');
+        out('No discovery yet (`applyant search index discover`).');
+      }
+    });
+
+  index
+    .command('companies')
+    .description('the companies in the index: matching ones first, then hiring ones, then by name')
+    .option('--ats <ats>', 'only this ATS (greenhouse, ashby, lever, workable, smartrecruiters)')
+    .option('-q, --query <text>', "part of the company's name or board token")
+    .option('--matching', 'only companies with open jobs an active strategy matches')
+    .option('-n, --limit <n>', 'how many (at most 500)', '50')
+    .option('--offset <n>', 'skip this many', '0')
+    .option('--json', 'print JSON')
+    .action(
+      async (opts: {
+        ats?: string;
+        query?: string;
+        matching?: boolean;
+        limit: string;
+        offset: string;
+        json?: boolean;
+      }) => {
+        const res = await client().listIndexCompanies({
+          ...(opts.ats ? { ats: opts.ats } : {}),
+          query: opts.query ?? '',
+          matchingOnly: !!opts.matching,
+          limit: Number(opts.limit) || 50,
+          offset: Number(opts.offset) || 0,
+        });
+        if (opts.json)
+          return json({ total: res.total, companies: res.companies.map(indexCompanyJson) });
+        if (res.companies.length === 0) return out('No companies in the index match.');
+        out(
+          table(
+            [
+              'ID',
+              'ATS',
+              'COMPANY',
+              'STATUS',
+              'JOBS',
+              'MATCHING',
+              'LAST READ',
+              'NEXT',
+              'FOUND VIA',
+            ],
+            res.companies.map((c) => [
+              String(c.id),
+              c.ats,
+              truncate(c.name ? `${c.name} (${c.token})` : c.token, 40),
+              c.enabled ? c.status : `${c.status} (off)`,
+              String(c.jobs),
+              String(c.matching),
+              when(c.lastReadAt),
+              c.enabled ? when(c.nextReadAt) : '-',
+              c.foundVia,
+            ]),
+          ),
+        );
+        const shown = (Number(opts.offset) || 0) + res.companies.length;
+        if (res.total > shown) out(`${shown} of ${res.total} (--offset ${shown} for more)`);
+      },
+    );
+
+  index
+    .command('discover')
+    .description(
+      "look for more company boards now: Common Crawl and Applyant's own data (also weekly)",
+    )
+    .action(async () => {
+      const res = await client().discoverIndexCompanies({});
+      out(
+        res.discoveryId !== undefined
+          ? `Looking for company boards as discovery ${res.discoveryId}; \`applyant search index\` shows what it found.`
+          : 'A discovery is already waiting or running.',
+      );
+    });
+
+  for (const [verb, enabled] of [
+    ['off', false],
+    ['on', true],
+  ] as const) {
+    index
+      .command(`${verb} <id>`)
+      .description(
+        enabled
+          ? 'take a company back into the index'
+          : 'leave a company out of the index: it is neither read nor searched',
+      )
+      .action(async (id: string) => {
+        if (!/^\d+$/.test(id))
+          throw new Error(`"${id}" is not a company id (see \`search index companies\`)`);
+        const res = await client().setIndexCompanyEnabled({ id: BigInt(id), enabled });
+        const c = res.company;
+        out(`${c?.name ?? c?.token} (${c?.ats}) switched ${verb}.`);
+      });
+  }
+
   // ---- the planner ----
   search
     .command('plan')
@@ -613,7 +807,7 @@ export function registerSearch(program: Command, client: () => ApplyantClient): 
       const res = await client().planSearch({});
       out(
         res.planId !== undefined
-          ? `Planning searches as plan ${res.planId}: new strategies show up as agent-generated, new boards join the watch list. \`applyant search plans\` shows what it did.`
+          ? `Planning searches as plan ${res.planId}: new strategies show up as agent-generated, new boards join the ATS index or the watch list. \`applyant search plans\` shows what it did.`
           : 'The planner is already running.',
       );
     });

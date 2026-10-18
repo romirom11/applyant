@@ -90,3 +90,10 @@ export function sleep(ms: number, signal: AbortSignal): Promise<void> {
     signal.addEventListener('abort', onAbort, { once: true });
   });
 }
+
+/**
+ * The daemon's own, over the real network: strategies read the same watched boards within
+ * minutes of each other and share those reads, and the ATS index's crawler takes its Workable
+ * reads through the same lane. An injected fetch (tests) gets fresh ones per run.
+ */
+export const DAEMON_READS = new SharedReads({ gapMs: { workable: 1_000 } });

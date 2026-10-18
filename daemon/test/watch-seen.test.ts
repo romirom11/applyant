@@ -1,17 +1,13 @@
-// The watch list grows from what searches match: a job search across every company finds a job
-// that fits, and its company's board joins the watch list, read in full on later runs. So does
-// the board behind any matched job page (an HN post, a RemoteOK apply link) and behind a
-// verified posting's apply link.
+// The ATS index grows from what searches match: a job search across every company finds a job
+// that fits, and its company's board joins the index, read at the next crawl and then every
+// few hours. So does the board behind any matched job page (an HN post, a RemoteOK apply link)
+// and behind a verified posting's apply link. The watch list doesn't grow this way any more.
 import { eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { postings, searchSources } from '../src/db/schema.ts';
-import { addSource, setSourceEnabled, sourcesFor } from '../src/domain/search/sources.ts';
-import {
-  boardOf,
-  MAX_SEEN_BOARDS_PER_RUN,
-  MAX_WATCHED_BOARDS,
-  watchSeen,
-} from '../src/domain/search/watchlist.ts';
+import { atsCompanies, postings, searchSources } from '../src/db/schema.ts';
+import { knowBoards } from '../src/domain/search/ats-index/store.ts';
+import { setCompanyEnabled } from '../src/domain/search/ats-index/views.ts';
+import { boardOf, MAX_SEEN_BOARDS_PER_RUN, watchSeen } from '../src/domain/search/watchlist.ts';
 import { EventBus } from '../src/queue/events.ts';
 import { runInTx } from '../src/queue/tx.ts';
 import { type TempDb, tempDb } from './helpers/db.ts';
@@ -31,15 +27,23 @@ describe('boards behind matched jobs', () => {
     t.cleanup();
   });
 
-  const agentBoards = () =>
+  const indexed = () =>
     t.db
       .select()
-      .from(searchSources)
-      .where(eq(searchSources.origin, 'agent'))
+      .from(atsCompanies)
+      .orderBy(atsCompanies.id)
       .all()
-      .map((s) => ({ key: s.key, label: s.label, note: s.note, enabled: s.enabled }));
+      .map((c) => ({
+        board: `${c.ats}:${c.token}`,
+        name: c.name,
+        via: c.foundVia,
+        note: c.foundNote,
+        status: c.status,
+      }));
+  const agentSources = () =>
+    t.db.select().from(searchSources).where(eq(searchSources.origin, 'agent')).all();
 
-  it('a job search finds jobs at companies nobody watched: they become postings, their boards join the watch list', async () => {
+  it('a job search finds jobs at companies nobody knew: they become postings, their boards join the index', async () => {
     h = searchHarness(t, { fetch: recordedFetch(roleReplies()), now: () => now });
     const run = await h.run({
       name: 'Laravel',
@@ -54,7 +58,7 @@ describe('boards behind matched jobs', () => {
       added: 5,
       complete: false,
     });
-    expect(row?.note).toBe('5 listed · 5 matched · 5 new · 4 boards now watched');
+    expect(row?.note).toBe('5 listed · 5 matched · 5 new · 4 boards joined the ATS index');
     expect(
       t.db
         .select()
@@ -62,27 +66,35 @@ describe('boards behind matched jobs', () => {
         .all()
         .map((p) => p.canonicalUrl),
     ).toContain('https://jobs.smartrecruiters.com/JobsForHumanity/744000074527197');
-    expect(agentBoards()).toEqual([
+    expect(indexed()).toEqual([
       {
-        key: 'smartrecruiters:ALTEN',
-        label: 'ALTEN',
+        board: 'smartrecruiters:ALTEN',
+        name: 'ALTEN',
+        via: 'smartrecruiters-search',
         note: 'has "Développeur Full Stack Vue.js / PHP Laravel" ("Laravel" matched it on SmartRecruiters job search · every company)',
-        enabled: true,
+        status: 'new',
       },
-      expect.objectContaining({ key: 'smartrecruiters:SQLI1', label: 'SQLI' }),
+      expect.objectContaining({ board: 'smartrecruiters:SQLI1', name: 'SQLI' }),
       expect.objectContaining({
-        key: 'smartrecruiters:JobsForHumanity',
-        label: 'Jobs for Humanity',
+        board: 'smartrecruiters:JobsForHumanity',
+        name: 'Jobs for Humanity',
       }),
-      expect.objectContaining({ key: 'smartrecruiters:Shebaxyz3', label: 'Sheba.xyz' }),
+      expect.objectContaining({ board: 'smartrecruiters:Shebaxyz3', name: 'Sheba.xyz' }),
     ]);
-    // A strategy reading SmartRecruiters boards now reads them in full.
-    expect(sourcesFor(t.db, ['smartrecruiters']).map((s) => s.key)).toHaveLength(4);
+    // Read at the next crawl; the watch list stays the candidate's.
+    expect(
+      t.db
+        .select()
+        .from(atsCompanies)
+        .all()
+        .map((c) => c.nextReadAt),
+    ).toEqual(Array(4).fill(now));
+    expect(agentSources()).toEqual([]);
 
-    // The next run finds them watched already.
+    // The next run finds them known already.
     const again = await h.again(1);
     expect(h.runRow(again)?.note).toBe('5 listed · 5 matched · 0 new');
-    expect(agentBoards()).toHaveLength(4);
+    expect(indexed()).toHaveLength(4);
   });
 
   it("a matched job page's board, from any source; the board a listing came from isn't seen again", async () => {
@@ -118,26 +130,31 @@ describe('boards behind matched jobs', () => {
     });
     await h.run({ name: 'AI', queries: ['ai engineer'], sources: ['board:remoteok'] });
     // Only the job that matched: an office manager's board isn't one for this candidate.
-    expect(agentBoards()).toEqual([
+    expect(indexed()).toEqual([
       {
-        key: 'ashby:acme-ai',
-        label: 'Acme AI',
+        board: 'ashby:acme-ai',
+        name: 'Acme AI',
+        via: 'posting',
         note: 'has "Senior AI Engineer" ("AI" matched it on RemoteOK)',
-        enabled: true,
+        status: 'new',
       },
     ]);
   });
 
-  it('at most MAX_SEEN_BOARDS_PER_RUN new ones at once; one watched already (in any case, on or off) stays as it is', () => {
+  it('at most MAX_SEEN_BOARDS_PER_RUN new ones at once; one the index knows (in any case, on or off) stays as it is', () => {
     const bus = new EventBus();
-    addSource(t.db, { kind: 'lever', locator: 'Acme' }, now);
-    addSource(t.db, { kind: 'greenhouse', locator: 'offco' }, now);
-    setSourceEnabled(t.db, 'greenhouse:offco', false);
+    const [acme, offco] = runInTx(t.db, bus, { now }, (tx) =>
+      knowBoards(tx, [
+        { board: { ats: 'lever', token: 'Acme' }, via: 'common-crawl' },
+        { board: { ats: 'greenhouse', token: 'offco' }, via: 'common-crawl' },
+      ]),
+    );
+    setCompanyEnabled(t.db, offco?.id ?? 0, false);
     const job = (url: string, title = 'AI Engineer') => ({
       listing: { url, applyUrl: null, title, company: null },
       where: '"AI" matched it on HN',
     });
-    const res = runInTx(t.db, bus, { now }, (tx) =>
+    const added = runInTx(t.db, bus, { now }, (tx) =>
       watchSeen(tx, [
         job('https://jobs.lever.co/acme/0cc069a3-f9c2-4d8b-a0d6-db117b3f02e7'),
         job('https://job-boards.greenhouse.io/offco/jobs/123'),
@@ -146,54 +163,19 @@ describe('boards behind matched jobs', () => {
         ),
       ]),
     );
-    expect(res.added.map((s) => s.key)).toEqual(
-      Array.from({ length: MAX_SEEN_BOARDS_PER_RUN }, (_, i) => `greenhouse:co${i}`),
+    expect(added.map((c) => c.token)).toEqual(
+      Array.from({ length: MAX_SEEN_BOARDS_PER_RUN }, (_, i) => `co${i}`),
     );
-    expect(res.rejected).toHaveLength(2);
-    expect(t.db.select().from(searchSources).where(eq(searchSources.locator, 'acme')).get()).toBe(
-      undefined,
-    );
-    expect(
-      t.db.select().from(searchSources).where(eq(searchSources.key, 'greenhouse:offco')).get()
-        ?.enabled,
-    ).toBe(false);
-  });
-
-  it('a career page that reads the board watches it already; past MAX_WATCHED_BOARDS no more join', () => {
-    const bus = new EventBus();
-    const page = addSource(t.db, { kind: 'page', locator: 'https://acme.ai/careers' }, now).source;
-    t.db
-      .update(searchSources)
-      .set({ resolved: { via: 'ats', ats: 'greenhouse', token: 'AcmeAI' } })
-      .where(eq(searchSources.id, page.id))
-      .run();
-    const job = (url: string) => ({
-      listing: { url, applyUrl: null, title: 'AI Engineer', company: null },
-      where: '"AI" matched it on HN',
-    });
-    const seen = (...urls: string[]) =>
-      runInTx(t.db, bus, { now }, (tx) => watchSeen(tx, urls.map(job))).added.map((s) => s.key);
-    expect(seen('https://job-boards.greenhouse.io/acmeai/jobs/1')).toEqual([]);
-
-    // The agent's boards that are switched on count; one switched off leaves room.
-    for (let i = 0; i < MAX_WATCHED_BOARDS - 1; i++) {
-      addSource(t.db, { kind: 'ashby', locator: `co${i}`, origin: 'agent' }, now);
-    }
-    expect(
-      seen(
-        'https://job-boards.greenhouse.io/one/jobs/1',
-        'https://job-boards.greenhouse.io/two/jobs/2',
-      ),
-    ).toEqual(['greenhouse:one']);
-    expect(seen('https://job-boards.greenhouse.io/two/jobs/2')).toEqual([]);
-    setSourceEnabled(t.db, 'ashby:co0', false);
-    expect(seen('https://job-boards.greenhouse.io/two/jobs/2')).toEqual(['greenhouse:two']);
+    const byId = (id: number) =>
+      t.db.select().from(atsCompanies).where(eq(atsCompanies.id, id)).get();
+    expect(byId(acme?.id ?? 0)).toMatchObject({ token: 'Acme', foundVia: 'common-crawl' });
+    expect(byId(offco?.id ?? 0)?.enabled).toBe(false);
   });
 
   it("a verified posting's apply link on an ATS board (a LinkedIn job applying through Greenhouse)", () => {
     const bus = new EventBus();
     // What verify_posting passes once a posting is live.
-    const res = runInTx(t.db, bus, { now }, (tx) =>
+    const added = runInTx(t.db, bus, { now }, (tx) =>
       watchSeen(
         tx,
         [
@@ -210,8 +192,8 @@ describe('boards behind matched jobs', () => {
         1,
       ),
     );
-    expect(res.added.map((s) => [s.key, s.note])).toEqual([
-      ['greenhouse:acmeai', 'has "Staff AI Engineer" (posting 7 applies there)'],
+    expect(added.map((c) => [c.ats, c.token, c.name, c.foundNote])).toEqual([
+      ['greenhouse', 'acmeai', 'Acme AI', 'has "Staff AI Engineer" (posting 7 applies there)'],
     ]);
   });
 

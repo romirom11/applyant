@@ -114,6 +114,8 @@ describe('search from the CLI', () => {
       'board:workable-search',
       'board:smartrecruiters-search',
       'board:ats-web-search',
+      // The ATS index: every company board Applyant knows, searched locally.
+      'board:ats-index',
       // LinkedIn and Xing: built in, read only once Applyant's browser is signed in (phase 14).
       'linkedin:jobs',
       'xing:jobs',
@@ -218,6 +220,22 @@ describe('search from the CLI', () => {
     const bad = await cli(['search', 'strategies', 'add', 'Too often', '--every', '5m']);
     expect(bad.code).not.toBe(0);
     expect(bad.stderr).toContain('at most every 60 minutes');
+  });
+
+  it('search index: the index per ATS, its companies, a switch per company', async () => {
+    const status = await cli(['search', 'index']);
+    expect(status.stdout).toContain('ATS index · on · 0 companies · 0 open jobs · 0 matching');
+    expect(status.stdout).toMatch(/Greenhouse\s+on\s+0\s+0/);
+    // No strategy reads the index here: nothing was looked for by itself.
+    expect(status.stdout).toContain('No discovery yet');
+    const companies = await cli(['search', 'index', 'companies', '--ats', 'greenhouse']);
+    expect(companies.stdout).toContain('No companies in the index match.');
+    const bad = await cli(['search', 'index', 'companies', '--ats', 'bamboo']);
+    expect(bad.code).not.toBe(0);
+    expect(bad.stderr).toContain('unknown ATS "bamboo"');
+    const off = await cli(['search', 'index', 'off', '999']);
+    expect(off.code).not.toBe(0);
+    expect(off.stderr).toContain('no company 999 in the ATS index');
   });
 });
 

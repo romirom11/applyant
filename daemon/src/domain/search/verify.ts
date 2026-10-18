@@ -19,8 +19,8 @@
 // read_form (the application form itself, read in phase 4's form engine). Verifying a posting
 // that was live before (a search source stopped listing it) only checks it still is: live keeps
 // its stage and everything built on it, dead closes it. When the page or its apply link is on an
-// ATS board that isn't watched yet (a LinkedIn or Telegram job applying through Greenhouse), the
-// board joins the watch list.
+// ATS board the index doesn't know yet (a LinkedIn or Telegram job applying through
+// Greenhouse), the board joins the ATS index.
 import { eq } from 'drizzle-orm';
 import type { Frame, Page } from 'playwright';
 import { guardReadOnly, readScope } from '../../browser/form-read.ts';

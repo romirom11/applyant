@@ -5,11 +5,13 @@
 //               strategy's queries and locations match · group them into postings (dedupe.ts)
 //               career pages read by their listing recipe (phase 11) get a sample of their
 //               listings checked every few days (listing_check: "a job title with its link?")
+//               board:ats-index searches the ATS index's store (ats-index/), no request
 //   commit      new postings at `found` (+ verify_posting), every listing as a posting source,
-//               the strategy's claim on them · the ATS boards behind matched listings onto the
-//               watch list (watchlist.ts) · the absence rule per source (absence.ts) · the
-//               run's per-source results · a build_recipe for pages that need one (recipes/) ·
-//               a `search.run` event
+//               the strategy's claim on them · watched ATS boards' reads into the ATS index,
+//               and the boards behind matched listings into it (watchlist.ts) · the absence
+//               rule per source (absence.ts; the index's jobs close through their boards'
+//               reads instead) · the run's per-source results · a build_recipe for pages that
+//               need one (recipes/) · a `search.run` event
 //
 // Tasks created here (verify, and from it score and read_form) carry the run's id.
 import { and, count, eq, isNull } from 'drizzle-orm';
@@ -32,13 +34,22 @@ import {
 import { telegramPostsSchema } from '../../models/schemas/telegram.ts';
 import type { Handler, Tx } from '../../queue/types.ts';
 import { applyAbsence, reopenPosting } from './absence.ts';
+import {
+  activeMatcher,
+  boardKey,
+  INDEX_LINK_KIND,
+  indexAtsFor,
+  indexListings,
+  matchingCurrent,
+  recordWatchedRead,
+} from './ats-index/store.ts';
 import { type Cluster, DedupeIndex } from './dedupe.ts';
 import { readAtsBoardShared } from './readers/ats-api.ts';
-import { isBoardId, readBoard } from './readers/boards.ts';
+import { INDEX_SOURCE_KEY, isBoardId, readBoard } from './readers/boards.ts';
 import { LINKEDIN } from './readers/linkedin.ts';
 import { NeedsRecipeError, readPage } from './readers/page.ts';
 import { type PlatformAccess, readPlatform } from './readers/platform.ts';
-import { SharedReads } from './readers/shared.ts';
+import { DAEMON_READS, SharedReads } from './readers/shared.ts';
 import {
   applyUrlOf,
   type JudgePosts,
@@ -67,10 +78,9 @@ import { watchSeen } from './watchlist.ts';
 export const MAX_NEW_PER_RUN = 50;
 const PARALLEL_SOURCES = 4;
 
-// The daemon's own, over the real network: strategies read the same watched boards within
-// minutes of each other and share those reads, and every run's web searches go through one
-// pace and daily budget. An injected fetch (tests) gets fresh ones per run.
-const SHARED_READS = new SharedReads({ gapMs: { workable: 1_000 } });
+// The daemon's own, over the real network: every run's web searches go through one pace and
+// daily budget (board reads are shared through DAEMON_READS). An injected fetch (tests) gets
+// fresh ones per run.
 const WEB_SEARCH = new WebSearchGate();
 
 export interface SourceRead {
@@ -306,6 +316,20 @@ export const searchHandler: Handler<'search'> = async (task, ctx) => {
     sources.filter((s) => s.kind === 'page' || isPlatformKind(s.kind)).map((s) => s.id),
   );
   ctx.progress({ message: `${strategy.name}: reading ${sources.length} source(s)` });
+  // The ATS index leaves out the boards this run reads itself (watched ones, and the boards
+  // career pages read): their jobs come from there, read in full.
+  const boardsRead = new Set(
+    sources.flatMap((s) =>
+      isAts(s.kind)
+        ? [boardKey(s.kind, s.locator)]
+        : s.resolved?.via === 'ats'
+          ? [boardKey(s.resolved.ats, s.resolved.token)]
+          : [],
+    ),
+  );
+  // Only the jobs flagged as matching while the flags are current for the active strategies
+  // (a strategy just added or edited, or run while paused, scans every open job).
+  const matchingOnly = strategy.state === 'active' && matchingCurrent(ctx.read);
   const reader = ctx.deps.reader as ReaderPool | undefined;
   const live = !ctx.deps.fetch;
   const rctx: ReaderContext = {
@@ -318,9 +342,16 @@ export const searchHandler: Handler<'search'> = async (task, ctx) => {
     platform: platformAccess(ctx, task.id),
     telegram: telegramReading(ctx, task.id),
     wants: (l) => matchesStrategy(l, strategy),
-    shared: live ? SHARED_READS : new SharedReads(),
+    shared: live ? DAEMON_READS : new SharedReads(),
     web: live ? WEB_SEARCH : new WebSearchGate({ paceMs: 0 }),
     turn: runsBefore(ctx.read, strategy.id, task.runId),
+    index: (wants) =>
+      indexListings(ctx.read, {
+        wants,
+        ats: indexAtsFor(strategy.sources),
+        skip: boardsRead,
+        matchingOnly,
+      }),
   };
   const reads = await mapLimit(sources, PARALLEL_SOURCES, async (s) => {
     const recipe = recipes.get(s.id) ?? null;
@@ -417,7 +448,9 @@ function linkListing(tx: Tx, postingId: number, source: SearchSourceRow, l: List
     .insert(postingSources)
     .values({
       postingId,
-      kind: source.kind,
+      // The index's link is its own: a job search listing the same job page doesn't take it
+      // over, and the crawler finds it when the job closes.
+      kind: source.key === INDEX_SOURCE_KEY ? INDEX_LINK_KIND : source.kind,
       url: l.sourceUrl,
       firstSeenAt: tx.now,
       searchSourceId: source.id,
@@ -555,25 +588,65 @@ export function commitSearch(tx: Tx, input: CommitInput): void {
       .run();
   }
 
-  // The boards behind what this run matched join the watch list: a company hiring for the
-  // strategy's titles is then read in full on every run.
-  const watched = watchSeen(
+  // A watched board's read (or a career page's that reads one) is a read of the index's board
+  // too: the crawler doesn't read it again before its time.
+  const matcher = activeMatcher(tx.db);
+  for (const r of input.reads) {
+    if (!r.run) continue;
+    const board = isAts(r.source.kind)
+      ? { ats: r.source.kind, token: r.source.locator }
+      : r.resolved?.via === 'ats'
+        ? { ats: r.resolved.ats, token: r.resolved.token }
+        : null;
+    if (!board) continue;
+    const apiHost =
+      r.resolved?.via === 'lever'
+        ? r.resolved.apiHost
+        : r.source.resolved?.via === 'lever'
+          ? r.source.resolved.apiHost
+          : undefined;
+    recordWatchedRead(
+      tx,
+      {
+        board,
+        via: r.source.origin === 'candidate' ? 'candidate' : 'watch-list',
+        name: r.company ?? (r.source.label !== r.source.locator ? r.source.label : null),
+        run: { ...r.run, company: r.company, ...(apiHost ? { apiHost } : {}) },
+      },
+      matcher,
+    );
+  }
+
+  // The boards behind what this run matched join the ATS index: a company hiring for the
+  // strategy's titles is then read every few hours, and searched by every strategy.
+  const indexed = watchSeen(
     tx,
     input.clusters.flatMap((cluster) =>
-      cluster.candidates.map((c) => {
+      cluster.candidates.flatMap((c) => {
         const read = bySource.get(c.sourceId);
+        // The index's own jobs are on boards it knows.
+        if (!read || read.source.key === INDEX_SOURCE_KEY) return [];
         // A career page that embeds a board reads that board: it isn't seen again.
-        const resolved = read?.resolved ?? read?.source.resolved ?? null;
+        const resolved = read.resolved ?? read.source.resolved ?? null;
         const from =
-          resolved?.via === 'ats' ? { kind: resolved.ats, locator: resolved.token } : read?.source;
-        const where = `"${strategy.name}" matched it on ${read?.source.label ?? 'a search'}`;
-        return { listing: c.listing, where, from };
+          resolved?.via === 'ats' ? { kind: resolved.ats, locator: resolved.token } : read.source;
+        const where = `"${strategy.name}" matched it on ${read.source.label}`;
+        const via =
+          read.source.key === 'board:workable-search'
+            ? ('workable-search' as const)
+            : read.source.key === 'board:smartrecruiters-search'
+              ? ('smartrecruiters-search' as const)
+              : ('posting' as const);
+        return [{ listing: c.listing, where, from, via }];
       }),
     ),
   );
 
-  // Absence, per source, over everything it listed (not only what this strategy matched).
+  // Absence, per source, over everything it listed (not only what this strategy matched). The
+  // index is a search over its store: its jobs close when their boards' complete reads no
+  // longer list them (ats-index/store.ts), not when a run doesn't list them.
   for (const r of input.reads) {
+    if (r.source.key === INDEX_SOURCE_KEY) continue;
     const a = applyAbsence(tx, {
       strategyId: strategy.id,
       sourceId: r.source.id,
@@ -635,8 +708,8 @@ export function commitSearch(tx: Tx, input: CommitInput): void {
     `${listed} listed`,
     `${all.reduce((n, r) => n + r.matched, 0)} matched`,
     `${added} new`,
-    ...(watched.added.length
-      ? [`${watched.added.length} board${watched.added.length === 1 ? '' : 's'} now watched`]
+    ...(indexed.length
+      ? [`${indexed.length} board${indexed.length === 1 ? '' : 's'} joined the ATS index`]
       : []),
     ...(closed ? [`${closed} closed`] : []),
     ...(failed ? [`${failed} source(s) failed`] : []),

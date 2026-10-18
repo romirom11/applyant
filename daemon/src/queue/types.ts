@@ -34,6 +34,11 @@ export const TASK_ENTITY = {
   build_recipe: 'search_source',
   // One search_planner run (phase 11): strategies from the profile, boards from web search.
   plan_search: 'search_plan',
+  // The ATS index (docs/design/07): one crawl of the company boards that are due (entity_id is
+  // always 0)…
+  index_crawl: 'index',
+  // …and one discovery run looking for more of them (entity_id = ats_discoveries id).
+  index_discover: 'ats_discovery',
   // Company research (phase 12): researcher's sourced profile of one company, with red flags.
   research_company: 'company',
   // One mailbox sync (phase 13): new replies → email_classify → matched to an application
