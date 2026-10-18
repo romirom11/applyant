@@ -17,7 +17,7 @@ import {
   searchSources,
 } from '../../db/schema.ts';
 import { ATS_KINDS, type Ats, boardFromUrl } from './readers/ats-embed.ts';
-import { BOARDS, BOARDS_OFF, type BoardId, isBoardId } from './readers/boards.ts';
+import { BOARDS, BOARDS_OFF, type BoardId, INDEX_SOURCE_KEY, isBoardId } from './readers/boards.ts';
 import { telegramChannelOf } from './readers/telegram.ts';
 
 export class SearchError extends Error {}
@@ -294,9 +294,14 @@ export function findSource(conn: Conn, ref: string): SearchSourceRow | null {
   return byLocator.length === 1 ? (byLocator[0] ?? null) : null;
 }
 
-/** Whether a selector ("greenhouse", "board:hn", "all") picks this source. */
+/**
+ * Whether a selector ("greenhouse", "board:hn", "all") picks this source. An ATS kind picks the
+ * ATS index too: "Greenhouse boards" are every Greenhouse board Applyant knows, not only the
+ * watched ones (the index then gives only that ATS's jobs).
+ */
 export function selects(selector: string, source: Pick<SearchSourceRow, 'key' | 'kind'>): boolean {
-  return selector === 'all' || selector === source.kind || selector === source.key;
+  if (selector === 'all' || selector === source.kind || selector === source.key) return true;
+  return source.key === INDEX_SOURCE_KEY && isAts(selector);
 }
 
 /** Checks a strategy's selectors: each must be "all", a kind, or a known source key. */
@@ -331,6 +336,15 @@ export function sourcesFor(conn: Conn, selectors: string[]): SearchSourceRow[] {
       .where(eq(searchSources.enabled, true))
       .all()
       .filter((s) => !off.has(s.kind) && selectors.some((sel) => selects(sel, s)))
+      // The index for "Greenhouse" boards only while that kind is on.
+      .filter(
+        (s) =>
+          s.key !== INDEX_SOURCE_KEY ||
+          selectors.some(
+            (sel) =>
+              sel === 'all' || sel === s.kind || sel === s.key || (isAts(sel) && !off.has(sel)),
+          ),
+      )
       // LinkedIn/Xing are off until Applyant's browser is signed in there.
       .filter((s) => !isPlatformKind(s.kind) || signedIn.has(s.kind))
       .sort((a, b) => order(a.kind) - order(b.kind) || a.id - b.id)

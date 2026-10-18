@@ -17,7 +17,7 @@ import {
 import type { Embedder } from '../../src/models/embeddings.ts';
 import { EventBus } from '../../src/queue/events.ts';
 import { runInTx } from '../../src/queue/tx.ts';
-import type { Handler } from '../../src/queue/types.ts';
+import type { Handler, Handlers } from '../../src/queue/types.ts';
 import { Worker } from '../../src/queue/worker.ts';
 import type { TempDb } from './db.ts';
 import { handlers, quietLog, testDeps } from './deps.ts';
@@ -137,6 +137,8 @@ export function searchHarness(
     now?: () => Date;
     /** Extra deps (LinkedIn/Xing tests: the guardrails and a fake signed-in browser). */
     deps?: Partial<Deps>;
+    /** More real handlers (the ATS index's crawl and discovery). */
+    handlers?: Partial<Handlers>;
   } = {},
 ): SearchHarness {
   const bus = new EventBus();
@@ -150,6 +152,7 @@ export function searchHarness(
     handlers: handlers({
       search: searchHandler,
       verify_posting: done as Handler<'verify_posting'>,
+      ...o.handlers,
     }),
     deps: {
       ...testDeps({ dir: t.dir, fetch, ...(o.embedder ? { embedder: o.embedder } : {}) }),

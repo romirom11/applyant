@@ -37,6 +37,8 @@ import { scorePosting } from './domain/scoring/handlers.ts';
 import { getPreferences } from './domain/scoring/prefs.ts';
 import { rematchPostings } from './domain/scoring/rematch.ts';
 import { requestScoring, unscoredPostings } from './domain/scoring/store.ts';
+import { indexCrawl } from './domain/search/ats-index/crawl.ts';
+import { indexDiscover } from './domain/search/ats-index/discover.ts';
 import { searchHandler } from './domain/search/handlers.ts';
 import { planSearch } from './domain/search/planner.ts';
 import { buildRecipe } from './domain/search/recipes/build.ts';
@@ -242,6 +244,8 @@ export async function runDaemon(config: Config = loadConfig()): Promise<() => Pr
     search: searchHandler,
     build_recipe: buildRecipe,
     plan_search: planSearch,
+    index_crawl: indexCrawl,
+    index_discover: indexDiscover,
     research_company: researchCompany,
     sync_mail: syncMail,
     interview_event: interviewEvent,

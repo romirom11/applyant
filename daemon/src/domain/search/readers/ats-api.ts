@@ -1,7 +1,8 @@
 // The public ATS lists. Each returns a board's whole published list, so a finished read is
 // complete: a job missing from it has been unpublished.
 //
-//   greenhouse  boards-api.greenhouse.io/v1/boards/<token>/jobs?content=true   (meta.total)
+//   greenhouse  boards-api.greenhouse.io/v1/boards/<token>/jobs?content=true   (meta.total;
+//               the ATS index reads it without content: titles and places, a tenth the size)
 //   ashby       api.ashbyhq.com/posting-api/job-board/<slug>?includeCompensation=true
 //   lever       api.lever.co/v0/postings/<site>?mode=json, else api.eu.lever.co (EU boards
 //               answer 404 or [] on the global host)
@@ -53,11 +54,11 @@ function base(p: Partial<Listing> & { url: string; title: string }): Listing {
   };
 }
 
-async function greenhouse(token: string, ctx: ReaderContext): Promise<AtsRun> {
+async function greenhouse(token: string, ctx: ReaderContext, light = false): Promise<AtsRun> {
   const t = encodeURIComponent(token);
   const { data } = await getJson<Node>(
     ctx.fetch,
-    `https://boards-api.greenhouse.io/v1/boards/${t}/jobs?content=true`,
+    `https://boards-api.greenhouse.io/v1/boards/${t}/jobs${light ? '' : '?content=true'}`,
     ctx.signal,
   );
   const jobs = arr(data?.jobs);
@@ -664,16 +665,19 @@ export function readAtsBoardShared(
     : read();
 }
 
-/** Reads one ATS board's public list. `apiHost` is Lever's host that answered last time. */
+/**
+ * Reads one ATS board's public list. `apiHost` is Lever's host that answered last time; `light`
+ * asks for the list without descriptions where that's a separate, lighter request (Greenhouse).
+ */
 export function readAtsBoard(
   ats: Ats,
   token: string,
   ctx: ReaderContext,
-  o: { apiHost?: string | undefined } = {},
+  o: { apiHost?: string | undefined; light?: boolean } = {},
 ): Promise<AtsRun> {
   switch (ats) {
     case 'greenhouse':
-      return greenhouse(token, ctx);
+      return greenhouse(token, ctx, o.light);
     case 'ashby':
       return ashby(token, ctx);
     case 'lever':

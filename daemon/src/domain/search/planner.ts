@@ -4,8 +4,10 @@
 //   plan_search  slow:    one planner run with the provider's web search, seeded from SQLite:
 //                         preferences, profile, projects and skills, the strategies with their
 //                         results, and the sources already read
-//                commit:  boards → the watch list (sources, origin agent) · new strategies,
-//                         marked agent-generated, each starting its first run · the plan row
+//                commit:  ATS boards → the ATS index (those a strategy names, career pages
+//                         and channels → the watch list: sources, origin agent) · new
+//                         strategies, marked agent-generated, each starting its first run ·
+//                         the plan row
 //
 // The candidate starts the planner (`applyant search plan`, or Plan searches in the app); once
 // it has run, it runs again by itself every PLAN_EVERY_MS so new queries and boards keep coming.
@@ -15,6 +17,7 @@ import {
   facts,
   type SearchPlanRow,
   searchPlans,
+  searchSources,
   searchStrategies,
   tasks,
 } from '../../db/schema.ts';
@@ -23,8 +26,11 @@ import type { Handler, Tx } from '../../queue/types.ts';
 import { getStandardProfile } from '../knowledge/profile.ts';
 import { listProjects } from '../knowledge/projects.ts';
 import { getPreferences } from '../scoring/prefs.ts';
+import { boardKey, knowBoards, type NewBoard } from './ats-index/store.ts';
+import { boardFromUrl } from './readers/ats-embed.ts';
 import { BOARDS } from './readers/boards.ts';
 import {
+  isAts,
   KIND_LABELS,
   listSources,
   parseSourceInput,
@@ -39,7 +45,7 @@ import {
   MAX_EVERY_MINUTES,
   MIN_EVERY_MINUTES,
 } from './strategies.ts';
-import { watchBoards } from './watchlist.ts';
+import { MAX_BOARDS_PER_PLAN, watchBoards } from './watchlist.ts';
 
 /** Once the planner has run, it runs again this long after its last run. */
 export const PLAN_EVERY_MS = 7 * 24 * 3_600_000;
@@ -193,7 +199,7 @@ Strategies are what Applyant runs every few hours:
 - sources: which sources it reads: "all", a kind (greenhouse, ashby, lever, workable, smartrecruiters, personio, recruitee, teamtailor, join, breezy = company boards on those ATSs; page = company career pages and feeds; board = the job boards; telegram = Telegram job channels), a source key from the list, or the URL of a board you return below.
 - Propose at most ${MAX_STRATEGIES_PER_PLAN} new strategies, only ones that add something the existing strategies don't cover (another role family the candidate fits, another location, a narrower query for a weak strategy). None is fine.
 
-Boards: use web search to find companies whose job boards are worth watching for this candidate: companies hiring for the candidate's roles, stack and locations. Applyant already searches every company on Workable and SmartRecruiters by each strategy's queries (board:workable-search, board:smartrecruiters-search), and a board behind a job a strategy matched joins the watch list by itself, so spend your searches on Greenhouse, Ashby and Lever boards, the ATSs European (especially German-speaking) companies use (Personio, Recruitee, Teamtailor, JOIN, Breezy HR) and companies' own career pages. Search the ATS hosts with site: queries (site:jobs.ashbyhq.com "AI Engineer" remote Europe · site:job-boards.greenhouse.io … · site:jobs.lever.co … · site:apply.workable.com … · site:jobs.smartrecruiters.com … · site:jobs.personio.de … · site:recruitee.com … · site:teamtailor.com … · site:join.com/companies … · site:breezy.hr …) and look for companies' own careers pages. For each board return the URL of the company's job list (https://jobs.ashbyhq.com/acme, https://job-boards.greenhouse.io/acme, https://jobs.lever.co/acme, https://apply.workable.com/acme, https://careers.smartrecruiters.com/Acme, https://acme.jobs.personio.de, https://acme.recruitee.com, https://acme.teamtailor.com/jobs, https://join.com/companies/acme, https://acme.breezy.hr, or https://acme.com/careers), not a single posting, not a search page and not a redirecting aggregator. Prefer direct company boards and feeds, including Jobico and Djinni when relevant. Skip boards already in the source list. At most 25, the best fits first, each with one sentence on why it fits and the search that found it.
+Boards: use web search to find companies whose job boards are worth watching for this candidate: companies hiring for the candidate's roles, stack and locations. Applyant already searches every company on Workable and SmartRecruiters by each strategy's queries (board:workable-search, board:smartrecruiters-search), and keeps an index of every company board it knows on the ATSs (from Common Crawl, and every board behind a job a strategy matched), searched by every strategy, so spend your searches on Greenhouse, Ashby and Lever boards it may not know yet, the ATSs European (especially German-speaking) companies use (Personio, Recruitee, Teamtailor, JOIN, Breezy HR) and companies' own career pages. Search the ATS hosts with site: queries (site:jobs.ashbyhq.com "AI Engineer" remote Europe · site:job-boards.greenhouse.io … · site:jobs.lever.co … · site:apply.workable.com … · site:jobs.smartrecruiters.com … · site:jobs.personio.de … · site:recruitee.com … · site:teamtailor.com … · site:join.com/companies … · site:breezy.hr …) and look for companies' own careers pages. For each board return the URL of the company's job list (https://jobs.ashbyhq.com/acme, https://job-boards.greenhouse.io/acme, https://jobs.lever.co/acme, https://apply.workable.com/acme, https://careers.smartrecruiters.com/Acme, https://acme.jobs.personio.de, https://acme.recruitee.com, https://acme.teamtailor.com/jobs, https://join.com/companies/acme, https://acme.breezy.hr, or https://acme.com/careers), not a single posting, not a search page and not a redirecting aggregator. Prefer direct company boards and feeds, including Jobico and Djinni when relevant. Skip boards already in the source list. At most 25, the best fits first, each with one sentence on why it fits and the search that found it.
 
 Telegram channels: you may also suggest public Telegram job channels worth following for this candidate (active channels that post single vacancies for the candidate's roles, stack, languages and locations; not chats, not channels of courses or ads). Return each as a board with the URL https://t.me/s/<channel>, why it fits and the search that found it (e.g. site:t.me/s "remote" "python" vacancy). At most 5, and only channels whose recent posts you saw.
 
@@ -260,9 +266,63 @@ export interface PlanApplied {
   skipped: string[];
 }
 
-/** Boards → the watch list, strategies → agent-generated strategies (each starts a run). */
+/**
+ * Company boards on the ATSs join the index: read on its schedule and searched by every
+ * strategy. The ones a new strategy names (or already on the watch list), career pages and
+ * Telegram channels go to the watch list, read on every run.
+ */
+function splitBoards(
+  conn: Conn,
+  o: PlannerOutput,
+): { index: NewBoard[]; watch: PlannerOutput['boards'] } {
+  const named = new Set<string>();
+  for (const s of o.strategies) {
+    for (const sel of s.sources) {
+      const board = /^https?:\/\//i.test(sel.trim()) ? boardFromUrl(sel.trim()) : null;
+      const [kind, locator] = sel.trim().split(/:(.*)/s);
+      if (board) named.add(boardKey(board.ats, board.token));
+      else if (kind && locator && isAts(kind)) named.add(boardKey(kind, locator));
+    }
+  }
+  const out: { index: NewBoard[]; watch: PlannerOutput['boards'] } = { index: [], watch: [] };
+  for (const b of o.boards) {
+    const board = /\/embed\b/.test(b.url) ? null : boardFromUrl(b.url.trim());
+    const watched =
+      board &&
+      !!conn
+        .select({ id: searchSources.id })
+        .from(searchSources)
+        .where(
+          and(
+            eq(searchSources.kind, board.ats),
+            sql`lower(${searchSources.locator}) = ${board.token.toLowerCase()}`,
+          ),
+        )
+        .get();
+    if (!board || watched || named.has(boardKey(board.ats, board.token))) {
+      out.watch.push(b);
+      continue;
+    }
+    out.index.push({
+      board,
+      via: 'planner',
+      name: b.company,
+      note: [b.why.trim(), b.foundWith ? `found with: ${b.foundWith.trim()}` : null]
+        .filter(Boolean)
+        .join(' · '),
+    });
+  }
+  return out;
+}
+
+/**
+ * Boards → the ATS index or the watch list, strategies → agent-generated strategies (each
+ * starts a run).
+ */
 export function applyPlan(tx: Tx, planId: number, o: PlannerOutput): PlanApplied {
-  const watched = watchBoards(tx, o.boards);
+  const split = splitBoards(tx.db, o);
+  const indexed = knowBoards(tx, split.index, { max: MAX_BOARDS_PER_PLAN });
+  const watched = watchBoards(tx, split.watch);
   const skipped: string[] = watched.rejected.map((r) => `board ${r.url}: ${r.reason}`);
   // A board URL a strategy names → that board's source key.
   const keyOf = (selector: string): string | null => {
@@ -321,6 +381,9 @@ export function applyPlan(tx: Tx, planId: number, o: PlannerOutput): PlanApplied
   const note = [
     `${added.length} new strateg${added.length === 1 ? 'y' : 'ies'}`,
     `${boards.length} new board${boards.length === 1 ? '' : 's'} watched`,
+    ...(indexed.length
+      ? [`${indexed.length} new board${indexed.length === 1 ? '' : 's'} in the ATS index`]
+      : []),
     ...(watched.known.length ? [`${watched.known.length} already watched`] : []),
     `${o.searches.length} web search${o.searches.length === 1 ? '' : 'es'}`,
     ...(skipped.length ? [`skipped: ${skipped.slice(0, 6).join('; ')}`] : []),

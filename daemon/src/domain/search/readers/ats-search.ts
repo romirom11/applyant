@@ -1,7 +1,7 @@
 // Role-first job search: every company on the ATSs that is hiring for a strategy's titles, not
-// only the boards on the watch list. The strategy's queries are the search terms. Each listing
+// only the boards Applyant knows. The strategy's queries are the search terms. Each listing
 // carries its company board, and the search commit adds the boards behind matched listings to
-// the watch list (watchlist.ts), so later runs read those companies in full.
+// the ATS index (watchlist.ts), so later runs search those companies in full.
 //
 //   workable-search         jobs.workable.com/api/v1/jobs?query="…" with workplace=remote or a
 //                           location (Workable's own job search over every account; 20 a page)

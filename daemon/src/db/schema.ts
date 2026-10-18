@@ -4,6 +4,7 @@ import { sql } from 'drizzle-orm';
 import { index, integer, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 import type { FieldSpec, FormRead } from '../browser/form-types.ts';
 import type { Component, RoleFit, StoredExtraction, StoredMatch } from '../domain/scoring/types.ts';
+import type { Ats } from '../domain/search/readers/ats-embed.ts';
 import {
   type ListingRecipe,
   RECIPE_STATUSES,
@@ -99,7 +100,8 @@ export const postingSources = sqliteTable(
     postingId: integer('posting_id')
       .notNull()
       .references(() => postings.id, { onDelete: 'cascade' }),
-    // manual | share | greenhouse | ashby | lever | workable | smartrecruiters | page | board
+    // manual | share | greenhouse | ashby | lever | workable | smartrecruiters | page | board |
+    // ats-index (a job of the ATS index: its board's complete reads close it, crawl.ts)
     kind: text('kind').notNull(),
     url: text('url').notNull(),
     firstSeenAt: integer('first_seen_at', { mode: 'timestamp_ms' }).notNull().default(now),
@@ -358,7 +360,7 @@ export const SEARCH_PLAN_TRIGGERS = ['manual', 'schedule', 'setup'] as const;
 
 /**
  * One search_planner run (phase 11): the strategies it proposed and the boards its web
- * searches found, which join the watch list as sources.
+ * searches found, which join the ATS index (company boards) or the watch list as sources.
  */
 export const searchPlans = sqliteTable('search_plans', {
   id: integer('id').primaryKey(),
@@ -375,6 +377,121 @@ export const searchPlans = sqliteTable('search_plans', {
   boards: text('boards', { mode: 'json' }).$type<string[]>().notNull().default(sql`'[]'`),
   /** The web searches it says it ran. */
   searches: text('searches', { mode: 'json' }).$type<string[]>().notNull().default(sql`'[]'`),
+  note: text('note'),
+});
+
+// ---- The ATS index (docs/design/07) -------------------------------------------------------
+
+/**
+ * new: not read yet · hiring: open jobs at its last read · empty: none · failing: its last read
+ * failed (`fails` in a row) · gone: the ATS says there's no such board (404/410).
+ */
+export const ATS_COMPANY_STATUSES = ['new', 'hiring', 'empty', 'failing', 'gone'] as const;
+export type AtsCompanyStatus = (typeof ATS_COMPANY_STATUSES)[number];
+
+/**
+ * How a board came into the index: Common Crawl's URL index, a posting (a matched listing or a
+ * verified apply link), the planner, the Workable / SmartRecruiters job searches, or a board on
+ * the watch list (the agent's, or the candidate's own).
+ */
+export const ATS_FOUND_VIA = [
+  'common-crawl',
+  'posting',
+  'planner',
+  'workable-search',
+  'smartrecruiters-search',
+  'watch-list',
+  'candidate',
+] as const;
+export type AtsFoundVia = (typeof ATS_FOUND_VIA)[number];
+
+/**
+ * One company board the index knows, read on its own schedule (`next_read_at`). The token is
+ * unique per ATS whatever its case (jobs.lever.co/Acme and /acme are one board).
+ */
+export const atsCompanies = sqliteTable(
+  'ats_companies',
+  {
+    id: integer('id').primaryKey(),
+    ats: text('ats').$type<Ats>().notNull(),
+    token: text('token').notNull(),
+    /** The company's name, once a read or a listing named it. */
+    name: text('name'),
+    /** Switched off by the candidate: not read, not searched. */
+    enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+    status: text('status', { enum: ATS_COMPANY_STATUSES }).notNull().default('new'),
+    foundVia: text('found_via', { enum: ATS_FOUND_VIA }).notNull(),
+    /** Why it's known: the job it was seen with, the planner's reason. */
+    foundNote: text('found_note'),
+    /** Open jobs held, and how many of them an active strategy matches. */
+    jobs: integer('jobs').notNull().default(0),
+    matching: integer('matching').notNull().default(0),
+    /** Failed reads in a row (the backoff). */
+    fails: integer('fails').notNull().default(0),
+    lastReadAt: integer('last_read_at', { mode: 'timestamp_ms' }),
+    nextReadAt: integer('next_read_at', { mode: 'timestamp_ms' }).notNull().default(now),
+    /** What the last read did, or why it failed. */
+    lastNote: text('last_note'),
+    /** How the board is read: Lever's API host that answered (EU boards). */
+    resolved: text('resolved', { mode: 'json' }).$type<{ apiHost?: string }>(),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull().default(now),
+  },
+  (t) => [
+    uniqueIndex('ats_companies_board').on(t.ats, sql`lower(${t.token})`),
+    index('ats_companies_due').on(t.ats, t.nextReadAt),
+  ],
+);
+
+/**
+ * The open jobs of the index's boards (and those closed in the last weeks). Only a job some
+ * active strategy matches keeps its description (capped): 200k jobs of text would be most of
+ * the database, and only matched ones become postings.
+ */
+export const atsJobs = sqliteTable(
+  'ats_jobs',
+  {
+    id: integer('id').primaryKey(),
+    companyId: integer('company_id')
+      .notNull()
+      .references(() => atsCompanies.id, { onDelete: 'cascade' }),
+    /** The ATS's id for the job, or its URL when the list gives none. */
+    key: text('key').notNull(),
+    externalId: text('external_id'),
+    url: text('url').notNull(),
+    title: text('title').notNull(),
+    location: text('location'),
+    remote: integer('remote', { mode: 'boolean' }),
+    team: text('team'),
+    postedAt: integer('posted_at', { mode: 'timestamp_ms' }),
+    description: text('description'),
+    /** An active strategy's queries and locations match it. */
+    matching: integer('matching', { mode: 'boolean' }).notNull().default(false),
+    firstSeenAt: integer('first_seen_at', { mode: 'timestamp_ms' }).notNull().default(now),
+    lastSeenAt: integer('last_seen_at', { mode: 'timestamp_ms' }).notNull().default(now),
+    /** Gone from a complete read of its board. */
+    closedAt: integer('closed_at', { mode: 'timestamp_ms' }),
+  },
+  (t) => [
+    uniqueIndex('ats_jobs_company_key').on(t.companyId, t.key),
+    index('ats_jobs_open').on(t.matching, t.companyId).where(sql`closed_at is null`),
+  ],
+);
+
+export const ATS_DISCOVERY_TRIGGERS = ['manual', 'schedule', 'setup'] as const;
+
+/** One discovery run: where it looked for company boards and what it found. */
+export const atsDiscoveries = sqliteTable('ats_discoveries', {
+  id: integer('id').primaryKey(),
+  trigger: text('trigger', { enum: ATS_DISCOVERY_TRIGGERS }).notNull(),
+  /** queued (waiting or running) · done · failed */
+  status: text('status', { enum: ['queued', 'done', 'failed'] })
+    .notNull()
+    .default('queued'),
+  startedAt: integer('started_at', { mode: 'timestamp_ms' }).notNull().default(now),
+  finishedAt: integer('finished_at', { mode: 'timestamp_ms' }),
+  /** Boards it came across, and how many were new to the index. */
+  found: integer('found').notNull().default(0),
+  added: integer('added').notNull().default(0),
   note: text('note'),
 });
 
@@ -1201,6 +1318,9 @@ export type SearchStrategyRow = typeof searchStrategies.$inferSelect;
 export type SearchRunRow = typeof searchRuns.$inferSelect;
 export type ListingRecipeRow = typeof listingRecipes.$inferSelect;
 export type SearchPlanRow = typeof searchPlans.$inferSelect;
+export type AtsCompanyRow = typeof atsCompanies.$inferSelect;
+export type AtsJobRow = typeof atsJobs.$inferSelect;
+export type AtsDiscoveryRow = typeof atsDiscoveries.$inferSelect;
 export type RoleRouteRow = typeof roleRoutes.$inferSelect;
 export type CompanyRow = typeof companies.$inferSelect;
 export type MailboxRow = typeof mailboxes.$inferSelect;

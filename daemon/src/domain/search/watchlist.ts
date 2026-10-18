@@ -1,35 +1,32 @@
-// The watch list: company boards and career pages the search planner's web searches found,
-// and the ATS boards behind jobs that searches matched or verification led to (a company
-// hiring for the candidate's titles, seen on a job board, in a Telegram post, in a job search
-// across every company, or behind a LinkedIn posting's apply link). Each becomes a search
-// source (origin agent, with why it's watched as its note) and is polled directly like any
-// other: an ATS board through its list API, a career page through the generic reader and, when
-// it needs one, a listing recipe. Web search stays rare this way: it finds boards, and the
-// boards are then read on every run.
-import { and, count, eq, inArray, sql } from 'drizzle-orm';
-import { type SearchSourceRow, searchSources } from '../../db/schema.ts';
-import type { Tx } from '../../queue/types.ts';
+// The watch list: the company boards the search planner's web searches found that one of its
+// strategies names, its career pages and Telegram channels. Each becomes a search source
+// (origin agent, with why it's watched as its note) and is polled directly like any other: an
+// ATS board through its list API, a career page through the generic reader and, when it needs
+// one, a listing recipe.
+//
+// The ATS boards behind jobs that searches matched or verification led to (a company hiring
+// for the candidate's titles, seen on a job board, in a Telegram post, in a job search across
+// every company, or behind a LinkedIn posting's apply link) join the ATS index instead
+// (ats-index/): read on its own schedule, every 6 hours while it has jobs a strategy matches,
+// and searched by every strategy without a request.
+import { eq } from 'drizzle-orm';
 import {
-  ATS_KINDS,
-  type AtsBoard,
-  atsJobKey,
-  boardFromUrl,
-  boardUrl,
-} from './readers/ats-embed.ts';
+  type AtsCompanyRow,
+  type AtsFoundVia,
+  type SearchSourceRow,
+  searchSources,
+} from '../../db/schema.ts';
+import type { Tx } from '../../queue/types.ts';
+import { boardKey, findCompany, knowBoards, type NewBoard } from './ats-index/store.ts';
+import { type AtsBoard, atsJobKey, boardFromUrl } from './readers/ats-embed.ts';
 import { isBoardId } from './readers/boards.ts';
 import type { Listing } from './readers/types.ts';
 import { addSource, parseSourceInput, SearchError, sourceKey } from './sources.ts';
 
 /** Boards one planner run may add (the rest are likely noise). */
 export const MAX_BOARDS_PER_PLAN = 30;
-/** Boards one search run may add from the jobs it matched (more join on later runs). */
-export const MAX_SEEN_BOARDS_PER_RUN = 10;
-/**
- * Company boards the agent may watch (switched on) before matched jobs stop adding more: every
- * strategy reads every board on every run, so the list mustn't grow without end. Boards
- * switched off don't count.
- */
-export const MAX_WATCHED_BOARDS = 200;
+/** Boards one search run may add to the index from the jobs it matched (more join later). */
+export const MAX_SEEN_BOARDS_PER_RUN = 50;
 
 /**
  * Hosts that are never watched as a company's board: search engines, social networks and big
@@ -158,82 +155,38 @@ export function boardOf(l: Pick<Listing, 'url' | 'applyUrl' | 'board'>): AtsBoar
   return null;
 }
 
-const BOARD_TOKEN = /^[a-z0-9][a-z0-9._-]*$/i;
-
 export interface SeenJob {
   listing: Pick<Listing, 'url' | 'applyUrl' | 'board' | 'title' | 'company'>;
   /** How it was seen: `"AI Engineer" matched it on RemoteOK` · `posting 12 applies there`. */
   where: string;
   /** The board the job was read from, if it was one: that board isn't "seen" again. */
   from?: { kind: string; locator: string } | null;
-}
-
-/** Whether the board is a source already: as itself, or as a career page that reads it. */
-function watched(tx: Tx, board: AtsBoard): boolean {
-  const token = board.token.toLowerCase();
-  // Whatever the case of its name in this URL (jobs.lever.co/Acme · /acme).
-  const own = tx.db
-    .select({ id: searchSources.id })
-    .from(searchSources)
-    .where(and(eq(searchSources.kind, board.ats), sql`lower(${searchSources.locator}) = ${token}`))
-    .get();
-  if (own) return true;
-  return !!tx.db
-    .select({ id: searchSources.id })
-    .from(searchSources)
-    .where(
-      and(
-        eq(searchSources.kind, 'page'),
-        sql`json_extract(${searchSources.resolved}, '$.via') = 'ats'`,
-        sql`json_extract(${searchSources.resolved}, '$.ats') = ${board.ats}`,
-        sql`lower(json_extract(${searchSources.resolved}, '$.token')) = ${token}`,
-      ),
-    )
-    .get();
-}
-
-/** Company boards the agent watches now (switched on). */
-function agentBoards(tx: Tx): number {
-  return (
-    tx.db
-      .select({ n: count() })
-      .from(searchSources)
-      .where(
-        and(
-          eq(searchSources.origin, 'agent'),
-          eq(searchSources.enabled, true),
-          inArray(searchSources.kind, [...ATS_KINDS]),
-        ),
-      )
-      .get()?.n ?? 0
-  );
+  /** How the index records it: by a job search's name (workable-search, …), else a posting's. */
+  via?: AtsFoundVia;
 }
 
 /**
- * Watches the boards behind jobs a search matched (or verification opened), at most `max` new
- * ones, and none once the agent watches MAX_WATCHED_BOARDS. A board already on the list, on or
- * off, stays as it is.
+ * The boards behind jobs a search matched (or verification opened) join the ATS index, at most
+ * `max` new ones, each `new` and read at the next crawl. A board the index knows already, on or
+ * off, stays as it is. Returns the boards added.
  */
-export function watchSeen(tx: Tx, jobs: SeenJob[], max = MAX_SEEN_BOARDS_PER_RUN): WatchResult {
-  const room = Math.min(max, MAX_WATCHED_BOARDS - agentBoards(tx));
-  if (room <= 0) return { added: [], known: [], rejected: [] };
-  const found: FoundBoard[] = [];
+export function watchSeen(tx: Tx, jobs: SeenJob[], max = MAX_SEEN_BOARDS_PER_RUN): AtsCompanyRow[] {
+  const found: NewBoard[] = [];
   const seen = new Set<string>();
-  for (const { listing, where, from } of jobs) {
+  for (const { listing, where, from, via } of jobs) {
     const board = boardOf(listing);
-    // A name the board's own URL can't carry (a reader's odd identifier) isn't a board.
-    if (!board || !BOARD_TOKEN.test(board.token)) continue;
-    const key = `${board.ats}:${board.token.toLowerCase()}`;
-    if (from && `${from.kind}:${from.locator.toLowerCase()}` === key) continue;
+    if (!board) continue;
+    const key = boardKey(board.ats, board.token);
+    if (from && boardKey(from.kind, from.locator) === key) continue;
     if (seen.has(key)) continue;
     seen.add(key);
-    if (watched(tx, board)) continue;
+    if (findCompany(tx.db, board)) continue;
     found.push({
-      url: boardUrl(board),
-      company: listing.company,
-      why: `has "${listing.title}" (${where})`,
-      foundWith: null,
+      board,
+      via: via ?? 'posting',
+      name: listing.company,
+      note: `has "${listing.title}" (${where})`,
     });
   }
-  return watchBoards(tx, found, { max: room });
+  return knowBoards(tx, found, { max });
 }

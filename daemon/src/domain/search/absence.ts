@@ -11,6 +11,7 @@
 //                 lists them: that list says when they close.
 import { and, eq, gt, inArray, isNotNull, isNull, ne } from 'drizzle-orm';
 import {
+  type PostingSourceRow,
   type PostingStage,
   postingSources,
   postings,
@@ -96,6 +97,75 @@ export function reopenPosting(tx: Tx, postingId: number, why: string): boolean {
   return true;
 }
 
+/**
+ * A link a complete list has: seen now, and opened again (with its posting, when absence had
+ * closed it) if it was closed.
+ */
+export function listedAgain(
+  tx: Tx,
+  link: PostingSourceRow,
+  sourceKey: string,
+  result: AbsenceResult,
+): void {
+  tx.db
+    .update(postingSources)
+    .set({ lastSeenAt: tx.now, closedAt: null })
+    .where(eq(postingSources.id, link.id))
+    .run();
+  if (link.closedAt && reopenPosting(tx, link.postingId, `listed again on ${sourceKey}`)) {
+    result.reopened++;
+  }
+}
+
+/**
+ * A link a complete list no longer has: it closes, and so does its posting unless another
+ * source still lists it (then verification decides). The ATS index's crawler closes its links
+ * this way too, one board's complete read at a time.
+ */
+export function unlisted(
+  tx: Tx,
+  link: PostingSourceRow,
+  sourceKey: string,
+  result: AbsenceResult,
+): void {
+  if (link.closedAt) return;
+  tx.db
+    .update(postingSources)
+    .set({ closedAt: tx.now })
+    .where(eq(postingSources.id, link.id))
+    .run();
+  const p = tx.db.select().from(postings).where(eq(postings.id, link.postingId)).get();
+  if (!p || !LIVE_STAGES.includes(p.stage)) return;
+  const stillListed = tx.db
+    .select({ id: postingSources.id })
+    .from(postingSources)
+    .where(
+      and(
+        eq(postingSources.postingId, p.id),
+        ne(postingSources.id, link.id),
+        isNotNull(postingSources.searchSourceId),
+        isNull(postingSources.closedAt),
+      ),
+    )
+    .get();
+  if (stillListed) {
+    // Another source still lists it: let verification decide.
+    if (p.stage !== 'found' && !verifyBusy(tx, p.id)) {
+      tx.enqueue('verify_posting', p.id);
+      result.reverify++;
+    }
+    return;
+  }
+  const note = `closed: no longer listed on ${sourceKey} (its complete list)`;
+  tx.db
+    .update(postings)
+    .set({ stage: 'closed', verifyNote: note })
+    .where(eq(postings.id, p.id))
+    .run();
+  tx.emit({ kind: 'posting.stage', postingId: p.id, stage: 'closed', message: note });
+  result.closed++;
+}
+
 export function applyAbsence(tx: Tx, input: AbsenceInput): AbsenceResult {
   const result: AbsenceResult = { closed: 0, reopened: 0, reverify: 0 };
   const ids = new Set(input.listed.map((l) => l.externalId).filter((x): x is string => !!x));
@@ -110,56 +180,8 @@ export function applyAbsence(tx: Tx, input: AbsenceInput): AbsenceResult {
       .where(eq(postingSources.searchSourceId, input.sourceId))
       .all();
     for (const link of links) {
-      if (listed(link)) {
-        tx.db
-          .update(postingSources)
-          .set({ lastSeenAt: tx.now, closedAt: null })
-          .where(eq(postingSources.id, link.id))
-          .run();
-        if (
-          link.closedAt &&
-          reopenPosting(tx, link.postingId, `listed again on ${input.sourceKey}`)
-        ) {
-          result.reopened++;
-        }
-        continue;
-      }
-      if (link.closedAt) continue;
-      tx.db
-        .update(postingSources)
-        .set({ closedAt: tx.now })
-        .where(eq(postingSources.id, link.id))
-        .run();
-      const p = tx.db.select().from(postings).where(eq(postings.id, link.postingId)).get();
-      if (!p || !LIVE_STAGES.includes(p.stage)) continue;
-      const stillListed = tx.db
-        .select({ id: postingSources.id })
-        .from(postingSources)
-        .where(
-          and(
-            eq(postingSources.postingId, p.id),
-            ne(postingSources.id, link.id),
-            isNotNull(postingSources.searchSourceId),
-            isNull(postingSources.closedAt),
-          ),
-        )
-        .get();
-      if (stillListed) {
-        // Another source still lists it: let verification decide.
-        if (p.stage !== 'found' && !verifyBusy(tx, p.id)) {
-          tx.enqueue('verify_posting', p.id);
-          result.reverify++;
-        }
-        continue;
-      }
-      const note = `closed: no longer listed on ${input.sourceKey} (its complete list)`;
-      tx.db
-        .update(postings)
-        .set({ stage: 'closed', verifyNote: note })
-        .where(eq(postings.id, p.id))
-        .run();
-      tx.emit({ kind: 'posting.stage', postingId: p.id, stage: 'closed', message: note });
-      result.closed++;
+      if (listed(link)) listedAgain(tx, link, input.sourceKey, result);
+      else unlisted(tx, link, input.sourceKey, result);
     }
     return result;
   }
