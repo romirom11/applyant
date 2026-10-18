@@ -1,7 +1,9 @@
-// Sources as the app shows them: every place Applyant reads jobs from, grouped (the ATS index,
-// the searches across companies, watched companies, career pages and feeds, job boards,
-// Telegram, LinkedIn and Xing), each with its switch; the index per ATS, its discovery runs and
-// its companies a page at a time. Plain values, tested without SwiftUI.
+// Sources as the app shows them: every kind of place Applyant reads jobs from, grouped (the ATS
+// index per ATS, the searches across companies, career pages and feeds, job boards, Telegram,
+// LinkedIn and Xing), each with its switch. A company is one thing: it lives in the index, under
+// its ATS, and one it watches as well (an ATS source) says so there, with one switch for both;
+// the list never shows companies one by one. The index's discovery runs and its companies a page
+// at a time. Plain values, tested without SwiftUI.
 import ApplyantAPI
 import Foundation
 
@@ -11,24 +13,37 @@ public typealias AtsIndexDiscovery = Applyant_V1_AtsIndexDiscovery
 public typealias IndexCompany = Applyant_V1_IndexCompany
 
 /// What the Sources section's detail pane shows.
-public enum SourcesSelection: Hashable, Sendable {
+public indirect enum SourcesSelection: Hashable, Sendable {
     /// Every company on ATS: the index, its totals, discovery and companies.
     case index
     /// One ATS in the index ("greenhouse"), with its companies.
     case ats(String)
     /// One source by key (its detail, as Search had it).
     case source(String)
+    /// One company of the index, opened from the list it's in (`.index` or `.ats`).
+    case company(Int64, in: SourcesSelection)
+
+    /// The row of the list it sits under: a company under the list it was opened from, a watched
+    /// ATS board under its ATS, anything else its own row.
+    public var listRow: SourcesSelection {
+        switch self {
+        case let .company(_, parent): return parent.listRow
+        case let .source(key):
+            let kind = String(key.prefix { $0 != ":" })
+            return key.contains(":") && SourcesText.isAts(kind) ? .ats(kind) : self
+        default: return self
+        }
+    }
 }
 
-/// A group of the Sources list, in the screen's order.
+/// A group of the Sources list, in the screen's order: kinds of sources, never single companies.
 public enum SourceGroupID: String, CaseIterable, Sendable {
-    case index, acrossCompanies, watched, pages, boards, telegram, platforms
+    case index, acrossCompanies, pages, boards, telegram, platforms
 
     public var title: String {
         switch self {
         case .index: "Every company on ATS"
         case .acrossCompanies: "Searches across companies"
-        case .watched: "Watched companies"
         case .pages: "Career pages and feeds"
         case .boards: "Job boards"
         case .telegram: "Telegram"
@@ -174,8 +189,9 @@ public enum SourcesText {
     }
 
     /// The Sources list's groups after the index: each group's sources under their kind's
-    /// switch, in the screen's order. Empty groups are left out, except Telegram (that's where a
-    /// channel is followed) and Watched companies (that's where a board is added).
+    /// switch, in the screen's order. Watched ATS boards aren't among them: they're companies of
+    /// the index, under their ATS. Empty groups are left out, except Telegram (that's where a
+    /// channel is followed).
     public static func groups(_ list: SearchList) -> [SourceGroup] {
         let kinds = list.kinds
         func kind(_ k: String) -> Applyant_V1_SearchSourceKind {
@@ -185,17 +201,9 @@ public enum SourcesText {
             list.sources.filter(keep).map { SearchText.sourceRow($0) }
         }
         let across = acrossCompaniesKeys.compactMap { key in list.sources.first { $0.key == key } }.map { SearchText.sourceRow($0) }
-        // Every ATS kind the daemon has, in its order, then any ATS a source has beyond those.
-        var atsKinds = kinds.map(\.kind).filter(isAts)
-        for s in list.sources where isAts(s.kind) && !atsKinds.contains(s.kind) { atsKinds.append(s.kind) }
-        let watched = atsKinds.compactMap { k -> SourceBlock? in
-            let r = rows { $0.kind == k }
-            return r.isEmpty ? nil : SourceBlock(kind: kind(k), rows: r)
-        }
         let skip = Set(acrossCompaniesKeys + [indexKey])
         var groups: [SourceGroup] = []
         if !across.isEmpty { groups.append(SourceGroup(id: .acrossCompanies, blocks: [SourceBlock(kind: nil, rows: across)])) }
-        groups.append(SourceGroup(id: .watched, blocks: watched))
         let pages = rows { $0.kind == "page" }
         if !pages.isEmpty { groups.append(SourceGroup(id: .pages, blocks: [SourceBlock(kind: kind("page"), rows: pages)])) }
         let boards = rows { $0.kind == "board" && !skip.contains($0.key) }
@@ -207,6 +215,37 @@ public enum SourcesText {
         }
         if !platforms.isEmpty { groups.append(SourceGroup(id: .platforms, blocks: platforms)) }
         return groups
+    }
+
+    /// The watched boards of one ATS (its sources): companies of the index you also watch.
+    public static func watchedCount(_ list: SearchList, ats: String) -> Int {
+        list.sources.filter { $0.kind == ats }.count
+    }
+
+    /// The list a company was opened from, as its back button says: "All companies", "Greenhouse".
+    public static func listTitle(_ selection: SourcesSelection) -> String {
+        switch selection.listRow {
+        case .index: "All companies"
+        case let .ats(ats): kindTitle(ats)
+        default: "Sources"
+        }
+    }
+
+    // MARK: Paused
+
+    public static let pausedTitle = "Background work is paused"
+    /// The index pane's callout, in full.
+    public static let pausedDetail = "The index isn't read and no companies are looked for until you resume."
+    /// The same in one sentence (the list header's tooltip, the menu).
+    public static let pausedLine = "Background work is paused: the index isn't read and no companies are looked for until you resume."
+    /// The list's header, short.
+    public static let pausedNote = "Paused: nothing is read until you resume"
+
+    /// Find More Companies' tooltip: what it does, or why it can't now.
+    public static func findMoreHelp(paused: Bool, running: Bool) -> String {
+        if paused { return "Background work is paused: no companies are looked for until you resume" }
+        if running { return "A discovery is waiting or running" }
+        return "Looks for more company boards now: in Common Crawl's index of the web, behind postings and in the job searches (it also runs weekly)"
     }
 
     // MARK: The index
@@ -334,12 +373,68 @@ public enum SourcesText {
         return parts.joined(separator: " · ")
     }
 
-    /// A company's chips: off, then its status.
+    /// A company's chips: off, watched, then its status.
     public static func companyChips(_ c: IndexCompany) -> [Chip] {
         var chips: [Chip] = []
         if !c.enabled { chips.append(Chip(text: "Off", tone: .neutral)) }
+        if c.watched { chips.append(Chip(text: "Watched", tone: .accent)) }
         chips.append(statusChip(c))
         return chips
+    }
+
+    /// A company's line in the list: its counts, when it was read, and, watched, what its own
+    /// reads found ("Greenhouse · 12 jobs · 3 matching · read 2 hours ago · watched: 8 found").
+    public static func companyMeta(_ c: IndexCompany, showsAts: Bool, source: SearchSource?, now: Date = Date()) -> String {
+        var parts = [companyLine(c, showsAts: showsAts)]
+        if c.hasLastReadAt { parts.append("read " + relative(c.lastReadAt.date, now: now)) }
+        if c.watched, let source, source.stats.found > 0 {
+            parts.append("watched: " + SearchText.stats(source.stats))
+        } else if !c.watched {
+            let via = foundVia(c.foundVia)
+            if !via.isEmpty { parts.append(via) }
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    /// A company's detail, as label and value: its status, jobs, how it was found, its reads.
+    public static func companyFacts(_ c: IndexCompany, now: Date = Date()) -> [(label: String, value: String)] {
+        var items: [(label: String, value: String)] = [
+            (label: "Status", value: statusChip(c).text + (c.enabled ? "" : " · left out of the index")),
+            (label: "Open jobs", value: c.jobs > 0 || c.status == "hiring"
+                ? plural(c.jobs, "job") + " · \(number(c.matching)) matching your searches"
+                : "none known yet"),
+        ]
+        let via = foundVia(c.foundVia)
+        if !via.isEmpty { items.append((label: "How it's known", value: via.prefix(1).uppercased() + via.dropFirst())) }
+        items.append((label: "Last read", value: c.hasLastReadAt ? relative(c.lastReadAt.date, now: now) : "not yet"))
+        if c.enabled, c.hasNextReadAt {
+            items.append((label: "Next read", value: c.nextReadAt.date <= now ? "due now" : relative(c.nextReadAt.date, now: now)))
+        }
+        if c.hasLastNote, !c.lastNote.isEmpty { items.append((label: "Last note", value: c.lastNote)) }
+        return items
+    }
+
+    /// "2 hours ago", "in 3 days": the same in every locale, as the rest of the screen's words.
+    static func relative(_ date: Date, now: Date) -> String {
+        let f = RelativeDateTimeFormatter()
+        f.locale = Locale(identifier: "en_US")
+        f.dateTimeStyle = .named
+        return f.localizedString(for: date, relativeTo: now)
+    }
+
+    /// Why the companies browser shows none: the filter, the pause, no discovery yet, or none on
+    /// this ATS so far.
+    public static func companiesEmpty(_ filter: IndexCompanyFilter, index: AtsIndex?, paused: Bool) -> String {
+        if !filter.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || filter.matchingOnly {
+            return filter.matchingOnly && filter.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ? "No company here has open jobs your searches match yet."
+                : "No company matches the filter."
+        }
+        let scope = filter.ats.map { "No \(kindTitle($0)) companies" } ?? "No companies"
+        if paused { return "\(scope) yet. Background work is paused: none are looked for until you resume." }
+        if index?.discoveries.isEmpty ?? true { return "\(scope) yet: no discovery has run. Find More Companies looks for them." }
+        if discovering(index) { return "\(scope) yet. A discovery is looking for them now." }
+        return "\(scope) found yet. Find More Companies looks again; a board you add by URL joins here."
     }
 
     /// How a company got into the index.

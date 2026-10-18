@@ -157,6 +157,9 @@ final class FakeDaemon: DaemonAPI, @unchecked Sendable {
         for i in searchList.sources.indices where searchList.sources[i].key == target {
             searchList.sources[i].enabled = enabled
         }
+        for i in indexCompanyList.indices where indexCompanyList[i].watched && indexCompanyList[i].sourceKey == target {
+            indexCompanyList[i].enabled = enabled
+        }
         for i in searchList.kinds.indices where searchList.kinds[i].kind == target {
             searchList.kinds[i].enabled = enabled
             for j in searchList.sources.indices where searchList.sources[j].kind == target {
@@ -218,6 +221,11 @@ final class FakeDaemon: DaemonAPI, @unchecked Sendable {
         log("setIndexCompany \(id) \(enabled)")
         guard let i = indexCompanyList.firstIndex(where: { $0.id == id }) else { throw APIError("no company \(id)") }
         indexCompanyList[i].enabled = enabled
+        // A watched company's source switches with it, as the daemon has it.
+        let key = indexCompanyList[i].sourceKey
+        for j in searchList.sources.indices where indexCompanyList[i].watched && searchList.sources[j].key == key {
+            searchList.sources[j].enabled = enabled
+        }
         return indexCompanyList[i]
     }
     func discoverIndexCompanies() async throws -> Int64? {

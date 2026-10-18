@@ -4,7 +4,6 @@ import { timestampFromDate } from '@bufbuild/protobuf/wkt';
 import { Code, ConnectError, type ServiceImpl } from '@connectrpc/connect';
 import type { Conn } from '../db/client.ts';
 import type {
-  AtsCompanyRow,
   AtsDiscoveryRow,
   ListingRecipeRow,
   ResolvedSource,
@@ -12,8 +11,10 @@ import type {
   StrategyState,
 } from '../db/schema.ts';
 import { startDiscovery } from '../domain/search/ats-index/discover.ts';
+import { knowWatched } from '../domain/search/ats-index/store.ts';
 import {
   type AtsView,
+  type CompanyView,
   indexView,
   listCompanies,
   setCompanyEnabled,
@@ -210,7 +211,7 @@ function discoveryToPb(d: AtsDiscoveryRow): AtsIndexDiscovery {
   });
 }
 
-export function indexCompanyToPb(c: AtsCompanyRow): IndexCompany {
+export function indexCompanyToPb(c: CompanyView): IndexCompany {
   return create(IndexCompanySchema, {
     id: BigInt(c.id),
     ats: c.ats,
@@ -225,6 +226,8 @@ export function indexCompanyToPb(c: AtsCompanyRow): IndexCompany {
     foundVia: c.foundVia,
     lastNote: c.lastNote ?? undefined,
     boardUrl: boardUrl(c),
+    watched: c.sourceKey !== null,
+    sourceKey: c.sourceKey ?? undefined,
   });
 }
 
@@ -314,9 +317,11 @@ export function searchRpcs(
     },
 
     setIndexCompanyEnabled(req) {
-      return guard(() => ({
-        company: indexCompanyToPb(setCompanyEnabled(c.db, Number(req.id), req.enabled)),
-      }));
+      return guard(() =>
+        runInTx(c.db, c.bus, { now: c.now() }, (tx) => ({
+          company: indexCompanyToPb(setCompanyEnabled(tx.db, Number(req.id), req.enabled)),
+        })),
+      );
     },
 
     discoverIndexCompanies() {
@@ -441,7 +446,12 @@ export function searchRpcs(
           req.kind ? [req.kind, req.locator] : [req.locator],
           req.label ?? null,
         );
-        const { source, created } = addSource(c.db, input, c.now());
+        // A watched ATS board is a company of the index from the start.
+        const { source, created } = runInTx(c.db, c.bus, { now: c.now() }, (tx) => {
+          const res = addSource(tx.db, input, tx.now);
+          knowWatched(tx, [res.source]);
+          return res;
+        });
         const view = sourceView(c.db, source.key);
         return { source: view ? sourceToPb(view, recipeRow(c.db, source.id)) : undefined, created };
       });

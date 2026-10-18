@@ -1,9 +1,10 @@
 // The search source registry: every place postings can be listed, each with an on/off switch
 // (and a switch per kind). A disabled source, or a source of a disabled kind, is never queried.
-import { count, eq, inArray, isNotNull, sql } from 'drizzle-orm';
+import { and, count, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 import { platformOf } from '../../browser/guardrails.ts';
 import type { Conn } from '../../db/client.ts';
 import {
+  atsCompanies,
   PLATFORM_KEYS,
   type PlatformKey,
   platforms,
@@ -249,8 +250,8 @@ export function kindsOff(conn: Conn): Set<SearchSourceKind> {
 }
 
 /**
- * Switches a source (by key or id) or a whole kind on or off. Returns what changed: the kind,
- * or the sources.
+ * Switches a source (by key or id) or a whole kind on or off; a watched ATS board's company in
+ * the index with it. Returns what changed: the kind, or the sources.
  */
 export function setSourceEnabled(
   conn: Conn,
@@ -275,6 +276,19 @@ export function setSourceEnabled(
     .where(eq(searchSources.id, row.id))
     .returning()
     .get();
+  // A watched ATS board is a company of the index too: one switch for both.
+  if (isAts(row.kind)) {
+    conn
+      .update(atsCompanies)
+      .set({ enabled })
+      .where(
+        and(
+          eq(atsCompanies.ats, row.kind),
+          sql`lower(${atsCompanies.token}) = ${row.locator.toLowerCase()}`,
+        ),
+      )
+      .run();
+  }
   return { kind: null, sources: updated ? [updated] : [] };
 }
 

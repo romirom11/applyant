@@ -1,6 +1,7 @@
 // What the Sources screen and `applyant search index` show of the ATS index: the index per ATS,
-// its companies (filtered, paged) and the switch per company.
-import { and, asc, count, desc, eq, type SQL, sql } from 'drizzle-orm';
+// its companies (filtered, paged) and the switch per company. A company the watch list also
+// has (an ATS source) is one company: `watched`, with its source's key, and one switch for both.
+import { and, asc, count, desc, eq, inArray, type SQL, sql } from 'drizzle-orm';
 import type { Conn } from '../../../db/client.ts';
 import {
   type AtsCompanyRow,
@@ -12,6 +13,7 @@ import { ATS_KINDS, type Ats } from '../readers/ats-embed.ts';
 import { INDEX_SOURCE_KEY } from '../readers/boards.ts';
 import { isAts, KIND_LABELS, kindsOff, SearchError } from '../sources.ts';
 import { latestDiscoveries } from './discover.ts';
+import { boardKey } from './store.ts';
 
 export interface AtsView {
   ats: Ats;
@@ -92,11 +94,33 @@ export interface CompanyFilter {
   offset?: number;
 }
 
+/** A company of the index, and its source when the watch list has it too. */
+export interface CompanyView extends AtsCompanyRow {
+  sourceKey: string | null;
+}
+
+/** The watch list's ATS boards: "greenhouse:gitlab" (boardKey) → their source's key. */
+function watchedKeys(conn: Conn, ats: readonly Ats[] = ATS_KINDS): Map<string, string> {
+  return new Map(
+    conn
+      .select({ kind: searchSources.kind, locator: searchSources.locator, key: searchSources.key })
+      .from(searchSources)
+      .where(inArray(searchSources.kind, [...ats]))
+      .all()
+      .map((s) => [boardKey(s.kind, s.locator), s.key]),
+  );
+}
+
+function withSources(conn: Conn, rows: AtsCompanyRow[]): CompanyView[] {
+  const keys = watchedKeys(conn, [...new Set(rows.map((r) => r.ats))]);
+  return rows.map((r) => ({ ...r, sourceKey: keys.get(boardKey(r.ats, r.token)) ?? null }));
+}
+
 /** Companies the filter selects: matching ones first, then hiring ones, then by name. */
 export function listCompanies(
   conn: Conn,
   f: CompanyFilter,
-): { companies: AtsCompanyRow[]; total: number } {
+): { companies: CompanyView[]; total: number } {
   const raw = f.ats?.trim();
   let ats: Ats | null = null;
   if (raw) {
@@ -130,11 +154,14 @@ export function listCompanies(
     .offset(offset)
     .all();
   const total = conn.select({ n: count() }).from(atsCompanies).where(cond).get()?.n ?? 0;
-  return { companies, total };
+  return { companies: withSources(conn, companies), total };
 }
 
-/** Leaves one company out of the index (not read, not searched), or takes it back. */
-export function setCompanyEnabled(conn: Conn, id: number, enabled: boolean): AtsCompanyRow {
+/**
+ * Leaves one company out of the index (not read, not searched), or takes it back. A watched one's
+ * source switches with it: one switch per company.
+ */
+export function setCompanyEnabled(conn: Conn, id: number, enabled: boolean): CompanyView {
   const row = conn
     .update(atsCompanies)
     .set({ enabled })
@@ -142,5 +169,9 @@ export function setCompanyEnabled(conn: Conn, id: number, enabled: boolean): Ats
     .returning()
     .get();
   if (!row) throw new SearchError(`no company ${id} in the ATS index`);
-  return row;
+  const [view] = withSources(conn, [row]);
+  if (view?.sourceKey) {
+    conn.update(searchSources).set({ enabled }).where(eq(searchSources.key, view.sourceKey)).run();
+  }
+  return view ?? { ...row, sourceKey: null };
 }

@@ -6955,79 +6955,120 @@ public nonisolated struct Applyant_V1_GetAtsIndexResponse: Sendable {
 }
 
 /// One company board in the index.
-public nonisolated struct Applyant_V1_IndexCompany: Sendable {
+public nonisolated struct Applyant_V1_IndexCompany: @unchecked Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  public var id: Int64 = 0
+  public var id: Int64 {
+    get {_storage._id}
+    set {_uniqueStorage()._id = newValue}
+  }
 
-  public var ats: String = String()
+  public var ats: String {
+    get {_storage._ats}
+    set {_uniqueStorage()._ats = newValue}
+  }
 
   /// The board's name on its ATS (greenhouse token, ashby slug, lever site, personio subdomain…).
-  public var token: String = String()
+  public var token: String {
+    get {_storage._token}
+    set {_uniqueStorage()._token = newValue}
+  }
 
   /// The company's name, once a read or a listing named it.
   public var name: String {
-    get {_name ?? String()}
-    set {_name = newValue}
+    get {_storage._name ?? String()}
+    set {_uniqueStorage()._name = newValue}
   }
   /// Returns true if `name` has been explicitly set.
-  public var hasName: Bool {self._name != nil}
+  public var hasName: Bool {_storage._name != nil}
   /// Clears the value of `name`. Subsequent reads from it will return its default value.
-  public mutating func clearName() {self._name = nil}
+  public mutating func clearName() {_uniqueStorage()._name = nil}
 
   /// Switched off by the candidate: not read, not searched.
-  public var enabled: Bool = false
+  public var enabled: Bool {
+    get {_storage._enabled}
+    set {_uniqueStorage()._enabled = newValue}
+  }
 
   /// new (not read yet) | hiring | empty (no open jobs) | failing | gone (the ATS says no such board)
-  public var status: String = String()
+  public var status: String {
+    get {_storage._status}
+    set {_uniqueStorage()._status = newValue}
+  }
 
-  public var jobs: Int32 = 0
+  public var jobs: Int32 {
+    get {_storage._jobs}
+    set {_uniqueStorage()._jobs = newValue}
+  }
 
-  public var matching: Int32 = 0
+  public var matching: Int32 {
+    get {_storage._matching}
+    set {_uniqueStorage()._matching = newValue}
+  }
 
   public var lastReadAt: SwiftProtobuf.Google_Protobuf_Timestamp {
-    get {_lastReadAt ?? SwiftProtobuf.Google_Protobuf_Timestamp()}
-    set {_lastReadAt = newValue}
+    get {_storage._lastReadAt ?? SwiftProtobuf.Google_Protobuf_Timestamp()}
+    set {_uniqueStorage()._lastReadAt = newValue}
   }
   /// Returns true if `lastReadAt` has been explicitly set.
-  public var hasLastReadAt: Bool {self._lastReadAt != nil}
+  public var hasLastReadAt: Bool {_storage._lastReadAt != nil}
   /// Clears the value of `lastReadAt`. Subsequent reads from it will return its default value.
-  public mutating func clearLastReadAt() {self._lastReadAt = nil}
+  public mutating func clearLastReadAt() {_uniqueStorage()._lastReadAt = nil}
 
   public var nextReadAt: SwiftProtobuf.Google_Protobuf_Timestamp {
-    get {_nextReadAt ?? SwiftProtobuf.Google_Protobuf_Timestamp()}
-    set {_nextReadAt = newValue}
+    get {_storage._nextReadAt ?? SwiftProtobuf.Google_Protobuf_Timestamp()}
+    set {_uniqueStorage()._nextReadAt = newValue}
   }
   /// Returns true if `nextReadAt` has been explicitly set.
-  public var hasNextReadAt: Bool {self._nextReadAt != nil}
+  public var hasNextReadAt: Bool {_storage._nextReadAt != nil}
   /// Clears the value of `nextReadAt`. Subsequent reads from it will return its default value.
-  public mutating func clearNextReadAt() {self._nextReadAt = nil}
+  public mutating func clearNextReadAt() {_uniqueStorage()._nextReadAt = nil}
 
   /// How it was found: common-crawl | posting | planner | workable-search | smartrecruiters-search | watch-list | candidate
-  public var foundVia: String = String()
+  public var foundVia: String {
+    get {_storage._foundVia}
+    set {_uniqueStorage()._foundVia = newValue}
+  }
 
   public var lastNote: String {
-    get {_lastNote ?? String()}
-    set {_lastNote = newValue}
+    get {_storage._lastNote ?? String()}
+    set {_uniqueStorage()._lastNote = newValue}
   }
   /// Returns true if `lastNote` has been explicitly set.
-  public var hasLastNote: Bool {self._lastNote != nil}
+  public var hasLastNote: Bool {_storage._lastNote != nil}
   /// Clears the value of `lastNote`. Subsequent reads from it will return its default value.
-  public mutating func clearLastNote() {self._lastNote = nil}
+  public mutating func clearLastNote() {_uniqueStorage()._lastNote = nil}
 
   /// The board's own job list page.
-  public var boardURL: String = String()
+  public var boardURL: String {
+    get {_storage._boardURL}
+    set {_uniqueStorage()._boardURL = newValue}
+  }
+
+  /// It's also a source on the watch list (an ATS board the candidate or the planner added): the
+  /// strategies that name it read it directly, and its switch is the source's too.
+  public var watched: Bool {
+    get {_storage._watched}
+    set {_uniqueStorage()._watched = newValue}
+  }
+
+  /// That source's key ("greenhouse:gitlab"), when watched.
+  public var sourceKey: String {
+    get {_storage._sourceKey ?? String()}
+    set {_uniqueStorage()._sourceKey = newValue}
+  }
+  /// Returns true if `sourceKey` has been explicitly set.
+  public var hasSourceKey: Bool {_storage._sourceKey != nil}
+  /// Clears the value of `sourceKey`. Subsequent reads from it will return its default value.
+  public mutating func clearSourceKey() {_uniqueStorage()._sourceKey = nil}
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
 
-  fileprivate var _name: String? = nil
-  fileprivate var _lastReadAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
-  fileprivate var _nextReadAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
-  fileprivate var _lastNote: String? = nil
+  fileprivate var _storage = _StorageClass.defaultInstance
 }
 
 public nonisolated struct Applyant_V1_ListIndexCompaniesRequest: Sendable {
@@ -19135,93 +19176,167 @@ nonisolated extension Applyant_V1_GetAtsIndexResponse: SwiftProtobuf.Message, Sw
 
 nonisolated extension Applyant_V1_IndexCompany: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".IndexCompany"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}ats\0\u{1}token\0\u{1}name\0\u{1}enabled\0\u{1}status\0\u{1}jobs\0\u{1}matching\0\u{3}last_read_at\0\u{3}next_read_at\0\u{3}found_via\0\u{3}last_note\0\u{3}board_url\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}ats\0\u{1}token\0\u{1}name\0\u{1}enabled\0\u{1}status\0\u{1}jobs\0\u{1}matching\0\u{3}last_read_at\0\u{3}next_read_at\0\u{3}found_via\0\u{3}last_note\0\u{3}board_url\0\u{1}watched\0\u{3}source_key\0")
+
+  fileprivate class _StorageClass {
+    var _id: Int64 = 0
+    var _ats: String = String()
+    var _token: String = String()
+    var _name: String? = nil
+    var _enabled: Bool = false
+    var _status: String = String()
+    var _jobs: Int32 = 0
+    var _matching: Int32 = 0
+    var _lastReadAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
+    var _nextReadAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
+    var _foundVia: String = String()
+    var _lastNote: String? = nil
+    var _boardURL: String = String()
+    var _watched: Bool = false
+    var _sourceKey: String? = nil
+
+      // This property is used as the initial default value for new instances of the type.
+      // The type itself is protecting the reference to its storage via CoW semantics.
+      // This will force a copy to be made of this reference when the first mutation occurs;
+      // hence, it is safe to mark this as `nonisolated(unsafe)`.
+      static nonisolated(unsafe) let defaultInstance = _StorageClass()
+
+    private init() {}
+
+    init(copying source: _StorageClass) {
+      _id = source._id
+      _ats = source._ats
+      _token = source._token
+      _name = source._name
+      _enabled = source._enabled
+      _status = source._status
+      _jobs = source._jobs
+      _matching = source._matching
+      _lastReadAt = source._lastReadAt
+      _nextReadAt = source._nextReadAt
+      _foundVia = source._foundVia
+      _lastNote = source._lastNote
+      _boardURL = source._boardURL
+      _watched = source._watched
+      _sourceKey = source._sourceKey
+    }
+  }
+
+  fileprivate mutating func _uniqueStorage() -> _StorageClass {
+    if !isKnownUniquelyReferenced(&_storage) {
+      _storage = _StorageClass(copying: _storage)
+    }
+    return _storage
+  }
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
-    while let fieldNumber = try decoder.nextFieldNumber() {
-      // The use of inline closures is to circumvent an issue where the compiler
-      // allocates stack space for every case branch when no optimizations are
-      // enabled. https://github.com/apple/swift-protobuf/issues/1034
-      switch fieldNumber {
-      case 1: try { try decoder.decodeSingularInt64Field(value: &self.id) }()
-      case 2: try { try decoder.decodeSingularStringField(value: &self.ats) }()
-      case 3: try { try decoder.decodeSingularStringField(value: &self.token) }()
-      case 4: try { try decoder.decodeSingularStringField(value: &self._name) }()
-      case 5: try { try decoder.decodeSingularBoolField(value: &self.enabled) }()
-      case 6: try { try decoder.decodeSingularStringField(value: &self.status) }()
-      case 7: try { try decoder.decodeSingularInt32Field(value: &self.jobs) }()
-      case 8: try { try decoder.decodeSingularInt32Field(value: &self.matching) }()
-      case 9: try { try decoder.decodeSingularMessageField(value: &self._lastReadAt) }()
-      case 10: try { try decoder.decodeSingularMessageField(value: &self._nextReadAt) }()
-      case 11: try { try decoder.decodeSingularStringField(value: &self.foundVia) }()
-      case 12: try { try decoder.decodeSingularStringField(value: &self._lastNote) }()
-      case 13: try { try decoder.decodeSingularStringField(value: &self.boardURL) }()
-      default: break
+    _ = _uniqueStorage()
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      while let fieldNumber = try decoder.nextFieldNumber() {
+        // The use of inline closures is to circumvent an issue where the compiler
+        // allocates stack space for every case branch when no optimizations are
+        // enabled. https://github.com/apple/swift-protobuf/issues/1034
+        switch fieldNumber {
+        case 1: try { try decoder.decodeSingularInt64Field(value: &_storage._id) }()
+        case 2: try { try decoder.decodeSingularStringField(value: &_storage._ats) }()
+        case 3: try { try decoder.decodeSingularStringField(value: &_storage._token) }()
+        case 4: try { try decoder.decodeSingularStringField(value: &_storage._name) }()
+        case 5: try { try decoder.decodeSingularBoolField(value: &_storage._enabled) }()
+        case 6: try { try decoder.decodeSingularStringField(value: &_storage._status) }()
+        case 7: try { try decoder.decodeSingularInt32Field(value: &_storage._jobs) }()
+        case 8: try { try decoder.decodeSingularInt32Field(value: &_storage._matching) }()
+        case 9: try { try decoder.decodeSingularMessageField(value: &_storage._lastReadAt) }()
+        case 10: try { try decoder.decodeSingularMessageField(value: &_storage._nextReadAt) }()
+        case 11: try { try decoder.decodeSingularStringField(value: &_storage._foundVia) }()
+        case 12: try { try decoder.decodeSingularStringField(value: &_storage._lastNote) }()
+        case 13: try { try decoder.decodeSingularStringField(value: &_storage._boardURL) }()
+        case 14: try { try decoder.decodeSingularBoolField(value: &_storage._watched) }()
+        case 15: try { try decoder.decodeSingularStringField(value: &_storage._sourceKey) }()
+        default: break
+        }
       }
     }
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    // The use of inline closures is to circumvent an issue where the compiler
-    // allocates stack space for every if/case branch local when no optimizations
-    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
-    // https://github.com/apple/swift-protobuf/issues/1182
-    if self.id != 0 {
-      try visitor.visitSingularInt64Field(value: self.id, fieldNumber: 1)
-    }
-    if !self.ats.isEmpty {
-      try visitor.visitSingularStringField(value: self.ats, fieldNumber: 2)
-    }
-    if !self.token.isEmpty {
-      try visitor.visitSingularStringField(value: self.token, fieldNumber: 3)
-    }
-    try { if let v = self._name {
-      try visitor.visitSingularStringField(value: v, fieldNumber: 4)
-    } }()
-    if self.enabled != false {
-      try visitor.visitSingularBoolField(value: self.enabled, fieldNumber: 5)
-    }
-    if !self.status.isEmpty {
-      try visitor.visitSingularStringField(value: self.status, fieldNumber: 6)
-    }
-    if self.jobs != 0 {
-      try visitor.visitSingularInt32Field(value: self.jobs, fieldNumber: 7)
-    }
-    if self.matching != 0 {
-      try visitor.visitSingularInt32Field(value: self.matching, fieldNumber: 8)
-    }
-    try { if let v = self._lastReadAt {
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 9)
-    } }()
-    try { if let v = self._nextReadAt {
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 10)
-    } }()
-    if !self.foundVia.isEmpty {
-      try visitor.visitSingularStringField(value: self.foundVia, fieldNumber: 11)
-    }
-    try { if let v = self._lastNote {
-      try visitor.visitSingularStringField(value: v, fieldNumber: 12)
-    } }()
-    if !self.boardURL.isEmpty {
-      try visitor.visitSingularStringField(value: self.boardURL, fieldNumber: 13)
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every if/case branch local when no optimizations
+      // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+      // https://github.com/apple/swift-protobuf/issues/1182
+      if _storage._id != 0 {
+        try visitor.visitSingularInt64Field(value: _storage._id, fieldNumber: 1)
+      }
+      if !_storage._ats.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._ats, fieldNumber: 2)
+      }
+      if !_storage._token.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._token, fieldNumber: 3)
+      }
+      try { if let v = _storage._name {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 4)
+      } }()
+      if _storage._enabled != false {
+        try visitor.visitSingularBoolField(value: _storage._enabled, fieldNumber: 5)
+      }
+      if !_storage._status.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._status, fieldNumber: 6)
+      }
+      if _storage._jobs != 0 {
+        try visitor.visitSingularInt32Field(value: _storage._jobs, fieldNumber: 7)
+      }
+      if _storage._matching != 0 {
+        try visitor.visitSingularInt32Field(value: _storage._matching, fieldNumber: 8)
+      }
+      try { if let v = _storage._lastReadAt {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 9)
+      } }()
+      try { if let v = _storage._nextReadAt {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 10)
+      } }()
+      if !_storage._foundVia.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._foundVia, fieldNumber: 11)
+      }
+      try { if let v = _storage._lastNote {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 12)
+      } }()
+      if !_storage._boardURL.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._boardURL, fieldNumber: 13)
+      }
+      if _storage._watched != false {
+        try visitor.visitSingularBoolField(value: _storage._watched, fieldNumber: 14)
+      }
+      try { if let v = _storage._sourceKey {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 15)
+      } }()
     }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Applyant_V1_IndexCompany, rhs: Applyant_V1_IndexCompany) -> Bool {
-    if lhs.id != rhs.id {return false}
-    if lhs.ats != rhs.ats {return false}
-    if lhs.token != rhs.token {return false}
-    if lhs._name != rhs._name {return false}
-    if lhs.enabled != rhs.enabled {return false}
-    if lhs.status != rhs.status {return false}
-    if lhs.jobs != rhs.jobs {return false}
-    if lhs.matching != rhs.matching {return false}
-    if lhs._lastReadAt != rhs._lastReadAt {return false}
-    if lhs._nextReadAt != rhs._nextReadAt {return false}
-    if lhs.foundVia != rhs.foundVia {return false}
-    if lhs._lastNote != rhs._lastNote {return false}
-    if lhs.boardURL != rhs.boardURL {return false}
+    if lhs._storage !== rhs._storage {
+      let storagesAreEqual: Bool = withExtendedLifetime((lhs._storage, rhs._storage)) { (_args: (_StorageClass, _StorageClass)) in
+        let _storage = _args.0
+        let rhs_storage = _args.1
+        if _storage._id != rhs_storage._id {return false}
+        if _storage._ats != rhs_storage._ats {return false}
+        if _storage._token != rhs_storage._token {return false}
+        if _storage._name != rhs_storage._name {return false}
+        if _storage._enabled != rhs_storage._enabled {return false}
+        if _storage._status != rhs_storage._status {return false}
+        if _storage._jobs != rhs_storage._jobs {return false}
+        if _storage._matching != rhs_storage._matching {return false}
+        if _storage._lastReadAt != rhs_storage._lastReadAt {return false}
+        if _storage._nextReadAt != rhs_storage._nextReadAt {return false}
+        if _storage._foundVia != rhs_storage._foundVia {return false}
+        if _storage._lastNote != rhs_storage._lastNote {return false}
+        if _storage._boardURL != rhs_storage._boardURL {return false}
+        if _storage._watched != rhs_storage._watched {return false}
+        if _storage._sourceKey != rhs_storage._sourceKey {return false}
+        return true
+      }
+      if !storagesAreEqual {return false}
+    }
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

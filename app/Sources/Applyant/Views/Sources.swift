@@ -1,9 +1,10 @@
-// Sources: every place Applyant reads jobs from, each with its switch. The ATS index first
-// (every company board Applyant knows on Greenhouse, Ashby, Lever and the other ATSs, read on
-// its own schedule and searched by every strategy), then the searches across companies, the
-// companies you watch, career pages and feeds, job boards, Telegram, LinkedIn and Xing. A
-// source that's off (or whose kind is) is never queried; the index's ATSs and single companies
-// switch the same way.
+// Sources: every kind of place Applyant reads jobs from, each with its switch. The ATS index
+// first (every company board Applyant knows on Greenhouse, Ashby, Lever and the other ATSs, read
+// on its own schedule and searched by every strategy), then the searches across companies, career
+// pages and feeds, job boards, Telegram, LinkedIn and Xing. The list holds kinds, never single
+// companies: a company is a row of its ATS's companies on the right, the ones you watch marked
+// so, each with one switch. A source that's off (or whose kind is) is never queried; the index's
+// ATSs and single companies switch the same way.
 import ApplyantAPI
 import ApplyantKit
 import SwiftUI
@@ -18,9 +19,17 @@ struct SourcesList: View {
         let order: [SourcesSelection] = [.index] + atsRows.map { .ats($0.ats) }
             + groups.flatMap { $0.rows.compactMap(Self.selection) }
         VStack(alignment: .leading, spacing: 0) {
-            ModuleHeader(section: .sources, subtitle: subtitle).columnHeader()
+            VStack(alignment: .leading, spacing: 8) {
+                ModuleHeader(section: .sources, subtitle: subtitle)
+                if store.backgroundPausedAt != nil {
+                    MetaLine(SourcesText.pausedNote, systemImage: "pause.circle.fill", tone: .warning, details: SourcesText.pausedLine)
+                }
+                AddBoardOrPage(store: store)
+            }
+            .columnHeader()
             CardList(
-                selection: Binding(get: { store.navigation.sources }, set: { store.navigation.sources = $0 }),
+                // A company or a watched board opened on the right keeps its ATS picked here.
+                selection: Binding(get: { store.navigation.sources?.listRow }, set: { store.navigation.sources = $0 }),
                 order: order,
                 tint: world.main
             ) {
@@ -72,7 +81,10 @@ struct SourcesList: View {
                 Text(index.map(SourcesText.indexLine) ?? (store.atsIndexProblem == nil ? "Loading…" : "Not available yet"))
                     .textRole(.meta).lineLimit(1)
                 if SourcesText.discovering(index) {
-                    ChipView(chip: Chip(text: "Finding companies…", tone: .accent, live: true)).padding(.top, 2)
+                    ChipView(chip: store.backgroundPausedAt == nil
+                        ? Chip(text: "Finding companies…", tone: .accent, live: true)
+                        : Chip(text: "Finding companies after resume", tone: .neutral))
+                        .padding(.top, 2)
                 }
             }
         }
@@ -106,13 +118,6 @@ private struct SourceGroupView: View {
             CardListHeader(title: group.title, count: group.rows.isEmpty ? nil : group.rows.count, tint: tint)
             Spacer()
             if let kind = single { kindSwitch(kind).padding(.top, 10).padding(.trailing, 6) }
-        }
-        if group.id == .watched {
-            AddBoardOrPage(store: store).padding(.horizontal, 4)
-            if group.rows.isEmpty {
-                Text("A company's careers page or its board on an ATS, by URL: Applyant reads it on every search.")
-                    .textRole(.meta).padding(.horizontal, 6)
-            }
         }
         ForEach(Array(group.blocks.enumerated()), id: \.offset) { _, block in
             if single == nil, let kind = block.kind {
@@ -204,10 +209,40 @@ struct SourcesDetail: View {
             } else {
                 EmptyState(title: "Source gone", systemImage: ApplyantKit.Section.sources.symbol, art: .searching)
             }
+        case let .company(id, list)?:
+            // A watched company is its source too: its detail, with what the index knows of it.
+            if let c = store.indexCompany(id) {
+                if c.watched, c.hasSourceKey, let s = store.source(c.sourceKey) {
+                    SourceDetail(store: store, source: s, company: c, back: list)
+                } else {
+                    IndexCompanyDetail(store: store, company: c, back: list)
+                }
+            } else {
+                EmptyState(title: "Company not found", systemImage: "building.2", detail: "It isn't on the page of companies shown any more.", art: .searching) {
+                    Button(SourcesText.listTitle(list)) { store.navigation.sources = list.listRow }.buttonStyle(.secondary)
+                }
+            }
         case let .ats(ats)?:
             AtsIndexPage(store: store, ats: ats).id(ats)
         case .index?, nil:
             AtsIndexPage(store: store, ats: nil)
+        }
+    }
+}
+
+/// Background work is paused: the index isn't read and no companies are looked for, with Resume.
+private struct PausedCallout: View {
+    let store: AppStore
+
+    var body: some View {
+        if store.backgroundPausedAt != nil {
+            Callout(.warning, title: SourcesText.pausedTitle, detail: SourcesText.pausedDetail, systemImage: "pause.circle.fill") {
+                Button("Resume") { Task { await store.setBackgroundPaused(false) } }
+                    .buttonStyle(.secondary)
+                    .controlSize(.small)
+                    .help("Resume background work: whatever came due while paused runs now")
+            }
+            .entrance(0)
         }
     }
 }
@@ -222,6 +257,7 @@ private struct AtsIndexPage: View {
         if let index = store.atsIndex {
             ScrollView {
                 VStack(alignment: .leading, spacing: Theme.blockSpacing) {
+                    PausedCallout(store: store)
                     if let ats {
                         if let a = index.ats.first(where: { $0.ats == ats }) {
                             atsPage(a, index: index)
@@ -253,7 +289,7 @@ private struct AtsIndexPage: View {
         PageHeader(title: SourceGroupID.index.title, subtitle: SourcesText.indexLine(index)) {
             ArtView(.searching, size: 56)
         }
-        Prose("Greenhouse, Ashby, Lever and the other ATSs have no search across companies, so Applyant keeps an index of every company board it has found, each read on its own schedule. Every search looks through it, so it sees every company, not only the ones you watch.", size: .compact)
+        Prose("Greenhouse, Ashby, Lever and the other ATSs have no search across companies, so Applyant keeps an index of every company board it has found, each read on its own schedule. Every search looks through it, so it sees every company, not only the ones you watch. The boards you watch are companies here too, marked Watched.", size: .compact)
             .entrance(1)
         Toggle(isOn: Binding(
             get: { on },
@@ -281,7 +317,7 @@ private struct AtsIndexPage: View {
     @ViewBuilder
     private func atsPage(_ a: AtsIndexAts, index: AtsIndex) -> some View {
         let row = SourcesText.atsRow(a)
-        let watched = store.search.sources.filter { $0.kind == a.ats }.count
+        let watched = SourcesText.watchedCount(store.search, ats: a.ats)
         PageHeader(title: row.title, subtitle: "In the index" + (row.lastReadAt.map { " · last read " + $0.formatted(.relative(presentation: .named)) } ?? "")) {
             IconTile(systemImage: "building.2", size: 56, colors: a.enabled && index.enabled ? [Theme.world(.new).main, Theme.world(.applied).main] : [Theme.glyph, Theme.raised])
         }
@@ -300,7 +336,7 @@ private struct AtsIndexPage: View {
         }
         StatStrip(SourcesText.atsTotals(a).map { StatStrip.Item(label: $0.label, value: $0.value) }, maxColumns: 6).entrance(2)
         if watched > 0 {
-            MetaLine("You also watch \(watched) of its boards (Watched companies); its switch covers them too.", systemImage: "eye")
+            MetaLine("You watch \(watched) of its companies (marked Watched): the searches that name them read them directly. Its switch covers them too.", systemImage: "eye")
         }
     }
 }
@@ -344,16 +380,15 @@ private struct DiscoveryCard: View {
     var body: some View {
         let latest = index.discoveries.first
         let running = SourcesText.discovering(index)
+        let paused = store.backgroundPausedAt != nil
         Card(title: "Finding companies", systemImage: "sparkle.magnifyingglass") {
             HStack(spacing: 8) {
-                if running { ProgressView().controlSize(.mini) }
-                Button(running ? "Looking…" : "Find More Companies") { Task { await store.discoverIndexCompanies() } }
+                if running, !paused { ProgressView().controlSize(.mini) }
+                Button(running && !paused ? "Looking…" : "Find More Companies") { Task { await store.discoverIndexCompanies() } }
                     .buttonStyle(.secondary)
                     .controlSize(.small)
-                    .disabled(running)
-                    .help(running
-                        ? "A discovery is waiting or running"
-                        : "Looks for more company boards now: in Common Crawl's index of the web, behind postings and in the job searches (it also runs weekly)")
+                    .disabled(running || paused)
+                    .help(SourcesText.findMoreHelp(paused: paused, running: running))
             }
         } content: {
             if let d = latest {
@@ -366,7 +401,10 @@ private struct DiscoveryCard: View {
                     if d.hasNote, !d.note.isEmpty { Prose(d.note, size: .compact) }
                 }
             } else {
-                Text("No discovery has run yet. It runs weekly, or now with Find More Companies.").textRole(.body, color: Theme.secondaryText)
+                Text(paused
+                    ? "No discovery has run yet. It starts once background work is resumed, then weekly."
+                    : "No discovery has run yet. It runs weekly, or now with Find More Companies.")
+                    .textRole(.body, color: Theme.secondaryText)
             }
         }
     }
@@ -385,8 +423,12 @@ private struct IndexCompaniesBrowser: View {
         self.store = store
         self.ats = ats
         self.atsChoices = atsChoices
-        _filter = State(initialValue: IndexCompanyFilter(ats: ats))
+        // Back from a company: the same filter and page.
+        _filter = State(initialValue: store.indexCompanyFilters[ats ?? ""] ?? IndexCompanyFilter(ats: ats))
     }
+
+    /// The list a company is opened from.
+    private var scope: SourcesSelection { ats.map { .ats($0) } ?? .index }
 
     var body: some View {
         // The page on screen while the next loads, if it's from the same ATS scope.
@@ -418,15 +460,16 @@ private struct IndexCompaniesBrowser: View {
             }
             if let page {
                 if page.companies.isEmpty {
-                    Text(filter.query.isEmpty && !filter.matchingOnly
-                        ? "No companies here yet. Find More Companies looks for them."
-                        : "No company matches.")
+                    Text(SourcesText.companiesEmpty(page.filter, index: store.atsIndex, paused: store.backgroundPausedAt != nil))
                         .textRole(.body, color: Theme.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
                 } else {
                     VStack(alignment: .leading, spacing: 0) {
                         ForEach(Array(page.companies.enumerated()), id: \.element.id) { i, c in
                             if i > 0 { Rectangle().fill(Theme.hairline).frame(height: 1) }
-                            IndexCompanyLine(store: store, company: c, showsAts: ats == nil)
+                            IndexCompanyLine(store: store, company: c, showsAts: page.filter.ats == nil) {
+                                store.openIndexCompany(c, from: scope)
+                            }
                         }
                     }
                 }
@@ -447,6 +490,7 @@ private struct IndexCompaniesBrowser: View {
             }
         }
         .task(id: filter) {
+            store.indexCompanyFilters[ats ?? ""] = filter
             // Typing waits for a pause; a page or a filter picked loads at once.
             if let shown = store.indexCompanies?.filter, shown.query != filter.query {
                 try? await Task.sleep(for: .milliseconds(300))
@@ -457,42 +501,128 @@ private struct IndexCompaniesBrowser: View {
     }
 }
 
-/// A company of the index: its name, status and counts, when it was read, its board, and its
-/// switch.
+/// A company of the index: its name, status and counts, when it was read (and, watched, what its
+/// own reads found), its board, and its switch; a click opens it.
 private struct IndexCompanyLine: View {
     let store: AppStore
     let company: IndexCompany
     let showsAts: Bool
+    let open: () -> Void
 
     var body: some View {
         let c = company
         let title = SourcesText.companyTitle(c)
-        let read = c.hasLastReadAt ? "read " + c.lastReadAt.date.formatted(.relative(presentation: .named)) : nil
-        let meta = ([SourcesText.companyLine(c, showsAts: showsAts), read, SourcesText.foundVia(c.foundVia)] as [String?])
-            .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
+        let source = c.hasSourceKey ? store.source(c.sourceKey) : nil
         HStack(spacing: 10) {
-            CompanyAvatar(name: title, size: 28).opacity(c.enabled ? 1 : 0.5)
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
-                    Text(title).textRole(.itemTitle, color: c.enabled ? Theme.text : Theme.secondaryText).lineLimit(1)
-                    ForEach(SourcesText.companyChips(c), id: \.text) { ChipView(chip: $0) }
+            Button(action: open) {
+                HStack(spacing: 10) {
+                    CompanyAvatar(name: title, size: 28).opacity(c.enabled ? 1 : 0.5)
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 6) {
+                            Text(title).textRole(.itemTitle, color: c.enabled ? Theme.text : Theme.secondaryText).lineLimit(1)
+                            ForEach(SourcesText.companyChips(c), id: \.text) { ChipView(chip: $0) }
+                        }
+                        MetaLine(SourcesText.companyMeta(c, showsAts: showsAts, source: source), details: c.hasLastNote && !c.lastNote.isEmpty ? c.lastNote : nil)
+                    }
+                    Spacer(minLength: 8)
                 }
-                MetaLine(meta, details: c.hasLastNote && !c.lastNote.isEmpty ? c.lastNote : nil)
+                .contentShape(Rectangle())
             }
-            Spacer(minLength: 8)
-            if !c.boardURL.isEmpty, let url = URL(string: c.boardURL) {
-                Link("Board ↗", destination: url)
-                    .font(.system(size: 12))
-                    .foregroundStyle(Theme.accent)
-                    .help(c.boardURL)
-            }
+            .buttonStyle(.plain)
+            .help(c.watched ? "Its source: what it found, how it's read" : "What the index knows of it")
+            BoardLink(company: c)
             SourceSwitch(
                 label: title,
                 isOn: c.enabled,
-                help: c.enabled ? "Leave \(title) out: it isn't read or searched" : "Take \(title) back into the index"
+                help: c.enabled
+                    ? (c.watched ? "Switch \(title) off: not read, not searched, off on your watch list too" : "Leave \(title) out: it isn't read or searched")
+                    : (c.watched ? "Switch \(title) back on, on your watch list too" : "Take \(title) back into the index")
             ) { value in Task { await store.setIndexCompany(c.id, enabled: value) } }
         }
         .padding(.vertical, 7)
+    }
+}
+
+/// A company's own board on its ATS.
+private struct BoardLink: View {
+    let company: IndexCompany
+
+    var body: some View {
+        if !company.boardURL.isEmpty, let url = URL(string: company.boardURL) {
+            Link("Board ↗", destination: url)
+                .font(.system(size: 12))
+                .foregroundStyle(Theme.accent)
+                .help(company.boardURL)
+        }
+    }
+}
+
+/// Back to the list a company was opened from.
+private struct BackToList: View {
+    let store: AppStore
+    let list: SourcesSelection
+
+    var body: some View {
+        Button { store.navigation.sources = list.listRow } label: { Label(SourcesText.listTitle(list), systemImage: "chevron.left") }
+            .buttonStyle(.secondary)
+            .controlSize(.small)
+            .keyboardShortcut(.cancelAction)
+            .help("Back to \(SourcesText.listTitle(list)) (Esc)")
+    }
+}
+
+/// What the index knows of a company: its status, jobs, how it's known, its reads, and its board.
+private struct IndexFacts: View {
+    let company: IndexCompany
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Space.s) {
+            Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: Theme.Space.l, verticalSpacing: Theme.Space.s) {
+                ForEach(SourcesText.companyFacts(company), id: \.label) { item in
+                    GridRow {
+                        Text(item.label).textRole(.body, color: Theme.secondaryText)
+                        Text(item.value).textRole(.body).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
+                    }
+                }
+            }
+            BoardLink(company: company)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(Theme.cardPadding)
+        .cardSurface()
+    }
+}
+
+/// A company of the index that isn't watched: what the index knows of it, and its switch.
+private struct IndexCompanyDetail: View {
+    let store: AppStore
+    let company: IndexCompany
+    let back: SourcesSelection
+
+    var body: some View {
+        let c = company
+        let title = SourcesText.companyTitle(c)
+        ScrollView {
+            VStack(alignment: .leading, spacing: Theme.blockSpacing) {
+                BackToList(store: store, list: back)
+                PageHeader(title: title, subtitle: "\(SourcesText.kindTitle(c.ats)) · \(c.token) · in the index") {
+                    CompanyAvatar(name: title, size: 56).opacity(c.enabled ? 1 : 0.5)
+                } trailing: {
+                    HStack(spacing: 4) { ForEach(SourcesText.companyChips(c), id: \.text) { ChipView(chip: $0) } }
+                }
+                PausedCallout(store: store)
+                Toggle(isOn: Binding(
+                    get: { c.enabled },
+                    set: { value in Task { await store.setIndexCompany(c.id, enabled: value) } }
+                )) {
+                    Text(c.enabled ? "On: read on its schedule, searched by every strategy" : "Off: left out of the index, neither read nor searched").textRole(.body)
+                }
+                .toggleStyle(.switch)
+                .entrance(1)
+                IndexFacts(company: c).entrance(2)
+            }
+            .pageColumn()
+        }
     }
 }
 
@@ -503,11 +633,15 @@ private struct IndexCompanyLine: View {
 struct SourceDetail: View {
     let store: AppStore
     let source: SearchSource
+    /// A watched company opened from the index: what the index knows of it, and the way back.
+    var company: IndexCompany?
+    var back: SourcesSelection?
 
     var body: some View {
         let s = source
         ScrollView {
             VStack(alignment: .leading, spacing: Theme.blockSpacing) {
+                if let back { BackToList(store: store, list: back) }
                 PageHeader(title: s.label, subtitle: SourcesText.kindTitle(s.kind)) {
                     IconTile(systemImage: "dot.radiowaves.left.and.right", size: 56, colors: s.enabled && s.kindEnabled ? [Theme.world(.new).main, Theme.world(.applied).main] : [Theme.glyph, Theme.raised])
                         .help(s.key)
@@ -540,6 +674,18 @@ struct SourceDetail: View {
                 .padding(Theme.cardPadding)
                 .cardSurface()
                 .entrance(2)
+                if let company {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("In the index").textRole(.heading)
+                        Text("A watched company: the searches that name it read it directly, and those reads count as the index's, so it isn't read twice. Its switch above is its switch in the index too.")
+                            .textRole(.body, color: Theme.secondaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                        IndexFacts(company: company)
+                    }
+                    .entrance(3)
+                } else if SourcesText.isAts(s.kind) {
+                    MetaLine("A company of the index too, under \(SourcesText.kindTitle(s.kind)): its switch is the company's switch there.", systemImage: "building.2")
+                }
                 if let detail = store.sourceDetails[s.key], detail.hasRecipe {
                     RecipeView(store: store, source: detail).entrance(3)
                 }

@@ -211,7 +211,7 @@ service ApplyantService {
   // ListIndexCompanies pages through the index's companies, filtered.
   rpc ListIndexCompanies(ListIndexCompaniesRequest) returns (ListIndexCompaniesResponse);
   // SetIndexCompanyEnabled leaves one company out of the index (it's not read or searched) or
-  // takes it back.
+  // takes it back. A watched company's search source switches with it (one switch per company).
   rpc SetIndexCompanyEnabled(SetIndexCompanyEnabledRequest) returns (SetIndexCompanyEnabledResponse);
   // DiscoverIndexCompanies looks for more company boards now (it also runs weekly by itself).
   rpc DiscoverIndexCompanies(DiscoverIndexCompaniesRequest) returns (DiscoverIndexCompaniesResponse);
@@ -2078,6 +2078,11 @@ message IndexCompany {
   optional string last_note = 12;
   // The board's own job list page.
   string board_url = 13;
+  // It's also a source on the watch list (an ATS board the candidate or the planner added): the
+  // strategies that name it read it directly, and its switch is the source's too.
+  bool watched = 14;
+  // That source's key ("greenhouse:gitlab"), when watched.
+  optional string source_key = 15;
 }
 
 message ListIndexCompaniesRequest {

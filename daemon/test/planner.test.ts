@@ -178,7 +178,8 @@ describe('search planner', () => {
       ],
       ['page:https://kestrel.example/careers', 'Kestrel', 'Python shop in Athens.'],
     ]);
-    // The other ATS board joins the index, read at its next crawl.
+    // The other ATS board joins the index, read at its next crawl; the watched one is a company
+    // of the index too.
     expect(
       t.db
         .select()
@@ -187,6 +188,7 @@ describe('search planner', () => {
         .map((c) => [c.ats, c.token, c.name, c.status, c.foundVia, c.foundNote]),
     ).toEqual([
       ['greenhouse', 'tallyhall', 'Tallyhall', 'new', 'planner', 'Hires founding engineers.'],
+      ['ashby', 'lumen', 'Lumen Health', 'new', 'watch-list', 'ashby:lumen'],
     ]);
 
     const strategies = listStrategies(t.db).filter((s) => s.origin === 'agent');

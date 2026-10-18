@@ -141,7 +141,8 @@ struct StrategyEditorSheet: View {
 
 // MARK: Search sources
 
-/// A job board or a career page by URL (Sources → Watched companies).
+/// A job board or a career page by URL (Sources, under its header): a board joins the index as a
+/// watched company, a page Career pages and feeds.
 struct AddBoardOrPage: View {
     let store: AppStore
     @State private var input = ""

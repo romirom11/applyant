@@ -213,6 +213,8 @@ function indexCompanyJson(c: IndexCompany) {
     foundVia: c.foundVia,
     lastNote: c.lastNote ?? null,
     boardUrl: c.boardUrl,
+    watched: c.watched,
+    sourceKey: c.sourceKey ?? null,
   };
 }
 
@@ -754,7 +756,7 @@ export function registerSearch(program: Command, client: () => ApplyantClient): 
               String(c.matching),
               when(c.lastReadAt),
               c.enabled ? when(c.nextReadAt) : '-',
-              c.foundVia,
+              c.watched ? `${c.foundVia} (watched)` : c.foundVia,
             ]),
           ),
         );

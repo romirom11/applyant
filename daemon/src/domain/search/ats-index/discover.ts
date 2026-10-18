@@ -37,8 +37,7 @@ import { type Ats, type AtsBoard, boardFromUrl, jobPageBoard } from '../readers/
 import { USER_AGENT } from '../readers/http.ts';
 import { sleep } from '../readers/shared.ts';
 import type { Fetch } from '../readers/types.ts';
-import { isAts } from '../sources.ts';
-import { boardKey, indexWanted, knowBoards, type NewBoard } from './store.ts';
+import { boardKey, indexWanted, knowBoards, type NewBoard, watchedBoards } from './store.ts';
 
 /** Once a discovery has run, the next starts this long after it. */
 export const DISCOVER_EVERY_MS = 7 * 24 * 3_600_000;
@@ -525,20 +524,7 @@ export async function commonCrawlBoards(
 
 /** Boards Applyant has come across: the watch list's, and those behind postings. */
 export function ownBoards(conn: Conn): NewBoard[] {
-  const out: NewBoard[] = [];
-  for (const s of conn.select().from(searchSources).all()) {
-    const via = s.origin === 'candidate' ? 'candidate' : 'watch-list';
-    if (isAts(s.kind)) {
-      out.push({ board: { ats: s.kind, token: s.locator }, via, name: s.label, note: s.key });
-    } else if (s.kind === 'page' && s.resolved?.via === 'ats') {
-      out.push({
-        board: { ats: s.resolved.ats, token: s.resolved.token },
-        via,
-        name: s.label,
-        note: `read by ${s.key}`,
-      });
-    }
-  }
+  const out = watchedBoards(conn.select().from(searchSources).all());
   const rows = conn
     .select({
       id: postings.id,
@@ -562,6 +548,15 @@ export function ownBoards(conn: Conn): NewBoard[] {
     if (board) out.push({ board, via: 'posting', note: `posting ${l.postingId}` });
   }
   return out;
+}
+
+/**
+ * The local part of discovery, on the daemon's start: the watch list's boards and those behind
+ * postings join the index without waiting for a run or the network (a pause doesn't hold it
+ * back: it reads only Applyant's own data). Returns how many are new.
+ */
+export function knowOwnBoards(tx: Tx): number {
+  return knowBoards(tx, ownBoards(tx.db)).length;
 }
 
 // ---- Runs --------------------------------------------------------------------------------

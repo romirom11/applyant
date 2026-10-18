@@ -26,6 +26,7 @@ import {
   atsCompanies,
   atsJobs,
   postingSources,
+  type SearchSourceRow,
   searchSources,
   searchStrategies,
 } from '../../../db/schema.ts';
@@ -133,6 +134,31 @@ export function knowBoards(tx: Tx, boards: NewBoard[], o: { max?: number } = {})
     if (row) added.push(row);
   }
   return added;
+}
+
+/**
+ * The boards the watch list reads: its ATS boards (each also a company of the index, `watched`)
+ * and the career pages that resolved to one. Named by the source's label, when it's more than
+ * the board's token.
+ */
+export function watchedBoards(sources: SearchSourceRow[]): NewBoard[] {
+  return sources.flatMap((s): NewBoard[] => {
+    const via = s.origin === 'candidate' ? 'candidate' : 'watch-list';
+    if (isAts(s.kind)) {
+      const name = s.label !== s.locator ? s.label : null;
+      return [{ board: { ats: s.kind, token: s.locator }, via, name, note: s.key }];
+    }
+    if (s.kind === 'page' && s.resolved?.via === 'ats') {
+      const board = { ats: s.resolved.ats, token: s.resolved.token };
+      return [{ board, via, name: s.label, note: `read by ${s.key}` }];
+    }
+    return [];
+  });
+}
+
+/** A source joined the watch list: its board (if it reads one) is in the index from now on. */
+export function knowWatched(tx: Tx, sources: SearchSourceRow[]): AtsCompanyRow[] {
+  return knowBoards(tx, watchedBoards(sources));
 }
 
 export function findCompany(conn: Conn, board: AtsBoard): AtsCompanyRow | null {

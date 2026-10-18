@@ -32,6 +32,7 @@ import {
   DISCOVER_EVERY_MS,
   DISCOVER_RETRY_MS,
   indexDiscover,
+  knowOwnBoards,
   LOST_NOTE,
   latestDiscoveries,
   newProgress,
@@ -58,6 +59,8 @@ import type { Fetch, Listing } from '../src/domain/search/readers/types.ts';
 import { addSource, setSourceEnabled } from '../src/domain/search/sources.ts';
 import { watchSeen } from '../src/domain/search/watchlist.ts';
 import {
+  AddSearchSourceRequestSchema,
+  type AddSearchSourceResponse,
   DiscoverIndexCompaniesRequestSchema,
   type DiscoverIndexCompaniesResponse,
   GetAtsIndexRequestSchema,
@@ -66,6 +69,7 @@ import {
   type ListIndexCompaniesResponse,
   SetIndexCompanyEnabledRequestSchema,
   type SetIndexCompanyEnabledResponse,
+  SetSearchSourceEnabledRequestSchema,
 } from '../src/gen/applyant/v1/applyant_pb.js';
 import { setPaused } from '../src/queue/pause.ts';
 import { Scheduler } from '../src/queue/scheduler.ts';
@@ -713,6 +717,48 @@ describe('the ATS index', () => {
       .run();
     expect(ownBoards(t.db).map((b) => `${b.board.ats}:${b.board.token}`)).toContain('join:beta');
   });
+
+  it("the watch list's boards and those behind postings are in the index from the start, paused too, without a request", () => {
+    runInTx(t.db, h.bus, { now: clock }, (tx) => setPaused(tx, true));
+    addSource(t.db, { kind: 'greenhouse', locator: 'kalepa', label: 'Kalepa' }, clock);
+    addSource(t.db, { kind: 'ashby', locator: 'parloa', origin: 'agent' }, clock);
+    const page = addSource(t.db, { kind: 'page', locator: 'https://acme.com/careers' }, clock);
+    t.db
+      .update(searchSources)
+      .set({ resolved: { via: 'ats', ats: 'lever', token: 'acme' } })
+      .where(eq(searchSources.id, page.source.id))
+      .run();
+    t.db
+      .insert(postings)
+      .values({
+        stage: 'found',
+        canonicalUrl: 'https://job-boards.greenhouse.io/beta/jobs/7',
+        company: 'Beta',
+      })
+      .run();
+    // A board the index already has keeps how it was found, and gets its name.
+    know(['greenhouse', 'Kalepa']);
+    const added = runInTx(t.db, h.bus, { now: clock }, (tx) => knowOwnBoards(tx));
+    expect(added).toBe(3);
+    const rows = t.db.select().from(atsCompanies).orderBy(atsCompanies.id).all();
+    expect(rows.map((c) => [c.ats, c.token, c.name, c.foundVia, c.status])).toEqual([
+      ['greenhouse', 'Kalepa', 'Kalepa', 'common-crawl', 'new'],
+      ['ashby', 'parloa', null, 'watch-list', 'new'],
+      ['lever', 'acme', 'acme.com', 'candidate', 'new'],
+      ['greenhouse', 'beta', 'Beta', 'posting', 'new'],
+    ]);
+    // Nothing was asked of the network, and the crawl and discovery wait for the pause to end.
+    expect(h.fetch.calls).toEqual([]);
+    expect(
+      t.db
+        .select()
+        .from(tasks)
+        .all()
+        .filter((x) => x.kind.startsWith('index_')),
+    ).toEqual([]);
+    // Again: nothing new.
+    expect(runInTx(t.db, h.bus, { now: clock }, (tx) => knowOwnBoards(tx))).toBe(0);
+  });
 });
 
 // ---- Discovery -------------------------------------------------------------------------------
@@ -981,7 +1027,7 @@ describe('discovery', () => {
           .all()
           .map((c) => [c.ats, c.token, c.foundVia, c.name, c.status]),
       ).toEqual([
-        ['lever', 'mine', 'candidate', 'mine', 'new'],
+        ['lever', 'mine', 'candidate', null, 'new'],
         ['greenhouse', 'acme', 'posting', 'Acme', 'new'],
         ['greenhouse', 'fresh', 'common-crawl', null, 'new'],
       ]);
@@ -1255,5 +1301,66 @@ describe('the ATS index RPCs', () => {
       {} as never,
     )) as GetAtsIndexResponse;
     expect(again.discoveries.map((d) => [d.trigger, d.status])).toEqual([['manual', 'queued']]);
+  });
+
+  it('a board added to the watch list is a company of the index at once: watched, with one switch for both', async () => {
+    const rpc = searchRpcs({ db: t.db, bus: h.bus, now: () => now });
+    const added = (await rpc.addSearchSource(
+      create(AddSearchSourceRequestSchema, {
+        kind: '',
+        locator: 'https://job-boards.greenhouse.io/kalepa',
+        label: 'Kalepa',
+      }),
+      {} as never,
+    )) as AddSearchSourceResponse;
+    expect(added.source?.key).toBe('greenhouse:kalepa');
+    runInTx(t.db, h.bus, { now }, (tx) =>
+      knowBoards(tx, [{ board: { ats: 'greenhouse', token: 'other' }, via: 'common-crawl' }]),
+    );
+    const list = async () =>
+      (
+        (await rpc.listIndexCompanies(
+          create(ListIndexCompaniesRequestSchema, {}),
+          {} as never,
+        )) as ListIndexCompaniesResponse
+      ).companies;
+    const [kalepa, other] = await list();
+    expect(kalepa).toMatchObject({
+      token: 'kalepa',
+      name: 'Kalepa',
+      foundVia: 'candidate',
+      watched: true,
+      sourceKey: 'greenhouse:kalepa',
+      enabled: true,
+    });
+    expect(other).toMatchObject({ token: 'other', watched: false });
+    expect(other?.sourceKey).toBeUndefined();
+    const index = (await rpc.getAtsIndex(
+      create(GetAtsIndexRequestSchema, {}),
+      {} as never,
+    )) as GetAtsIndexResponse;
+    expect(index.ats[0]).toMatchObject({ ats: 'greenhouse', companies: 2 });
+
+    // Off in the index: its source is off too.
+    const source = () =>
+      t.db.select().from(searchSources).where(eq(searchSources.key, 'greenhouse:kalepa')).get();
+    const off = (await rpc.setIndexCompanyEnabled(
+      create(SetIndexCompanyEnabledRequestSchema, { id: kalepa?.id ?? 0n, enabled: false }),
+      {} as never,
+    )) as SetIndexCompanyEnabledResponse;
+    expect(off.company).toMatchObject({ enabled: false, watched: true });
+    expect(source()?.enabled).toBe(false);
+    // On as a source: on in the index too.
+    await rpc.setSearchSourceEnabled(
+      create(SetSearchSourceEnabledRequestSchema, { target: 'greenhouse:kalepa', enabled: true }),
+      {} as never,
+    );
+    expect((await list())[0]).toMatchObject({ token: 'kalepa', enabled: true });
+    // A company that isn't watched switches alone.
+    await rpc.setIndexCompanyEnabled(
+      create(SetIndexCompanyEnabledRequestSchema, { id: other?.id ?? 0n, enabled: false }),
+      {} as never,
+    );
+    expect(source()?.enabled).toBe(true);
   });
 });

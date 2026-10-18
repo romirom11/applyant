@@ -6723,6 +6723,21 @@ export declare type IndexCompany = Message<"applyant.v1.IndexCompany"> & {
    * @generated from field: string board_url = 13;
    */
   boardUrl: string;
+
+  /**
+   * It's also a source on the watch list (an ATS board the candidate or the planner added): the
+   * strategies that name it read it directly, and its switch is the source's too.
+   *
+   * @generated from field: bool watched = 14;
+   */
+  watched: boolean;
+
+  /**
+   * That source's key ("greenhouse:gitlab"), when watched.
+   *
+   * @generated from field: optional string source_key = 15;
+   */
+  sourceKey?: string | undefined;
 };
 
 /**
@@ -9839,7 +9854,7 @@ export declare const ApplyantService: GenService<{
   },
   /**
    * SetIndexCompanyEnabled leaves one company out of the index (it's not read or searched) or
-   * takes it back.
+   * takes it back. A watched company's search source switches with it (one switch per company).
    *
    * @generated from rpc applyant.v1.ApplyantService.SetIndexCompanyEnabled
    */

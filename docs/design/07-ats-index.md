@@ -51,12 +51,19 @@ index, and cost money.
 6. **More ATSs** for DACH and the rest of Europe: Personio (`<co>.jobs.personio.de/xml`),
    Recruitee (`<co>.recruitee.com/api/offers/`), Teamtailor (`<co>.teamtailor.com/jobs.json`),
    JOIN, Breezy, as source kinds, in career-page detection and in the index.
-7. **A Sources screen** in the app: every source grouped (the index per ATS with its companies,
-   the cross-company job searches, watched companies, career pages and feeds, job boards,
-   Telegram, LinkedIn and Xing), each with its switch.
+7. **A Sources screen** in the app: the kinds of sources, grouped (the index per ATS, the
+   cross-company job searches, career pages and feeds, job boards, Telegram, LinkedIn and Xing),
+   each with its switch. A company is one thing: it's a row of its ATS's companies (never a row
+   of the list), and one on the watch list too says so there ("Watched"), with one switch for
+   both. While background work is paused the screen says the index isn't read and no
+   companies are looked for until it's resumed.
 
 The watch list stays for the candidate's own boards; boards found by matched jobs and by the
-planner join the index instead (hot: read every 6 h from the start).
+planner join the index instead (hot: read every 6 h from the start). The index knows every
+watched board (and those behind postings) from the daemon's start and from the moment one is
+added, without waiting for a discovery or the network: that part of discovery is local, so a
+pause doesn't hold it back. The searches that name a watched board read it directly, and their
+reads are the index's reads of it.
 
 ## Contract
 

@@ -76,30 +76,44 @@ func indexCompany(_ id: Int64, _ token: String, ats: String = "greenhouse", stat
 @Suite struct SourcesTests {
     @Test func everySourceSitsInItsGroupInTheScreensOrder() {
         let groups = SourcesText.groups(everySource())
-        // The index's group is drawn from GetAtsIndex; the rest follow in order. No Career page
-        // group without pages… here there is one; Telegram stays with no channel followed.
-        #expect(groups.map(\.id) == [.acrossCompanies, .watched, .pages, .boards, .telegram, .platforms])
-        #expect(groups.map(\.title) == ["Searches across companies", "Watched companies", "Career pages and feeds", "Job boards", "Telegram", "LinkedIn and Xing"])
+        // The index's group is drawn from GetAtsIndex; the rest follow in order, kinds of sources
+        // only: the watched ATS boards are companies of the index, never rows of the list.
+        #expect(groups.map(\.id) == [.acrossCompanies, .pages, .boards, .telegram, .platforms])
+        #expect(groups.map(\.title) == ["Searches across companies", "Career pages and feeds", "Job boards", "Telegram", "LinkedIn and Xing"])
+        #expect(!groups.flatMap(\.rows).map(\.title).contains { ["GitLab", "OpenAI", "Acme"].contains($0) })
         // The searches across companies in their own order, without a kind switch.
         #expect(groups[0].rows.map(\.title) == ["Workable job search · every company", "Web search · Greenhouse, Ashby and Lever jobs"])
         #expect(groups[0].blocks.first?.kind == nil)
-        // Watched: every ATS kind with sources (a new one, Personio, too), each under its switch;
-        // Lever has none and is left out.
-        #expect(groups[1].blocks.map(\.title) == ["Greenhouse", "Ashby", "Personio"])
-        #expect(groups[1].blocks.map { $0.kind?.kind } == ["greenhouse", "ashby", "personio"])
+        #expect(groups[1].rows.map(\.title) == ["Acme careers"])
         // Job boards leave out the index and the searches across companies.
-        #expect(groups[3].rows.map(\.title) == ["Hacker News · Who is hiring"])
-        #expect(groups[3].blocks.first?.kind?.kind == "board")
-        #expect(groups[4].rows.isEmpty && groups[4].blocks.first?.kind?.kind == "telegram")
-        #expect(groups[5].blocks.map(\.title) == ["LinkedIn"])
+        #expect(groups[2].rows.map(\.title) == ["Hacker News · Who is hiring"])
+        #expect(groups[2].blocks.first?.kind?.kind == "board")
+        #expect(groups[3].rows.isEmpty && groups[3].blocks.first?.kind?.kind == "telegram")
+        #expect(groups[4].blocks.map(\.title) == ["LinkedIn"])
+        // Search's link still counts every source, the watched boards too.
         #expect(SourcesText.onLine(everySource()) == "8 of 9 sources on")
         #expect(SourcesText.onLine(SearchList()) == "0 of 0 sources on")
+        #expect(SourcesText.watchedCount(everySource(), ats: "greenhouse") == 1)
+        #expect(SourcesText.watchedCount(everySource(), ats: "lever") == 0)
     }
 
-    @Test func anEmptyListStillOffersWatchingAndTelegram() {
+    @Test func anEmptyListStillOffersTelegram() {
         let groups = SourcesText.groups(SearchList())
-        #expect(groups.map(\.id) == [.watched, .telegram])
+        #expect(groups.map(\.id) == [.telegram])
         #expect(groups[0].rows.isEmpty)
+    }
+
+    @Test func aCompanyOrAWatchedBoardKeepsItsListRowPicked() {
+        #expect(SourcesSelection.company(4, in: .ats("greenhouse")).listRow == .ats("greenhouse"))
+        #expect(SourcesSelection.company(4, in: .index).listRow == .index)
+        // A watched board opened by its key (just added) sits under its ATS; other sources are
+        // their own rows.
+        #expect(SourcesSelection.source("greenhouse:gitlab").listRow == .ats("greenhouse"))
+        #expect(SourcesSelection.source("board:hn").listRow == .source("board:hn"))
+        #expect(SourcesSelection.source("page:https://acme.com/careers").listRow == .source("page:https://acme.com/careers"))
+        #expect(SourcesSelection.ats("ashby").listRow == .ats("ashby"))
+        #expect(SourcesText.listTitle(.company(4, in: .index)) == "All companies")
+        #expect(SourcesText.listTitle(.company(4, in: .ats("greenhouse"))) == "Greenhouse")
     }
 
     @Test func newATSKindsHaveTitles() {
@@ -185,6 +199,50 @@ func indexCompany(_ id: Int64, _ token: String, ats: String = "greenhouse", stat
         #expect(SourcesText.foundVia("") == "")
     }
 
+    @Test func aWatchedCompanySaysSoWithWhatItsOwnReadsFound() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        var c = indexCompany(1, "gitlab", name: "GitLab")
+        c.watched = true
+        c.sourceKey = "greenhouse:gitlab"
+        c.lastReadAt = .init(date: now.addingTimeInterval(-2 * 3600))
+        #expect(SourcesText.companyChips(c).map(\.text) == ["Watched", "Hiring"])
+        var s = source("greenhouse:gitlab", "GitLab", kind: "greenhouse", complete: true)
+        s.stats = stats(8, 3, 0)
+        #expect(SourcesText.companyMeta(c, showsAts: false, source: s, now: now) == "12 jobs · 3 matching · read 2 hours ago · watched: \(SearchText.stats(s.stats))")
+        // Not watched: how it was found instead.
+        var other = indexCompany(2, "acme")
+        other.lastReadAt = c.lastReadAt
+        #expect(SourcesText.companyMeta(other, showsAts: true, source: nil, now: now) == "Greenhouse · 12 jobs · 3 matching · read 2 hours ago · found in Common Crawl")
+        // Its detail: status, jobs, how it's known, its reads, the last note.
+        other.nextReadAt = .init(date: now.addingTimeInterval(-60))
+        other.lastNote = "12 jobs"
+        let facts = SourcesText.companyFacts(other, now: now)
+        #expect(facts.map(\.label) == ["Status", "Open jobs", "How it's known", "Last read", "Next read", "Last note"])
+        #expect(facts.map(\.value) == ["Hiring", "12 jobs · 3 matching your searches", "Found in Common Crawl", "2 hours ago", "due now", "12 jobs"])
+        other.enabled = false
+        let off = SourcesText.companyFacts(other, now: now)
+        #expect(off.first?.value == "Hiring · left out of the index" && !off.map(\.label).contains("Next read"))
+        #expect(SourcesText.companyFacts(indexCompany(3, "new", status: "new", jobs: 0, matching: 0), now: now)[1].value == "none known yet")
+    }
+
+    @Test func emptyCompaniesSayWhyAndPausedSaysWhatWaits() {
+        var i = index()
+        let all = IndexCompanyFilter()
+        #expect(SourcesText.companiesEmpty(IndexCompanyFilter(query: "zzz"), index: i, paused: true) == "No company matches the filter.")
+        #expect(SourcesText.companiesEmpty(IndexCompanyFilter(matchingOnly: true), index: i, paused: false) == "No company here has open jobs your searches match yet.")
+        #expect(SourcesText.companiesEmpty(IndexCompanyFilter(ats: "lever"), index: i, paused: true) == "No Lever companies yet. Background work is paused: none are looked for until you resume.")
+        #expect(SourcesText.companiesEmpty(all, index: i, paused: false) == "No companies found yet. Find More Companies looks again; a board you add by URL joins here.")
+        i.discoveries = []
+        #expect(SourcesText.companiesEmpty(all, index: i, paused: false) == "No companies yet: no discovery has run. Find More Companies looks for them.")
+        #expect(SourcesText.companiesEmpty(all, index: nil, paused: false).hasSuffix("no discovery has run. Find More Companies looks for them."))
+        i.discoveries = [.with { $0.status = "queued" }]
+        #expect(SourcesText.companiesEmpty(all, index: i, paused: false) == "No companies yet. A discovery is looking for them now.")
+        #expect(SourcesText.pausedLine == "Background work is paused: the index isn't read and no companies are looked for until you resume.")
+        #expect(SourcesText.findMoreHelp(paused: true, running: true).hasPrefix("Background work is paused"))
+        #expect(SourcesText.findMoreHelp(paused: false, running: true) == "A discovery is waiting or running")
+        #expect(SourcesText.findMoreHelp(paused: false, running: false).hasPrefix("Looks for more company boards now"))
+    }
+
     @Test func companiesComeAHundredAtATime() {
         let filter = IndexCompanyFilter(ats: "greenhouse", query: "  git ", matchingOnly: true)
         #expect(filter.request.ats == "greenhouse" && filter.request.query == "git" && filter.request.matchingOnly)
@@ -231,6 +289,20 @@ func indexCompany(_ id: Int64, _ token: String, ats: String = "greenhouse", stat
         #expect(store.indexCompanies?.companies.first?.enabled == false)
         #expect(daemon.calls.filter { $0 == "atsIndex" }.count == asked + 1)
 
+        // A watched company is one switch: off in the index, off as a source; and back.
+        daemon.indexCompanyList[0].watched = true
+        daemon.indexCompanyList[0].sourceKey = "greenhouse:gitlab"
+        await store.loadIndexCompanies(IndexCompanyFilter(ats: "greenhouse", matchingOnly: true))
+        store.openIndexCompany(store.indexCompanies!.companies[0], from: .ats("greenhouse"))
+        #expect(store.navigation.sources == .company(1, in: .ats("greenhouse")))
+        #expect(store.navigation.sources?.listRow == .ats("greenhouse"))
+        #expect(store.source("greenhouse:gitlab")?.enabled == true)
+        await store.setIndexCompany(1, enabled: false)
+        #expect(store.source("greenhouse:gitlab")?.enabled == false && store.indexCompany(1)?.enabled == false)
+        await store.setSource("greenhouse:gitlab", enabled: true)
+        #expect(store.indexCompany(1)?.enabled == true)
+        #expect(store.indexCompanies?.companies.first?.enabled == true)
+
         // An ATS's kind switch takes it out of the index; the master switch is the index's source.
         await store.setSource("greenhouse", enabled: false)
         #expect(store.atsIndex?.ats.first?.enabled == false)
@@ -260,6 +332,6 @@ func indexCompany(_ id: Int64, _ token: String, ats: String = "greenhouse", stat
         #expect(store.lastError == nil)
         #expect(store.count(.sources) == 0)
         // The sources themselves read as before.
-        #expect(SourcesText.groups(store.search).count == 6)
+        #expect(SourcesText.groups(store.search).count == 5)
     }
 }

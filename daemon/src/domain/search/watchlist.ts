@@ -17,7 +17,13 @@ import {
   searchSources,
 } from '../../db/schema.ts';
 import type { Tx } from '../../queue/types.ts';
-import { boardKey, findCompany, knowBoards, type NewBoard } from './ats-index/store.ts';
+import {
+  boardKey,
+  findCompany,
+  knowBoards,
+  knowWatched,
+  type NewBoard,
+} from './ats-index/store.ts';
 import { type AtsBoard, jobPageBoard } from './readers/ats-embed.ts';
 import { isBoardId } from './readers/boards.ts';
 import type { Listing } from './readers/types.ts';
@@ -134,6 +140,8 @@ export function watchBoards(tx: Tx, boards: FoundBoard[], o: { max?: number } = 
         .returning()
         .get();
       out.added.push(row ?? source);
+      // A watched ATS board is a company of the index too.
+      knowWatched(tx, [row ?? source]);
     } catch (err) {
       if (!(err instanceof SearchError)) throw err;
       out.rejected.push({ url: raw, reason: err.message });

@@ -70,6 +70,10 @@ public final class AppStore {
     public private(set) var indexCompaniesProblem: String?
     /// The filter asked for last: a slower answer for an older one is dropped.
     private var indexCompaniesAsked: IndexCompanyFilter?
+    /// Each companies list's filter ("" all, else its ATS), kept while a company is open.
+    public var indexCompanyFilters: [String: IndexCompanyFilter] = [:]
+    /// The company open in Sources, as it was when opened (and after its switch).
+    public private(set) var openedIndexCompany: IndexCompany?
     /// The events of the runs open on screen (Agent runs).
     public private(set) var runEvents: [Int64: [DaemonEvent]] = [:]
     /// Researched companies (the Companies section).
@@ -655,6 +659,11 @@ public final class AppStore {
         guard let api, await attempt({ try await api.setSource(target, enabled: enabled) }) != nil else { return }
         await refreshSearch(api)
         if atsIndex != nil { await refreshAtsIndex(api) }
+        // A watched board's company switched with it.
+        if let shown = indexCompanies?.filter { await loadIndexCompanies(shown) }
+        if let open = openedIndexCompany, open.sourceKey == target {
+            openedIndexCompany = indexCompanies?.companies.first { $0.id == open.id } ?? open
+        }
     }
 
     /// Starts the search planner: new strategies (agent-generated) and boards for the watch list.
@@ -736,7 +745,21 @@ public final class AppStore {
     public func setIndexCompany(_ id: Int64, enabled: Bool) async {
         guard let api, let company = await attempt({ try await api.setIndexCompany(id, enabled: enabled) }) else { return }
         indexCompanies?.replace(company)
+        if openedIndexCompany?.id == id { openedIndexCompany = company }
         await refreshAtsIndex(api)
+        // A watched one's source switched with it.
+        if company.watched { await refreshSearch(api) }
+    }
+
+    /// Opens a company of the index from the list it's in (`.index` or `.ats`).
+    public func openIndexCompany(_ company: IndexCompany, from list: SourcesSelection) {
+        openedIndexCompany = company
+        navigation.sources = .company(company.id, in: list)
+    }
+
+    /// A company of the index as the screen has it now: on the page shown, else as it was opened.
+    public func indexCompany(_ id: Int64) -> IndexCompany? {
+        indexCompanies?.companies.first { $0.id == id } ?? (openedIndexCompany?.id == id ? openedIndexCompany : nil)
     }
 
     /// Looks for more company boards now; false when a discovery was already going.
@@ -1541,6 +1564,11 @@ public final class AppStore {
         }
         guard let api, let source = await attempt({ try await api.addSearchSource(kind: "", locator: url) }) else { return nil }
         await refreshSearch(api)
+        // An ATS board is a company of the index from now on.
+        if atsIndex != nil, SourcesText.isAts(source.kind) {
+            await refreshAtsIndex(api)
+            if let shown = indexCompanies?.filter { await loadIndexCompanies(shown) }
+        }
         navigation.sources = .source(source.key)
         return source
     }

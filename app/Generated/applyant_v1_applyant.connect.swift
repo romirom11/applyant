@@ -352,7 +352,7 @@ public protocol Applyant_V1_ApplyantServiceClientInterface: Sendable {
     func `listIndexCompanies`(request: Applyant_V1_ListIndexCompaniesRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_ListIndexCompaniesResponse>
 
     /// SetIndexCompanyEnabled leaves one company out of the index (it's not read or searched) or
-    /// takes it back.
+    /// takes it back. A watched company's search source switches with it (one switch per company).
     @available(iOS 13, *)
     func `setIndexCompanyEnabled`(request: Applyant_V1_SetIndexCompanyEnabledRequest, headers: Connect.Headers) async -> ResponseMessage<Applyant_V1_SetIndexCompanyEnabledResponse>
 
