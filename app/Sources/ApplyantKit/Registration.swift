@@ -86,6 +86,12 @@ public struct LaunchctlAgent: Sendable {
         if boot.status == 0 || loaded { return .launchAgentFile }
         return .failed("launchctl bootstrap failed: \(boot.output.trimmingCharacters(in: .whitespacesAndNewlines))")
     }
+
+    /// Takes the daemon down until the next `install()` (the app's next launch, or login): the
+    /// plist stays, but launchd forgets the service, so KeepAlive doesn't start it again.
+    public func unload() {
+        if loaded { _ = run("/bin/launchctl", ["bootout", service]) }
+    }
 }
 
 public struct DaemonRegistration: Sendable {

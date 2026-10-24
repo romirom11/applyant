@@ -46,6 +46,13 @@ final class StatusModel {
     }
 
     func openLogs() { NSWorkspace.shared.open(UserPaths().logsDir) }
+
+    /// Quitting while background work is paused: the daemon has nothing to do, so launchd stops
+    /// it instead of keeping it alive. The next launch (or login) starts it again, still paused.
+    func stopDaemon() {
+        guard Bundle.main.bundleURL.pathExtension == "app" else { return }
+        registrar.agent.unload()
+    }
 }
 
 @MainActor
@@ -56,6 +63,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let toasts = Toasts()
     private(set) var notifications: NotificationDelegate?
     private var running: Task<Void, Never>?
+    /// A scripted check (`--script`): quitting leaves the daemon alone.
+    private var scripted = false
     /// Set by the SwiftUI scene, so notifications and the menu can open the main window.
     var openMainWindow: (() -> Void)?
 
@@ -68,6 +77,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 NSApp.setActivationPolicy(.regular)
                 self?.openMainWindow?()
             }
+            scripted = true
             running = Task { await store.run() }
             Task { await script.run() }
             return
@@ -109,6 +119,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 try? await Task.sleep(for: .milliseconds(500))
             }
         }
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        guard scripted == false, store.backgroundPausedAt != nil else { return }
+        status.stopDaemon()
     }
 
     /// macOS started the app as a login item (nobody asked for a window).
