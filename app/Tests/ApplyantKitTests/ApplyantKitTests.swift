@@ -196,4 +196,25 @@ final class Box<T>: @unchecked Sendable {
         let written = try String(contentsOf: user.userAgentPlist, encoding: .utf8)
         #expect(written.contains("/Users/me/Applications/Applyant.app/Contents/MacOS/applyantd"))
     }
+
+    @Test func unloadBootsOutOnlyALoadedAgent() {
+        let calls = Box<[[String]]>([])
+        let loaded = Box(true)
+        let run: RunCommand = { _, args in
+            calls.value.append(args)
+            if args.first == "bootout" { loaded.value = false }
+            return (args.first == "print" && !loaded.value ? 113 : 0, "")
+        }
+        let agent = LaunchctlAgent(
+            user: UserPaths(home: URL(fileURLWithPath: "/tmp/none")),
+            layout: BundleLayout(contents: URL(fileURLWithPath: "/Applications/Applyant.app/Contents")),
+            run: run,
+            uid: 501
+        )
+        agent.unload()
+        #expect(calls.value.contains(["bootout", "gui/501/com.applyant.daemon"]))
+        calls.value = []
+        agent.unload()
+        #expect(!calls.value.contains { $0.first == "bootout" })
+    }
 }
